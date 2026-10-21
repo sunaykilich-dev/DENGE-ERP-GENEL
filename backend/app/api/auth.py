@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app import crypto
-from app.api import deps
 from app.api.deps import SESSION_COOKIE, ClockDep, CurrentUser, DbDep, client_ip
 from app.config import get_config
 from app.models import User
@@ -91,7 +90,10 @@ async def login_mfa(
             status.HTTP_401_UNAUTHORIZED, "Doğrulama süresi doldu, tekrar giriş yapın"
         )
     user = await db.get(User, int(user_id))
-    if user is None or not user.is_active:
+    # Giriş kuralı tek yerde (`giris_yapabilir_mi`). Yalnız `is_active`'e
+    # bakmak, parola adımından SONRA girişi kapatılan hesabın elindeki geçerli
+    # pending_token ile oturum açmasına izin veriyordu (E13-02 c).
+    if user is None or not user.giris_yapabilir_mi():
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Oturum geçersiz")
 
     if not mfa_service.check_login_code(user, payload.code):

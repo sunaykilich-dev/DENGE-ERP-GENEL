@@ -26,11 +26,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy import text as sa_text
 
-from app.api.deps import DbDep, client_ip, current_user, scope_filter
+from app.api.deps import DbDep, client_ip, current_user
 from app.models import Attachment, User
 from app.models.attachment import EK_SAHIPLERI, EK_TURLERI
 from app.services import audit
 from app.services import storage as depo
+from app.services.teknik_servis import ek_kapsam
 
 router = APIRouter(prefix="/api/ekler", tags=["ekler"])
 
@@ -49,6 +50,12 @@ SAHIP_IZNI: dict[str, tuple[str, str]] = {
     "contracts": ("abonelik.gor", "abonelik.yaz"),
     "settlements": ("hakedis.gor", "hakedis.yaz"),
     "import_files": ("satinalma.gor", "satinalma.yaz"),
+    # --- Teknik servis (plan §1.11) ---
+    "service_orders": ("servis.gor", "servis.yaz"),
+    "service_equipment": ("ekipman.gor", "ekipman.yaz"),
+    "maintenance_contracts": ("bakim.gor", "bakim.yaz"),
+    # Tesis eki carinin parçası: okuma hesap.gor, yükleme lokasyon.yaz.
+    "addresses": ("hesap.gor", "lokasyon.yaz"),
 }
 
 
@@ -88,7 +95,7 @@ def _sahip_dogrula(entity: str) -> tuple[str, str]:
     return SAHIP_IZNI[entity]
 
 
-async def _kapsam(db, entity: str, entity_id: int, user: User) -> None:
+async def _kapsam(db, entity: str, entity_id: int, user: User, *, yazma: bool = False) -> None:
     """Kayıt bazlı kapsamı ek uçlarında da uygular (plan §3.4).
 
     Ek uçları yalnız MODÜL iznine bakıyordu: `hesap.gor` izni olan satış
@@ -96,21 +103,12 @@ async def _kapsam(db, entity: str, entity_id: int, user: User) -> None:
     indiriyor ve silebiliyordu. Ek kimlikleri sıralı olduğu için bu, tüm
     belge arşivinin taranabilmesi demekti.
 
-    Kapsam bugün yalnız `accounts` için tanımlı; başka bir kayıt türüne
-    kapsam geldiğinde kontrol buraya eklenir.
+    Kural sahip türüne göre `services/teknik_servis/ek_kapsam.py` kayıt
+    defterinden gelir (`accounts` dalı orada birebir korunur). Teknik servis
+    türünde kayıtlı kural yoksa erişim reddedilir (fail-closed). Kapsam
+    dışı → 404: kimlik taramasında "var ama göremezsin" bilgisi sızmasın.
     """
-    if entity != "accounts" or scope_filter(user) is None:
-        return
-    from app.models import Account
-
-    var = await db.scalar(
-        select(Account.id).where(
-            Account.id == entity_id,
-            Account.is_deleted.is_(False),
-            Account.sales_rep_id == user.id,
-        )
-    )
-    if var is None:
+    if not await ek_kapsam.erisebilir_mi(db, user, entity, entity_id, yazma):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kayıt bulunamadı")
 
 
@@ -200,6 +198,10 @@ _SAHIP_TABLOSU = {
     "rma_cases": "rma_cases",
     "purchase_orders": "purchase_orders",
     "import_files": "import_files",
+    "service_orders": "service_orders",
+    "service_equipment": "service_equipment",
+    "maintenance_contracts": "maintenance_contracts",
+    "addresses": "addresses",
 }
 
 
@@ -227,7 +229,7 @@ async def yukle(
 ) -> EkOut:
     _, yazma = _sahip_dogrula(entity)
     _izin(user, yazma)
-    await _kapsam(db, entity, entity_id, user)
+    await _kapsam(db, entity, entity_id, user, yazma=True)
     if kind not in EK_TURLERI:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen ek türü: {kind}")
     if not await _sahip_var_mi(db, entity, entity_id):
@@ -238,6 +240,8 @@ async def yukle(
     try:
         icerik = await depo.sinirli_oku(file)
         mime = depo.mime_coz(file.content_type or "", file.filename or "")
+        # Teknik servis eklerinde içerik beyanla uyuşmalı (magic byte).
+        ek_kapsam.icerik_dogrula(entity, icerik, mime)
         kayit = depo.yaz(icerik, mime_type=mime)
     except depo.DepoHatasi as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
@@ -287,7 +291,7 @@ async def sil(ek_id: int, request: Request, db: DbDep, user: Kullanici) -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ek bulunamadı")
     _, yazma = _sahip_dogrula(ek.entity)
     _izin(user, yazma)
-    await _kapsam(db, ek.entity, ek.entity_id, user)
+    await _kapsam(db, ek.entity, ek.entity_id, user, yazma=True)
 
     # Ürün kapak görseli siliniyorsa bağ da kopar; FK SET NULL bunu yapar ama
     # aynı transaction içinde açıkça yapmak niyeti görünür kılıyor.

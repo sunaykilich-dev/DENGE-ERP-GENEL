@@ -35,6 +35,15 @@ class HesapIn(BaseModel):
     notes: str | None = None
     is_active: bool = True
     partner: MontajNoktasiIn | None = None
+    # Muhasebe cari kodu — yalnız metin (E14-01).
+    dis_referans: str | None = Field(default=None, max_length=40)
+    # VKN başka aktif hesapta varsa 409 döner; kullanıcı listeyi görüp onay +
+    # gerekçe verirse kayıt geçer ve denetime `vkn.cakisma.onay` yazılır.
+    # Bu iki alan ORM'e GİTMEZ (uçta `exclude` edilir; E14 B2).
+    # `is_verified/verified_*/merged_into_id` burada BİLEREK YOK: doğrulama yalnız
+    # `/dogrula` (`hesap.birlestir`) ile, birleştirme yalnız birleştirme servisiyle.
+    vkn_cakisma_onayi: bool = False
+    vkn_cakisma_gerekce: str | None = Field(default=None, max_length=300)
 
     @field_validator("tax_no")
     @classmethod
@@ -102,6 +111,9 @@ class HesapOut(BaseModel):
     # Hak ediş dökümü e-posta ile gönderilecek ve ödeme listesi IBAN'dan
     # üretilecek; eksikse D5 bloke olur. Listede görünür uyarı olarak taşınır.
     eksik_alanlar: list[str] = []
+    # Servis ekranından hızlı açılan müşteri doğrulanana kadar `false`.
+    is_verified: bool = True
+    dis_referans: str | None = None
 
     model_config = {"from_attributes": True}
 

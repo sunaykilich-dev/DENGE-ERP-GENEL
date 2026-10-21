@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import (
     TOPLAM_BASLIGI,
+    ClockDep,
     DbDep,
     client_ip,
     require_permission,
@@ -20,11 +21,76 @@ from app.schemas.accounts import HesapIn, HesapOut, HesapPatch, MukerrerAday
 from app.services import accounts as svc
 from app.services import audit
 from app.services.normalize import normalize_msisdn
+from app.services.teknik_servis import ana_veri
 
 router = APIRouter(prefix="/api/hesaplar", tags=["hesaplar"])
 
 Okuyucu = Annotated[User, Depends(require_permission("hesap.gor"))]
 Yazici = Annotated[User, Depends(require_permission("hesap.yaz"))]
+# Hızlı açılan müşteriyi doğrulamak birleştirme yetkisidir (E14 K7): doğrulayan
+# kişi aynı zamanda "bu kayıt mükerrer mi" sorusunu cevaplayan kişidir.
+Dogrulayici = Annotated[User, Depends(require_permission("hesap.gor", "hesap.birlestir"))]
+
+# Gövdede gelen ama ORM'e GİTMEMESİ gereken alanlar. `Account(**veri)` bilinmeyen
+# anahtarda TypeError (500) verirdi; PATCH döngüsü ise sessizce setattr ederdi.
+_ORM_DISI = {"partner", "vkn_cakisma_onayi", "vkn_cakisma_gerekce"}
+
+
+async def _vkn_kontrolu(
+    db,
+    user: User,
+    tax_no: str | None,
+    *,
+    haric_id: int | None,
+    onay: bool,
+    gerekce: str | None,
+) -> list[Account]:
+    """Aynı VKN'li başka aktif hesap varsa 409; onay + gerekçe ile geçilir.
+
+    Tekil indeks yok (aynı VKN'li şube/bayi çiftleri meşru, E14 K6); kontrol
+    yalnız VKN YENİ girildiğinde ya da DEĞİŞTİĞİNDE çağrılır. Ön yüz düzenlemede
+    formun tamamını gönderiyor: her PATCH'te kontrol etmek, aynı VKN'li çiftte
+    telefon değiştirmeyi bile onaya bağlardı (E14 B1).
+
+    409 gövdesi kapsam dışı hesabın unvanını göstermez, yalnız sayısını verir:
+    satış temsilcisi VKN yazarak başkasının portföyünü taramasın.
+    """
+    cakisanlar = await ana_veri.vkn_cakismasi(db, tax_no, haric_id=haric_id)
+    if not cakisanlar:
+        return []
+    if onay:
+        if not gerekce or len(gerekce.strip()) < 5:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Aynı VKN'li kayıt onayı için gerekçe zorunlu (en az 5 karakter).",
+            )
+        return cakisanlar
+    gorunen = [h for h in cakisanlar if not await svc.kapsam_disinda_mi(db, user, h.id)]
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        {
+            "kod": "VKN_CAKISMASI",
+            "mesaj": "Bu VKN başka aktif hesapta kayıtlı. Aynı firma değilse gerekçeyle onaylayın.",
+            "mevcut": [{"id": h.id, "title": h.title} for h in gorunen],
+            "kapsam_disi": len(cakisanlar) - len(gorunen),
+        },
+    )
+
+
+async def _vkn_onayini_yaz(
+    db, request: Request, user: User, hesap_id: int, cakisanlar: list[Account], gerekce
+) -> None:
+    if cakisanlar:
+        await audit.log(
+            db,
+            "accounts",
+            "vkn.cakisma.onay",
+            entity_id=hesap_id,
+            new_value={"cakisan_hesaplar": [h.id for h in cakisanlar], "gerekce": gerekce},
+            user_id=user.id,
+            ip=client_ip(request),
+            is_personal_data=True,
+        )
 
 
 async def _kapsamli_hesap(db, hesap_id: int, user: User) -> Account:
@@ -66,6 +132,7 @@ async def listele(
         default=None, description="MUSTERI | BAYI | MONTAJ_NOKTASI | TEDARIKCI"
     ),
     eksigi_olanlar: bool = False,
+    dogrulanmamis: bool = False,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     response: Response = None,  # type: ignore[assignment]
@@ -89,6 +156,8 @@ async def listele(
         if sutun is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen rol: {rol}")
         stmt = stmt.where(sutun.is_(True))
+    if dogrulanmamis:
+        stmt = stmt.where(Account.is_verified.is_(False))
 
     if eksigi_olanlar:
         # "Eksik bilgisi olanlar" SQL'de değil çıktıda hesaplanıyor; sayfalama
@@ -397,10 +466,20 @@ async def olustur(payload: HesapIn, request: Request, db: DbDep, user: Yazici) -
             "Hesabın en az bir rolü olmalı (müşteri, bayi, montaj noktası veya tedarikçi)",
         )
 
-    veri = payload.model_dump(exclude={"partner"})
+    cakisanlar = await _vkn_kontrolu(
+        db,
+        user,
+        payload.tax_no,
+        haric_id=None,
+        onay=payload.vkn_cakisma_onayi,
+        gerekce=payload.vkn_cakisma_gerekce,
+    )
+
+    veri = payload.model_dump(exclude=_ORM_DISI)
     hesap = Account(**veri, created_by=user.id)
     db.add(hesap)
     await db.flush()
+    await _vkn_onayini_yaz(db, request, user, hesap.id, cakisanlar, payload.vkn_cakisma_gerekce)
 
     if payload.is_montaj_noktasi:
         # Montaj noktası kaydı hak edişin ön koşulu; rol işaretliyse hep açılır.
@@ -437,7 +516,19 @@ async def guncelle(
             "Bu kaydı siz görüntülerken başka biri değiştirdi. Sayfayı yenileyip tekrar deneyin.",
         )
 
-    veri = payload.model_dump(exclude_unset=True, exclude={"partner", "version"})
+    # VKN kontrolü yalnız VKN gövdede VAR ve eskisinden FARKLI ise (E14 B1).
+    cakisanlar: list[Account] = []
+    if "tax_no" in payload.model_fields_set and payload.tax_no and payload.tax_no != hesap.tax_no:
+        cakisanlar = await _vkn_kontrolu(
+            db,
+            user,
+            payload.tax_no,
+            haric_id=hesap.id,
+            onay=payload.vkn_cakisma_onayi,
+            gerekce=payload.vkn_cakisma_gerekce,
+        )
+
+    veri = payload.model_dump(exclude_unset=True, exclude=_ORM_DISI | {"version"})
     # Kapsamı olan kullanıcı temsilciyi değiştiremez: hesabı kendine atayıp
     # kapsamını tek istekte genişletmek mümkündü.
     if "sales_rep_id" in veri and scope_filter(user) is not None:
@@ -459,6 +550,37 @@ async def guncelle(
 
     await audit.log_change(
         db, hesap, "guncelle", user_id=user.id, ip=client_ip(request), is_personal_data=True
+    )
+    await _vkn_onayini_yaz(db, request, user, hesap.id, cakisanlar, payload.vkn_cakisma_gerekce)
+    await db.commit()
+    return await getir(hesap_id, db, user)
+
+
+@router.post("/{hesap_id}/dogrula", response_model=HesapOut)
+async def dogrula(
+    hesap_id: int, request: Request, db: DbDep, clock: ClockDep, user: Dogrulayici
+) -> HesapOut:
+    """Servis ekranından hızlı açılan müşteriyi doğrular (TS-014).
+
+    `is_verified/verified_at/verified_by` YALNIZ bu uçla yazılır; HesapIn/Patch
+    bu alanları taşımaz (E14 B2) — `hesap.yaz` sahibi doğrulamayı atlatamaz.
+    Zaten doğrulanmış kayıt 409: ikinci doğrulama, ilk doğrulayanı ezerdi.
+    """
+    hesap = await _kapsamli_hesap(db, hesap_id, user)
+    if hesap.is_verified:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Hesap zaten doğrulanmış.")
+    hesap.is_verified = True
+    hesap.verified_at = clock.now()
+    hesap.verified_by = user.id
+    hesap.updated_by = user.id
+    await audit.log(
+        db,
+        "accounts",
+        "hesap.dogrula",
+        entity_id=hesap.id,
+        new_value={"is_verified": True},
+        user_id=user.id,
+        ip=client_ip(request),
     )
     await db.commit()
     return await getir(hesap_id, db, user)

@@ -13,6 +13,11 @@ from app.models import LoginAttempt, Session, User
 # düşer. Ofiste açık unutulan bir ekran akşama kadar açık kalmasın diye
 # 12 saatten indirildi (kullanıcı kararı, 23 Eyl 2026).
 SESSION_TTL = timedelta(hours=4)
+# MUTLAK üst sınır (E13-02, TS-007): kayan pencere her istekte uzadığı için
+# sürekli kullanılan (ya da çalınıp açık tutulan) bir oturum hiç bitmiyordu.
+# Açılıştan 12 saat sonra oturum ne olursa olsun düşer; kullanıcı yeniden
+# girer (MFA dahil). KOD SABİTİDİR, ayar değil: arayüzden gevşetilemesin (K-05).
+SESSION_MAX = timedelta(hours=12)
 # Oturum bu süreden eskiyse expires_at ileri kaydırılır (kayan pencere,
 # her istekte UPDATE atmamak için eşikli).
 SLIDE_THRESHOLD = timedelta(minutes=30)
@@ -37,8 +42,13 @@ def verify_password(plain: str, password_hash: str) -> bool:
 
 
 async def authenticate(db: AsyncSession, username: str, password: str) -> User | None:
+    """Parola doğrulama. Giriş kuralı `User.giris_yapabilir_mi()`'dedir.
+
+    `is_active` tek başına yetmez: kaydı canlı ama girişi kapalı personel
+    (`giris_acik=false`, ör. girişsiz saha personeli) de reddedilir.
+    """
     user = await db.scalar(select(User).where(User.username == username))
-    if user is None or not user.is_active:
+    if user is None or not user.giris_yapabilir_mi():
         return None
     return user if verify_password(password, user.password_hash) else None
 
@@ -110,7 +120,7 @@ async def create_session(db: AsyncSession, user: User, clock: Clock) -> str:
             token=token,
             user_id=user.id,
             created_at=now,
-            expires_at=now + SESSION_TTL,
+            expires_at=_bitis(now, now),
             last_seen_at=now,
         )
     )
@@ -118,18 +128,36 @@ async def create_session(db: AsyncSession, user: User, clock: Clock) -> str:
     return token
 
 
+def _bitis(acilis: datetime, now: datetime) -> datetime:
+    """Kayan bitiş, mutlak üst sınırı (`acilis + SESSION_MAX`) aşamaz."""
+    return min(now + SESSION_TTL, acilis + SESSION_MAX)
+
+
 async def resolve_session(db: AsyncSession, token: str, clock: Clock) -> User | None:
+    """Oturum jetonunu kullanıcıya çözer; geçersizse None (→ 401).
+
+    Üç bağımsız düşürme koşulu: hareketsizlik (`expires_at`), mutlak süre
+    (`SESSION_MAX`, kaydırma bunu aşamaz) ve giriş kuralı
+    (`giris_yapabilir_mi`: pasifleştirilen ya da girişi kapatılan kişinin
+    açık oturumu da bir sonraki istekte düşer).
+    """
     now = clock.now()
     sess = await db.get(Session, token)
-    if sess is None or sess.expires_at <= now:
+    if sess is None or sess.expires_at <= now or now - sess.created_at >= SESSION_MAX:
         return None
     user = await db.get(User, sess.user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.giris_yapabilir_mi():
         return None
     if now - sess.last_seen_at > SLIDE_THRESHOLD:
         sess.last_seen_at = now
-        sess.expires_at = now + SESSION_TTL
-        await db.flush()
+        sess.expires_at = _bitis(sess.created_at, now)
+        # COMMIT burada bilinçli (servis katmanında istisna): kaydırma eskiden
+        # yalnız flush ediliyordu ve yazma yapmayan uçlarda (GET) istek
+        # sonunda geri alınıyordu — salt okuyan kullanıcının oturumu girişten
+        # 4 saat sonra kullanım ortasında düşüyordu (TS-007 testi yakaladı).
+        # Çağrı isteğin BAŞINDA, kimlik çözümünde yapılır; oturumda bekleyen
+        # başka bir yazma yoktur.
+        await db.commit()
     return user
 
 

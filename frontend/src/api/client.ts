@@ -30,7 +30,7 @@ async function istek<T>(yol: string, init: RequestInit = {}): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       "X-Requested-With": "fetch",
-      ...(init.headers ?? {}),
+      ...init.headers,
     },
   });
 
@@ -112,6 +112,11 @@ export interface Kullanici {
   permissions: string[];
   sees_cost: boolean;
   version?: number;
+  /** Teknik servis Dalga 0 (TS-002/TS-007): `/api/auth/me` bunları da döndürür. */
+  giris_acik?: boolean;
+  parola_degismeli?: boolean;
+  birimler?: string[];
+  birincil_birim?: string | null;
 }
 
 export interface GirisSonucu {

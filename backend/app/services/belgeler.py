@@ -144,12 +144,36 @@ VARSAYILAN_SARTLAR = (
 )
 
 
+async def _teklif_adresi(db: AsyncSession, teklif: Quote) -> Address | None:
+    """Teklif PDF'ine basılan müşteri adresi (K24, E14-02/E14-15).
+
+    1. Teklif bir tesise bağlıysa (`quotes.address_id`, servis işinden açılan
+       teklif) ve tesis aynı müşteriye aitse o basılır.
+    2. Değilse carinin TESİS DIŞI ilk adresi. `addresses` artık servis
+       tesislerini de taşıyor; sırasız `limit(1)` bir AVM tesisini teklifin
+       muhatap adresi diye basabilirdi.
+
+    Sıralama `id`: bugünkü sırasız sorgu pratikte ekleme sırasını veriyordu
+    ve canlıdaki satırların hepsi MERKEZ olduğundan basılan adres DEĞİŞMEZ.
+    `is_primary DESC` bilerek eklenmedi — çok adresli hesapta bugünkü çıktıyı
+    değiştirirdi (E14 kontrol B8).
+    """
+    if teklif.address_id is not None:
+        bagli = await db.get(Address, teklif.address_id)
+        if bagli is not None and bagli.account_id == teklif.customer_id:
+            return bagli
+    return await db.scalar(
+        select(Address)
+        .where(Address.account_id == teklif.customer_id, Address.kind != "TESIS")
+        .order_by(Address.id)
+        .limit(1)
+    )
+
+
 async def teklif_baglami(db: AsyncSession, teklif: Quote, versiyon: QuoteVersion) -> dict:
     musteri = await db.get(Account, teklif.customer_id)
     hazirlayan = await db.get(User, teklif.owner_id) if teklif.owner_id else None
-    adres = await db.scalar(
-        select(Address).where(Address.account_id == teklif.customer_id).limit(1)
-    )
+    adres = await _teklif_adresi(db, teklif)
     kalemler = (
         await db.scalars(
             select(QuoteLine)

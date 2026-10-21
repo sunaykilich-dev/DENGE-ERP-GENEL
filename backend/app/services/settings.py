@@ -13,6 +13,8 @@ kullanılan oran satırın içine dondurulur (plan §3.3/2), böylece oran sonra
 değişse bile geçmiş dökümler değişmez.
 """
 
+import re
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -20,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crypto
 from app.models import Setting
+from app.models.teknik_servis import SERVIS_TURLERI
 
 # DB'de düz metin saklanmaması gereken kimlik bilgileri — set_many şifreler,
 # get/get_all çözer, API katmanı arayüze maskeler.
@@ -88,9 +91,194 @@ DEFAULTS: dict[str, Any] = {
     "smtp_user": "",
     "smtp_password": "",
     "smtp_from": "",
+    # =======================================================================
+    # TEKNİK SERVİS (plan §1.9, KD-16) — tüm anahtarlar Dalga 0'da TEK seferde.
+    # Modüller burayı sonradan düzenlemez; yeni anahtar şema paketine taleptir.
+    # =======================================================================
+    # --- Teknik servis --------------------------------------------------------
+    # ALINAMADI+neden de onay kaydı sayılır; saha bloke olmaz (KD-19).
+    "servis_onay_zorunlu_turler": ["PB"],
+    "servis_toplu_atama_ust_sinir": 150,  # toplu atama/plan; 151 → 422
+    "servis_ek_silme_saat": 24,
+    "servis_kapsam_son_is_gun": 30,
+    "servis_plan_varsayilan_sure_dk": 60,
+    "servis_bolge_oneri_gun": 3,
+    "servis_plan_bekleyen_uyari_gun": 3,
+    "hesap_dogrulanmamis_uyari_gun": 7,
+    # --- Ekipman / bakım ------------------------------------------------------
+    "servis_varsayilan_garanti_ay": 24,
+    "servis_garanti_uyari_gun": 30,
+    "servis_kpi_bakim_gecikme_ay": 12,
+    "ekipman_tekrar_ariza_gun": 90,
+    "ekipman_tekrar_ariza_esik": 2,
+    "bakim_on_acilis_gun": 30,
+    "bakim_tolerans_gun": 30,
+    # Sözleşme–ekipman eşleştirmesi %100 olunca açılır (TS-063, KD-21).
+    "bakim_otomatik_uretim": False,
+    # --- Saha / zaman ---------------------------------------------------------
+    "zaman_manuel_geri_gun": 2,
+    "zaman_manuel_gerekce_esik_dk": 30,
+    "zaman_geri_alma_dk": 5,
+    "zaman_asgari_bolum_dk": 1,
+    "zaman_uzun_sayac_uyari_saat": 10,
+    "zaman_gecikmeli_manuel_saat": 24,
+    "zaman_rapor_varsayilan_gun": 31,
+    # --- SLA / operasyon ------------------------------------------------------
+    # ISO zaman; boşken SLA damgalanmaz (göç sonrası uyarı fırtınası önlemi, KD-22).
+    "servis_sla_yururluk_at": None,
+    "servis_sla_risk_yuzde": 80,
+    "servis_tekrar_ariza_gun": 30,
+    "servis_uyari_uretimi_acik": True,
+    "servis_uyari_saklama_gun": 90,
+    "servis_eposta_acik": False,
+    "servis_eposta_deneme": 3,
+    "servis_gunluk_ozet_saati": "07:30",
+    # --- Atölye / kiralama ----------------------------------------------------
+    "atolye_tekrar_gelis_gun": 90,
+    "atolye_teslim_alinmayan_uyari_gun": 30,
+    "kiralama_kontrol_uyari_gun": 7,
+    # --- Teklif ---------------------------------------------------------------
+    "teklif_oz_onay_yasak": True,
+    "teklif_takip_uyari_gun": 3,
+    "teklif_sunulacak_uyari_is_gunu": 2,
+    # --- Eğitim ---------------------------------------------------------------
+    "egitim_gozlem_basari_esigi_yuzde": 85,
+    "egitim_rozet_sari_esigi_yuzde": 65,
+    "egitim_duzeltici_termin_gun": 14,
+    "egitim_belge_uyari_gun": 30,
+    "egitim_plan_uyari_gun": 7,
+    "egitim_toplu_plan_ust_sinir": 300,
+    "egitim_takip_pencere_gun": 7,
 }
 
 # Admin arayüzünden düzenlenebilir anahtarların beyaz listesi = DEFAULTS anahtarları.
+
+# --- Değer doğrulaması (yalnız teknik servis anahtarları) -----------------------
+#
+# `set_many` canlıda değer DOĞRULAMIYOR: arayüzden "abc" yazılan bir eşik
+# sessizce kaydediliyor ve onu okuyan kod ilk karşılaştırmada patlıyordu.
+# Teknik servis anahtarları için sınır tablosu eklendi; mevcut anahtarların
+# davranışı DEĞİŞMEZ (KD-16). Tip kodları:
+#   "tam"   → tam sayı, [alt, ust] kapalı aralık (bool kabul edilmez)
+#   "bool"  → True/False
+#   "liste" → metin listesi; `alt` izinli değerler kümesi (None: serbest)
+#   "saat"  → "SS:DD" metni
+#   "zaman" → ISO 8601 saat dilimli zaman ya da None/boş (kapalı)
+# Süre sınırları (15–1440 dk plan, 18 saat zaman bölümü, 62 gün takvim)
+# ayar değil kod sabitidir; burada yer almaz.
+AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
+    # İzinli değerler servis türü sözlüğünün KENDİSİ (kopya değil).
+    "servis_onay_zorunlu_turler": ("liste", frozenset(SERVIS_TURLERI), None),
+    "servis_toplu_atama_ust_sinir": ("tam", 1, 1000),
+    "servis_ek_silme_saat": ("tam", 0, 720),
+    "servis_kapsam_son_is_gun": ("tam", 1, 365),
+    "servis_plan_varsayilan_sure_dk": ("tam", 15, 1440),
+    "servis_bolge_oneri_gun": ("tam", 0, 30),
+    "servis_plan_bekleyen_uyari_gun": ("tam", 1, 90),
+    "hesap_dogrulanmamis_uyari_gun": ("tam", 1, 365),
+    "servis_varsayilan_garanti_ay": ("tam", 0, 120),
+    "servis_garanti_uyari_gun": ("tam", 1, 365),
+    "servis_kpi_bakim_gecikme_ay": ("tam", 1, 60),
+    "ekipman_tekrar_ariza_gun": ("tam", 1, 730),
+    "ekipman_tekrar_ariza_esik": ("tam", 2, 50),
+    "bakim_on_acilis_gun": ("tam", 0, 180),
+    "bakim_tolerans_gun": ("tam", 0, 180),
+    "bakim_otomatik_uretim": ("bool", None, None),
+    "zaman_manuel_geri_gun": ("tam", 0, 31),
+    "zaman_manuel_gerekce_esik_dk": ("tam", 1, 1440),
+    "zaman_geri_alma_dk": ("tam", 0, 60),
+    "zaman_asgari_bolum_dk": ("tam", 1, 60),
+    "zaman_uzun_sayac_uyari_saat": ("tam", 1, 24),
+    "zaman_gecikmeli_manuel_saat": ("tam", 1, 720),
+    "zaman_rapor_varsayilan_gun": ("tam", 1, 366),
+    "servis_sla_yururluk_at": ("zaman", None, None),
+    "servis_sla_risk_yuzde": ("tam", 1, 99),
+    "servis_tekrar_ariza_gun": ("tam", 1, 365),
+    "servis_uyari_uretimi_acik": ("bool", None, None),
+    "servis_uyari_saklama_gun": ("tam", 7, 3650),
+    "servis_eposta_acik": ("bool", None, None),
+    "servis_eposta_deneme": ("tam", 1, 10),
+    "servis_gunluk_ozet_saati": ("saat", None, None),
+    "atolye_tekrar_gelis_gun": ("tam", 1, 730),
+    "atolye_teslim_alinmayan_uyari_gun": ("tam", 1, 365),
+    "kiralama_kontrol_uyari_gun": ("tam", 1, 365),
+    "teklif_oz_onay_yasak": ("bool", None, None),
+    "teklif_takip_uyari_gun": ("tam", 1, 90),
+    "teklif_sunulacak_uyari_is_gunu": ("tam", 1, 30),
+    "egitim_gozlem_basari_esigi_yuzde": ("tam", 1, 100),
+    "egitim_rozet_sari_esigi_yuzde": ("tam", 1, 100),
+    "egitim_duzeltici_termin_gun": ("tam", 1, 365),
+    "egitim_belge_uyari_gun": ("tam", 1, 365),
+    "egitim_plan_uyari_gun": ("tam", 1, 90),
+    "egitim_toplu_plan_ust_sinir": ("tam", 1, 2000),
+    "egitim_takip_pencere_gun": ("tam", 1, 90),
+}
+
+
+class AyarHatasi(KeyError):
+    """Ayar değeri sınır dışı ya da tipi yanlış.
+
+    `KeyError`'dan türer çünkü parametre ucu (`api/settings_api.py`)
+    `set_many`'nin `KeyError`'ını zaten 400'e çeviriyor; ayrı sınıf o dosyaya
+    dokunmadan doğru yanıt kodunu verir. `str()` mesajı tırnaksız döner
+    (KeyError'ın varsayılanı anahtarı tırnak içinde yazardı).
+    """
+
+    def __str__(self) -> str:
+        return str(self.args[0]) if self.args else ""
+
+
+_SAAT_KALIBI = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def ayar_dogrula(key: str, value: Any) -> Any:
+    """`AYAR_SINIRLARI`'ndaki anahtarın değerini doğrular, kanonik hâlini döner.
+
+    Sınır tablosunda olmayan anahtar olduğu gibi döner (eski davranış).
+    """
+    sinir = AYAR_SINIRLARI.get(key)
+    if sinir is None:
+        return value
+    tip, alt, ust = sinir
+    if tip == "tam":
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise AyarHatasi(f"{key}: tam sayı olmalı")
+        if not alt <= value <= ust:
+            raise AyarHatasi(f"{key}: {alt} ile {ust} arasında olmalı")
+        return value
+    if tip == "bool":
+        if not isinstance(value, bool):
+            raise AyarHatasi(f"{key}: evet/hayır (true/false) olmalı")
+        return value
+    if tip == "liste":
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise AyarHatasi(f"{key}: metin listesi olmalı")
+        if alt is not None:
+            yabanci = sorted(set(value) - set(alt))
+            if yabanci:
+                raise AyarHatasi(f"{key}: bilinmeyen değer(ler): {', '.join(yabanci)}")
+        return list(dict.fromkeys(value))
+    if tip == "saat":
+        if not isinstance(value, str) or not _SAAT_KALIBI.match(value):
+            raise AyarHatasi(f"{key}: SS:DD biçiminde olmalı (ör. 07:30)")
+        return value
+    if tip == "zaman":
+        if value is None or value == "":
+            return None
+        if not isinstance(value, str):
+            raise AyarHatasi(f"{key}: ISO 8601 zaman olmalı")
+        try:
+            an = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise AyarHatasi(
+                f"{key}: ISO 8601 zaman olmalı (ör. 2026-11-01T00:00:00+03:00)"
+            ) from exc
+        if an.tzinfo is None:
+            # Saat dilimsiz an hangi ana denk geldiği belirsiz: SLA yürürlüğü
+            # 3 saat kayardı.
+            raise AyarHatasi(f"{key}: saat dilimi belirtilmeli (ör. +03:00)")
+        return an.isoformat()
+    raise AyarHatasi(f"{key}: tanımsız ayar tipi {tip}")  # pragma: no cover - tablo hatası
 
 
 def _decode(key: str, value: Any) -> Any:
@@ -114,9 +302,14 @@ async def get(db: AsyncSession, key: str) -> Any:
 
 
 async def set_many(db: AsyncSession, values: dict[str, Any], user_id: int | None) -> None:
+    # Önce HEPSİ doğrulanır, sonra yazılır: üçüncü anahtar hatalıyken ilk
+    # ikisinin oturuma yazılmış kalması yarım güncelleme demekti.
+    dogrulanmis: dict[str, Any] = {}
     for key, value in values.items():
         if key not in DEFAULTS:
             raise KeyError(f"Bilinmeyen ayar: {key}")
+        dogrulanmis[key] = ayar_dogrula(key, value)
+    for key, value in dogrulanmis.items():
         stored = (
             crypto.encrypt(value) if key in SENSITIVE_KEYS and isinstance(value, str) else value
         )

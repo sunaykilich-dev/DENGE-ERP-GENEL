@@ -2,27 +2,30 @@
 
 Brief bunu ayrı bir gereksinim olarak yazmamış ama kabul kriteri 1'in kendisi
 bu ve mevcut uygulamada en çok kullanılan özellik. Modüller geldikçe
-`ARAYICILAR` listesine yeni kaynak eklenir; arayüz değişmez.
+`ARAYICILAR` kayıt defterine yeni kaynak eklenir; arayüz değişmez.
+
+**Kayıt defteri (teknik servis plan §1.11):** yeni modül arayıcısını KENDİ
+API dosyasından `arayici_kaydet("servis.gor")` dekoratörüyle ekler (ör.
+`_servis_ara`: servis işi no + `seri_norm`; `_ekipman_ara`). Bu dosya her
+modülde yeniden düzenlenmez. Her arayıcı kendi iznini VE kapsamını uygular;
+sonuç sayısı da bir sızıntıdır.
 """
 
+from collections.abc import Callable
 from typing import Annotated, Protocol
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DbDep, require_permission
+from app.api.deps import CurrentUser, DbDep
 from app.models import Account, Device, Product, SimCard, User, Vehicle
 from app.services import accounts as hesap_svc
 from app.services.normalize import tr_normkey
 
 router = APIRouter(prefix="/api/arama", tags=["arama"])
-
-# Arama, kullanıcının zaten görebileceği kayıtları döndürür; her arayıcı
-# kendi iznini ve kapsamını uygular.
-Kullanici = Annotated[User, Depends(require_permission("hesap.gor"))]
 
 
 class AramaSonucu(BaseModel):
@@ -40,6 +43,53 @@ class Arayici(Protocol):
     async def __call__(
         self, db: AsyncSession, user: User, terim: str, limit: int
     ) -> list[AramaSonucu]: ...
+
+
+# Sıra = sonuç listesindeki sıra. Yeni arayıcılar SONA eklenir.
+ARAYICILAR: list[Arayici] = []
+
+
+def arayici_kaydet(izin: str) -> Callable[[Callable], Arayici]:
+    """Arayıcıyı kayıt defterine ekleyen dekoratör.
+
+    `izin` arayıcının kendi okuma iznidir; genel arama kapısı "kayıtlı
+    arayıcılardan en az birinin iznine sahip olma"dır. Böylece `hesap.gor`'u
+    olmayan servis teknisyeni (KD-09) yalnız kendi göreceği servis işlerini
+    arayabilir, hesap sonucu görmez.
+    """
+
+    def _kaydet(fn: Callable) -> Arayici:
+        fn.izin = izin  # type: ignore[attr-defined]
+        if fn not in ARAYICILAR:
+            ARAYICILAR.append(fn)  # type: ignore[arg-type]
+        return fn  # type: ignore[return-value]
+
+    return _kaydet
+
+
+class _AramaIzinleri:
+    """Kapının izin listesi kayıt defterinden CANLI okunur: yeni arayıcı
+    sonradan kaydolduğunda (modül import sırası) liste kendiliğinden genişler.
+    Yetki matrisi de bunu `izinler_herhangi` olarak okur."""
+
+    def __iter__(self):
+        return iter(dict.fromkeys(a.izin for a in ARAYICILAR))
+
+
+async def _arama_kullanicisi(user: CurrentUser) -> User:
+    izinler = tuple(_AramaIzinleri())
+    if not any(user.has(i) for i in izinler):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, f"Bu işlem için yetkiniz yok ({' veya '.join(izinler)})"
+        )
+    return user
+
+
+_arama_kullanicisi.izinler_herhangi = _AramaIzinleri()  # type: ignore[attr-defined]
+
+# Arama, kullanıcının zaten görebileceği kayıtları döndürür; her arayıcı
+# kendi iznini ve kapsamını uygular.
+Kullanici = Annotated[User, Depends(_arama_kullanicisi)]
 
 
 async def _hesap_ara(db: AsyncSession, user: User, terim: str, limit: int) -> list[AramaSonucu]:
@@ -168,8 +218,16 @@ async def _hat_ara(db: AsyncSession, user: User, terim: str, limit: int) -> list
     ]
 
 
-# Yeni modül geldikçe buraya eklenir: iş emri, teklif, hak ediş dökümü.
-ARAYICILAR = (_cihaz_ara, _arac_ara, _hat_ara, _hesap_ara, _urun_ara)
+# Canlı arayıcılar — sıra eskisiyle aynı (cihaz, araç, hat, hesap, ürün).
+# Teknik servis arayıcıları kendi API dosyalarından SONRA kaydolur.
+for _izin, _arayici in (
+    ("cihaz.gor", _cihaz_ara),
+    ("arac.gor", _arac_ara),
+    ("hat.gor", _hat_ara),
+    ("hesap.gor", _hesap_ara),
+    ("urun.gor", _urun_ara),
+):
+    arayici_kaydet(_izin)(_arayici)
 
 
 @router.get("", response_model=list[AramaSonucu])
@@ -181,5 +239,9 @@ async def ara(
 ) -> list[AramaSonucu]:
     sonuclar: list[AramaSonucu] = []
     for arayici in ARAYICILAR:
+        # İzin burada da sorulur (derinlemesine savunma): arayıcı kendi
+        # kontrolünü unutsa bile izinsiz kullanıcıya sonuç dönmez.
+        if not user.has(arayici.izin):
+            continue
         sonuclar.extend(await arayici(db, user, q, limit))
     return sonuclar[: limit * 2]

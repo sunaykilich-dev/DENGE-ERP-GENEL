@@ -1,21 +1,67 @@
-"""Kullanıcı ve rol yönetimi (izin: sistem.kullanici)."""
+"""Kullanıcı ve rol yönetimi (izin: sistem.kullanici).
 
-from typing import Annotated
+Yetki yükseltme önlemi (TS-006, E13-01) burada uygulanır, kuralları
+`services/yetki.py`'dedir: yüksek yetkili izinler yalnız ADMIN rolünde, ADMIN
+rolünü yalnız ADMIN atar, ADMIN rolü katalogdan yönetilir (409), son aktif
+ADMIN korunur (409), üst yetkili hedefe yalnız ADMIN dokunur (403). Her ret
+`yetki.ret` eylemiyle denetime yazılır — ret de bir güvenlik olayıdır.
+"""
+
+from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 
 from app.api.deps import DbDep, client_ip, require_permission
-from app.models import Role, RolePermission, User, UserPermission
-from app.permissions import PERMISSIONS, SCOPE_ALL, SCOPE_OWN_CUSTOMERS
+from app.models import Role, RolePermission, User, UserPermission, UserUnit
+from app.permissions import (
+    BIRIM_KAPSAMLARI,
+    BIRIMLER,
+    PERMISSIONS,
+    SCOPE_ALL,
+    SCOPE_OWN_CUSTOMERS,
+    SCOPE_OWN_JOBS,
+    SCOPE_OWN_UNITS,
+    SCOPES,
+)
 from app.schemas.auth import RoleOut, UserCreate, UserOut, UserPatch
-from app.services import audit
+from app.services import audit, yetki
 from app.services import auth as auth_service
 
 router = APIRouter(prefix="/api", tags=["kullanicilar"])
 
 AdminDep = Annotated[User, Depends(require_permission("sistem.kullanici"))]
+
+
+async def _reddet(
+    db,
+    request: Request,
+    aktor: User,
+    *,
+    entity: str,
+    entity_id: int | str | None,
+    durum: int,
+    mesaj: str,
+    ayrinti: dict | None = None,
+) -> NoReturn:
+    """Yetki reddini denetime yazar ve HTTP hatası fırlatır.
+
+    Çağrı noktasında henüz HİÇBİR yazma yapılmamış olmalı: commit yalnız
+    denetim satırını kalıcı kılar. Ret yazılmasaydı, kullanıcı yönetimi
+    yetkisini zorlayan biri iz bırakmadan deneme yapabilirdi (E13-01 (8)).
+    """
+    await audit.log(
+        db,
+        entity,
+        "yetki.ret",
+        entity_id=entity_id,
+        new_value={"neden": mesaj, **(ayrinti or {})},
+        user_id=aktor.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    raise HTTPException(durum, mesaj)
 
 
 @router.get("/roller", response_model=list[RoleOut])
@@ -44,8 +90,9 @@ class RolYetkisi(BaseModel):
 
 # Menüdeki ekran → onu açan izin. Arayüzdeki `MENU` tablosunun sunucu
 # tarafındaki karşılığı: "bu kullanıcı hangi sayfaları görür" sorusu
-# yöneticiye kod okumadan cevaplanabilmeli.
-_SAYFA_IZINLERI: list[tuple[str, str]] = [
+# yöneticiye kod okumadan cevaplanabilmeli. İzin bir demetse "herhangi biri"
+# yeter (MENU'deki liste izniyle aynı anlam).
+_SAYFA_IZINLERI: list[tuple[str, str | tuple[str, ...]]] = [
     ("Panel", "rapor.gor"),
     ("Hesaplar", "hesap.gor"),
     ("Ürün Kataloğu", "urun.gor"),
@@ -68,12 +115,90 @@ _SAYFA_IZINLERI: list[tuple[str, str]] = [
     ("Kullanıcılar", "sistem.kullanici"),
     ("Parametreler", "sistem.ayar"),
     ("Denetim İzi", "sistem.denetim"),
+    # --- Teknik Servis (plan §1.10; menü grubu "Teknik Servis") -------------
+    ("Servis Paneli", "servis.gor"),
+    ("Operasyon Merkezi", "operasyon.gor"),
+    ("Servis İşleri", "servis.gor"),
+    ("Planlama", "servis.gor"),
+    ("Benim İşlerim", "zaman.yaz"),
+    ("Ekipman Kütüğü", "ekipman.gor"),
+    ("Planlı Bakım", "bakim.gor"),
+    ("Atölye", "atolye.gor"),
+    ("Kiralamalar", "kiralama.gor"),
+    ("Kiralık Envanter", "kiralama.gor"),
+    ("Yedek Parça", "parca.gor"),
+    ("Saha / Zaman Takibi", "servis_rapor.gor"),
+    ("Servis Raporları", "servis_rapor.gor"),
+    ("Servis Maliyet", "maliyet.gor"),
+    ("Fatura Devri", "tahsilat.gor"),
+    ("Ana Veri Kalitesi", "hesap.birlestir"),
+    ("Servis Tanımları", ("servis.tanim", "operasyon.yonet")),
+    # --- İnsan Kaynakları ---------------------------------------------------
+    ("Personel", "personel.gor"),
+    ("Eğitim ve Gelişim", "egitim.gor"),
+    ("Gelişim Kartım", "egitim.kendim"),
 ]
 
-_KAPSAM_ACIKLAMA = {
-    SCOPE_ALL: "Tüm kayıtları görür",
-    SCOPE_OWN_CUSTOMERS: "Yalnız kendi müşterilerini ve onlara bağlı araç, cihaz, iş emrini görür",
+
+def _sayfa_acik(izin: str | tuple[str, ...], kodlar: set[str]) -> bool:
+    return any(k in kodlar for k in izin) if isinstance(izin, tuple) else izin in kodlar
+
+
+# Kapsam = (kısa etiket, açıklama). Yeni kapsamlar canlı ekranlarda (hesap,
+# cihaz, hat, mobilite iş emri) TÜM kayıtları görür; kısıt yalnız teknik
+# servis kayıtlarındadır — yönetici bunu rol seçerken bilmeli (plan §1.2).
+_KAPSAMLAR: dict[str, tuple[str, str]] = {
+    SCOPE_ALL: ("Tüm kayıtlar", "Tüm kayıtları görür"),
+    SCOPE_OWN_CUSTOMERS: (
+        "Yalnız kendi müşterileri",
+        "Yalnız kendi müşterilerini ve onlara bağlı araç, cihaz, iş emrini görür",
+    ),
+    SCOPE_OWN_UNITS: (
+        "Yalnız kendi birimi",
+        "Servis işlerinde ve diğer teknik servis kayıtlarında yalnız üyesi olduğu "
+        "birimleri görür (birimi yoksa hiçbirini); diğer modüllerde tüm kayıtlar",
+    ),
+    SCOPE_OWN_JOBS: (
+        "Yalnız kendi işleri",
+        "Servis işlerinde yalnız atandığı ya da planında olduğu işleri, diğer teknik "
+        "servis kayıtlarında üyesi olduğu birimleri görür (birimi yoksa hiçbirini); "
+        "diğer modüllerde tüm kayıtlar",
+    ),
 }
+_KAPSAM_ACIKLAMA = {kod: aciklama for kod, (_, aciklama) in _KAPSAMLAR.items()}
+
+
+class KapsamSatiri(BaseModel):
+    kod: str
+    ad: str
+    aciklama: str
+    birim_zorunlu: bool
+
+
+class BirimSatiri(BaseModel):
+    kod: str
+    ad: str
+
+
+class KapsamKatalogu(BaseModel):
+    kapsamlar: list[KapsamSatiri]
+    birimler: list[BirimSatiri]
+
+
+@router.get("/kapsamlar", response_model=KapsamKatalogu)
+async def kapsam_katalogu(_: AdminDep) -> KapsamKatalogu:
+    """Rol kapsamları ve birimler — rol/kullanıcı ekranının seçenekleri.
+
+    Liste sunucudan gelir (E13-D02): ön yüzde sabit iki seçenek vardı ve yeni
+    kapsamlar rol ekranından hiç seçilemiyordu.
+    """
+    return KapsamKatalogu(
+        kapsamlar=[
+            KapsamSatiri(kod=k, ad=ad, aciklama=ac, birim_zorunlu=k in BIRIM_KAPSAMLARI)
+            for k, (ad, ac) in _KAPSAMLAR.items()
+        ],
+        birimler=[BirimSatiri(kod=k, ad=ad) for k, ad in BIRIMLER.items()],
+    )
 
 
 @router.get("/roller/{kod}/yetkiler", response_model=RolYetkisi)
@@ -102,7 +227,7 @@ def _yetki_gorunumu(rol: Role, kodlar: set[str], istisna: list[str] | None = Non
         name=rol.name,
         scope=rol.scope,
         scope_aciklama=_KAPSAM_ACIKLAMA.get(rol.scope, rol.scope),
-        sayfalar=[ad for ad, izin in _SAYFA_IZINLERI if izin in kodlar],
+        sayfalar=[ad for ad, izin in _SAYFA_IZINLERI if _sayfa_acik(izin, kodlar)],
         izinler=[
             IzinSatiri(kod=k, modul=PERMISSIONS[k][0], aciklama=PERMISSIONS[k][1])
             for k in sorted(kodlar)
@@ -175,13 +300,44 @@ async def _rol_izinlerini_yaz(db, rol: Role, kodlar: list[str]) -> None:
     rol.ozellestirildi = True
 
 
+def _bilinmeyenleri_reddet(kodlar: list[str]) -> None:
+    gecersiz = [k for k in kodlar if k not in PERMISSIONS]
+    if gecersiz:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen izin: {', '.join(gecersiz)}")
+
+
+async def _verilemeyenleri_reddet(
+    db, request: Request, aktor: User, kodlar: list[str], *, entity: str, entity_id
+) -> None:
+    """Yüksek yetkili ya da aktörde olmayan izin istenirse 403 + denetim."""
+    if verilemez := yetki.verilemeyen_izinler(aktor, kodlar):
+        await _reddet(
+            db,
+            request,
+            aktor,
+            entity=entity,
+            entity_id=entity_id,
+            durum=status.HTTP_403_FORBIDDEN,
+            mesaj=f"Bu izinleri veremezsiniz: {', '.join(verilemez)}",
+            ayrinti={"izinler": verilemez},
+        )
+
+
 @router.post("/roller", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
 async def rol_olustur(payload: RolIn, request: Request, db: DbDep, user: AdminDep) -> RoleOut:
-    """Yeni rol. Kod BÜYÜK HARF ve değiştirilemez — yetki kontrolleri ona bakar."""
-    if payload.scope not in (SCOPE_ALL, SCOPE_OWN_CUSTOMERS):
+    """Yeni rol. Kod BÜYÜK HARF ve değiştirilemez — yetki kontrolleri ona bakar.
+
+    Yüksek yetkili izin (`sistem.*`, `kvkk.yonet`) özel role konamaz (403):
+    yalnız ADMIN rolünde bulunur.
+    """
+    if payload.scope not in SCOPES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçersiz kapsam")
     if await db.scalar(select(Role).where(Role.code == payload.code)):
         raise HTTPException(status.HTTP_409_CONFLICT, f"Bu rol kodu zaten var: {payload.code}")
+    _bilinmeyenleri_reddet(payload.izinler)
+    await _verilemeyenleri_reddet(
+        db, request, user, payload.izinler, entity="roles", entity_id=payload.code
+    )
 
     rol = Role(
         code=payload.code,
@@ -222,8 +378,26 @@ async def rol_guncelle(
     rol = await db.scalar(select(Role).where(Role.code == kod))
     if rol is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Rol bulunamadı: {kod}")
-    if payload.scope is not None and payload.scope not in (SCOPE_ALL, SCOPE_OWN_CUSTOMERS):
+    if rol.code == yetki.ROL_ADMIN:
+        # İzinleri boşaltılabilen ADMIN herkesi kilitlerdi; ADMIN her açılışta
+        # katalogdaki tüm izinlere eşitlenir (seeds/dev.py sync_roles).
+        await _reddet(
+            db,
+            request,
+            user,
+            entity="roles",
+            entity_id=rol.id,
+            durum=status.HTTP_409_CONFLICT,
+            mesaj="Sistem yöneticisi rolü katalogdan yönetilir; düzenlenemez.",
+            ayrinti={"kod": rol.code},
+        )
+    if payload.scope is not None and payload.scope not in SCOPES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçersiz kapsam")
+    if payload.izinler is not None:
+        _bilinmeyenleri_reddet(payload.izinler)
+        await _verilemeyenleri_reddet(
+            db, request, user, payload.izinler, entity="roles", entity_id=rol.id
+        )
 
     eski = {"ad": rol.name, "kapsam": rol.scope}
     if payload.name is not None:
@@ -320,9 +494,38 @@ async def istisnalari_yaz(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kullanıcı bulunamadı")
     if hedef.id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kendi izinlerinizi değiştiremezsiniz.")
-    gecersiz = [i.permission_code for i in payload if i.permission_code not in PERMISSIONS]
-    if gecersiz:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen izin: {', '.join(gecersiz)}")
+    _bilinmeyenleri_reddet([i.permission_code for i in payload])
+    # Üst yetkili hedefin (kısma dahil) istisnasına yalnız ADMIN dokunur.
+    try:
+        yetki.hedef_kontrol(user, hedef)
+    except yetki.YetkiHatasi as e:
+        await _reddet(
+            db,
+            request,
+            user,
+            entity="users",
+            entity_id=hedef.id,
+            durum=status.HTTP_403_FORBIDDEN,
+            mesaj=str(e),
+            ayrinti={"islem": "izin.istisna"},
+        )
+    # Kısma (`allow=False`) her zaman serbest; VERME alt küme ve yüksek yetki
+    # kuralına tabi.
+    if verilemez := yetki.verilemeyen_izinler(
+        user,
+        [i.permission_code for i in payload if i.allow],
+        hedef_admin=yetki.admin_mi(hedef),
+    ):
+        await _reddet(
+            db,
+            request,
+            user,
+            entity="users",
+            entity_id=hedef.id,
+            durum=status.HTTP_403_FORBIDDEN,
+            mesaj=f"Bu izinleri veremezsiniz: {', '.join(verilemez)}",
+            ayrinti={"islem": "izin.istisna", "izinler": verilemez},
+        )
 
     eski = [
         {"kod": u.permission_code, "allow": u.allow}
@@ -367,10 +570,51 @@ async def istisnalari_getir(user_id: int, db: DbDep, _: AdminDep) -> list[Istisn
     ]
 
 
-@router.get("/kullanicilar", response_model=list[UserOut])
-async def list_users(db: DbDep, _: AdminDep) -> list[UserOut]:
+class KullaniciSatiri(UserOut):
+    """Liste satırı: kullanıcı + rolünden sapma göstergesi (E13-10).
+
+    `sapma_sayisi` kişiye özel istisna satırı sayısıdır; aynı roldeki iki
+    kişinin neden farklı şey gördüğü listede rozetle görünür. `UserOut`'a
+    değil yalnız listeye eklenir: giriş yanıtı bunu taşımaz.
+    """
+
+    sapma_sayisi: int = 0
+    rol_ozellestirildi: bool = False
+
+
+@router.get("/kullanicilar", response_model=list[KullaniciSatiri])
+async def list_users(db: DbDep, _: AdminDep) -> list[KullaniciSatiri]:
     users = (await db.scalars(select(User).order_by(User.username))).all()
-    return [UserOut.of(u) for u in users]
+    return [
+        KullaniciSatiri(
+            **UserOut.of(u).model_dump(),
+            sapma_sayisi=len(u.izin_istisnalari),
+            rol_ozellestirildi=bool(u.role.ozellestirildi),
+        )
+        for u in users
+    ]
+
+
+def _birimleri_dogrula(
+    rol: Role, birimler: list[str], birincil: str | None
+) -> tuple[list[str], str | None]:
+    """Açılışta verilen birimleri doğrular; (sıralı birimler, birincil) döner.
+
+    Birim kapsamlı rolde birimsiz hesap 400 (E13-11): birimsiz şef hiçbir servis
+    kaydı görmezdi (fail-closed) ve bunu kimse fark etmezdi.
+    """
+    if bilinmeyen := sorted(set(birimler) - set(BIRIMLER)):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {', '.join(bilinmeyen)}"
+        )
+    temiz = sorted(set(birimler))
+    if rol.scope in BIRIM_KAPSAMLARI and not temiz:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu rol için en az bir birim seçilmeli")
+    if birincil is not None and birincil not in temiz:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Birincil birim seçili birimlerden olmalı")
+    if birincil is None and temiz:
+        birincil = temiz[0]
+    return temiz, birincil
 
 
 @router.post("/kullanicilar", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -380,6 +624,18 @@ async def create_user(payload: UserCreate, request: Request, db: DbDep, admin: A
     role = await db.scalar(select(Role).where(Role.code == payload.role_code))
     if role is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen rol: {payload.role_code}")
+    birimler, birincil = _birimleri_dogrula(role, payload.birimler, payload.birincil_birim)
+    if not yetki.rol_atanabilir_mi(admin, role):
+        await _reddet(
+            db,
+            request,
+            admin,
+            entity="users",
+            entity_id=None,
+            durum=status.HTTP_403_FORBIDDEN,
+            mesaj=f"Bu rolü atayamazsınız: {role.code}",
+            ayrinti={"islem": "olustur", "username": payload.username, "rol": role.code},
+        )
 
     user = User(
         full_name=payload.full_name,
@@ -388,14 +644,20 @@ async def create_user(payload: UserCreate, request: Request, db: DbDep, admin: A
         password_hash=auth_service.hash_password(payload.password),
         role_id=role.id,
     )
+    user.birimler = [
+        UserUnit(birim=b, is_primary=(b == birincil), created_by=admin.id) for b in birimler
+    ]
     db.add(user)
     await db.flush()
+    yeni = {"username": user.username, "rol": role.code}
+    if birimler:
+        yeni["birimler"] = birimler
     await audit.log(
         db,
         "users",
         "olustur",
         entity_id=user.id,
-        new_value={"username": user.username, "rol": role.code},
+        new_value=yeni,
         user_id=admin.id,
         ip=client_ip(request),
     )
@@ -424,8 +686,61 @@ async def patch_user(
     if user.id == admin.id:
         if payload.is_active is False:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kendi hesabınızı kapatamazsınız")
+        if payload.giris_acik is False:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kendi girişinizi kapatamazsınız")
         if payload.role_code is not None and payload.role_code != user.role.code:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kendi rolünüzü değiştiremezsiniz")
+
+    # --- Yetki yükseltme önlemi: HİÇBİR şey yazılmadan önce ------------------
+    role = None
+    rol_degisiyor = False
+    if payload.role_code is not None:
+        role = await db.scalar(select(Role).where(Role.code == payload.role_code))
+        if role is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen rol: {payload.role_code}")
+        rol_degisiyor = role.id != user.role_id
+    ret = {"entity": "users", "entity_id": user.id}
+    if (
+        payload.is_active is False or payload.giris_acik is False or rol_degisiyor
+    ) and await yetki.son_admin_mi(db, user):
+        await _reddet(
+            db,
+            request,
+            admin,
+            **ret,
+            durum=status.HTTP_409_CONFLICT,
+            mesaj="Giriş yapabilen son sistem yöneticisi kapatılamaz ve rolü değiştirilemez.",
+            ayrinti={"islem": "guncelle"},
+        )
+    if user.id != admin.id:
+        try:
+            yetki.hedef_kontrol(admin, user)
+        except yetki.YetkiHatasi as e:
+            await _reddet(
+                db,
+                request,
+                admin,
+                **ret,
+                durum=status.HTTP_403_FORBIDDEN,
+                mesaj=str(e),
+                ayrinti={"islem": "guncelle"},
+            )
+    if rol_degisiyor:
+        if not yetki.rol_atanabilir_mi(admin, role):
+            await _reddet(
+                db,
+                request,
+                admin,
+                **ret,
+                durum=status.HTTP_403_FORBIDDEN,
+                mesaj=f"Bu rolü atayamazsınız: {role.code}",
+                ayrinti={"islem": "guncelle", "rol": role.code},
+            )
+        if role.scope in BIRIM_KAPSAMLARI and not user.birimler:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Bu rol için en az bir birim gerekli; önce personel kartından birim verin.",
+            )
 
     if payload.full_name is not None:
         user.full_name = payload.full_name
@@ -433,10 +748,9 @@ async def patch_user(
         user.email = payload.email
     if payload.is_active is not None:
         user.is_active = payload.is_active
-    if payload.role_code is not None:
-        role = await db.scalar(select(Role).where(Role.code == payload.role_code))
-        if role is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen rol: {payload.role_code}")
+    if payload.giris_acik is not None:
+        user.giris_acik = payload.giris_acik
+    if role is not None:
         user.role_id = role.id
     if payload.password is not None:
         user.password_hash = auth_service.hash_password(payload.password)
@@ -447,12 +761,14 @@ async def patch_user(
     # Değişiklik ne olursa olsun eski/yeni değerleriyle loglanır.
     await audit.log_change(db, user, "guncelle", user_id=admin.id, ip=client_ip(request))
 
-    # Yetki, parola veya aktiflik değiştiyse açık oturumları düşür: eski yetkiyle
-    # açılmış bir oturum yeni kısıtı görmezdi.
+    # Yetki, parola, aktiflik veya giriş değiştiyse açık oturumları düşür: eski
+    # yetkiyle açılmış bir oturum yeni kısıtı görmezdi; girişi kapatılan kişinin
+    # açık oturumu da hemen düşmeli (TS-007).
     if (
         payload.role_code is not None
         or payload.password is not None
         or payload.is_active is False
+        or payload.giris_acik is False
         or payload.reset_mfa
     ):
         await auth_service.revoke_all_sessions(db, user.id)

@@ -10,10 +10,13 @@ gömülmüş durumda (`BZL OTOMOTİV (GAZİANTEP EVA)`). Göçte ayrıştırıl�
 `parent_dealer_id`'ye yazılacak; bayi bazında ciro raporu ancak böyle çıkar.
 """
 
+from datetime import datetime
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     String,
@@ -22,6 +25,7 @@ from sqlalchemy import (
     event,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -33,6 +37,7 @@ from app.models.mixins import (
     TimestampMixin,
     VersionedMixin,
 )
+from app.services import normalize as _normalize
 from app.services.normalize import tr_normkey
 
 # Belge tipi — hak edişte kesintileri belirler (brief §4.7 madde 6).
@@ -66,6 +71,13 @@ class Account(
         Index("ix_accounts_title_trgm", text("title_key gin_trgm_ops"), postgresql_using="gin"),
         Index("ix_accounts_tax_no", "tax_no"),
         UniqueConstraint("source_system", "source_ref", name="uq_accounts_kaynak"),
+        Index("ix_accounts_dis_referans", "dis_referans"),
+        # Ekrandan birleştirilen kaynak kayıt silinmiş olmalı; canlı bir kaydın
+        # "başkasına birleşti" görünmesi aramada iki müşteri gösterirdi.
+        CheckConstraint(
+            "merged_into_id IS NULL OR is_deleted", name="ck_accounts_birlesen_silinmis"
+        ),
+        CheckConstraint("merged_into_id <> id", name="ck_accounts_kendine_birlesemez"),
     )
 
     title: Mapped[str] = mapped_column(String(200))
@@ -104,7 +116,27 @@ class Account(
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
 
-    parent_dealer: Mapped["Account | None"] = relationship(remote_side="Account.id")
+    # --- Teknik servis ana veri (E14-01) ------------------------------------
+    # Var olan bütün hesaplar doğrulanmış sayılır (mobilite davranışı
+    # değişmez); servis ekranından HIZLI eklenen müşteri `false` doğar ve
+    # `hesap.birlestir` sahibi `/dogrula` ile onaylar. Doğrulama alanları
+    # HesapIn/Patch'te YOK — yalnız o uç yazar.
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), default=True, nullable=False
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verified_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL", name="fk_accounts_dogrulayan")
+    )
+    # Muhasebe cari kodu — yalnız METİN, entegrasyon değil.
+    dis_referans: Mapped[str | None] = mapped_column(String(40))
+    merged_into_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("accounts.id", ondelete="SET NULL", name="fk_accounts_birlesti")
+    )
+
+    parent_dealer: Mapped["Account | None"] = relationship(
+        remote_side="Account.id", foreign_keys=[parent_dealer_id]
+    )
     # installation_partners tablosunun accounts'a İKİ yabancı anahtarı var
     # (account_id ve billing_account_id: fatura başka tüzel kişi adına
     # kesilebiliyor). Hangisinin bu ilişkiyi kurduğu açıkça yazılmalı.
@@ -162,6 +194,7 @@ class InstallationPartner(Base, TimestampMixin):
 
 class Contact(Base, PkMixin, TimestampMixin):
     __tablename__ = "contacts"
+    __table_args__ = (Index("ix_contacts_adres", "address_id"),)
 
     account_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("accounts.id", ondelete="CASCADE"), index=True
@@ -172,19 +205,161 @@ class Contact(Base, PkMixin, TimestampMixin):
     email: Mapped[str | None] = mapped_column(String(160))
     is_primary: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     notes: Mapped[str | None] = mapped_column(Text)
+    # Lokasyon irtibatı (E14 §3.3): NULL = hesap geneli. Tesis düzeyindeki
+    # birincil kişi `addresses.primary_contact_id` ile tutulur; hesap
+    # düzeyindeki tek-birincil kuralı aynen kalır.
+    address_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("addresses.id", ondelete="SET NULL", name="fk_contacts_adres")
+    )
 
 
-class Address(Base, PkMixin, TimestampMixin):
+# Adres türleri. TESIS = servis lokasyonu (gidilen yer). Ayrı `sites` tablosu
+# AÇILMAZ: gidilen yer de carinin bir adresidir ve teklif/servis/kiralama aynı
+# satıra bağlanır (plan §1.5).
+ADRES_TURLERI = ("MERKEZ", "FATURA", "SEVK", "TESIS")
+
+
+class Address(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin, SourceMixin):
+    """Hesap adresi; `kind='TESIS'` iken servis lokasyonudur (E14-02).
+
+    **Silme yok, pasifleme var** (`is_active`): servis geçmişi bağlı kalır.
+    SoftDeleteMixin bilerek eklenmedi — `belgeler.py` silinmiş filtresi
+    yazmıyor ve silme ucu açılmayacak.
+
+    **`line` NULL olabilir yalnız TESIS'te** (onaylı istisna, plan §1.12):
+    hızlı eklemede yalnız tesis adı ve il bilinir; uydurma adres yazılmaz.
+    Diğer türlerde eski NOT NULL kuralı `ck_addresses_satir` ile korunur.
+    """
+
     __tablename__ = "addresses"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN (" + ", ".join(f"'{t}'" for t in ADRES_TURLERI) + ")",
+            name="ck_addresses_tur",
+        ),
+        CheckConstraint("kind = 'TESIS' OR line IS NOT NULL", name="ck_addresses_satir"),
+        CheckConstraint("kind <> 'TESIS' OR site_name IS NOT NULL", name="ck_addresses_tesis_adi"),
+        Index("ix_addresses_tesis_trgm", text("site_key gin_trgm_ops"), postgresql_using="gin"),
+        Index("ix_addresses_hesap_tur", "account_id", "kind", "is_active"),
+        # Aynı carinin aynı adlı iki AKTİF tesisi olamaz ("Akyaka AVM" ile
+        # "AKYAKA  AVM" aynı anahtardır); pasif eski kayıt engel değildir.
+        Index(
+            "uq_addresses_tesis_aktif",
+            "account_id",
+            "site_key",
+            unique=True,
+            postgresql_where=text("kind = 'TESIS' AND is_active"),
+        ),
+        UniqueConstraint("source_system", "source_ref", name="uq_addresses_kaynak"),
+    )
 
     account_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("accounts.id", ondelete="CASCADE"), index=True
     )
     label: Mapped[str] = mapped_column(String(40), server_default=text("'Merkez'"))
-    line: Mapped[str] = mapped_column(Text)
+    line: Mapped[str | None] = mapped_column(Text)
     district: Mapped[str | None] = mapped_column(String(60))
     city: Mapped[str | None] = mapped_column(String(60))
     is_primary: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+
+    # --- Servis lokasyonu (E14 §3.2) -----------------------------------------
+    kind: Mapped[str] = mapped_column(
+        String(10), server_default=text("'MERKEZ'"), default="MERKEZ", nullable=False
+    )
+    site_name: Mapped[str | None] = mapped_column(String(200))
+    # unvan_anahtari(site_name) — ORM olayıyla dolar (aşağıda).
+    site_key: Mapped[str | None] = mapped_column(String(200))
+    access_note: Mapped[str | None] = mapped_column(Text)
+    # Döngüsel FK (contacts.address_id ↔ addresses.primary_contact_id):
+    # `use_alter` olmadan metadata sıralaması uyarı verir.
+    primary_contact_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "contacts.id",
+            ondelete="SET NULL",
+            name="fk_addresses_birincil_irtibat",
+            use_alter=True,
+        ),
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), default=True, nullable=False
+    )
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), default=True, nullable=False
+    )
+
+
+TAKMA_AD_KAYNAKLARI = ("ELLE", "ESLESTIRME", "BIRLESTIRME", "GOC")
+
+
+class AccountAlias(Base, PkMixin, TimestampMixin, ActorMixin):
+    """Müşteri/tesis takma adı (E14 §3.4).
+
+    Eski kayıtlarda aynı müşteri "AKYAKA PARK AVM", "Akyaka Park AVM Güvenlik"
+    gibi onlarca yazımla geçiyor. Onaylanan her yazım burada bir hedefe
+    bağlanır; sonraki eşleştirme ve göç aynı yazımı bir daha sormaz.
+
+    **`alias_key` GLOBAL tekil:** bir yazım yalnız bir hedefe gider —
+    eşleştirme deterministik kalır. Kayıt değiştirilmez; yalnız eklenir ve
+    silinir (silme denetime yazılır).
+    """
+
+    __tablename__ = "account_aliases"
+    __table_args__ = (
+        UniqueConstraint("alias_key", name="uq_account_aliases_anahtar"),
+        Index("ix_account_aliases_trgm", text("alias_key gin_trgm_ops"), postgresql_using="gin"),
+        CheckConstraint(
+            "kaynak IN (" + ", ".join(f"'{k}'" for k in TAKMA_AD_KAYNAKLARI) + ")",
+            name="ck_account_aliases_kaynak",
+        ),
+    )
+
+    account_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("accounts.id", ondelete="CASCADE"), index=True
+    )
+    # Doluysa ad bir tesise işaret eder; aynı hesaba ait olduğunu servis doğrular.
+    address_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("addresses.id", ondelete="SET NULL")
+    )
+    alias_text: Mapped[str] = mapped_column(String(250))
+    alias_key: Mapped[str] = mapped_column(String(250))
+    kaynak: Mapped[str] = mapped_column(String(12))
+    kaynak_tablo: Mapped[str | None] = mapped_column(String(40))
+
+
+BIRLESTIRME_TURLERI = ("HESAP", "LOKASYON")
+
+
+class AccountMerge(Base, PkMixin, TimestampMixin, ActorMixin):
+    """Hesap/lokasyon birleştirme kaydı — DEĞİŞMEZ (E14 §3.5).
+
+    Birleştirme geri alınamaz bir işlem; neyin nereye taşındığının tek kanıtı
+    bu satırdır. Önizlemede gösterilen sayılar (`onizleme`) ile gerçekte
+    güncellenen satırlar (`tasinan`) AYRI tutulur: arada başka biri kayıt
+    eklediyse fark görünür kalır. API'de güncelleme/silme ucu yoktur.
+
+    `kaynak_id`/`hedef_id` FK değildir: tür polimorfik (hesap ya da adres) ve
+    kaynak kayıt birleştirmeden sonra silinmiş olabilir.
+    """
+
+    __tablename__ = "account_merges"
+    __table_args__ = (
+        CheckConstraint(
+            "tur IN (" + ", ".join(f"'{t}'" for t in BIRLESTIRME_TURLERI) + ")",
+            name="ck_account_merges_tur",
+        ),
+        CheckConstraint("kaynak_id <> hedef_id", name="ck_account_merges_farkli"),
+        CheckConstraint("length(trim(gerekce)) >= 5", name="ck_account_merges_gerekce"),
+    )
+
+    tur: Mapped[str] = mapped_column(String(10))
+    kaynak_id: Mapped[int] = mapped_column(BigInteger)
+    hedef_id: Mapped[int] = mapped_column(BigInteger)
+    gerekce: Mapped[str] = mapped_column(Text)
+    onizleme: Mapped[dict | None] = mapped_column(JSONB)
+    tasinan: Mapped[dict | None] = mapped_column(JSONB)
+    doldurulan_alanlar: Mapped[dict | None] = mapped_column(JSONB)
+    eklenen_roller: Mapped[list | None] = mapped_column(JSONB)
 
 
 # `title_key` unutulmasın diye ORM olayına bağlanır: API, seed ve veri göçü
@@ -194,3 +369,20 @@ class Address(Base, PkMixin, TimestampMixin):
 @event.listens_for(Account, "before_update")
 def _hesap_anahtari(_mapper, _connection, target: Account) -> None:
     target.title_key = tr_normkey(target.title)
+
+
+# Tesis ve takma ad anahtarı da aynı gerekçeyle ORM olayına bağlıdır.
+# `unvan_anahtari` (`services/normalize.py`, TS-011) `tr_normkey`'den farklıdır:
+# A.Ş./LTD. ŞTİ. eklerini ve noktalamayı atar; `title_key` ve mobilite araması
+# DEĞİŞMEZ. Çağrı modül özniteliği üzerinden ve yalnız alan doluyken yapılır:
+# tesis adı olmayan (MERKEZ/FATURA/SEVK) adres yazımı bu fonksiyona hiç uğramaz.
+@event.listens_for(Address, "before_insert")
+@event.listens_for(Address, "before_update")
+def _tesis_anahtari(_mapper, _connection, target: Address) -> None:
+    target.site_key = _normalize.unvan_anahtari(target.site_name) if target.site_name else None
+
+
+@event.listens_for(AccountAlias, "before_insert")
+@event.listens_for(AccountAlias, "before_update")
+def _takma_ad_anahtari(_mapper, _connection, target: AccountAlias) -> None:
+    target.alias_key = _normalize.unvan_anahtari(target.alias_text)

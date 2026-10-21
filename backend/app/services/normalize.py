@@ -253,6 +253,255 @@ def _luhn_ok(digits: str) -> bool:
     return toplam % 10 == 0
 
 
+# --- Teknik servis: seri no, ünvan anahtarı, il (TS-011) ------------------------
+
+# Seri numarası ASCII kabul edilir. Türkçe klavyede küçük yazılan "i" Türkçe
+# büyük harfte "İ" olur ve sahadaki etiketteki ASCII "I" ile hiç eşleşmezdi
+# (E03-D01: üç modülün üç ayrı tanımı bu yüzden tekleştirildi). Türkçe harfler
+# ASCII büyük karşılığına indirgenir; `tr_normkey` KULLANILMAZ çünkü o küçük
+# harfe çevirir ve boşluk dışındaki işaretlere dokunmaz — seri için anahtar
+# büyük harf olmalı ki ekranda göründüğü gibi okunabilsin.
+_SERI_FOLD = str.maketrans(
+    {
+        "i": "I",
+        "ı": "I",
+        "İ": "I",
+        "ş": "S",
+        "Ş": "S",
+        "ğ": "G",
+        "Ğ": "G",
+        "ü": "U",
+        "Ü": "U",
+        "ö": "O",
+        "Ö": "O",
+        "ç": "C",
+        "Ç": "C",
+    }
+)
+
+
+def normalize_seri(raw: object) -> str:
+    """Seri numarasının TEK karşılaştırma anahtarı (servis işi, kütük, atölye).
+
+    Kural (plan TS-011, E01-10/E03-D01): baş/son boşluk kırpılır, iç boşluklar
+    teke iner, ASCII büyük harfe çevrilir (i/ı/İ → I). Baştaki SIFIRLAR ve
+    `/ - .` işaretleri KORUNUR: `00123` ile `123`, `AB-1` ile `AB1` farklı
+    cihazlardır — üretici etiketinde ikisi de geçer, "benzer" diye birleştirmek
+    yanlış cihaza servis yazmak demektir.
+
+    Boş/None girdi boş metin döner (çağıran `or None` ile NULL'a çevirir).
+
+    >>> normalize_seri(" abc-i01 ")
+    'ABC-I01'
+    >>> normalize_seri(" 00ab  12/3 ")
+    '00AB 12/3'
+    """
+    if raw is None:
+        return ""
+    text = unicodedata.normalize("NFC", _stringify(raw))
+    text = text.translate(_SERI_FOLD).upper()
+    return re.sub(r"\s+", " ", text).strip()
+
+
+# Ünvan sonundaki/içindeki tüzel kişilik ekleri. Uzun dizi önce denenir ki
+# "sanayi ve ticaret" önce "ve" diye bölünmesin. Yalnız tam KELİME dizileri
+# atılır; "Tic" ile başlayan bir ad ("Ticaretgen") etkilenmez.
+_UNVAN_EKLERI: tuple[tuple[str, ...], ...] = (
+    ("sanayi", "ve", "ticaret"),
+    ("san", "ve", "tic"),
+    ("anonim", "sirketi"),
+    ("limited", "sirketi"),
+    ("sanayi", "ticaret"),
+    ("ltd", "sti"),
+    ("san", "tic"),
+    ("a", "s"),
+    ("ltd",),
+    ("sti",),
+    ("san",),
+    ("tic",),
+)
+
+
+def _ek_at(kelimeler: list[str]) -> list[str]:
+    sonuc: list[str] = []
+    i = 0
+    while i < len(kelimeler):
+        for ek in _UNVAN_EKLERI:
+            if tuple(kelimeler[i : i + len(ek)]) == ek:
+                i += len(ek)
+                break
+        else:
+            sonuc.append(kelimeler[i])
+            i += 1
+    # "AŞ" noktasız yazıldığında tek kelime "as" olur; yalnız SONDA ek sayılır
+    # (ad içindeki "AS" — ör. "AS Elektrik" — atılmaz).
+    if len(sonuc) > 1 and sonuc[-1] == "as":
+        sonuc.pop()
+    return sonuc
+
+
+def unvan_anahtari(ham: object) -> str:
+    """Müşteri/tesis/takma ad eşleştirme anahtarı (E14 §3.7, K20).
+
+    `tr_normkey`'den FARKLIDIR ve onun yerine geçmez: `tr_normkey` ve
+    `accounts.title_key` mobilite araması ve içe aktarma tarafından
+    kullanılıyor, değişmez. Bu anahtar ek olarak noktalamayı ve tüzel kişilik
+    eklerini (A.Ş., LTD. ŞTİ., SAN. VE TİC., Anonim/Limited Şirketi) atar.
+    Eski kayıtlarda aynı müşteri onlarca yazımla geçiyor; ekler yüzünden
+    farklı anahtara düşmesi eşleştirmeyi elle yapılır hâle getiriyordu.
+
+    Bedeli: ekler atılınca iki ayrı firma aynı anahtara düşebilir. Bu yüzden
+    eşleştirme yalnız TEK aday varsa bağlar (E14-10 kontrolü).
+
+    >>> unvan_anahtari("G4S ELEKTRONİK SİSTEMLERİ A.Ş.")
+    'g4s elektronik sistemleri'
+    >>> unvan_anahtari("G4S Elektronik Sistemleri Anonim Şirketi")
+    'g4s elektronik sistemleri'
+    """
+    if ham is None:
+        return ""
+    temel = tr_normkey(_stringify(ham))
+    temel = re.sub(r"[^\w\s]|_", " ", temel)
+    kelimeler = temel.split()
+    ekler_atilmis = _ek_at(kelimeler)
+    # Ad yalnız eklerden oluşuyorsa ("A.Ş.") anahtar boş kalmasın: boş anahtar
+    # birbirinden alakasız kayıtları tek gruba toplardı.
+    return " ".join(ekler_atilmis or kelimeler)
+
+
+# 81 il, plaka kodu sırasıyla (index + 1 = plaka kodu). Kanonik yazım resmî
+# il adıdır; ekranda ve raporda bu görünür.
+IL_ADLARI: tuple[str, ...] = (
+    "Adana",
+    "Adıyaman",
+    "Afyonkarahisar",
+    "Ağrı",
+    "Amasya",
+    "Ankara",
+    "Antalya",
+    "Artvin",
+    "Aydın",
+    "Balıkesir",
+    "Bilecik",
+    "Bingöl",
+    "Bitlis",
+    "Bolu",
+    "Burdur",
+    "Bursa",
+    "Çanakkale",
+    "Çankırı",
+    "Çorum",
+    "Denizli",
+    "Diyarbakır",
+    "Edirne",
+    "Elazığ",
+    "Erzincan",
+    "Erzurum",
+    "Eskişehir",
+    "Gaziantep",
+    "Giresun",
+    "Gümüşhane",
+    "Hakkari",
+    "Hatay",
+    "Isparta",
+    "Mersin",
+    "İstanbul",
+    "İzmir",
+    "Kars",
+    "Kastamonu",
+    "Kayseri",
+    "Kırklareli",
+    "Kırşehir",
+    "Kocaeli",
+    "Konya",
+    "Kütahya",
+    "Malatya",
+    "Manisa",
+    "Kahramanmaraş",
+    "Mardin",
+    "Muğla",
+    "Muş",
+    "Nevşehir",
+    "Niğde",
+    "Ordu",
+    "Rize",
+    "Sakarya",
+    "Samsun",
+    "Siirt",
+    "Sinop",
+    "Sivas",
+    "Tekirdağ",
+    "Tokat",
+    "Trabzon",
+    "Tunceli",
+    "Şanlıurfa",
+    "Uşak",
+    "Van",
+    "Yozgat",
+    "Zonguldak",
+    "Aksaray",
+    "Bayburt",
+    "Karaman",
+    "Kırıkkale",
+    "Batman",
+    "Şırnak",
+    "Bartın",
+    "Ardahan",
+    "Iğdır",
+    "Yalova",
+    "Karabük",
+    "Kilis",
+    "Osmaniye",
+    "Düzce",
+)
+
+# Sahada yaygın eski/kısa adlar. Yalnız TEK ile eşleşen, belirsiz olmayan
+# yazımlar; ilçe adları (Kadıköy, İzmit) bilinçli olarak YOK — ilçe ile il
+# karışırsa rapordaki şehir kırılımı sessizce yanlış olurdu.
+_IL_TAKMA_ADLARI = {
+    "afyon": "Afyonkarahisar",
+    "kmaras": "Kahramanmaraş",
+    "maras": "Kahramanmaraş",
+    "urfa": "Şanlıurfa",
+    "antep": "Gaziantep",
+    "icel": "Mersin",
+}
+
+
+def _il_anahtar(ham: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", tr_normkey(ham))
+
+
+_IL_ANAHTARLARI: dict[str, str] = {
+    **{_il_anahtar(ad): ad for ad in IL_ADLARI},
+    **_IL_TAKMA_ADLARI,
+}
+
+
+def il_normalize(ham: object) -> str | None:
+    """Serbest il yazımını resmî il adına çevirir; bilinmiyorsa None (E14-D02).
+
+    "İSTANBUL", "istanbul", "Istanbul " ve plaka kodu "34" aynı sonucu
+    verir: `İstanbul`. Boş girdi de None döner; "boş mu, tanınmadı mı"
+    ayrımını çağıran yapar (lokasyon uçları tanınmayan ili 400 ile reddeder,
+    canlı `HesapIn.region` değişmez).
+
+    >>> il_normalize("ISTANBUL")
+    'İstanbul'
+    >>> il_normalize("34")
+    'İstanbul'
+    """
+    if ham is None:
+        return None
+    metin = _stringify(ham)
+    if not metin:
+        return None
+    if metin.isdigit():
+        kod = int(metin)
+        return IL_ADLARI[kod - 1] if 1 <= kod <= len(IL_ADLARI) else None
+    return _IL_ANAHTARLARI.get(_il_anahtar(metin))
+
+
 # --- Sayı ve tarih ------------------------------------------------------------
 
 

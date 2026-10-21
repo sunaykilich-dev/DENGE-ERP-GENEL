@@ -3,6 +3,7 @@ import { Alert, App, Checkbox, Form, Input, Modal, Select, Typography } from "an
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
+import { kapsamKataloguSorgusu } from "../auth/AuthContext";
 
 interface Izin {
   kod: string;
@@ -54,6 +55,9 @@ export default function RolDuzenle({
     queryFn: () => api.get<Yetki>(`/api/roller/${rolKodu}/yetkiler`),
     enabled: acik && Boolean(rolKodu),
   });
+  const kapsamlar = useQuery({ ...kapsamKataloguSorgusu, enabled: acik });
+  const seciliKapsam = Form.useWatch("scope", form) as string | undefined;
+  const kapsamAciklamasi = kapsamlar.data?.kapsamlar.find((k) => k.kod === seciliKapsam);
 
   useEffect(() => {
     if (!acik) return;
@@ -136,13 +140,19 @@ export default function RolDuzenle({
           name="scope"
           label="Kayıt kapsamı"
           initialValue="TUMU"
-          extra="'Yalnız kendi müşterileri' seçilirse kullanıcı, temsilcisi olmadığı hesapları ve onlara bağlı araç, cihaz, iş emrini göremez."
+          extra={
+            kapsamAciklamasi
+              ? `${kapsamAciklamasi.aciklama}.${
+                  kapsamAciklamasi.birim_zorunlu
+                    ? " Bu roldeki kullanıcıya en az bir birim verilmelidir."
+                    : ""
+                }`
+              : undefined
+          }
         >
           <Select
-            options={[
-              { value: "TUMU", label: "Tüm kayıtlar" },
-              { value: "KENDI_MUSTERILERI", label: "Yalnız kendi müşterileri" },
-            ]}
+            loading={kapsamlar.isLoading}
+            options={(kapsamlar.data?.kapsamlar ?? []).map((k) => ({ value: k.kod, label: k.ad }))}
           />
         </Form.Item>
       </Form>

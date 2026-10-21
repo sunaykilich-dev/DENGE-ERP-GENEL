@@ -1,16 +1,23 @@
 import {
   AuditOutlined,
   BarChartOutlined,
+  CalendarOutlined,
   CarOutlined,
   ContainerOutlined,
   CheckSquareOutlined,
+  ClusterOutlined,
+  DashboardOutlined,
   DollarOutlined,
   FileTextOutlined,
+  FieldTimeOutlined,
   HddOutlined,
+  IdcardOutlined,
   ImportOutlined,
   LogoutOutlined,
   PieChartOutlined,
+  ProfileOutlined,
   SafetyCertificateOutlined,
+  ScheduleOutlined,
   SettingOutlined,
   ShoppingCartOutlined,
   ShoppingOutlined,
@@ -18,10 +25,12 @@ import {
   SyncOutlined,
   TeamOutlined,
   ToolOutlined,
+  UnorderedListOutlined,
   UserOutlined,
   WifiOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Layout, Menu, Tag, Typography } from "antd";
+import type { MenuProps } from "antd";
 import { useMemo } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
@@ -37,18 +46,38 @@ const { Header, Sider, Content } = Layout;
 const KENAR_GENISLIK = 228;
 const BASLIK_PADDING = 20;
 
-/**
- * Menü tanımı. Her kalem gerektirdiği izni taşır; kullanıcıda yoksa kalem
- * GÖRÜNMEZ. Bu yalnız görsel bir kısıtlamadır — sunucu her uçta kendi
- * kontrolünü ayrıca yapar (bkz. require_permission).
- */
-const MENU: {
+/** Menü grupları (teknik servis plan §1.10, KD-29). Canlı kalemler grupsuz. */
+const GRUPLAR: Record<string, React.ReactNode> = {
+  "Teknik Servis": <ToolOutlined />,
+  "İnsan Kaynakları": <IdcardOutlined />,
+};
+
+export interface MenuKalemi {
   key: string;
   label: string;
   icon: React.ReactNode;
   /** Tek izin ya da "bunlardan herhangi biri" listesi. */
   izin: string | string[];
-}[] = [
+  /**
+   * İsteğe bağlı grup: aynı gruptaki kalemler AntD alt menüsü olarak çizilir.
+   * Grup başlığı ancak içinde en az bir yetkili kalem varsa görünür; böylece
+   * teknik servis yetkisi olmayan mobilite kullanıcısı menüde hiçbir
+   * değişiklik görmez.
+   */
+  grup?: keyof typeof GRUPLAR;
+}
+
+/**
+ * Menü tanımı. Her kalem gerektirdiği izni taşır; kullanıcıda yoksa kalem
+ * GÖRÜNMEZ. Bu yalnız görsel bir kısıtlamadır — sunucu her uçta kendi
+ * kontrolünü ayrıca yapar (bkz. require_permission).
+ *
+ * Canlı kalemler AYNI sırada ve grupsuz kalır ("İş Emirleri" = mobilite,
+ * "RMA / Servis" adları değişmez). Teknik servis kalemleri yalnız Dalga 0/1
+ * ekranlarıdır; sonraki dalgaların kalemleri kendi rotalarıyla eklenir —
+ * rotası olmayan kalem tıklanınca açılışa geri düşerdi.
+ */
+export const MENU: MenuKalemi[] = [
   { key: "/", label: "Panel", icon: <PieChartOutlined />, izin: "rapor.gor" },
   { key: "/hesaplar", label: "Hesaplar", icon: <TeamOutlined />, izin: "hesap.gor" },
   { key: "/urunler", label: "Ürün Kataloğu", icon: <ContainerOutlined />, izin: "urun.gor" },
@@ -77,6 +106,64 @@ const MENU: {
   },
   { key: "/gorevler", label: "Görevler", icon: <CheckSquareOutlined />, izin: "gorev.gor" },
   { key: "/raporlar", label: "Raporlar", icon: <BarChartOutlined />, izin: "rapor.gor" },
+  // --- Teknik Servis (plan §1.10) ------------------------------------------
+  {
+    key: "/servis-paneli",
+    label: "Servis Paneli",
+    icon: <DashboardOutlined />,
+    izin: "servis.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/servis-isleri",
+    label: "Servis İşleri",
+    icon: <UnorderedListOutlined />,
+    izin: "servis.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/servis-planlama",
+    label: "Planlama",
+    icon: <CalendarOutlined />,
+    izin: "servis.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/benim-islerim",
+    label: "Benim İşlerim",
+    icon: <FieldTimeOutlined />,
+    izin: "zaman.yaz",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/servis-ekipman",
+    label: "Ekipman Kütüğü",
+    icon: <ClusterOutlined />,
+    izin: "ekipman.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/bakim",
+    label: "Planlı Bakım",
+    icon: <ScheduleOutlined />,
+    izin: "bakim.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/servis-tanimlar",
+    label: "Servis Tanımları",
+    icon: <ProfileOutlined />,
+    izin: ["servis.tanim", "operasyon.yonet"],
+    grup: "Teknik Servis",
+  },
+  // --- İnsan Kaynakları ----------------------------------------------------
+  {
+    key: "/personel",
+    label: "Personel",
+    icon: <TeamOutlined />,
+    izin: "personel.gor",
+    grup: "İnsan Kaynakları",
+  },
   {
     key: "/kvkk",
     label: "KVKK",
@@ -103,21 +190,83 @@ const MENU: {
   },
 ];
 
+type Yetkili = (...kodlar: string[]) => boolean;
+
+function kalemYetkili(m: MenuKalemi, yetkili: Yetkili): boolean {
+  return Array.isArray(m.izin) ? m.izin.some((i) => yetkili(i)) : yetkili(m.izin);
+}
+
+/**
+ * Girişte açılacak sayfa (plan §1.10, KD-30). `/` canlı Panel'dir ve
+ * `rapor.gor` ister; servis rolleri bu izni almaz (KD-06). Kural olmasa
+ * teknisyen girişte 403 yağmuru gören boş bir panele düşerdi.
+ *
+ * Sıra: `rapor.gor` → `/` (değişmez) · `zaman.yaz` ∧ ¬`servis.planla` →
+ * `/benim-islerim` · `servis.gor` → `/servis-paneli` · `egitim.kendim` →
+ * `/gelisim-kartim` · değilse ilk yetkili menü kalemi. Hedef yalnız MENÜDE
+ * tanımlı (rotası olan) bir yolsa seçilir; rotası henüz olmayan bir dalga
+ * ekranına yönlendirip `*` → `/` döngüsüne düşülmez. Hiçbiri yoksa null.
+ */
+export function acilisYolu(yetkili: Yetkili): string | null {
+  if (yetkili("rapor.gor")) return "/";
+  const menude = (yol: string) =>
+    MENU.some((m) => m.key === yol && kalemYetkili(m, yetkili));
+  const kurallar: [boolean, string][] = [
+    [yetkili("zaman.yaz") && !yetkili("servis.planla"), "/benim-islerim"],
+    [yetkili("servis.gor"), "/servis-paneli"],
+    [yetkili("egitim.kendim"), "/gelisim-kartim"],
+  ];
+  for (const [uygun, yol] of kurallar) {
+    if (uygun && menude(yol)) return yol;
+  }
+  return MENU.find((m) => m.key !== "/" && kalemYetkili(m, yetkili))?.key ?? null;
+}
+
+/** `/servis-isleri/12` gibi alt yollarda da menü kalemi seçili görünsün. */
+function seciliAnahtar(yol: string): string {
+  const aday = MENU.filter(
+    (m) => m.key !== "/" && (yol === m.key || yol.startsWith(`${m.key}/`)),
+  ).sort((a, b) => b.key.length - a.key.length)[0];
+  return aday?.key ?? yol;
+}
+
+const KAPSAM_ETIKETI: Record<string, string> = {
+  KENDI_MUSTERILERI: "yalnız kendi müşterileri",
+  KENDI_BIRIMI: "servis işlerinde kendi birimi",
+  KENDI_ISLERI: "servis işlerinde kendi işleri",
+};
+
 export default function AppLayout() {
   const { kullanici, cikisYap, yetkili } = useAuth();
   const konum = useLocation();
 
-  const kalemler = useMemo(
-    () =>
-      MENU.filter((m) =>
-        Array.isArray(m.izin) ? m.izin.some((i) => yetkili(i)) : yetkili(m.izin),
-      ).map((m) => ({
-        key: m.key,
-        icon: m.icon,
-        label: <Link to={m.key}>{m.label}</Link>,
-      })),
-    [yetkili],
-  );
+  const kalemler = useMemo(() => {
+    const sonuc: NonNullable<MenuProps["items"]> = [];
+    const cizilenGruplar = new Set<string>();
+    for (const m of MENU) {
+      if (!m.grup) {
+        if (kalemYetkili(m, yetkili)) {
+          sonuc.push({ key: m.key, icon: m.icon, label: <Link to={m.key}>{m.label}</Link> });
+        }
+        continue;
+      }
+      if (cizilenGruplar.has(m.grup)) continue;
+      cizilenGruplar.add(m.grup);
+      const alt = MENU.filter((k) => k.grup === m.grup && kalemYetkili(k, yetkili)).map((k) => ({
+        key: k.key,
+        icon: k.icon,
+        label: <Link to={k.key}>{k.label}</Link>,
+      }));
+      // Yetkili kalemi olmayan grup başlığı hiç çizilmez.
+      if (alt.length) {
+        sonuc.push({ key: `grup:${m.grup}`, icon: GRUPLAR[m.grup], label: m.grup, children: alt });
+      }
+    }
+    return sonuc;
+  }, [yetkili]);
+
+  const secili = seciliAnahtar(konum.pathname);
+  const acikGrup = MENU.find((m) => m.key === secili)?.grup;
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -168,8 +317,10 @@ export default function AppLayout() {
                 label: (
                   <span>
                     {kullanici?.role.name}
-                    {kullanici?.role.scope === "KENDI_MUSTERILERI" && (
-                      <Tag style={{ marginInlineStart: 8 }}>yalnız kendi müşterileri</Tag>
+                    {kullanici && KAPSAM_ETIKETI[kullanici.role.scope] && (
+                      <Tag style={{ marginInlineStart: 8 }}>
+                        {KAPSAM_ETIKETI[kullanici.role.scope]}
+                      </Tag>
                     )}
                   </span>
                 ),
@@ -203,7 +354,8 @@ export default function AppLayout() {
         <Sider width={KENAR_GENISLIK} breakpoint="lg" collapsedWidth={56}>
           <Menu
             mode="inline"
-            selectedKeys={[konum.pathname]}
+            selectedKeys={[secili]}
+            defaultOpenKeys={acikGrup ? [`grup:${acikGrup}`] : []}
             items={kalemler}
             style={{ height: "100%", borderInlineEnd: `1px solid ${marka.ruleSoft}` }}
           />

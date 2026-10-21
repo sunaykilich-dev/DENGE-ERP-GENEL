@@ -39,6 +39,13 @@ EK_SAHIPLERI = (
     "contracts",
     "settlements",
     "import_files",
+    # --- Teknik servis (plan §1.11). Yalnız tablosu VAR olanlar: kiralama ve
+    # eğitim sahipleri kendi dalgalarında eklenir. Bu türlerin ek kapsamı
+    # `services/teknik_servis/ek_kapsam.py` kayıt defterindedir (fail-closed).
+    "service_orders",
+    "service_equipment",
+    "maintenance_contracts",
+    "addresses",
 )
 
 # İşin niteliğine göre sınıflandırma — "eksik fotoğraf" kesintisi (brief §4.7)
@@ -58,6 +65,15 @@ EK_TURLERI = (
     "URUN_GORSELI",
     "BROSUR",
     "TEKNIK_DOKUMAN",
+    # Teknik servis (plan §1.11). Müşteri imzası mevcut `IMZA` ile tutulur;
+    # ayrı `MUSTERI_IMZASI` türü açılmaz (iki ad aynı şeyi bölerdi).
+    "SERVIS_ONCESI",
+    "SERVIS_SONRASI",
+    "SERVIS_FORMU",
+    "BAKIM_FORMU",
+    "GOZLEM_FOTOGRAFI",
+    "DUZELTICI_KANIT",
+    "SERTIFIKA",
     "DIGER",
 )
 

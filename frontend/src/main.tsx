@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { App as AntApp, ConfigProvider } from "antd";
+import { App as AntApp, Card, ConfigProvider, Empty } from "antd";
 import trTR from "antd/locale/tr_TR";
 import dayjs from "dayjs";
 import "dayjs/locale/tr";
@@ -8,7 +8,16 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider, useAuth } from "./auth/AuthContext";
-import AppLayout from "./components/AppLayout";
+import AppLayout, { acilisYolu } from "./components/AppLayout";
+import BakimPage from "./pages/BakimPage";
+import BenimIslerimPage from "./pages/BenimIslerimPage";
+import PersonelPage from "./pages/PersonelPage";
+import ServisEkipmanPage from "./pages/ServisEkipmanPage";
+import ServisIsKartiMobil from "./pages/ServisIsKartiMobil";
+import ServisIsleriPage from "./pages/ServisIsleriPage";
+import ServisPaneli from "./pages/ServisPaneli";
+import ServisPlanlamaPage from "./pages/ServisPlanlamaPage";
+import ServisTanimlarPage from "./pages/ServisTanimlarPage";
 import AboneliklerPage from "./pages/AboneliklerPage";
 import AraclarPage from "./pages/AraclarPage";
 import AuditPage from "./pages/AuditPage";
@@ -54,6 +63,23 @@ function Yonlendirici() {
   );
 }
 
+/**
+ * Açılış (`/`): Panel yalnız `rapor.gor` sahibine çizilir; diğer kullanıcı
+ * izninden türeyen ilk ekrana yönlendirilir (plan §1.10, KD-30). Servis
+ * kullanıcısı `/` PanelPage'in 403 yağmurunu görmez.
+ */
+function Acilis() {
+  const { yetkili } = useAuth();
+  const hedef = acilisYolu(yetkili);
+  if (hedef === "/") return <PanelPage />;
+  if (hedef) return <Navigate to={hedef} replace />;
+  return (
+    <Card>
+      <Empty description="Hesabınıza tanımlı bir ekran yok. Yöneticinizden yetki isteyin." />
+    </Card>
+  );
+}
+
 function KorumaliUygulama() {
   const { kullanici, yukleniyor } = useAuth();
   if (yukleniyor) return null;
@@ -64,7 +90,7 @@ function KorumaliUygulama() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<PanelPage />} />
+        <Route path="/" element={<Acilis />} />
         <Route path="/gorevler" element={<GorevlerPage />} />
         <Route path="/raporlar" element={<RaporlarPage />} />
         <Route path="/kvkk" element={<KvkkPage />} />
@@ -91,6 +117,19 @@ function KorumaliUygulama() {
         <Route path="/kullanicilar" element={<UsersPage />} />
         <Route path="/ayarlar" element={<SettingsPage />} />
         <Route path="/denetim" element={<AuditPage />} />
+        {/* --- Teknik servis (Dalga 0/1, plan §1.10) --- */}
+        <Route path="/servis-paneli" element={<ServisPaneli />} />
+        <Route path="/servis-isleri" element={<ServisIsleriPage />} />
+        <Route path="/servis-isleri/:id" element={<ServisIsleriPage />} />
+        <Route path="/servis-planlama" element={<ServisPlanlamaPage />} />
+        <Route path="/benim-islerim" element={<BenimIslerimPage />} />
+        <Route path="/benim-islerim/:id" element={<ServisIsKartiMobil />} />
+        <Route path="/servis-ekipman" element={<ServisEkipmanPage />} />
+        <Route path="/servis-ekipman/:id" element={<ServisEkipmanPage />} />
+        <Route path="/bakim" element={<BakimPage />} />
+        <Route path="/servis-tanimlar" element={<ServisTanimlarPage />} />
+        <Route path="/personel" element={<PersonelPage />} />
+        <Route path="/personel/:id" element={<PersonelPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

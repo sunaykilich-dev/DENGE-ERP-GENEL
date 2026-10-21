@@ -11,27 +11,101 @@ e-posta, plaka, şase) maskelenir, kaydın kendisi ve ilişkileri durur.
 Böylece hak ediş geçmişi ve cihaz zaman çizelgesi bozulmaz.
 
 **Anonimleştirme geri alınamaz** ve bunu yapan kişi denetim izine yazılır.
+
+**Kayıt defterleri (teknik servis, plan §1.11):** yeni modüller kişisel veri
+alanlarını bu dosyayı düzenlemeden, kendi dosyalarının sonunda kaydeder —
+`ANONIMLESTIRME_KANCALARI` (hesap anonimleştirilirken çalışan temizleyiciler),
+`VERI_BUL_KANCALARI` (ilgili kişi başvurusunda ek arama), ve
+`DENETIM_MASKE_VARLIKLARI` (geçmiş denetim satırlarının maskelenmesi). Bu
+dosya Dalga 1'den sonra dondurulur; bir modülün kişisel alanı ancak buraya
+kaydolursa imhaya girer.
 """
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import Clock
-from app.models import Account, AuditLog, Contact, Device, Vehicle
+from app.models import Account, AccountAlias, Address, AuditLog, Contact, Device, Vehicle
 from app.models.vehicle import plaka_anahtari
 from app.services import audit
 from app.services.normalize import normalize_msisdn, normalize_plate, tr_normkey
 
 # Kişisel veri taşıyan varlıklar — erişim logu ve veri bulma bunlara bakar.
-KISISEL_VARLIKLAR = ("accounts", "contacts", "vehicles")
+# `addresses`: bireysel müşterinin tesisi evidir; `account_aliases`: eski
+# yazımlar kişinin adını taşıyabilir (E14-03).
+KISISEL_VARLIKLAR = ("accounts", "contacts", "vehicles", "addresses", "account_aliases")
 
 
 class KvkkHatasi(ValueError):
     """KVKK işlemi kurallara aykırı."""
+
+
+# --- Kayıt defterleri ------------------------------------------------------------
+
+
+@dataclass
+class VeriBulAramasi:
+    """Veri bulma kancalarına verilen, bir kez çözülmüş arama."""
+
+    arama: str
+    anahtar: str  # tr_normkey(arama)
+    telefon: str | None
+    plaka: str | None
+    hesap_idleri: list[int] = field(default_factory=list)
+
+
+# (db, account_id, clock) → {"etiket": maskelenen_satir_sayisi}
+AnonimlestirmeKancasi = Callable[[AsyncSession, int, Clock], Awaitable[dict[str, int]]]
+# (db, arama) → bulunan kayıt satırları (sonuç sözlüğünde kendi anahtarı altında)
+VeriBulKancasi = Callable[[AsyncSession, VeriBulAramasi], Awaitable[list[dict]]]
+# (db, account_id) → bu hesaba ait denetim satırlarını seçen SQL koşulları
+DenetimMaskeKancasi = Callable[[AsyncSession, int], Awaitable[list[ColumnElement[bool]]]]
+
+ANONIMLESTIRME_KANCALARI: list[AnonimlestirmeKancasi] = []
+VERI_BUL_KANCALARI: dict[str, VeriBulKancasi] = {}
+DENETIM_MASKE_VARLIKLARI: dict[str, DenetimMaskeKancasi] = {}
+
+
+def anonimlestirme_kaydet(fn: AnonimlestirmeKancasi) -> AnonimlestirmeKancasi:
+    """Hesap anonimleştirilirken çalışacak temizleyiciyi kaydeder (idempotent)."""
+    if fn not in ANONIMLESTIRME_KANCALARI:
+        ANONIMLESTIRME_KANCALARI.append(fn)
+    return fn
+
+
+def veri_bul_kaydet(anahtar: str, fn: VeriBulKancasi) -> None:
+    """`veri_bul` sonucuna `anahtar` altında ek kayıt listesi ekler."""
+    if anahtar in ("arama", "hesaplar", "kisiler", "araclar", "cihazlar", "ozet"):
+        raise ValueError(f"Veri bulma anahtarı çekirdek alanla çakışıyor: {anahtar}")
+    VERI_BUL_KANCALARI[anahtar] = fn
+
+
+def denetim_maske_kaydet(entity: str, fn: DenetimMaskeKancasi) -> None:
+    """`entity` denetim satırlarını anonimleştirmede maskelenecek varlıklara ekler."""
+    DENETIM_MASKE_VARLIKLARI[entity] = fn
+
+
+def denetim_hesap_kosulu(entity: str, account_id: int, idler: list[int]) -> ColumnElement[bool]:
+    """`entity` için hesaba ait denetim satırlarının koşulu.
+
+    Satır kimliğiyle (`entity_id`) YA DA değer içindeki `hesap` anahtarıyla
+    eşleşir: silinmiş satırın (ör. silinen takma ad) kimliği artık hesaptan
+    bulunamaz ama denetim satırı onun metnini taşır.
+    """
+    hesap = str(account_id)
+    kosul = or_(
+        AuditLog.new_value.op("->>")("hesap") == hesap,
+        AuditLog.old_value.op("->>")("hesap") == hesap,
+    )
+    if idler:
+        kosul = or_(kosul, AuditLog.entity_id.in_([str(i) for i in idler]))
+    return and_(AuditLog.entity == entity, kosul)
 
 
 # --- Erişim logu --------------------------------------------------------------
@@ -136,8 +210,12 @@ async def veri_bul(db: AsyncSession, arama: str) -> dict:
         )
     ).all()
 
+    # Ad araması Türkçe katlanmış anahtar üzerinden: `lower()` veritabanı
+    # collation'ına bağlı ('C' collation'da `lower('Ö')` = 'Ö'), "ÖZKAN" araması
+    # "Ali Özkan"ı bulamıyordu. Katlama SQL'de `translate` ile, aramanınki
+    # `tr_normkey` ile — iki taraf aynı kurala iner.
     kisi_kosullari = [
-        func.lower(Contact.full_name).contains(arama.lower()),
+        _sql_katla(Contact.full_name).contains(anahtar),
         Contact.email == arama.lower(),
     ]
     if telefon:
@@ -165,7 +243,7 @@ async def veri_bul(db: AsyncSession, arama: str) -> dict:
         )
     ).all()
 
-    return {
+    sonuc: dict[str, Any] = {
         "arama": arama,
         "hesaplar": [
             {
@@ -198,6 +276,26 @@ async def veri_bul(db: AsyncSession, arama: str) -> dict:
             for c in cihazlar
         ],
     }
+    baglam = VeriBulAramasi(
+        arama=arama,
+        anahtar=anahtar,
+        telefon=telefon,
+        plaka=plaka,
+        hesap_idleri=[h.id for h in hesaplar],
+    )
+    for ad, kanca in VERI_BUL_KANCALARI.items():
+        sonuc[ad] = await kanca(db, baglam)
+    return sonuc
+
+
+# 'C' collation'dan bağımsız Türkçe katlama: `tr_normkey`'in harf tablosunun
+# SQL karşılığı (uzunluklar eşit olmalı — translate harf harf eşler).
+_TR_KAYNAK = "İIıŞşĞğÜüÖöÇçÂâÎîÛû"
+_TR_HEDEF = "iiissgguuooccaaiiuu"
+
+
+def _sql_katla(sutun):
+    return func.lower(func.translate(sutun, _TR_KAYNAK, _TR_HEDEF))
 
 
 ANONIM_ISARETI = "[ANONİMLEŞTİRİLDİ]"
@@ -277,6 +375,15 @@ async def hesabi_anonimlestir(
         a.is_plate_verified = False
 
     await db.flush()
+    # Modül temizleyicileri (tesis, takma ad; Dalga 1+ servis kayıtlarının ham
+    # irtibat metinleri). Denetim maskesinden ÖNCE: onların ürettiği yazımlar
+    # da maskelenecek satırlar arasında olmalı.
+    kanca_sayilari: dict[str, int] = {}
+    for kanca in ANONIMLESTIRME_KANCALARI:
+        for etiket, adet in (await kanca(db, account_id, clock)).items():
+            kanca_sayilari[etiket] = kanca_sayilari.get(etiket, 0) + adet
+    await db.flush()
+
     maskelenen = await _denetim_izini_maskele(db, account_id, [k.id for k in kisiler])
     await audit.log(
         db,
@@ -288,6 +395,7 @@ async def hesabi_anonimlestir(
             "gerekce": gerekce,
             "kisi": len(kisiler),
             "arac": len(araclar),
+            **kanca_sayilari,
             "denetim_satiri": maskelenen,
         },
         user_id=user_id,
@@ -298,6 +406,7 @@ async def hesabi_anonimlestir(
         "account_id": account_id,
         "kisi": len(kisiler),
         "arac": len(araclar),
+        **kanca_sayilari,
         "denetim_satiri": maskelenen,
     }
 
@@ -321,6 +430,8 @@ async def _denetim_izini_maskele(db: AsyncSession, account_id: int, kisi_ids: li
         kosul.append(
             and_(AuditLog.entity == "contacts", AuditLog.entity_id.in_([str(k) for k in kisi_ids]))
         )
+    for kanca in DENETIM_MASKE_VARLIKLARI.values():
+        kosul.extend(await kanca(db, account_id))
     sonuc = await db.execute(
         sa_update(AuditLog)
         .where(or_(*kosul), AuditLog.is_personal_data.is_(True))
@@ -406,3 +517,99 @@ def maskele(deger: str | None, *, gosterilecek: int = 3) -> str | None:
 
 def ozet(veri: dict[str, Any]) -> dict[str, int]:
     return {anahtar: len(deger) for anahtar, deger in veri.items() if isinstance(deger, list)}
+
+
+# --- Ana veri: tesis ve takma ad (TS-016, E14-03) ---------------------------------
+#
+# Çekirdek kayıtlar: `addresses` ve `account_aliases` canlı hesap tablolarının
+# parçası olduğu için temizleyicileri burada, diğer modüller kendi dosyalarında.
+
+
+async def _tesisleri_anonimlestir(db: AsyncSession, account_id: int, _clock: Clock) -> dict:
+    """Hesabın adres satırları ve takma adları maskelenir; satırlar DURUR.
+
+    Servis işi, ekipman ve sözleşme bu satırlara FK ile bağlı — ticari kayıt
+    korunur, yalnız kişiyi işaret eden metin gider. Türetilmiş anahtarlar
+    (`site_key`, `alias_key`) ORM olayıyla MASKELİ metinden yeniden üretilir:
+    eski anahtar kalsaydı ad geri okunurdu ve global tekil `alias_key` aynı
+    yazımla yeni kaydı 409'a düşürürdü (E14 B5).
+    """
+    adresler = (await db.scalars(select(Address).where(Address.account_id == account_id))).all()
+    for a in adresler:
+        etiket = f"{ANONIM_ISARETI} #{a.id}"
+        if a.line is not None or a.kind != "TESIS":
+            a.line = etiket  # ck_addresses_satir: TESIS dışında satır boş olamaz
+        if a.site_name is not None or a.kind == "TESIS":
+            a.site_name = etiket  # site_key olayla yeniden üretilir
+        a.access_note = None
+        a.district = None
+
+    takma_adlar = (
+        await db.scalars(select(AccountAlias).where(AccountAlias.account_id == account_id))
+    ).all()
+    for t in takma_adlar:
+        # Anahtar kimlik taşır ki global tekillik bozulmasın (iki maskeli ad
+        # aynı anahtara düşerse ikinci UPDATE 409 verirdi).
+        t.alias_text = f"{ANONIM_ISARETI} TAKMA {t.id}"
+    return {"lokasyon": len(adresler), "takma_ad": len(takma_adlar)}
+
+
+async def _adres_denetim_kosulu(db: AsyncSession, account_id: int) -> list[ColumnElement[bool]]:
+    idler = list(await db.scalars(select(Address.id).where(Address.account_id == account_id)))
+    return [denetim_hesap_kosulu("addresses", account_id, idler)]
+
+
+async def _takma_ad_denetim_kosulu(db: AsyncSession, account_id: int) -> list[ColumnElement[bool]]:
+    idler = list(
+        await db.scalars(select(AccountAlias.id).where(AccountAlias.account_id == account_id))
+    )
+    return [denetim_hesap_kosulu("account_aliases", account_id, idler)]
+
+
+async def _tesis_bul(db: AsyncSession, arama: VeriBulAramasi) -> list[dict]:
+    """İlgili kişi başvurusu: adres metni, erişim notu ve tesis adında arar;
+    bulunan hesapların bütün adresleri de listelenir."""
+    kosullar = [
+        _sql_katla(Address.line).contains(arama.anahtar),
+        _sql_katla(Address.access_note).contains(arama.anahtar),
+        _sql_katla(Address.site_name).contains(arama.anahtar),
+    ]
+    if arama.hesap_idleri:
+        kosullar.append(Address.account_id.in_(arama.hesap_idleri))
+    adresler = (await db.scalars(select(Address).where(or_(*kosullar)).limit(200))).all()
+    return [
+        {
+            "id": a.id,
+            "account_id": a.account_id,
+            "tur": a.kind,
+            "tesis_adi": a.site_name,
+            "adres": a.line,
+            "il": a.city,
+            "anonim": _anonim_mi(a.line) or _anonim_mi(a.site_name),
+        }
+        for a in adresler
+    ]
+
+
+async def _takma_ad_bul(db: AsyncSession, arama: VeriBulAramasi) -> list[dict]:
+    kosullar = [_sql_katla(AccountAlias.alias_text).contains(arama.anahtar)]
+    if arama.hesap_idleri:
+        kosullar.append(AccountAlias.account_id.in_(arama.hesap_idleri))
+    takmalar = (await db.scalars(select(AccountAlias).where(or_(*kosullar)).limit(200))).all()
+    return [
+        {
+            "id": t.id,
+            "account_id": t.account_id,
+            "metin": t.alias_text,
+            "kaynak": t.kaynak,
+            "anonim": _anonim_mi(t.alias_text),
+        }
+        for t in takmalar
+    ]
+
+
+anonimlestirme_kaydet(_tesisleri_anonimlestir)
+denetim_maske_kaydet("addresses", _adres_denetim_kosulu)
+denetim_maske_kaydet("account_aliases", _takma_ad_denetim_kosulu)
+veri_bul_kaydet("lokasyonlar", _tesis_bul)
+veri_bul_kaydet("takma_adlar", _takma_ad_bul)

@@ -14,6 +14,37 @@ interface AuthDurumu {
 
 const Ctx = createContext<AuthDurumu | null>(null);
 
+/**
+ * Rol kapsamının kısa etiketi (TUMU için boş: kısıt yok, etiket basılmaz).
+ *
+ * Ekranlar eskiden yalnız `KENDI_MUSTERILERI`'yi tanıyordu; yeni kapsamlı
+ * (birim / kendi işleri) rol "tüm kayıtlar" gibi görünüyordu. Seçenek listesi
+ * ve uzun açıklama sunucudan (`/api/kapsamlar`) gelir; burası yalnız rozet.
+ */
+export const KAPSAM_ETIKETLERI: Record<string, string> = {
+  TUMU: "",
+  KENDI_MUSTERILERI: "yalnız kendi müşterileri",
+  KENDI_BIRIMI: "yalnız kendi birimi",
+  KENDI_ISLERI: "yalnız kendi işleri",
+};
+
+/** Sunucudaki kapsam ve birim kataloğu (`/api/kapsamlar`, `sistem.kullanici`). */
+export interface KapsamKatalogu {
+  kapsamlar: { kod: string; ad: string; aciklama: string; birim_zorunlu: boolean }[];
+  birimler: { kod: string; ad: string }[];
+}
+
+export const kapsamKataloguSorgusu = {
+  queryKey: ["kapsam-katalogu"],
+  queryFn: () => api.get<KapsamKatalogu>("/api/kapsamlar"),
+  staleTime: Infinity,
+};
+
+export function kapsamEtiketi(scope: string | undefined): string {
+  if (!scope) return "";
+  return KAPSAM_ETIKETLERI[scope] ?? scope.replaceAll("_", " ").toLocaleLowerCase("tr");
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [kullanici, setKullanici] = useState<Kullanici | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);

@@ -186,6 +186,98 @@ SATINALMA = StateMachine(
     ),
 )
 
+# --- Teknik servis işi (plan §1.7) -------------------------------------------
+# Mobilite iş emrinin aksine (kayıt doğrudan TAMAMLANDI doğar) servis işi
+# gerçek bir yaşam döngüsüdür. KARGODA/TEST_KONTROL YOK: atölye ayrıntısı
+# atölye kaydındadır (KD-13). PB ve kiralama kurulum/toplama işleri
+# PLANLAMADA doğar. Makine "hangi geçiş var"ı söyler; "hangi uç hangi
+# hedefe gidebilir" kısıtı (`UC_HEDEFLERI`) ve kancalar
+# `services/teknik_servis/is_emirleri.durum_degistir`'dedir. IPTAL terminal:
+# yeni arıza yeni iştir (bağlı iş ilişkisiyle).
+SERVIS_IS_EMRI = StateMachine(
+    ad="Servis İşi",
+    baslangiclar=frozenset({"MUSTERI_TALEBI", "PLANLAMADA"}),
+    gecisler=_m(
+        MUSTERI_TALEBI=(
+            "PLANLAMADA",
+            "PLANLANDI",
+            "ISLEMDE",
+            "ATOLYEDE",
+            "BEKLEMEDE",
+            "TAMAMLANDI",
+            "IPTAL",
+        ),
+        PLANLAMADA=("PLANLANDI", "ISLEMDE", "ATOLYEDE", "BEKLEMEDE", "TAMAMLANDI", "IPTAL"),
+        PLANLANDI=(
+            "PLANLAMADA",  # plan geri alma
+            "YOLA_CIKILDI",
+            "SAHADA",
+            "ISLEMDE",
+            "ATOLYEDE",
+            "BEKLEMEDE",
+            "TAMAMLANDI",
+            "IPTAL",
+        ),
+        # PLANLANDI'ya dönüş: yanlış "Yola Çıktım" basışının geri alınması.
+        YOLA_CIKILDI=("PLANLANDI", "SAHADA", "BEKLEMEDE", "TAMAMLANDI"),
+        SAHADA=("ISLEMDE", "ATOLYEDE", "BEKLEMEDE", "TAMAMLANDI"),
+        ISLEMDE=("SAHADA", "ATOLYEDE", "BEKLEMEDE", "TAMAMLANDI"),
+        ATOLYEDE=("BEKLEMEDE", "TAMAMLANDI", "IPTAL"),
+        # Beklemeden çıkış yalnız `beklemeyi_bitir` ile önceki duruma döner.
+        BEKLEMEDE=(
+            "MUSTERI_TALEBI",
+            "PLANLAMADA",
+            "PLANLANDI",
+            "SAHADA",
+            "ISLEMDE",
+            "ATOLYEDE",
+            "TEKRAR_ACILDI",
+            "IPTAL",
+        ),
+        TAMAMLANDI=("KAPATILDI", "TEKRAR_ACILDI"),
+        KAPATILDI=("TEKRAR_ACILDI",),
+        TEKRAR_ACILDI=(
+            "PLANLAMADA",
+            "PLANLANDI",
+            "SAHADA",
+            "ISLEMDE",
+            "ATOLYEDE",
+            "BEKLEMEDE",
+            "TAMAMLANDI",
+            "IPTAL",
+        ),
+        IPTAL=(),
+    ),
+)
+
+# --- Servis ekipmanı yaşam döngüsü (E03-09) ------------------------------------
+# "Serviste" bir durum DEĞİL (açık arıza işinden hesaplanır). HURDA terminal
+# değil: yanlış hurdaya ayırma gerekçeyle geri alınabilir (denetim M03-04).
+SERVIS_EKIPMANI = StateMachine(
+    ad="Servis Ekipmanı",
+    baslangiclar=frozenset({"BILINMIYOR", "KURULUM_BEKLIYOR", "KURULU"}),
+    gecisler=_m(
+        BILINMIYOR=("KURULUM_BEKLIYOR", "KURULU", "DEVRE_DISI", "HURDA"),
+        KURULUM_BEKLIYOR=("KURULU", "DEVRE_DISI", "HURDA"),
+        KURULU=("DEVRE_DISI", "KURULUM_BEKLIYOR"),
+        DEVRE_DISI=("KURULU", "HURDA"),
+        HURDA=("DEVRE_DISI",),
+    ),
+)
+
+# --- Bakım sözleşmesi (E04) ------------------------------------------------------
+# "Süresi doldu" saklanmaz (valid_to'dan hesaplanır); PASIF geri açılabilir.
+BAKIM_SOZLESMESI = StateMachine(
+    ad="Bakım Sözleşmesi",
+    baslangiclar=frozenset({"TASLAK", "TEYIT_BEKLIYOR"}),
+    gecisler=_m(
+        TASLAK=("AKTIF", "PASIF"),
+        TEYIT_BEKLIYOR=("AKTIF", "PASIF"),
+        AKTIF=("PASIF",),
+        PASIF=("AKTIF",),
+    ),
+)
+
 MAKINELER = {
     "cihaz": CIHAZ,
     "hat": HAT,
@@ -193,4 +285,7 @@ MAKINELER = {
     "abonelik": ABONELIK,
     "rma": RMA,
     "satinalma": SATINALMA,
+    "servis_is_emri": SERVIS_IS_EMRI,
+    "servis_ekipmani": SERVIS_EKIPMANI,
+    "bakim_sozlesmesi": BAKIM_SOZLESMESI,
 }

@@ -1,8 +1,30 @@
-from sqlalchemy import Boolean, ForeignKey, String, text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.models.mixins import PkMixin, TimestampMixin
+from app.models.mixins import ActorMixin, PkMixin, TimestampMixin
+
+# Teknik servis birim KODLARI — CHECK kısıtlarının tek kaynağı.
+#
+# Neden burada ve `permissions.BIRIMLER` değil: modeller `permissions`'ı
+# import etmez (izin kataloğu seed ve API katmanının konusudur; model →
+# permissions bağı döngüsel import riski taşır). Ad sözlüğü (kod → Türkçe
+# etiket) `permissions.BIRIMLER`'de durur; iki yerin AYNI kod kümesini
+# taşıdığı `tests/unit/test_servis_sozluk_tutarliligi.py` ile kilitlenir.
+# Kod listesi kalıcıdır: değiştirmek bütün `ck_*_birim` kısıtlarının elle
+# drop+create edilmesi demektir (autogenerate CHECK değişikliğini görmez).
+BIRIM_KODLARI = ("GUVENLIK", "HABERLESME", "POC", "MOBILITE", "ARAC_TAKIP")
+
+
+def birim_check(sutun: str, *, bos_olabilir: bool = False) -> str:
+    """`<sutun> IN ('GUVENLIK', ...)` CHECK ifadesi — her tabloda aynı liste.
+
+    Elle yazılan kopyalar zamanla ayrışırdı (bir tabloda POC unutulurdu);
+    bütün `ck_*_birim` kısıtları bu fonksiyondan üretilir.
+    """
+    liste = ", ".join(f"'{b}'" for b in BIRIM_KODLARI)
+    ifade = f"{sutun} IN ({liste})"
+    return f"{sutun} IS NULL OR {ifade}" if bos_olabilir else ifade
 
 
 class Permission(Base):
@@ -70,4 +92,41 @@ class Role(Base, PkMixin, TimestampMixin):
 
     permissions: Mapped[list[RolePermission]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class UserUnit(Base, TimestampMixin, ActorMixin):
+    """Kullanıcı–birim üyeliği (teknik servis birim kapsamı).
+
+    **Neden ayrı tablo, `users.birim` kolonu değil:** aynı kişi Mobilite ve
+    Araç Takip'te birlikte çalışıyor; tek kolon ikinci birimi kaybederdi.
+    Üyelik çoklu, ama "birincil birim" tek (`uq_user_units_birincil`):
+    ekranda varsayılan birim ve rapor kırılımı buna bakar.
+
+    **Fail-closed:** `KENDI_BIRIMI`/`KENDI_ISLERI` kapsamlı rolde bu tabloda
+    satırı olmayan kullanıcı HİÇBİR servis kaydı görmez (plan §1.2). Satır
+    yokluğu "hepsi" anlamına gelseydi, birimi girilmemiş yeni bir şef bütün
+    birimlerin işlerini görürdü.
+
+    Değişiklik denetime yazılır ve kullanıcının oturumları düşürülür (kapsam
+    değişti) — bunu servis katmanı (`s/personel.py`) yapar.
+    """
+
+    __tablename__ = "user_units"
+    __table_args__ = (
+        CheckConstraint(birim_check("birim"), name="ck_user_units_birim"),
+        Index(
+            "uq_user_units_birincil",
+            "user_id",
+            unique=True,
+            postgresql_where=text("is_primary"),
+        ),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    birim: Mapped[str] = mapped_column(String(20), primary_key=True)
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
     )

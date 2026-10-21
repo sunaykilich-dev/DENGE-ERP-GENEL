@@ -15,17 +15,32 @@ import {
   Tag,
 } from "antd";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { api, ApiError, type Kullanici, type Rol } from "../api/client";
-import { useAuth } from "../auth/AuthContext";
+import { kapsamEtiketi, kapsamKataloguSorgusu, useAuth } from "../auth/AuthContext";
 import IzinIstisnalari from "../components/IzinIstisnalari";
 import RolDuzenle from "../components/RolDuzenle";
 import RolYetkileri from "../components/RolYetkileri";
 
+/** Liste satırı: kullanıcı + giriş/birim bilgisi + rolünden sapma (E13-10). */
+type KullaniciSatiri = Kullanici & {
+  giris_acik?: boolean;
+  birimler?: string[];
+  birincil_birim?: string | null;
+  sapma_sayisi?: number;
+};
+
+/** Rol seçeneğinin etiketi: kısıtlı kapsam adın yanında yazılır. */
+function rolEtiketi(r: Rol): string {
+  const etiket = kapsamEtiketi(r.scope);
+  return etiket ? `${r.name} — ${etiket}` : r.name;
+}
+
 export default function UsersPage() {
   // Seçili rol, iki penceredeki yetki panelini besler: yönetici rolü
   // seçerken ne verdiğini aynı ekranda görsün.
-  const { kullanici: kendisi } = useAuth();
+  const { kullanici: kendisi, yetkili } = useAuth();
   const [sekme, setSekme] = useState("kullanicilar");
   const [rolDuzenle, setRolDuzenle] = useState<{
     acik: boolean;
@@ -39,14 +54,24 @@ export default function UsersPage() {
   const [acik, setAcik] = useState(false);
   const [form] = Form.useForm();
   // Düzenlenen kullanıcı; null ise düzenleme penceresi kapalı.
-  const [duzenlenen, setDuzenlenen] = useState<Kullanici | null>(null);
+  const [duzenlenen, setDuzenlenen] = useState<KullaniciSatiri | null>(null);
   const [duzenleForm] = Form.useForm();
 
   const kullanicilar = useQuery({
     queryKey: ["kullanicilar"],
-    queryFn: () => api.get<Kullanici[]>("/api/kullanicilar"),
+    queryFn: () => api.get<KullaniciSatiri[]>("/api/kullanicilar"),
   });
   const roller = useQuery({ queryKey: ["roller"], queryFn: () => api.get<Rol[]>("/api/roller") });
+  const katalog = useQuery(kapsamKataloguSorgusu);
+  // Birim kapsamlı rolde birimsiz hesap sunucuda 400; alan bu rolde zorunlu.
+  const yeniRolBirimIster =
+    katalog.data?.kapsamlar.find(
+      (k) => k.kod === roller.data?.find((r) => r.code === yeniRol)?.scope,
+    )?.birim_zorunlu ?? false;
+  const birimSecenekleri = (katalog.data?.birimler ?? []).map((b) => ({
+    value: b.kod,
+    label: b.ad,
+  }));
 
   const yenile = () => {
     void qc.invalidateQueries({ queryKey: ["kullanicilar"] });
@@ -74,6 +99,7 @@ export default function UsersPage() {
         full_name: duzenlenen.full_name,
         email: duzenlenen.email ?? undefined,
         role_code: duzenlenen.role.code,
+        giris_acik: duzenlenen.giris_acik ?? true,
         password: undefined,
         reset_mfa: false,
       });
@@ -138,8 +164,8 @@ export default function UsersPage() {
             {
               title: "Kapsam",
               render: (_: unknown, r: Rol) =>
-                r.scope === "KENDI_MUSTERILERI" ? (
-                  <Tag>yalnız kendi müşterileri</Tag>
+                kapsamEtiketi(r.scope) ? (
+                  <Tag>{kapsamEtiketi(r.scope)}</Tag>
                 ) : (
                   <Tag color="blue">tüm kayıtlar</Tag>
                 ),
@@ -177,14 +203,31 @@ export default function UsersPage() {
         dataSource={kullanicilar.data ?? []}
         pagination={false}
         columns={[
-          { title: "Ad Soyad", dataIndex: "full_name" },
+          {
+            title: "Ad Soyad",
+            // Personel kartı = kullanıcı (TS-008); kart izni olan kartı buradan açar.
+            render: (_, k: KullaniciSatiri) =>
+              yetkili("personel.gor") ? (
+                <Link to={`/personel/${k.id}`}>{k.full_name}</Link>
+              ) : (
+                k.full_name
+              ),
+          },
           { title: "Kullanıcı adı", dataIndex: "username", className: "mono" },
           {
             title: "Rol",
-            render: (_, k: Kullanici) => (
-              <Space size={4}>
+            render: (_, k: KullaniciSatiri) => (
+              <Space size={4} wrap>
                 <Tag color="blue">{k.role.name}</Tag>
-                {k.role.scope === "KENDI_MUSTERILERI" && <Tag>yalnız kendi müşterileri</Tag>}
+                {kapsamEtiketi(k.role.scope) && <Tag>{kapsamEtiketi(k.role.scope)}</Tag>}
+                {(k.birimler ?? []).map((b) => (
+                  <Tag key={b} color={b === k.birincil_birim ? "geekblue" : undefined}>
+                    {katalog.data?.birimler.find((x) => x.kod === b)?.ad ?? b}
+                  </Tag>
+                ))}
+                {(k.sapma_sayisi ?? 0) > 0 && (
+                  <Tag color="orange">Rolünden farklı ({k.sapma_sayisi})</Tag>
+                )}
                 {k.sees_cost && <Tag color="gold">maliyet görür</Tag>}
               </Space>
             ),
@@ -196,8 +239,10 @@ export default function UsersPage() {
           },
           {
             title: "Giriş",
-            render: (_, k: Kullanici) =>
-              kilitliler.data?.includes(k.username) ? (
+            render: (_, k: KullaniciSatiri) =>
+              k.giris_acik === false ? (
+                <Tag>giriş kapalı</Tag>
+              ) : kilitliler.data?.includes(k.username) ? (
                 <Space size={4}>
                   <Tag color="red">kilitli</Tag>
                   <Button
@@ -280,12 +325,28 @@ export default function UsersPage() {
           <Form.Item name="role_code" label="Rol" rules={[{ required: true }]}>
             <Select
               onChange={(v) => setYeniRol(v as string)}
-              options={(roller.data ?? []).map((r) => ({
-                value: r.code,
-                label: `${r.name}${r.scope === "KENDI_MUSTERILERI" ? " — yalnız kendi müşterileri" : ""}`,
-              }))}
+              options={(roller.data ?? []).map((r) => ({ value: r.code, label: rolEtiketi(r) }))}
             />
           </Form.Item>
+          {yeniRolBirimIster && (
+            <>
+              <Form.Item
+                name="birimler"
+                label="Birimler"
+                rules={[{ required: true, message: "Bu rol için en az bir birim seçin" }]}
+                extra="Birimi olmayan kullanıcı bu rolde hiçbir servis kaydı görmez."
+              >
+                <Select mode="multiple" options={birimSecenekleri} />
+              </Form.Item>
+              <Form.Item
+                name="birincil_birim"
+                label="Birincil birim"
+                extra="Boş bırakılırsa seçilen ilk birim (alfabetik) birincil olur."
+              >
+                <Select allowClear options={birimSecenekleri} />
+              </Form.Item>
+            </>
+          )}
           <Divider style={{ margin: "4px 0 12px" }}>Erişim ve izinler</Divider>
           <RolYetkileri rolKodu={yeniRol} />
         </Form>
@@ -313,6 +374,7 @@ export default function UsersPage() {
               full_name: v.full_name,
               email: v.email || null,
               role_code: v.role_code,
+              giris_acik: v.giris_acik,
               reset_mfa: v.reset_mfa || undefined,
             };
             if (v.password) gonderilecek.password = v.password;
@@ -334,11 +396,16 @@ export default function UsersPage() {
           >
             <Select
               onChange={(v) => setDuzenlenenRol(v as string)}
-              options={(roller.data ?? []).map((r) => ({
-                value: r.code,
-                label: `${r.name}${r.scope === "KENDI_MUSTERILERI" ? " — yalnız kendi müşterileri" : ""}`,
-              }))}
+              options={(roller.data ?? []).map((r) => ({ value: r.code, label: rolEtiketi(r) }))}
             />
+          </Form.Item>
+          <Form.Item
+            name="giris_acik"
+            label="Oturum açabilir"
+            valuePropName="checked"
+            extra="Kapatılırsa kayıt (personel kartı) durur, açık oturumları hemen düşer."
+          >
+            <Switch disabled={duzenlenen?.id === kendisi?.id} />
           </Form.Item>
           <Divider style={{ margin: "4px 0 12px" }}>Erişim ve izinler</Divider>
           {/* Rol açılır menüden DEĞİŞTİRİLDİYSE henüz kaydedilmemiş o rolün

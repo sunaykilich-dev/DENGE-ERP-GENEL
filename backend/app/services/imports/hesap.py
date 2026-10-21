@@ -53,7 +53,17 @@ SUTUNLAR = (
     Sutun("bolge", ("Bölge", "Bolge", "Şehir", "İl"), aciklama="Ör. İstanbul."),
     Sutun("segment", ("Segment",), aciklama="Ör. HYTERA_BAYI."),
     Sutun("notlar", ("Not", "Notlar"), aciklama="Serbest not."),
+    # Muhasebe cari kodu (E14-01): yalnız METİN, entegrasyon değil. İsteğe bağlı
+    # sütun; olmayan dosyanın davranışı değişmez.
+    Sutun(
+        "cari_kodu",
+        ("Cari Kodu", "Cari Kod", "Muhasebe Kodu"),
+        aciklama="Muhasebedeki cari kodu (en çok 40 karakter).",
+    ),
 )
+
+# `accounts.dis_referans` kolon boyu.
+CARI_KODU_UZUNLUK = 40
 
 BAYRAKLAR = (
     ("musteri_mi", "is_musteri"),
@@ -136,6 +146,13 @@ class HesapProfili(Profil):
                 deger = clean_cell(ham.get(kaynak))
                 if deger:
                     r.veri[alan] = deger
+
+            cari_kodu = clean_cell(ham.get("cari_kodu"))
+            if cari_kodu:
+                if len(cari_kodu) > CARI_KODU_UZUNLUK:
+                    r.hatalar.append(f"Cari kodu {CARI_KODU_UZUNLUK} karakteri aşıyor: {cari_kodu}")
+                else:
+                    r.veri["dis_referans"] = cari_kodu
 
             if r.veri.get("is_montaj_noktasi") and not r.veri.get("iban"):
                 r.uyarilar.append("Montaj noktasının IBAN'ı yok — ödeme listesine giremez")
@@ -238,6 +255,7 @@ def _alanlara_cevir(veri: dict[str, Any]) -> dict[str, Any]:
         "region",
         "segment",
         "notes",
+        "dis_referans",
     ):
         if veri.get(alan):
             alanlar[alan] = veri[alan]

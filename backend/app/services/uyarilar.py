@@ -189,4 +189,12 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
                 )
             )
 
+    # --- Teknik servis (plan §1.11) — TEK blok. Modül uyarıları kendi
+    # dosyalarından `services/teknik_servis/uyarilar.py` kayıt defterine
+    # kaydolur; her biri kendi iznini ve birim kapsamını uygular (sayı =
+    # sızıntı). Mobilite uyarıları yukarıda olduğu gibi kalır.
+    from app.services.teknik_servis import uyarilar as ts_uyarilar
+
+    ozet.uyarilar += await ts_uyarilar.topla(db, user, clock)
+
     return ozet

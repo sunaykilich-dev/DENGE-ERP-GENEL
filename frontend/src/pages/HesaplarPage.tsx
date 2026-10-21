@@ -23,8 +23,10 @@ import dayjs from "dayjs";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { ADRES_TURU_ETIKET, anaVeriApi, AnaVeriHatasi, type Lokasyon } from "../api/anaVeri";
 import { api, type ApiError } from "../api/client";
 import EkYukleyici from "../components/EkYukleyici";
+import LokasyonPenceresi from "../components/LokasyonPenceresi";
 import MontajTarifeleri from "../components/MontajTarifeleri";
 import { useAuth } from "../auth/AuthContext";
 import KayitGorevleri from "../components/KayitGorevleri";
@@ -50,6 +52,16 @@ interface Hesap {
   is_active: boolean;
   version: number;
   eksik_alanlar: string[];
+  /** Servis ekranından hızlı açılan müşteri doğrulanana kadar false. */
+  is_verified: boolean;
+  dis_referans: string | null;
+}
+
+/** VKN başka aktif hesapta varsa sunucunun 409 gövdesi. */
+interface VknCakismasi {
+  degerler: Record<string, unknown>;
+  mevcut: { id: number; title: string }[];
+  kapsam_disi: number;
 }
 
 interface Kisi {
@@ -123,6 +135,13 @@ export default function HesaplarPage() {
   const [arama, setArama] = useState("");
   const [rol, setRol] = useState<string>("HEPSI");
   const [yalnizEksik, setYalnizEksik] = useState(false);
+  const [yalnizDogrulanmamis, setYalnizDogrulanmamis] = useState(false);
+  const [vknCakismasi, setVknCakismasi] = useState<VknCakismasi | null>(null);
+  const [vknGerekce, setVknGerekce] = useState("");
+  // Lokasyon penceresi: undefined = kapalı, null = yeni, sayı = düzenlenen.
+  const [lokasyonPenceresi, setLokasyonPenceresi] = useState<number | null | undefined>(
+    undefined,
+  );
   const [duzenlenen, setDuzenlenen] = useState<Hesap | null>(null);
   const [acik, setAcik] = useState(false);
   const [kisiDuzenlenen, setKisiDuzenlenen] = useState<Kisi | null>(null);
@@ -135,12 +154,13 @@ export default function HesaplarPage() {
   const SAYFA_BOYU = 25;
 
   const hesaplar = useQuery({
-    queryKey: ["hesaplar", arama, rol, yalnizEksik, sayfa],
+    queryKey: ["hesaplar", arama, rol, yalnizEksik, yalnizDogrulanmamis, sayfa],
     queryFn: () => {
       const p = new URLSearchParams();
       if (arama) p.set("q", arama);
       if (rol !== "HEPSI") p.set("rol", rol);
       if (yalnizEksik) p.set("eksigi_olanlar", "true");
+      if (yalnizDogrulanmamis) p.set("dogrulanmamis", "true");
       p.set("limit", String(SAYFA_BOYU));
       p.set("offset", String((sayfa - 1) * SAYFA_BOYU));
       return api.getSayfa<Hesap>(`/api/hesaplar?${p}`);
@@ -157,24 +177,51 @@ export default function HesaplarPage() {
     queryFn: () => api.get<Kart>(`/api/hesaplar/${id}/kart`),
     enabled: !!id,
   });
+  const lokasyonlar = useQuery({
+    queryKey: ["hesap-lokasyonlari", Number(id)],
+    queryFn: () => anaVeriApi.hesapLokasyonlari(Number(id)),
+    enabled: !!id,
+  });
 
   const kaydet = useMutation({
     mutationFn: (v: Record<string, unknown>) =>
-      duzenlenen
-        ? api.patch<Hesap>(`/api/hesaplar/${duzenlenen.id}`, { ...v, version: duzenlenen.version })
-        : api.post<Hesap>("/api/hesaplar", v),
+      anaVeriApi.hesapKaydet(
+        duzenlenen ? duzenlenen.id : null,
+        duzenlenen ? { ...v, version: duzenlenen.version } : v,
+      ),
     onSuccess: () => {
       message.success(duzenlenen ? "Hesap güncellendi" : "Hesap açıldı");
       setAcik(false);
       setDuzenlenen(null);
+      setVknCakismasi(null);
+      setVknGerekce("");
       form.resetFields();
       void qc.invalidateQueries({ queryKey: ["hesaplar"] });
       void qc.invalidateQueries({ queryKey: ["hesap"] });
     },
-    onError: (e: ApiError) => {
-      message.error(e.message);
+    onError: (e: ApiError, degerler) => {
+      // VKN başka aktif hesapta: kayıt engellenmez, listeyi gösterip gerekçe ister.
+      if (e instanceof AnaVeriHatasi && e.detay?.kod === "VKN_CAKISMASI") {
+        setVknCakismasi({
+          degerler,
+          mevcut: (e.detay.mevcut as VknCakismasi["mevcut"]) ?? [],
+          kapsam_disi: Number(e.detay.kapsam_disi ?? 0),
+        });
+        return;
+      }
+      message.error(e.cakisma ? `${e.message} Sayfayı yenileyip tekrar deneyin.` : e.message);
       if (e.cakisma) void qc.invalidateQueries({ queryKey: ["hesaplar"] });
     },
+  });
+
+  const dogrula = useMutation({
+    mutationFn: (hesapId: number) => anaVeriApi.hesapDogrula(hesapId),
+    onSuccess: () => {
+      message.success("Hesap doğrulandı");
+      void qc.invalidateQueries({ queryKey: ["hesaplar"] });
+      void qc.invalidateQueries({ queryKey: ["hesap"] });
+    },
+    onError: (e: ApiError) => message.error(e.message),
   });
 
   const kisiKaydet = useMutation({
@@ -274,6 +321,15 @@ export default function HesaplarPage() {
           }}>
           Yalnız eksik bilgisi olanlar
         </Checkbox>
+        <Checkbox
+          checked={yalnizDogrulanmamis}
+          onChange={(e) => {
+            setYalnizDogrulanmamis(e.target.checked);
+            setSayfa(1);
+          }}
+        >
+          Doğrulanmamışlar
+        </Checkbox>
       </Space>
 
       {/* Listede yalnız kimlik bilgisi var: unvan, rol, bağlı bayi. Vergi no,
@@ -305,6 +361,11 @@ export default function HesaplarPage() {
             render: (x: string, hesap: Hesap) => (
               <Space size={6}>
                 <span>{x}</span>
+                {!hesap.is_verified && (
+                  <Tooltip title="Servis ekranından hızlı açıldı; mükerrer mi, bilgileri doğru mu kontrol edilip doğrulanmalı.">
+                    <Tag color="orange">Doğrulanmamış</Tag>
+                  </Tooltip>
+                )}
                 {hesap.eksik_alanlar.length > 0 && (
                   <Tooltip
                     title={`Eksik: ${hesap.eksik_alanlar.join(", ")} — hak ediş dökümü gönderimi ve ödeme listesi için gerekli`}
@@ -347,9 +408,15 @@ export default function HesaplarPage() {
         onClose={() => navigate("/hesaplar")}
         loading={secili.isLoading}
         extra={
-          yetkili("hesap.yaz") &&
           h && (
-            <Button onClick={() => duzenle(h)}>Düzenle</Button>
+            <Space wrap>
+              {!h.is_verified && yetkili("hesap.birlestir") && (
+                <Button loading={dogrula.isPending} onClick={() => dogrula.mutate(h.id)}>
+                  Doğrula
+                </Button>
+              )}
+              {yetkili("hesap.yaz") && <Button onClick={() => duzenle(h)}>Düzenle</Button>}
+            </Space>
           )
         }
       >
@@ -378,6 +445,16 @@ export default function HesaplarPage() {
                 <span className="mono">{h.iban ?? "—"}</span>
               </Descriptions.Item>
               <Descriptions.Item label="Bölge">{h.region ?? "—"}</Descriptions.Item>
+              <Descriptions.Item label="Cari kodu">
+                <span className="mono">{h.dis_referans ?? "—"}</span>
+              </Descriptions.Item>
+              <Descriptions.Item label="Doğrulama">
+                {h.is_verified ? (
+                  <Tag color="green">Doğrulandı</Tag>
+                ) : (
+                  <Tag color="orange">Doğrulanmamış</Tag>
+                )}
+              </Descriptions.Item>
               <Descriptions.Item label="Segment">
                 {h.segment?.replaceAll("_", " ") ?? "—"}
               </Descriptions.Item>
@@ -467,6 +544,66 @@ export default function HesaplarPage() {
                                 },
                               ]
                             : []),
+                        ]}
+                      />
+                    </Space>
+                  ),
+                },
+                {
+                  key: "lokasyonlar",
+                  label: `Lokasyonlar${lokasyonlar.data?.length ? ` (${lokasyonlar.data.length})` : ""}`,
+                  children: (
+                    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
+                      {yetkili("lokasyon.yaz") && (
+                        <Button
+                          size="small"
+                          type="primary"
+                          onClick={() => setLokasyonPenceresi(null)}
+                        >
+                          Lokasyon ekle
+                        </Button>
+                      )}
+                      <Table
+                        rowKey="id"
+                        size="small"
+                        pagination={false}
+                        loading={lokasyonlar.isLoading}
+                        dataSource={lokasyonlar.data ?? []}
+                        scroll={{ x: 560 }}
+                        onRow={(l) => ({
+                          onClick: () => setLokasyonPenceresi(l.id),
+                          style: { cursor: "pointer" },
+                        })}
+                        locale={{
+                          emptyText: (
+                            <Empty description="Lokasyon yok — servis işleri tesise bağlanır" />
+                          ),
+                        }}
+                        columns={[
+                          {
+                            title: "Ad",
+                            ellipsis: true,
+                            render: (_: unknown, l: Lokasyon) => (
+                              <Space size={4} wrap>
+                                <span>{l.site_name ?? l.label}</span>
+                                {!l.is_active && <Tag>pasif</Tag>}
+                                {!l.is_verified && <Tag color="orange">Doğrulanmamış</Tag>}
+                              </Space>
+                            ),
+                          },
+                          {
+                            title: "Tür",
+                            dataIndex: "kind",
+                            width: 130,
+                            render: (x: Lokasyon["kind"]) => ADRES_TURU_ETIKET[x] ?? x,
+                          },
+                          {
+                            title: "İl / ilçe",
+                            width: 170,
+                            ellipsis: true,
+                            render: (_: unknown, l: Lokasyon) =>
+                              [l.city, l.district].filter(Boolean).join(" / ") || "—",
+                          },
                         ]}
                       />
                     </Space>
@@ -758,6 +895,14 @@ export default function HesaplarPage() {
           <Form.Item name="region" label="Bölge">
             <Input />
           </Form.Item>
+          <Form.Item
+            name="dis_referans"
+            label="Cari kodu"
+            extra="Muhasebedeki cari kodu — yalnız bilgi amaçlı."
+            rules={[{ max: 40 }]}
+          >
+            <Input className="mono" />
+          </Form.Item>
           <Form.Item name="segment" label="Segment">
             <Select
               allowClear
@@ -811,6 +956,62 @@ export default function HesaplarPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* --- Aynı VKN'li kayıt uyarısı --- */}
+      <Modal
+        title="Bu VKN başka hesapta kayıtlı"
+        open={vknCakismasi !== null}
+        onCancel={() => {
+          setVknCakismasi(null);
+          setVknGerekce("");
+        }}
+        okText="Gerekçeyle kaydet"
+        cancelText="Vazgeç"
+        okButtonProps={{ disabled: vknGerekce.trim().length < 5 }}
+        confirmLoading={kaydet.isPending}
+        onOk={() =>
+          vknCakismasi &&
+          kaydet.mutate({
+            ...vknCakismasi.degerler,
+            vkn_cakisma_onayi: true,
+            vkn_cakisma_gerekce: vknGerekce.trim(),
+          })
+        }
+      >
+        <Typography.Paragraph>
+          Aynı VKN'li aktif kayıtlar aşağıda. Aynı firmaysa yeni kayıt açmak yerine mevcut olanı
+          kullanın; şube/bayi gibi meşru bir durumsa gerekçe yazıp kaydedin (denetime yazılır).
+        </Typography.Paragraph>
+        <ul>
+          {vknCakismasi?.mevcut.map((m) => (
+            <li key={m.id}>
+              <Link to={`/hesaplar/${m.id}`}>{m.title}</Link>
+            </li>
+          ))}
+          {!!vknCakismasi?.kapsam_disi && (
+            <li>
+              <Typography.Text type="secondary">
+                Görme yetkiniz olmayan {vknCakismasi.kapsam_disi} kayıt
+              </Typography.Text>
+            </li>
+          )}
+        </ul>
+        <Input.TextArea
+          rows={2}
+          placeholder="Gerekçe (en az 5 karakter)"
+          value={vknGerekce}
+          onChange={(e) => setVknGerekce(e.target.value)}
+        />
+      </Modal>
+
+      {h && lokasyonPenceresi !== undefined && (
+        <LokasyonPenceresi
+          acik
+          hesapId={h.id}
+          lokasyonId={lokasyonPenceresi}
+          onKapat={() => setLokasyonPenceresi(undefined)}
+        />
+      )}
     </Card>
   );
 }

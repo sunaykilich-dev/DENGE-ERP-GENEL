@@ -91,6 +91,13 @@ async def veri_bul_xlsx(arama: str, request: Request, db: DbDep, user: Yonetici)
         satirlar.append(["Araç", a["id"], a["plaka"], a["sase"] or "", ""])
     for c in sonuc["cihazlar"]:
         satirlar.append(["Cihaz", c["device_id"], c["kimlik"] or "", c["status"], ""])
+    # Teknik servis ana verisi (TS-016): kayıt defterinden gelen tesis ve
+    # takma adlar da talep sahibine verilecek dökümde yer almalı.
+    for t in sonuc.get("lokasyonlar", []):
+        ad = " / ".join(x for x in (t["tesis_adi"], t["adres"], t["il"]) if x)
+        satirlar.append(["Lokasyon", t["id"], ad, "", ""])
+    for t in sonuc.get("takma_adlar", []):
+        satirlar.append(["Takma ad", t["id"], t["metin"], "", ""])
 
     await svc.erisim_kaydet(
         db,

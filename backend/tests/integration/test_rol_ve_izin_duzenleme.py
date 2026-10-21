@@ -90,6 +90,98 @@ async def test_rol_yetkileri_yetki_ister(client, kullanici_ac):
     assert (await client.get("/api/roller/DEPO/yetkiler")).status_code == 403
     assert (await client.get("/api/izinler")).status_code == 403
     assert (await client.get("/api/kullanicilar/1/yetkiler")).status_code == 403
+    assert (await client.get("/api/kapsamlar")).status_code == 403
+
+
+# --------------------------------------------------------------------------
+# Teknik servis kapsamları ve sayfaları (TS-004)
+# --------------------------------------------------------------------------
+
+
+async def test_kapsam_katalogu_dort_kapsam_ve_birimleri_verir(client, kullanici_ac):
+    """Kapsam seçenekleri sunucudan gelir; ön yüzde sabit iki seçenek vardı ve
+    yeni kapsamlar rol ekranından hiç seçilemiyordu (E13-D02)."""
+    await kullanici_ac("yonetici", "ADMIN")
+    await _giris(client, "yonetici")
+    r = await client.get("/api/kapsamlar")
+    assert r.status_code == 200
+    d = r.json()
+    assert [k["kod"] for k in d["kapsamlar"]] == [
+        "TUMU",
+        "KENDI_MUSTERILERI",
+        "KENDI_BIRIMI",
+        "KENDI_ISLERI",
+    ]
+    zorunlu = {k["kod"] for k in d["kapsamlar"] if k["birim_zorunlu"]}
+    assert zorunlu == {"KENDI_BIRIMI", "KENDI_ISLERI"}
+    assert all(k["ad"] and k["aciklama"] for k in d["kapsamlar"])
+    assert {b["kod"] for b in d["birimler"]} == {
+        "GUVENLIK",
+        "HABERLESME",
+        "POC",
+        "MOBILITE",
+        "ARAC_TAKIP",
+    }
+    # Maliyet/fiyat anahtarı yok (DoD: yeni uçta maliyet anahtarı testi).
+    assert "maliyet" not in r.text and "fiyat" not in r.text
+
+
+@pytest.mark.parametrize("kapsam", ["KENDI_BIRIMI", "KENDI_ISLERI"])
+async def test_yeni_kapsamla_rol_acilir_ve_duzenlenir(client, kullanici_ac, kapsam):
+    await kullanici_ac("yonetici", "ADMIN")
+    await _giris(client, "yonetici")
+    r = await client.post(
+        "/api/roller",
+        json={
+            "code": "BOLGE_SEF",
+            "name": "Bölge Şefi",
+            "scope": kapsam,
+            "izinler": ["servis.gor"],
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["scope"] == kapsam
+    d = (await client.get("/api/roller/BOLGE_SEF/yetkiler")).json()
+    assert "diğer modüllerde tüm kayıtlar" in d["scope_aciklama"]
+
+    r = await client.patch("/api/roller/BOLGE_SEF", json={"scope": "TUMU"})
+    assert r.status_code == 200 and r.json()["scope"] == "TUMU"
+
+
+async def test_katalog_disi_kapsam_reddedilir(client, kullanici_ac):
+    await kullanici_ac("yonetici", "ADMIN")
+    await _giris(client, "yonetici")
+    r = await client.post(
+        "/api/roller", json={"code": "KOTU", "name": "Kötü", "scope": "HEPSI", "izinler": []}
+    )
+    assert r.status_code == 400
+    assert (await client.patch("/api/roller/DEPO", json={"scope": "HEPSI"})).status_code == 400
+
+
+async def test_rol_onizlemesi_servis_ve_personel_sayfalarini_tanir(client, kullanici_ac):
+    await kullanici_ac("yonetici", "ADMIN")
+    await _giris(client, "yonetici")
+    sef = (await client.get("/api/roller/SERVIS_SEF/yetkiler")).json()
+    assert {"Servis Paneli", "Servis İşleri", "Planlama", "Benim İşlerim", "Personel"} <= set(
+        sef["sayfalar"]
+    )
+    assert "Panel" not in sef["sayfalar"], "servis rolü rapor.gor almaz (KD-06)"
+    assert sef["scope"] == "KENDI_BIRIMI"
+
+    tekn = (await client.get("/api/roller/SERVIS_TEKNISYEN/yetkiler")).json()
+    assert "Hesaplar" not in tekn["sayfalar"], "teknisyende hesap.gor yok (KD-09)"
+    assert "yalnız atandığı" in tekn["scope_aciklama"]
+
+    # "Herhangi biri" izinli sayfa: Servis Tanımları servis.tanim VEYA operasyon.yonet.
+    await client.post(
+        "/api/roller",
+        json={"code": "SLA_SORUMLU", "name": "SLA", "izinler": ["operasyon.yonet"]},
+    )
+    sla = (await client.get("/api/roller/SLA_SORUMLU/yetkiler")).json()
+    assert sla["sayfalar"] == ["Servis Tanımları"]
+
+    ik = (await client.get("/api/roller/IK/yetkiler")).json()
+    assert {"Personel", "Eğitim ve Gelişim"} <= set(ik["sayfalar"])
 
 
 # --------------------------------------------------------------------------

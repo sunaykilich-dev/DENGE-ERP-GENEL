@@ -9,7 +9,6 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import Clock, RealClock
-from app.config import get_config
 from app.db import get_session
 from app.models import User
 from app.permissions import SCOPE_OWN_CUSTOMERS
@@ -94,6 +93,33 @@ def require_permission(*codes: str):
             )
         return user
 
+    # Otomatik yetki matrisi (`tests/integration/test_yetki_matrisi.py`) her
+    # ucun hangi izinleri istediğini buradan okur: matris elle tutulan bir
+    # tablo olsaydı yeni uç eklendiğinde unutulurdu (TS-013).
+    _guard.izinler = codes  # type: ignore[attr-defined]
+    return _guard
+
+
+def require_any_permission(*codes: str):
+    """Verilen izinlerden EN AZ BİRİNİ isteyen bağımlılık.
+
+    Aynı ekranı iki ayrı yetkiyle yöneten uçlar için (ör. Servis Tanımları:
+    arıza nedeni `servis.tanim`, bekleme nedeni `operasyon.yonet`). Uçta hangi
+    alt işlemin hangi izni istediği ayrıca gövdede kontrol edilir; bu kapı
+    yalnız "hiçbiri yoksa 403"tür. Varsayılan yine RED.
+    """
+    if not codes:
+        raise ValueError("En az bir izin kodu verilmeli")
+
+    async def _guard(user: CurrentUser) -> User:
+        if not any(user.has(c) for c in codes):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                f"Bu işlem için yetkiniz yok ({' veya '.join(codes)})",
+            )
+        return user
+
+    _guard.izinler_herhangi = codes  # type: ignore[attr-defined]
     return _guard
 
 

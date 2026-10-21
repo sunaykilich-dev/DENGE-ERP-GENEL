@@ -20,6 +20,9 @@ dependencies = [
     "qrcode>=8.0",
     "jinja2>=3.1",
     "weasyprint>=62.0",
+    # Europe/Istanbul saat dilimi verisi (teknik servis yerel gun, TS-011).
+    # Windows ve ince Docker imajlarinda sistem zoneinfo veritabani yok.
+    "tzdata>=2024.1",
 ]
 
 [dependency-groups]
@@ -35,6 +38,8 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "integration: gercek PostgreSQL gerektirir (TEST_DATABASE_URL)",
+    "yetki_matrisi: tum korumali uclari rol x uc olarak tarayan yavas test (TS-013)",
+    "kapsam_taramasi: {id} yollu teknik servis uclarinda kapsam disi 404 taramasi (TS-013)",
 ]
 
 [tool.ruff]

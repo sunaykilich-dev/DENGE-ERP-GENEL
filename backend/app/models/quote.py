@@ -82,6 +82,13 @@ class Quote(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, Versione
     title: Mapped[str | None] = mapped_column(String(200))
     # Kayıp nedeni zorunlu (brief §4.8 satış hunisi).
     lost_reason: Mapped[str | None] = mapped_column(String(200))
+    # Teklifin ilgili olduğu tesis (E14-15). Servis işinden açılan teklifte
+    # sunucu işten kopyalar; satış teklifinde boştur, bugünkü davranış aynı.
+    address_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("addresses.id", ondelete="SET NULL", name="fk_quotes_adres"),
+        index=True,
+    )
 
     versions: Mapped[list["QuoteVersion"]] = relationship(
         back_populates="quote", cascade="all, delete-orphan", lazy="selectin"

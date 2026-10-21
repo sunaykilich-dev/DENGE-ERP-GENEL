@@ -28,6 +28,13 @@ class UserOut(BaseModel):
     # kendi kontrolünü yapar — bu liste yalnız görsel kolaylıktır.
     permissions: list[str] = []
     sees_cost: bool = False
+    # Teknik servis (E13-05e): yalnız oturum/menü için gereken dört alan.
+    # Personel alanları (sicil, ünvan, saha rolü, not) burada DEĞİL,
+    # `PersonelOut`'tadır — giriş yanıtı kişisel veri taşımasın.
+    giris_acik: bool = True
+    parola_degismeli: bool = False
+    birimler: list[str] = []
+    birincil_birim: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -40,6 +47,10 @@ class UserOut(BaseModel):
             username=user.username,
             email=user.email,
             is_active=user.is_active,
+            giris_acik=user.giris_acik,
+            parola_degismeli=user.parola_degismeli,
+            birimler=user.birim_kodlari,
+            birincil_birim=user.birincil_birim,
             mfa_enabled=user.mfa_enabled,
             # GİRİŞ yanıtı da bunu taşımak ZORUNDA: arayüz girişten sonra
             # kullanıcıyı bu yanıttan kuruyor, /auth/me'yi yalnız sayfa
@@ -78,6 +89,11 @@ class UserCreate(BaseModel):
     email: str | None = Field(default=None, max_length=160)
     password: str = Field(min_length=8, max_length=200)
     role_code: str = Field(min_length=2, max_length=30)
+    # Birim kapsamlı (KENDI_BIRIMI/KENDI_ISLERI) rolde en az bir birim ZORUNLU
+    # (E13-11): birimsiz açılan şef hiçbir servis kaydı görmezdi ve bunu
+    # kimse fark etmezdi. Sonraki birim değişiklikleri personel kartından.
+    birimler: list[str] = Field(default_factory=list, max_length=5)
+    birincil_birim: str | None = None
 
 
 class UserPatch(BaseModel):
@@ -85,6 +101,9 @@ class UserPatch(BaseModel):
     email: str | None = Field(default=None, max_length=160)
     role_code: str | None = Field(default=None, min_length=2, max_length=30)
     is_active: bool | None = None
+    # Girişi açma/kapama yalnız kullanıcı yönetiminden (E13-03); kapatma bütün
+    # oturumları düşürür (TS-007).
+    giris_acik: bool | None = None
     password: str | None = Field(default=None, min_length=8, max_length=200)
     reset_mfa: bool | None = None  # admin: kullanıcının MFA'sını sıfırla (cihaz kaybı)
     # İyimser kilitleme: istemci gördüğü sürümü geri gönderir.

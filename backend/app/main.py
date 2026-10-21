@@ -12,13 +12,16 @@ from app.api import accounts as accounts_api
 from app.api import attachments as attachments_api
 from app.api import audit_api, settings_api
 from app.api import auth as auth_api
+from app.api import bakim as bakim_api
 from app.api import catalog as catalog_api
 from app.api import devices as devices_api
 from app.api import gorevler as gorevler_api
 from app.api import imports as imports_api
 from app.api import kvkk as kvkk_api
+from app.api import lokasyonlar as lokasyonlar_api
 from app.api import orders as orders_api
 from app.api import payments as payments_api
+from app.api import personel as personel_api
 from app.api import pricing as pricing_api
 from app.api import public_quotes as public_quotes_api
 from app.api import purchasing as purchasing_api
@@ -26,11 +29,16 @@ from app.api import quotes as quotes_api
 from app.api import reports as reports_api
 from app.api import rma as rma_api
 from app.api import search as search_api
+from app.api import servis_ekipman as servis_ekipman_api
+from app.api import servis_zaman as servis_zaman_api
 from app.api import settlements as settlements_api
 from app.api import sims as sims_api
 from app.api import stock as stock_api
 from app.api import subscriptions as subscriptions_api
 from app.api import tariffs as tariffs_api
+from app.api import teknik_servis as teknik_servis_api
+from app.api import teknik_servis_ana_veri as teknik_servis_ana_veri_api
+from app.api import teknik_servis_planlama as teknik_servis_planlama_api
 from app.api import users as users_api
 from app.api import vehicles as vehicles_api
 from app.api import workorders as workorders_api
@@ -207,6 +215,20 @@ def create_app() -> FastAPI:
     app.include_router(audit_api.router)
     app.include_router(attachments_api.router)
     app.include_router(gorevler_api.router)
+    # --- Teknik servis (Dalga 0 + 1) --------------------------------------
+    # Kayıt noktaları şema paketinde (D0-S) sabitlenir; uçları modül paketleri
+    # kendi dosyalarına yazar, bu bloğa dokunmaz. Dalga 2+ routerları
+    # (operasyon, atölye, kiralama, parça, maliyet, eğitim) D2-S ekler.
+    app.include_router(personel_api.router)
+    app.include_router(lokasyonlar_api.router)
+    app.include_router(teknik_servis_ana_veri_api.router)
+    app.include_router(teknik_servis_planlama_api.router)
+    app.include_router(servis_ekipman_api.router)
+    app.include_router(bakim_api.router)
+    app.include_router(servis_zaman_api.router)
+    # Genel `/api/teknik-servis/{...}` yolları alt önekli routerlardan SONRA:
+    # `/isler/{id}` gibi bir kalıp `/planlama/...` yolunu yutmasın.
+    app.include_router(teknik_servis_api.router)
 
     @app.get("/api/health")
     async def health() -> dict:

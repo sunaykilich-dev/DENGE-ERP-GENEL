@@ -45,7 +45,9 @@ TRUNCATE TABLE audit_logs, attachments, sim_device_history, sim_plan_history,
                contacts, addresses, accounts, sessions, login_attempts,
                settings, card_comments, card_members, card_labels, cards,
                board_labels, board_columns, boards,
-               user_permissions, users, role_permissions, roles, permissions
+               user_permissions, users, role_permissions, roles, permissions,
+               service_visits, service_vehicles, service_unavailability,
+               maintenance_generation_runs, account_merges
 RESTART IDENTITY CASCADE
 """
 
@@ -252,5 +254,227 @@ async def hat_ac(db):
         await db.commit()
         await db.refresh(hat)
         return hat
+
+    return _make
+
+
+# --- Teknik servis yardımcıları (TS-013) -------------------------------------------
+#
+# Kapsam testleri "iki birimden iki şef" kalıbıyla yazılır (00 §6.3/7): A
+# birimindeki kullanıcı B birimindeki kaydı GÖREMEMELİ ve DEĞİŞTİREMEMELİ. Her
+# test dosyası bu kayıtları kendi elle kursaydı zorunlu alanlar (kategori,
+# numara, müşteri FK'si) dosyadan dosyaya ayrışırdı; yardımcılar tek yerde.
+# Kayıtlar servis katmanını DEĞİL doğrudan ORM'yi kullanır: kapsam testinin
+# konusu uç, kurulum değil — servis fonksiyonu henüz yazılmamış bir dalgada da
+# çalışır.
+
+_TEST_ANI = "2026-01-01T09:00:00+00:00"
+
+
+@pytest_asyncio.fixture
+async def rol_ac(db):
+    """Teste özel rol açar: `rol_ac("T_SEF", ["servis.gor"], "KENDI_BIRIMI")`.
+
+    İzin kodu katalogda yoksa (paralel paket henüz eklemediyse) `permissions`
+    tablosuna da eklenir; böylece kapsam altyapısı rol kataloğundan bağımsız
+    sınanır. Gerçek rol kataloğunun kendisi `test_permissions` ve yetki
+    matrisiyle sınanır.
+    """
+    from sqlalchemy.dialects.postgresql import insert
+
+    from app.models import Permission, Role, RolePermission
+
+    async def _make(kod: str, izinler, kapsam: str = "TUMU") -> Role:
+        for izin in izinler:
+            await db.execute(
+                insert(Permission)
+                .values(code=izin, module="Test", description=f"test: {izin}")
+                .on_conflict_do_nothing()
+            )
+        rol = Role(code=kod, name=kod.title(), scope=kapsam, is_system=False)
+        rol.permissions = [RolePermission(permission_code=i) for i in izinler]
+        db.add(rol)
+        await db.commit()
+        await db.refresh(rol)
+        return rol
+
+    return _make
+
+
+@pytest_asyncio.fixture
+async def birimli_kullanici_ac(db, kullanici_ac):
+    """Rol + birim üyeliğiyle kullanıcı: `await birimli_kullanici_ac("sef_a", "SERVIS_SEF",
+    ["GUVENLIK"])`. İlk birim birincildir (ya da `birincil=`). Birimsiz kullanıcı
+    için `birimler=[]` (fail-closed testleri)."""
+    from sqlalchemy import select
+
+    from app.models import User, UserUnit
+
+    async def _make(
+        username: str,
+        rol: str,
+        birimler=("GUVENLIK",),
+        *,
+        birincil: str | None = None,
+        saha_rolu: str | None = None,
+        password: str = "parola1234",
+    ) -> User:
+        user = await kullanici_ac(username, rol, password)
+        birincil = birincil or (birimler[0] if birimler else None)
+        for b in birimler:
+            db.add(UserUnit(user_id=user.id, birim=b, is_primary=(b == birincil)))
+        if saha_rolu is not None:
+            user.saha_rolu = saha_rolu
+        kimlik = user.id
+        await db.commit()
+        # Birimler selectin ile yüklenir; ilişkiyi tazelemek için yeniden oku.
+        db.expire(user)
+        return await db.scalar(select(User).where(User.id == kimlik))
+
+    return _make
+
+
+async def _musteri(db, ad: str = "Test Müşteri A.Ş."):
+    from app.models import Account
+
+    hesap = Account(title=ad, is_musteri=True)
+    db.add(hesap)
+    await db.flush()
+    return hesap
+
+
+@pytest_asyncio.fixture
+async def lokasyon_ac(db):
+    """Müşteri tesisi (`addresses.kind='TESIS'`); hesap verilmezse açılır."""
+    from app.models import Address
+
+    sayac = {"n": 0}
+
+    async def _make(hesap=None, *, ad: str | None = None, il: str = "İstanbul", **kw) -> Address:
+        sayac["n"] += 1
+        hesap = hesap or await _musteri(db, f"Lokasyon Müşterisi {sayac['n']}")
+        adres = Address(
+            account_id=hesap.id,
+            kind="TESIS",
+            label="Tesis",
+            site_name=ad or f"Test Tesisi {sayac['n']}",
+            city=il,
+            **kw,
+        )
+        db.add(adres)
+        await db.commit()
+        await db.refresh(adres)
+        return adres
+
+    return _make
+
+
+@pytest_asyncio.fixture
+async def servis_isi_ac(db):
+    """Servis işi açar (ORM ile). `atananlar` verilirse ilk kişi sorumlu
+    teknisyen olur (KENDI_ISLERI kapsamı aktif atamaya bakar)."""
+    from datetime import date, datetime
+
+    from app.models import ServiceOrder, ServiceOrderAssignment
+    from app.services.teknik_servis import numara
+    from app.services.teknik_servis.is_emirleri import tur_kategorisi
+
+    async def _make(
+        *,
+        birim: str = "GUVENLIK",
+        musteri=None,
+        lokasyon=None,
+        tur: str = "ARIZA",
+        durum: str = "MUSTERI_TALEBI",
+        konu: str = "Test arızası",
+        atananlar=(),
+        **kw,
+    ) -> ServiceOrder:
+        if musteri is None:
+            musteri = await _musteri(db, f"Servis Müşterisi {birim}")
+        onek = "PB" if tur == "PB" else "SRV"
+        so = ServiceOrder(
+            so_no=await numara.belge_no(db, "service_order_no_seq", onek, date(2026, 1, 1)),
+            birim=birim,
+            tur=tur,
+            kategori=tur_kategorisi(tur),
+            status=durum,
+            customer_id=musteri.id,
+            address_id=lokasyon.id if lokasyon is not None else None,
+            konu=konu,
+            **kw,
+        )
+        db.add(so)
+        await db.flush()
+        an = datetime.fromisoformat(_TEST_ANI)
+        for sira, kisi in enumerate(atananlar):
+            db.add(
+                ServiceOrderAssignment(
+                    service_order_id=so.id,
+                    user_id=kisi.id,
+                    rol="TEKNISYEN",
+                    is_lead=(sira == 0),
+                    assigned_at=an,
+                )
+            )
+        await db.commit()
+        await db.refresh(so)
+        return so
+
+    return _make
+
+
+@pytest_asyncio.fixture
+async def ekipman_ac(db):
+    """Kurulu ekipman (servis kütüğü) açar."""
+    from app.models import ServiceEquipment
+
+    async def _make(
+        *,
+        birim: str = "GUVENLIK",
+        musteri=None,
+        lokasyon=None,
+        tip: str = "XRAY",
+        seri: str | None = "SN-0001",
+        **kw,
+    ) -> ServiceEquipment:
+        if musteri is None:
+            musteri = await _musteri(db, f"Ekipman Müşterisi {birim}")
+        ekipman = ServiceEquipment(
+            birim=birim,
+            equipment_type=tip,
+            serial_no=seri,
+            account_id=musteri.id,
+            address_id=lokasyon.id if lokasyon is not None else None,
+            **kw,
+        )
+        db.add(ekipman)
+        await db.commit()
+        await db.refresh(ekipman)
+        return ekipman
+
+    return _make
+
+
+@pytest_asyncio.fixture
+async def sozlesme_ac(db):
+    """Bakım sözleşmesi açar (varsayılan TASLAK; numara `BAKIM-NNNN`)."""
+    from app.models import MaintenanceContract
+    from app.services.teknik_servis import numara
+
+    async def _make(*, birim: str = "GUVENLIK", musteri=None, lokasyon=None, **kw):
+        if musteri is None:
+            musteri = await _musteri(db, f"Sözleşme Müşterisi {birim}")
+        sozlesme = MaintenanceContract(
+            contract_no=await numara.bakim_sozlesme_no(db),
+            birim=birim,
+            account_id=musteri.id,
+            address_id=lokasyon.id if lokasyon is not None else None,
+            **kw,
+        )
+        db.add(sozlesme)
+        await db.commit()
+        await db.refresh(sozlesme)
+        return sozlesme
 
     return _make

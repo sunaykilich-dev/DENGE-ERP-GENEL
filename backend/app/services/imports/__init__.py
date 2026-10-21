@@ -3,7 +3,17 @@
 Yeni bir veri türü eklemek = bir profil dosyası yazıp buraya eklemek.
 Arayüz, şablon indirme, karantina raporu ve denetim izi profil listesinden
 beslendiği için hiçbirine dokunmak gerekmez.
+
+**Teknik servis profilleri (plan §1.11):** listenin SONUNA eklenir; mobilite
+profillerinin sırası ve izinleri değişmez. Paralel paketlerin profil
+dosyaları bu dosyayı düzenlemeden kaydolsun diye `_EK_PROFIL_MODULLERI`
+sözleşmesi kullanılır: modül `PROFIL: Profil` ve `PROFIL_IZNI: str`
+tanımlar; dosya mevcutsa sırasıyla yüklenir (yoksa atlanır, import hatası
+GİZLENMEZ).
 """
+
+import importlib
+import importlib.util
 
 from app.services.imports.abonelik import AbonelikProfili
 from app.services.imports.arac import AracProfili
@@ -60,6 +70,26 @@ PROFIL_IZINLERI: dict[str, str] = {
     "tarife": "hakedis.yaz",
     "abonelik": "abonelik.yaz",
 }
+
+# Teknik servis profil modülleri — sıra = arayüz ve göç yükleme sırası (plan
+# §5.3: önce personel ve ad eşleme, sonra müşteri eşleştirme, kütük ...).
+# Dalga 2 göç profilleri (D2-I) bu listenin sonuna eklenir.
+_EK_PROFIL_MODULLERI = ("app.services.imports.personel",)
+
+
+def _ek_profilleri_yukle() -> None:
+    for modul_adi in _EK_PROFIL_MODULLERI:
+        if importlib.util.find_spec(modul_adi) is None:
+            continue
+        modul = importlib.import_module(modul_adi)
+        profil: Profil = modul.PROFIL
+        if profil.kod in PROFILLER:
+            raise ValueError(f"İçe aktarma profili iki kez tanımlı: {profil.kod}")
+        PROFILLER[profil.kod] = profil
+        PROFIL_IZINLERI[profil.kod] = modul.PROFIL_IZNI
+
+
+_ek_profilleri_yukle()
 
 __all__ = [
     "PROFILLER",

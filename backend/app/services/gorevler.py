@@ -20,10 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import (
     Account,
     Device,
+    MaintenanceContract,
     Order,
     PartnerSettlement,
     Quote,
     RmaCase,
+    ServiceEquipment,
+    ServiceOrder,
     SimCard,
     Vehicle,
     WorkOrder,
@@ -54,6 +57,21 @@ KAYIT_TIPLERI: tuple[KayitTipi, ...] = (
     KayitTipi("arac", "Araç", Vehicle, ("plate",), "/araclar/{id}"),
     KayitTipi("hat", "Hat (SIM)", SimCard, ("msisdn", "iccid"), "/hatlar/{id}"),
     KayitTipi("hakedis", "Hak Ediş Dökümü", PartnerSettlement, ("period",), "/hakedis"),
+    # --- Teknik servis (plan §1.11) -------------------------------------------
+    # Görev uçlarında kayıt kapsamı bilerek uygulanmaz (api/gorevler.py); bu
+    # yüzden etiket alanı KİŞİSEL VERİ ya da müşteri adı taşımaz: yalnız belge
+    # numarası. Ekipmanın seri numarası bile yazılmaz (müşteri malı kütüğü):
+    # alan listesi boş, kart "Ekipman #id" görünür. Kiralama, atölye ve eğitim
+    # tipleri tabloları geldiği dalgada eklenir.
+    KayitTipi("servis_isi", "Servis İşi", ServiceOrder, ("so_no",), "/servis-isleri/{id}"),
+    KayitTipi("ekipman", "Ekipman", ServiceEquipment, (), "/servis-ekipman/{id}"),
+    KayitTipi(
+        "bakim_sozlesme",
+        "Bakım Sözleşmesi",
+        MaintenanceContract,
+        ("contract_no",),
+        "/bakim?sozlesme={id}",
+    ),
 )
 
 _TIPE_GORE = {t.kod: t for t in KAYIT_TIPLERI}

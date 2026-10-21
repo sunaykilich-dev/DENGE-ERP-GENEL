@@ -1,15 +1,75 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.models.mixins import PkMixin, TimestampMixin, VersionedMixin
-from app.models.rbac import Role, UserPermission
+from app.models.rbac import Role, UserPermission, UserUnit
+
+# Saha rolü bir YETKİ değil, İK olgusudur: atama listeleri buna bakar, yetki
+# `Role`'e. Ünvan hiçbir kurala girmez ("Sistem Mühendisi" sahada teknisyen
+# olabilir). Aynı tuple `permissions.SAHA_ROLLERI` ile eşit tutulur (sözlük
+# tutarlılık testi).
+SAHA_ROLLERI = ("SEF", "TEKNISYEN", "STAJYER", "OFIS", "YOK")
+AYRILIS_NEDENLERI = ("ISTIFA", "FESIH", "EMEKLILIK", "SOZLESME_BITIMI", "DIGER")
 
 
 class User(Base, PkMixin, TimestampMixin, VersionedMixin):
+    """Kullanıcı = personel kartı (teknik servis plan §1.1, E13-05).
+
+    Ayrı `personnel` tablosu AÇILMAZ: ikinci bir kimlik kaynağı, atamada,
+    zaman kaydında ve eğitimde "hangi Ali Veli?" sorusunu geri getirirdi.
+    Girişi olmayan saha personeli (stajyer, sahadaki usta) de bir `users`
+    satırıdır; farkı `giris_acik=false` taşır.
+
+    **`is_active` ile `giris_acik` AYRI anlamlardır** (E13-03):
+    - `is_active` = kayıt canlı (işten ayrılınca false);
+    - `giris_acik` = oturum açabilir mi.
+    Personeli yeniden aktifleştirmek girişi AÇMAZ; giriş ayrıca ve geçici
+    parolayla açılır. Tek bayrakla ikisini birlikte açmak, çıkışı yapılmış
+    birinin eski parolasıyla geri girmesine kapı aralardı.
+    """
+
     __tablename__ = "users"
+    __table_args__ = (
+        Index(
+            "uq_users_sicil_no",
+            "sicil_no",
+            unique=True,
+            postgresql_where=text("sicil_no IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "saha_rolu IS NULL OR saha_rolu IN (" + ", ".join(f"'{r}'" for r in SAHA_ROLLERI) + ")",
+            name="ck_users_saha_rolu",
+        ),
+        CheckConstraint(
+            "ayrilis_nedeni IS NULL OR ayrilis_nedeni IN ("
+            + ", ".join(f"'{n}'" for n in AYRILIS_NEDENLERI)
+            + ")",
+            name="ck_users_ayrilis_nedeni",
+        ),
+        # Ayrılış tarihi ve nedeni birlikte vardır ya da birlikte yoktur:
+        # nedensiz çıkış raporda "bilinmiyor" sayısını sessizce şişirirdi.
+        CheckConstraint(
+            "(ayrilis_tarihi IS NULL) = (ayrilis_nedeni IS NULL)",
+            name="ck_users_ayrilis",
+        ),
+        CheckConstraint(
+            "yonetici_id IS NULL OR yonetici_id <> id", name="ck_users_yonetici_kendisi"
+        ),
+    )
 
     full_name: Mapped[str] = mapped_column(String(100))
     username: Mapped[str] = mapped_column(String(50), unique=True)
@@ -28,7 +88,45 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
     # FK hesaplar tablosu geldiğinde eklenecek — şimdilik salt sayı.
     account_id: Mapped[int | None] = mapped_column()
 
+    # --- Personel (teknik servis, E13 §2.2.1) ---------------------------------
+    # Hepsi nullable ya da varsayılanlı: mevcut kullanıcılar etkilenmez,
+    # birim/saha rolü göçte UYDURULMAZ.
+    giris_acik: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), default=True, nullable=False
+    )
+    sicil_no: Mapped[str | None] = mapped_column(String(30))
+    unvan: Mapped[str | None] = mapped_column(String(80))
+    saha_rolu: Mapped[str | None] = mapped_column(String(12))
+    ise_giris_tarihi: Mapped[date | None] = mapped_column(Date)
+    ayrilis_tarihi: Mapped[date | None] = mapped_column(Date)
+    ayrilis_nedeni: Mapped[str | None] = mapped_column(String(20))
+    ayrilisi_yapan_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL", name="fk_users_ayrilisi_yapan")
+    )
+    # Döngü (A→B→A) servis katmanında engellenir; şemada yalnız "kendisi değil".
+    yonetici_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL", name="fk_users_yonetici")
+    )
+    # Yalnız `personel.yaz` sahibine döner (kişisel not).
+    personel_notu: Mapped[str | None] = mapped_column(Text)
+    parola_degismeli: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
+    gecici_parola_bitis: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    parola_degisti_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    son_giris_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     role: Mapped[Role] = relationship(lazy="selectin")
+    # Birim üyelikleri kullanıcıyla BİRLİKTE yüklenir: kapsam kontrolü her
+    # istekte koşuyor (izin istisnalarıyla aynı gerekçe, N+1 yok).
+    # `user_units.created_by` da users'a gittiği için yabancı anahtar açıkça
+    # belirtilir.
+    birimler: Mapped[list["UserUnit"]] = relationship(
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        foreign_keys="UserUnit.user_id",
+        order_by="UserUnit.birim",
+    )
     # İstisnalar kullanıcıyla BİRLİKTE yüklenir: yetki kontrolü her istekte
     # koşuyor, ayrı sorgu N+1 üretirdi.
     izin_istisnalari: Mapped[list["UserPermission"]] = relationship(
@@ -50,6 +148,23 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
         from app.config import get_config
 
         return get_config().mfa_zorunlu and not self.mfa_enabled
+
+    def giris_yapabilir_mi(self) -> bool:
+        """Oturum açabilir mi — kural BURADA, tek yerde (E13-02/03).
+
+        `authenticate`, `login_mfa` ve `resolve_session` bunu çağırır. Kayıt
+        canlı olsa bile (`is_active`) girişi kapatılmış personel giremez.
+        """
+        return bool(self.is_active) and bool(self.giris_acik)
+
+    @property
+    def birim_kodlari(self) -> list[str]:
+        """Üyesi olduğu birim kodları, sıralı (kapsam yardımcılarının girdisi)."""
+        return sorted(u.birim for u in self.birimler)
+
+    @property
+    def birincil_birim(self) -> str | None:
+        return next((u.birim for u in self.birimler if u.is_primary), None)
 
     def has(self, permission_code: str) -> bool:
         """İzin var mı. Varsayılan DAİMA reddetmektir.

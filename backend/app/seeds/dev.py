@@ -18,8 +18,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session_factory
-from app.models import Permission, Role, RolePermission, User
-from app.permissions import PERMISSIONS, ROLES
+from app.models import Permission, Role, RolePermission, User, UserUnit
+from app.permissions import BIRIM_KAPSAMLARI, PERMISSIONS, ROLES
 from app.services import auth as auth_service
 
 
@@ -52,6 +52,12 @@ async def sync_roles(db: AsyncSession) -> None:
     bir izin eklendiğinde bu rollere kendiliğinden inmez. Sessiz kalmasın
     diye log'a UYARI düşer — KVKK menüsü tam olarak böyle, kimsenin fark
     etmediği bir senkron eksiğinden kaybolmuştu.
+
+    **ADMIN istisnadır** (E13-01 (3), TS-006): ADMIN her açılışta katalogdaki
+    TÜM izinlere eşitlenir ve `ozellestirildi` bayrağı indirilir. ADMIN rolü
+    bir kez arayüzden düzenlenmiş bir kurulumda yeni izinler (ör. `personel.*`)
+    yöneticiye hiç inmez, sistemi yönetecek kimse kalmazdı. ADMIN rolünün
+    API'den düzenlenmesi zaten 409'dur; bu satır eski kurulumları onarır.
     """
     atlanan: list[str] = []
     for code, (name, perms, scope) in ROLES.items():
@@ -60,6 +66,9 @@ async def sync_roles(db: AsyncSession) -> None:
             role = Role(code=code, name=name, scope=scope, is_system=True)
             db.add(role)
             await db.flush()
+        elif code == "ADMIN":
+            role.name, role.scope = name, scope
+            role.ozellestirildi = False
         elif role.ozellestirildi:
             # Ad ve kapsam da elle değiştirilmiş olabilir; ikisine de dokunma.
             eksik = set(perms) - {
@@ -100,8 +109,8 @@ async def sync_roles(db: AsyncSession) -> None:
             )
     if atlanan:
         logging.getLogger("denge").warning(
-            "Özelleştirilmiş rollere YENİ izinler inmedi (Kullanıcılar → Roller'den "
-            "elle verin): %s",
+            "Özelleştirilmiş rollere YENİ izinler inmedi — elle eklenecek "
+            "(Kullanıcılar → Roller): %s",
             " | ".join(atlanan),
         )
     await db.flush()
@@ -126,6 +135,8 @@ async def ensure_admin(db: AsyncSession, full_name: str) -> str | None:
 
 
 DEMO_PAROLA = "deneme1234"
+# Canlıya geçişte pilot birim GUVENLIK (plan §5.1 adım 8); deneme de aynısı.
+DEMO_BIRIM = "GUVENLIK"
 
 
 async def ensure_demo_users(db: AsyncSession) -> int:
@@ -146,14 +157,17 @@ async def ensure_demo_users(db: AsyncSession) -> int:
         if await db.scalar(select(User).where(User.username == username)):
             continue
         role = await db.scalar(select(Role).where(Role.code == code))
-        db.add(
-            User(
-                full_name=f"Deneme {ROLES[code][0]}",
-                username=username,
-                password_hash=auth_service.hash_password(DEMO_PAROLA),
-                role_id=role.id,
-            )
+        kisi = User(
+            full_name=f"Deneme {ROLES[code][0]}",
+            username=username,
+            password_hash=auth_service.hash_password(DEMO_PAROLA),
+            role_id=role.id,
         )
+        # Birim kapsamlı rol birimsiz HİÇBİR servis kaydı görmez (fail-closed);
+        # deneme hesabı boş ekranla açılmasın diye pilot birim verilir.
+        if ROLES[code][2] in BIRIM_KAPSAMLARI:
+            kisi.birimler = [UserUnit(birim=DEMO_BIRIM, is_primary=True)]
+        db.add(kisi)
         acilan += 1
     await db.flush()
     return acilan
