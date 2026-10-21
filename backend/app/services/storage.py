@@ -176,7 +176,11 @@ def yetim_dosyalar(kullanilan: set[str]) -> list[Path]:
     kok = _kok()
     if not kok.is_dir():
         return []
-    return [y for y in kok.rglob("*") if y.is_file() and str(y.relative_to(kok)) not in kullanilan]
+    # storage_path her platformda "/" ile saklanır; Windows'ta str() "\" üretir
+    # ve kullanımdaki dosya yetim sanılıp silinirdi.
+    return [
+        y for y in kok.rglob("*") if y.is_file() and y.relative_to(kok).as_posix() not in kullanilan
+    ]
 
 
 def yetimleri_temizle(kullanilan: set[str], *, en_az_yas_saat: int = 24) -> int:

@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -61,4 +62,9 @@ async def run_migrations_online() -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(run_migrations_online())
+    # Windows geliştirme makinesi: psycopg async, varsayılan ProactorEventLoop
+    # ile çalışmaz. Linux'ta (canlı) davranış değişmez.
+    asyncio.run(
+        run_migrations_online(),
+        loop_factory=asyncio.SelectorEventLoop if sys.platform == "win32" else None,
+    )

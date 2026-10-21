@@ -16,8 +16,10 @@
    `dengeerp` yerine `dengeerp_test`. Her test öncesi tablolar boşaltılır.
 """
 
+import asyncio
 import os
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -30,6 +32,10 @@ import app.models  # noqa: F401 — modellerin tamamı metadata'ya kaydolsun
 from app.config import get_config
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+# Windows geliştirme makinesi: psycopg async ProactorEventLoop ile çalışmaz.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Referans tabloları dahil her şey temizlenir; alembic_version kalır.
 _TRUNCATE = """
