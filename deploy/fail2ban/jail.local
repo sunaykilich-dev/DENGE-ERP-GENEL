@@ -1,0 +1,38 @@
+# fail2ban — tekrarlayan basarisiz girislerde IP'yi gecici yasaklar.
+# Kurulum:
+#   sudo cp deploy/fail2ban/jail.local /etc/fail2ban/jail.local
+#   sudo cp deploy/fail2ban/filter.conf        /etc/fail2ban/filter.d/denge-erp.conf
+#   sudo cp deploy/fail2ban/filter-teklif.conf /etc/fail2ban/filter.d/denge-erp-teklif.conf
+#   sudo systemctl restart fail2ban
+
+[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+# Ofis cikis IP'nizi ekleyin, yoksa kendinizi yasaklayabilirsiniz:
+# ignoreip = 127.0.0.1/8 OFIS_IP
+
+[sshd]
+enabled = true
+
+# Uygulama kendi kilidini de uygular (5 hata -> 15 dk, kullanici bazinda);
+# bu IP seviyesinde ikinci katman: farkli kullanici adlariyla deneyen bir
+# botu uygulama kilidi durduramaz.
+[denge-erp-login]
+enabled  = true
+port     = http,https
+filter   = denge-erp
+logpath  = /var/log/caddy/access.log
+maxretry = 8
+findtime = 10m
+bantime  = 1h
+
+# Teklif public linki jeton tahminine acik tek yuzey: 404 yagmuru = tarama.
+[denge-erp-teklif]
+enabled  = true
+port     = http,https
+filter   = denge-erp-teklif
+logpath  = /var/log/caddy/access.log
+maxretry = 20
+findtime = 5m
+bantime  = 6h
