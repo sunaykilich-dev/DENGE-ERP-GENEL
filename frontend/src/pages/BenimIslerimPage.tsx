@@ -35,6 +35,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { ManuelKayitPenceresi } from "../components/SayacDugmeleri";
+import SlaEtiketi from "../components/SlaEtiketi";
 import Statistic from "../components/Statistic";
 import {
   FAALIYET_ADLARI,
@@ -65,6 +66,7 @@ function IsSatiri({ is }: { is: MobilIs }) {
             <Tag style={{ marginInlineEnd: 0 }}>{is.durum.replaceAll("_", " ")}</Tag>
             {ONCELIK_RENGI[is.oncelik] && <Tag color={ONCELIK_RENGI[is.oncelik]}>{is.oncelik}</Tag>}
             {!is.bana_atanmis && <Tag color="purple">ekip</Tag>}
+            <SlaEtiketi sla={is.sla} />
           </Space>
           <Typography.Paragraph
             style={{ margin: 0, fontSize: 13, overflowWrap: "anywhere" }}

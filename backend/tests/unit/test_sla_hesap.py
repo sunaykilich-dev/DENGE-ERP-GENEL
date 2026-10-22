@@ -95,8 +95,7 @@ def test_mudahale_durumu() -> None:
     assert sla.mudahale_durumu(_is(mudahale_hedef_at=hedef), AN) == "BEKLENIYOR"
     assert sla.mudahale_durumu(_is(mudahale_hedef_at=hedef), hedef) == "ASILDI"
     assert (
-        sla.mudahale_durumu(_is(mudahale_hedef_at=hedef, ilk_mudahale_at=AN), hedef)
-        == "KARSILANDI"
+        sla.mudahale_durumu(_is(mudahale_hedef_at=hedef, ilk_mudahale_at=AN), hedef) == "KARSILANDI"
     )
     assert sla.mudahale_durumu(_is(), AN) is None
 

@@ -1,0 +1,4 @@
+﻿AssignmentId,WorkOrderId,AssignedName,AssignmentRole,IsActive,AssignedAt
+501,101,ALİ  VELİ,Teknisyen,1,2026-01-05T10:00:00
+502,101,Bilinmeyen Kişi,Teknisyen,1,2026-01-05T10:00:00
+503,101,Eski Atama,Teknisyen,0,2026-01-05T09:45:00

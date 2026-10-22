@@ -834,10 +834,12 @@ async def iptal(
         raise TeklifYetkiHatasi("Kabul edilmiş teklifi yalnız teklif onaylayıcı iptal edebilir")
     if kabulden:
         await maliyet.fatura_kilidi_dogrula(db, t)
-    await gecis(db, t, "IPTAL", user_id=user.id, neden=metin, ip=ip)
+    # İptal alanları geçişten ÖNCE: `gecis` flush ederse ck_quote_iptal_neden
+    # (status=IPTAL ⇒ cancel_reason dolu) ara durumda kırılmasın.
     t.cancelled_by = user.id
     t.cancelled_at = clock.now()
     t.cancel_reason = metin
+    await gecis(db, t, "IPTAL", user_id=user.id, neden=metin, ip=ip)
     await db.flush()
     uyarilar: list[str] = []
     if kabulden:

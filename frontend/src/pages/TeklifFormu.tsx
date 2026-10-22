@@ -12,9 +12,10 @@ import {
   Typography,
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { api, type ApiError } from "../api/client";
+import { teknikServisApi } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
 import { marka } from "../theme";
 
@@ -65,6 +66,8 @@ interface Baslik {
   };
   sartlar: string;
   kdv_varsayilan: number;
+  /** Birimli (servis) teklifte izinli KDV oranları (kesir). */
+  birimli_kdv_oranlari?: number[];
 }
 
 interface Kalem {
@@ -83,6 +86,14 @@ const KALEM_TIPLERI = [
   { value: "HIZMET", label: "Hizmet" },
   { value: "ABONELIK", label: "Abonelik" },
   { value: "SIM_PAKETI", label: "SIM paketi" },
+  { value: "SERBEST", label: "Serbest" },
+];
+
+/** Birimli (servis) teklifte kalem tipleri: abonelik/SIM yok, işçilik var. */
+const BIRIMLI_KALEM_TIPLERI = [
+  { value: "URUN", label: "Ürün / parça" },
+  { value: "ISCILIK", label: "İşçilik" },
+  { value: "HIZMET", label: "Hizmet" },
   { value: "SERBEST", label: "Serbest" },
 ];
 
@@ -115,12 +126,23 @@ const bosKalem = (kdv: number): Kalem => ({
   vat_rate: kdv,
 });
 
-export default function TeklifFormu({ onKaydedildi }: { onKaydedildi?: () => void }) {
+export default function TeklifFormu({
+  onKaydedildi,
+  servisIsiId,
+}: {
+  onKaydedildi?: (id?: number) => void;
+  /** Servis işinden teklif (TS-147): müşteri, birim ve adres işten gelir. */
+  servisIsiId?: number;
+}) {
   const { message } = App.useApp();
   const { kullanici } = useAuth();
   const qc = useQueryClient();
+  const birimlerim = kullanici?.birimler ?? [];
 
   const [musteriId, setMusteriId] = useState<number>();
+  const [birim, setBirim] = useState<string | undefined>(
+    servisIsiId ? undefined : birimlerim.length === 1 ? birimlerim[0] : undefined,
+  );
   const [musteriArama, setMusteriArama] = useState("");
   const [baslikMetni, setBaslikMetni] = useState("");
   const [paraBirimi, setParaBirimi] = useState("TRY");
@@ -148,16 +170,41 @@ export default function TeklifFormu({ onKaydedildi }: { onKaydedildi?: () => voi
       ),
   });
 
+  const servisIsi = useQuery({
+    queryKey: ["teklif-servis-isi", servisIsiId],
+    queryFn: () => teknikServisApi.getir(servisIsiId as number),
+    enabled: servisIsiId != null,
+  });
+  useEffect(() => {
+    const so = servisIsi.data;
+    if (!so) return;
+    setBirim(so.birim);
+    if (so.customer_id) setMusteriId(so.customer_id);
+    setBaslikMetni((o) => o || `${so.so_no} · ${so.konu}`);
+  }, [servisIsi.data]);
+
+  const birimli = !!birim;
+  const kdvOranlari = baslik.data?.birimli_kdv_oranlari ?? [0, 0.01, 0.1, 0.2];
+
   const musteri = (musteriler.data ?? []).find((m) => m.id === musteriId);
+  const musteriSecenekleri = (musteriler.data ?? []).map((m) => ({ value: m.id, label: m.title }));
+  if (servisIsi.data?.musteri && !musteriSecenekleri.some((o) => o.value === musteriId)) {
+    musteriSecenekleri.unshift({
+      value: servisIsi.data.musteri.id,
+      label: servisIsi.data.musteri.title,
+    });
+  }
 
   const kaydet = useMutation({
-    mutationFn: (govde: Record<string, unknown>) => api.post("/api/teklifler", govde),
-    onSuccess: () => {
-      message.success("Teklif oluşturuldu");
+    mutationFn: (govde: Record<string, unknown>) =>
+      api.post<{ id: number; quote_no: string; uyarilar?: string[] }>("/api/teklifler", govde),
+    onSuccess: (t) => {
+      message.success(`${t.quote_no} oluşturuldu`);
+      for (const u of t.uyarilar ?? []) message.warning(u);
       setKalemler([]);
       setBaslikMetni("");
       void qc.invalidateQueries({ queryKey: ["teklifler"] });
-      onKaydedildi?.();
+      onKaydedildi?.(t.id);
     },
     onError: (e: ApiError) => message.error(e.message),
   });
@@ -205,6 +252,8 @@ export default function TeklifFormu({ onKaydedildi }: { onKaydedildi?: () => voi
   function gonder() {
     kaydet.mutate({
       customer_id: musteriId,
+      ...(birim ? { birim } : {}),
+      ...(servisIsiId ? { service_order_id: servisIsiId } : {}),
       title: baslikMetni || null,
       currency: paraBirimi,
       valid_until: gecerlilik ? gecerlilik.format("YYYY-MM-DD") : null,
@@ -230,9 +279,56 @@ export default function TeklifFormu({ onKaydedildi }: { onKaydedildi?: () => voi
       <div style={{ flex: "1 1 430px", minWidth: 380, maxWidth: 560 }}>
         <Space orientation="vertical" size={14} style={{ width: "100%" }}>
           <Bolum baslik="Teklif bilgileri">
+            {servisIsiId != null && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 10 }}
+                title={
+                  servisIsi.data
+                    ? `${servisIsi.data.so_no} servis işinden teklif`
+                    : "Servis işi yükleniyor…"
+                }
+                description="Müşteri, birim, adres ve irtibat işten alınır; kabul edilince KDV hariç net tutar işin gelirine aktarılır."
+              />
+            )}
+            {servisIsi.isError && (
+              <Alert
+                type="error"
+                showIcon
+                style={{ marginBottom: 10 }}
+                title={(servisIsi.error as ApiError).message}
+              />
+            )}
+            {birimlerim.length > 0 && (
+              <Alan etiket="Birim (servis teklifi)">
+                <Select
+                  allowClear={birimlerim.length > 1 || !servisIsiId}
+                  disabled={servisIsiId != null}
+                  value={birim}
+                  onChange={(b) => {
+                    setBirim(b);
+                    // Birimli teklifte abonelik/SIM kalemi yok; tipi sıfırla.
+                    setKalemler((o) =>
+                      o.map((k) =>
+                        b && ["ABONELIK", "SIM_PAKETI"].includes(k.item_type)
+                          ? { ...k, item_type: "HIZMET" }
+                          : !b && k.item_type === "ISCILIK"
+                            ? { ...k, item_type: "HIZMET" }
+                            : k,
+                      ),
+                    );
+                  }}
+                  placeholder="Boş = satış teklifi"
+                  style={{ width: "100%" }}
+                  options={birimlerim.map((b) => ({ value: b, label: b }))}
+                />
+              </Alan>
+            )}
             <Alan etiket="Müşteri" zorunlu>
               <Select
                 showSearch
+                disabled={servisIsiId != null}
                 value={musteriId}
                 onChange={setMusteriId}
                 onSearch={setMusteriArama}
@@ -240,7 +336,7 @@ export default function TeklifFormu({ onKaydedildi }: { onKaydedildi?: () => voi
                 placeholder="Ara…"
                 style={{ width: "100%" }}
                 loading={musteriler.isLoading}
-                options={(musteriler.data ?? []).map((m) => ({ value: m.id, label: m.title }))}
+                options={musteriSecenekleri}
               />
             </Alan>
             <Alan etiket="Teklif başlığı">
@@ -318,7 +414,7 @@ export default function TeklifFormu({ onKaydedildi }: { onKaydedildi?: () => voi
                         value={k.item_type}
                         onChange={(v) => degis(k.anahtar, { item_type: v })}
                         style={{ width: 120 }}
-                        options={KALEM_TIPLERI}
+                        options={birimli ? BIRIMLI_KALEM_TIPLERI : KALEM_TIPLERI}
                       />
                       {k.item_type === "URUN" ? (
                         <Select
@@ -337,7 +433,8 @@ export default function TeklifFormu({ onKaydedildi }: { onKaydedildi?: () => voi
                         <Input
                           value={k.description}
                           onChange={(e) => degis(k.anahtar, { description: e.target.value })}
-                          placeholder="Açıklama"
+                          placeholder={k.item_type === "ISCILIK" ? "İşçilik açıklaması" : "Açıklama"}
+                          maxLength={birimli ? 500 : 300}
                           style={{ flex: 1, minWidth: 180 }}
                         />
                       )}
@@ -374,17 +471,30 @@ export default function TeklifFormu({ onKaydedildi }: { onKaydedildi?: () => voi
                         addonAfter="%"
                         style={{ width: 150 }}
                       />
-                      <InputNumber
-                        // KDV oranı KESİR saklanır (0.20 = %20); ekranda yüzde
-                        // gösterilir çünkü kullanıcı "20" yazmak ister.
-                        value={Math.round((k.vat_rate ?? kdvVarsayilan) * 100)}
-                        onChange={(v) => degis(k.anahtar, { vat_rate: (v ?? 20) / 100 })}
-                        min={0}
-                        max={100}
-                        addonBefore="KDV"
-                        addonAfter="%"
-                        style={{ width: 150 }}
-                      />
+                      {birimli ? (
+                        // Servis teklifinde KDV beyaz listeden seçilir (sunucu da denetler).
+                        <Select
+                          value={k.vat_rate ?? kdvVarsayilan}
+                          onChange={(v) => degis(k.anahtar, { vat_rate: v })}
+                          style={{ width: 120 }}
+                          options={kdvOranlari.map((o) => ({
+                            value: o,
+                            label: `KDV %${Math.round(o * 100)}`,
+                          }))}
+                        />
+                      ) : (
+                        <InputNumber
+                          // KDV oranı KESİR saklanır (0.20 = %20); ekranda yüzde
+                          // gösterilir çünkü kullanıcı "20" yazmak ister.
+                          value={Math.round((k.vat_rate ?? kdvVarsayilan) * 100)}
+                          onChange={(v) => degis(k.anahtar, { vat_rate: (v ?? 20) / 100 })}
+                          min={0}
+                          max={100}
+                          addonBefore="KDV"
+                          addonAfter="%"
+                          style={{ width: 150 }}
+                        />
+                      )}
                     </Space>
                   </Space>
                 </div>

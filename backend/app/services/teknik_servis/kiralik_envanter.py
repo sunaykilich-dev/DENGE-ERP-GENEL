@@ -1058,10 +1058,18 @@ async def _atolye_kaydi_ac(
     )
     if kabul is None:
         raise hazir_degil
+    from app.services.teknik_servis.kancalar import ServisGirdiHatasi
+
     try:
         kayit = await kabul(db, cihaz, aciklama=aciklama, user=user, clock=clock)
     except NotImplementedError as exc:
         raise hazir_degil from exc
+    except atolye.AtolyeBulunamadi as exc:
+        raise bulunamadi(str(exc) or "Bulunamadı") from exc
+    except atolye.AtolyeHatasi as exc:
+        raise KiralamaHatasi(exc.mesaj, veri=exc.veri) from exc
+    except ServisGirdiHatasi as exc:
+        raise girdi(str(exc)) from exc
     return int(kayit.id)
 
 
@@ -1728,3 +1736,48 @@ __all__ = [
     "kontrol",
     "transfer",
 ]
+
+
+# --- Atölye teslim kancası (TS-102) ---------------------------------------------------------
+
+
+async def _atolye_teslim_edildi(db: AsyncSession, kayit: Any, user: User, clock: Clock) -> None:
+    """Atölye kaydı TESLIM_EDILDI olunca kiralık cihazı son deposuna KONTROLDE
+    döndürür (hareket kiralama defterine bu modülden yazılır).
+
+    Kiralık olmayan kayıtta ya da cihaz artık ATOLYEDE değilse (elle hurdaya
+    ayrılmış gibi) hiçbir şey yapmaz. Son depo bilinmiyorsa teslim 409 ile
+    reddedilir: cihaz defterde kaybolmasın.
+    """
+    asset_id = getattr(kayit, "rental_asset_id", None)
+    if asset_id is None:
+        return
+    cihaz = await db.get(RentalAsset, asset_id)
+    if cihaz is None or cihaz.durum != "ATOLYEDE":
+        return
+    if cihaz.warehouse_id is None:
+        from app.services.teknik_servis.atolye import AtolyeHatasi
+
+        raise AtolyeHatasi("Kiralık cihazın dönüş deposu bilinmiyor; kiralama sorumlusuna bildirin")
+    try:
+        await atolyeden_dondu(
+            db,
+            asset_id,
+            cihaz.warehouse_id,
+            user=user,
+            clock=clock,
+            note=f"Atölyeden döndü ({kayit.atolye_no})",
+        )
+    except KiralamaHatasi as exc:
+        from app.services.teknik_servis.atolye import AtolyeHatasi
+
+        raise AtolyeHatasi(exc.mesaj) from exc
+
+
+def _atolye_kancasini_kaydet() -> None:
+    from app.services.teknik_servis import atolye
+
+    atolye.teslim_kancasi_kaydet(_atolye_teslim_edildi)
+
+
+_atolye_kancasini_kaydet()

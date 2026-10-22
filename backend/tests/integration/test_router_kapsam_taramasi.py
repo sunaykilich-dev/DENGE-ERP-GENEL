@@ -23,6 +23,10 @@ kolonunun, ilişkili tabloların ve denetim izinin değişmediğini doğrular.
 | `kisi_id` | irtibat (başka temsilcinin hesabı) | müşteri |
 | `takma_ad_id` | takma ad (başka temsilcinin hesabı) | müşteri |
 | `arac_id` | servis aracı (başka birim) | birim |
+| `kiralama_id` | kiralama (başka birim) | birim |
+| `kiralik_id` | kiralık seri cihaz (başka birim) | birim |
+| `katalog_id` | kiralık katalog profili (başka birim) | birim |
+| `tahsis_id` | kiralama tahsisi (başka birimin kiralaması) | birim |
 
 Yalın `{id}` yolun önekinden çözülür (`_ONEK_HEDEFLERI`). Gövdeli uçlarda
 gövde modelin `json_schema_extra` örneğinden ya da şemadan üretilir; 422
@@ -66,6 +70,10 @@ _PARAM_HEDEFLERI = {
     "kisi_id": "irtibat",
     "takma_ad_id": "takma_ad",
     "arac_id": "arac",
+    "kiralama_id": "kiralama",
+    "kiralik_id": "kiralik",
+    "katalog_id": "katalog",
+    "tahsis_id": "tahsis",
 }
 
 # Yalın `{id}` için önek → hedef (uzun önek önce).
@@ -77,7 +85,17 @@ _ONEK_HEDEFLERI = (
     ("/api/lokasyonlar/", "lokasyon"),
 )
 
-_BIRIM_HEDEFLERI = {"servis_isi", "ekipman", "sozlesme", "personel", "arac"}
+_BIRIM_HEDEFLERI = {
+    "servis_isi",
+    "ekipman",
+    "sozlesme",
+    "personel",
+    "arac",
+    "kiralama",
+    "kiralik",
+    "katalog",
+    "tahsis",
+}
 
 # Yazma sızıntısını yakalamak için sayılan tablolar: kaydın kendisi dışında
 # kapsam dışı bir uç bunlara satır ekleyebilir/silebilir.
@@ -127,6 +145,61 @@ async def _giris(client, username: str):
     return ist
 
 
+async def _kiralama_hedefleri(db, musteri) -> dict[str, Any]:
+    """HABERLESME birimli kiralık katalog profili, seri cihaz, kiralama ve
+    tahsis (ORM ile; akış kuralları kiralama testlerinde sınanır)."""
+    from datetime import date
+
+    from app.models import (
+        Product,
+        Rental,
+        RentalAllocation,
+        RentalAsset,
+        RentalCatalogItem,
+        RentalItem,
+        Warehouse,
+    )
+
+    depo = Warehouse(code="TRZ-KIR", name="Tarama Kiralık Deposu", kiralama_deposu=True)
+    urun = Product(code="TRZ-KIR-SERI", name="Tarama Kiralık Telsiz", identity_kind="SERI_NO")
+    db.add_all([depo, urun])
+    await db.flush()
+    katalog = RentalCatalogItem(product_id=urun.id, birim="HABERLESME", kategori="Tarama")
+    kiralik = RentalAsset(
+        product_id=urun.id,
+        serial_no="TRZ-0001",
+        serial_key="TRZ0001",
+        birim="HABERLESME",
+        warehouse_id=depo.id,
+    )
+    kiralama = Rental(
+        rental_no="KIR-202611-999901",
+        birim="HABERLESME",
+        customer_id=musteri.id,
+        baslangic=date(2026, 11, 1),
+        bitis=date(2026, 11, 5),
+        status="PLANLANDI",
+    )
+    db.add_all([katalog, kiralik, kiralama])
+    await db.flush()
+    kalem = RentalItem(rental_id=kiralama.id, product_id=urun.id, qty=1)
+    db.add(kalem)
+    await db.flush()
+    tahsis = RentalAllocation(
+        rental_id=kiralama.id,
+        rental_item_id=kalem.id,
+        product_id=urun.id,
+        asset_id=kiralik.id,
+        from_warehouse_id=depo.id,
+        qty=1,
+        baslangic=kiralama.baslangic,
+        bitis=kiralama.bitis,
+    )
+    db.add(tahsis)
+    await db.commit()
+    return {"kiralama": kiralama, "kiralik": kiralik, "katalog": katalog, "tahsis": tahsis}
+
+
 @pytest.fixture
 async def ortam(
     client,
@@ -161,6 +234,7 @@ async def ortam(
     arac = ServiceVehicle(plate="34 HAB 001", birim="HABERLESME")
     db.add_all([irtibat, takma, arac])
     await db.commit()
+    kiralama_hedefleri = await _kiralama_hedefleri(db, yabanci)
 
     o = Ortam()
     o.hedefler = {
@@ -173,6 +247,7 @@ async def ortam(
         "irtibat": irtibat,
         "takma_ad": takma,
         "arac": arac,
+        **kiralama_hedefleri,
     }
     o.birim_istemci = await _giris(client, "tarayici_birim")
     o.musteri_istemci = await _giris(client, "tarayici_musteri")

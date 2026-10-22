@@ -1,0 +1,10 @@
+﻿WorkOrderId,WorkOrderNo,UnitCode,WorkType,CustomerName,ProjectName,Location,Subject,Description,Priority,Status,SystemName,SerialNo,CreatedAt,UpdatedAt,ClosedAt
+101,SRV-202601-0001,Güvenlik Sistemleri,Saha Arızası,Akyaka Park AVM,,Akyaka Park AVM,X-Ray bant durdu,Bant motoru arızalı,Kritik,Kapatıldı,X-Ray,00123-A,2026-01-05T09:30:00,2026-01-06T17:00:00,2026-01-06T17:00:00
+102,SRV-202601-0002,POC,Telefonla Destek,Örnek Lojistik,,,Kamera görüntüsü yok,,Normal,Tamamlandı,,,2026-01-07T10:00:00,2026-01-07T11:00:00,
+103,SRV-202601-0003,POC,Uzaktan Müdahale,Örnek Lojistik,,,NVR erişim sorunu,,Yüksek,Uzaktan Müdahale,,,2026-01-08T08:00:00,,
+104,SRV-202601-0004,Güvenlik Sistemleri,Planlı Bakım,Akyaka Park AVM,,Akyaka Park AVM,PB 2026/1,,Normal,Müşteri Talebi,,00123-A,2026-01-09T08:00:00,,
+105,SRV-202601-0005,Haberleşme,Saha Arızası,Bilinmeyen Müşteri Ltd,,,Röle arızası,,Normal,Garip Durum,,,2026-01-10T08:00:00,,
+106,SRV-202601-0006,Güvenlik Sistemleri,Saha Arızası,Akyaka Park AVM,,,Mükerrer kayıt,,Normal,İptal,,,2026-01-11T08:00:00,2026-01-11T09:00:00,
+107,SRV-202601-0007,Güvenlik Sistemleri,Kontrol / Test,Örnek Lojistik,,Depo Girişi,Kapı dedektörü kontrol,,Normal,Beklemede,,KD-777,2026-01-12T08:00:00,2026-01-12T12:00:00,
+108,SRV-202601-0008,Güvenlik Sistemleri,Saha Arızası,Akyaka Park AVM,,,Kapalı kanalsız iş,,Normal,Tamamlandı,,,2026-01-13T08:00:00,2026-01-13T15:00:00,
+,SRV-202601-0009,Güvenlik Sistemleri,Saha Arızası,X,,,Kimliksiz,,Normal,Müşteri Talebi,,,2026-01-14T08:00:00,,

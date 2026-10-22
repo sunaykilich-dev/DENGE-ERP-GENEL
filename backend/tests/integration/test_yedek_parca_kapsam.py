@@ -218,17 +218,17 @@ async def test_kimlikli_uclarda_kapsam_disi_404(o, db, kullanici_ac) -> None:
     await db.commit()
     gizli = {hab_hareket.id, hab_cikis.id}
     istekler = [
-        ("POST", f"{URL}/hareketler/{hab_hareket.id}/ters-kayit", {"gerekce": "Deneme"}),
-        ("POST", f"{URL}/hareketler/{hab_cikis.id}/ters-kayit", {"gerekce": "Deneme"}),
-        ("GET", f"{URL}/sayimlar/{sayim.id}", None),
+        ("POST", f"{URL}/ters-kayit", {"hareket_id": hab_hareket.id, "gerekce": "Deneme"}),
+        ("POST", f"{URL}/ters-kayit", {"hareket_id": hab_cikis.id, "gerekce": "Deneme"}),
+        ("GET", f"{URL}/sayim?sayim_id={sayim.id}", None),
         (
             "PUT",
-            f"{URL}/sayimlar/{sayim.id}/satirlar",
-            {"satirlar": [{"product_id": o.urun.id, "sayilan_adet": 0}]},
+            f"{URL}/sayim/satirlar",
+            {"sayim_id": sayim.id, "satirlar": [{"product_id": o.urun.id, "sayilan_adet": 0}]},
         ),
-        ("POST", f"{URL}/sayimlar/{sayim.id}/onayla", {"gerekce": "Deneme"}),
-        ("POST", f"{URL}/sayimlar/{sayim.id}/iptal", {"gerekce": "Deneme"}),
-        ("POST", f"{URL}/talepler/{talep.id}/iptal", {"neden": "Deneme"}),
+        ("POST", f"{URL}/sayim/onayla", {"sayim_id": sayim.id, "gerekce": "Deneme"}),
+        ("POST", f"{URL}/sayim/iptal", {"sayim_id": sayim.id, "gerekce": "Deneme"}),
+        ("POST", f"{URL}/talepler/iptal", {"talep_id": talep.id, "neden": "Deneme"}),
         ("GET", f"{URL}/isler/{o.is_hab.id}/parcalar", None),
     ]
     for yontem, yol, govde in istekler:
@@ -249,12 +249,12 @@ async def test_depo_tanimi_kapsam(o, db, birimli_kullanici_ac, rol_ac, giris) ->
     await rol_ac("T_AYAR_GUV", ["sistem.ayar", "parca.gor"], "KENDI_BIRIMI")
     await birimli_kullanici_ac("ayarci", "T_AYAR_GUV", ["GUVENLIK"])
     ayarci = await giris("ayarci")
-    r = await ayarci.patch(f"{URL}/depolar/{o.hab.id}", json={"name": "Ele geçir"})
+    r = await ayarci.patch(f"{URL}/depolar", json={"depo_id": o.hab.id, "name": "Ele geçir"})
     assert r.status_code == 404
     await db.refresh(o.hab)
     assert o.hab.name == "SRV-HAB Deposu"
     # Kendi depoyu başka birime taşıyamaz.
-    r = await ayarci.patch(f"{URL}/depolar/{o.guv.id}", json={"birim": "HABERLESME"})
+    r = await ayarci.patch(f"{URL}/depolar", json={"depo_id": o.guv.id, "birim": "HABERLESME"})
     assert r.status_code == 404
     r = await ayarci.post(f"{URL}/depolar", json={"code": "SRV-YENI", "name": "Yeni Depo"})
     assert r.status_code == 201

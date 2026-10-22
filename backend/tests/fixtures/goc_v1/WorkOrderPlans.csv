@@ -1,0 +1,6 @@
+﻿WorkOrderPlanId,WorkOrderId,PlanDate,StartTime,EstimatedMinutes,VehiclePlate,RouteGroupNo,PlanNote,IsActive,PlannedAt,SiteArea,SiteDirections
+701,101,2026-01-06,09:00:00,120,34 ABC 123,TPL-ABC123,Sabah,1,2026-01-05T11:00:00,Giriş,
+702,103,2026-01-09,10:00:00,,,,Birinci plan,1,2026-01-08T09:00:00,,
+703,103,2026-01-10,10:00:00,90,,,İkinci plan,1,2026-01-08T15:00:00,,
+704,104,2026-01-15,,60,,,PB planı,1,2026-01-09T09:00:00,,
+705,108,2026-02-20,08:30:00,60,,,Kapandıktan sonra,1,2026-02-01T09:00:00,,

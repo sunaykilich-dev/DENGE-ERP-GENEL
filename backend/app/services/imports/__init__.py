@@ -73,8 +73,18 @@ PROFIL_IZINLERI: dict[str, str] = {
 
 # Teknik servis profil modülleri — sıra = arayüz ve göç yükleme sırası (plan
 # §5.3: önce personel ve ad eşleme, sonra müşteri eşleştirme, kütük ...).
-# Dalga 2 göç profilleri (D2-I) bu listenin sonuna eklenir.
-_EK_PROFIL_MODULLERI = ("app.services.imports.personel",)
+# Dalga 2 göç profilleri (D2-I) bu listenin sonuna eklenir; sıra plan §5.3
+# adım 4'ün zorunlu karar sırasıdır: ad eşleme → müşteri eşleştirme → bakım
+# sözleşmesi → servis işi karantinası. Yedek parça açılış stoğu (D2-D,
+# TS-134) talep üzerine en sona eklendi.
+_EK_PROFIL_MODULLERI = (
+    "app.services.imports.personel",
+    "app.services.imports.ad_esleme",
+    "app.services.imports.musteri_eslestirme",
+    "app.services.imports.bakim_sozlesme",
+    "app.services.imports.servis_isleri",
+    "app.services.imports.parca_acilis",
+)
 
 
 def _ek_profilleri_yukle() -> None:

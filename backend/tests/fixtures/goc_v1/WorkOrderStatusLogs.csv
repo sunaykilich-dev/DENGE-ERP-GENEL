@@ -1,0 +1,11 @@
+﻿StatusLogId,WorkOrderId,OldStatus,NewStatus,ChangedAt
+1001,101,,Müşteri Talebi,2026-01-05T09:30:00
+1002,101,Müşteri Talebi,Sahada,2026-01-06T09:00:00
+1003,101,Sahada,Tamamlandı,2026-01-06T12:00:00
+1004,101,Tamamlandı,Kapatıldı,2026-01-06T17:00:00
+1005,102,,Müşteri Talebi,2026-01-07T10:00:00
+1006,102,Müşteri Talebi,Telefonla Destek,2026-01-07T10:15:00
+1007,102,Telefonla Destek,Tamamlandı,2026-01-07T11:00:00
+1008,107,,Müşteri Talebi,2026-01-12T08:00:00
+1009,107,Müşteri Talebi,Sahada,2026-01-12T10:00:00
+1010,107,Sahada,Beklemede,2026-01-12T12:00:00

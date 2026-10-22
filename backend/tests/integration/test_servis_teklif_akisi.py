@@ -153,7 +153,9 @@ class TestIcOnay:
         try:
             t = await teklif_ac(s, ortam["musteri"].id, birim=None)
             assert t["sonraki_durumlar"] == []
-            assert (await s.post(f"/api/teklifler/{t['id']}/onaya-gonder", json={})).status_code == 409
+            assert (
+                await s.post(f"/api/teklifler/{t['id']}/onaya-gonder", json={})
+            ).status_code == 409
             r = await s.post(f"/api/teklifler/{t['id']}/iptal", json={"neden": "vazgeçildi"})
             assert r.status_code == 409
         finally:
@@ -328,9 +330,7 @@ class TestServisIsiKopru:
     ):
         tesis = await lokasyon_ac(ortam["musteri"])
         so = await servis_isi_ac(musteri=ortam["musteri"], lokasyon=tesis, birim="GUVENLIK")
-        t = await teklif_ac(
-            ortam["sef"], ortam["musteri"].id, birim=None, service_order_id=so.id
-        )
+        t = await teklif_ac(ortam["sef"], ortam["musteri"].id, birim=None, service_order_id=so.id)
         assert t["birim"] == "GUVENLIK"
         assert t["address_id"] == tesis.id
         assert t["so_no"] == so.so_no
@@ -352,9 +352,7 @@ class TestServisIsiKopru:
     ):
         so = await servis_isi_ac(musteri=ortam["musteri"], birim="GUVENLIK", durum="ISLEMDE")
         t = await teklif_ac(ortam["sef"], ortam["musteri"].id, service_order_id=so.id)
-        r = await ortam["sef"].post(
-            f"/api/teklifler/{t['id']}/onaya-gonder", json={"beklet": True}
-        )
+        r = await ortam["sef"].post(f"/api/teklifler/{t['id']}/onaya-gonder", json={"beklet": True})
         assert r.status_code == 200, r.text
         so = await _yenile(db, ServiceOrder, so.id)
         assert so.status == "BEKLEMEDE"
@@ -377,9 +375,7 @@ class TestServisIsiKopru:
         await bekletme.beklet(db, so, "MALZEME", user=None, clock=client.clock)
         await db.commit()
         t = await teklif_ac(ortam["sef"], ortam["musteri"].id, service_order_id=so.id)
-        r = await ortam["sef"].post(
-            f"/api/teklifler/{t['id']}/onaya-gonder", json={"beklet": True}
-        )
+        r = await ortam["sef"].post(f"/api/teklifler/{t['id']}/onaya-gonder", json={"beklet": True})
         assert r.status_code == 200
         assert any("başka nedenli" in u for u in r.json()["uyarilar"])
         await ortam["mudur1"].post(f"/api/teklifler/{t['id']}/onayla")

@@ -50,6 +50,7 @@ import {
   type Uygunsuzluk,
 } from "../api/bakim";
 import { useAuth } from "../auth/AuthContext";
+import ServisParcalari from "../components/ServisParcalari";
 
 const NOT_ZORUNLU = new Set(["UYGUNSUZ", "KONTROL_EDILEMEDI"]);
 const KAPALI = new Set(["TAMAMLANDI", "KAPATILDI", "IPTAL"]);
@@ -385,6 +386,9 @@ export default function BakimFormu({
           )}
 
           <UygunsuzlukKarti soId={veri.so.id} kayitlar={veri.uygunsuzluklar} onDegisti={yenile} />
+
+          {/* PB'de kullanılan parçalar aynı defterden (TS-133; eski parça raporu açılmaz). */}
+          <ServisParcalari soId={veri.so.id} baslik="Bakımda kullanılan parçalar" />
 
           <Card size="small" title="Ziyaret geçmişi">
             {veri.ziyaretler.length === 0 ? (

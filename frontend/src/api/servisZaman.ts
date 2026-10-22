@@ -12,6 +12,7 @@
  * ve her eylem `version` ister: çift basışta ikinci istek 409 alır.
  */
 import { api } from "./client";
+import type { SlaBlogu } from "./servisOperasyon";
 
 const TS = "/api/teknik-servis";
 
@@ -155,7 +156,12 @@ export interface MobilIs {
   sayac_acilabilir: boolean;
   kisi_saat_dk: number | null;
   sure_durumu: string | null;
+  /** Sunucunun SLA bloğu (TS-085); ekran hesaplamaz, yalnız gösterir. */
+  sla?: SlaBlogu | null;
 }
+
+/** "İş beklemesi" / "personel beklemesi" gibi ekran başlıkları (sunucudan, TS-085). */
+export type SlaTerimleri = Record<string, string>;
 
 export interface Ziyaret {
   anahtar: string;
@@ -182,6 +188,8 @@ export interface BenimIslerim extends BenimSayacim {
 
 export interface MobilKart extends Omit<BenimSayacim, "sunucu_zamani"> {
   sunucu_zamani: string;
+  sla?: SlaBlogu | null;
+  terimler?: SlaTerimleri;
   id: number;
   so_no: string;
   tur: string;

@@ -46,7 +46,9 @@ async def test_baska_birim_sefi_hicbir_sey_goremez_ve_degistiremez(
     assert r.status_code == 404
     r = await client.get(f"/api/ekler/service_orders/{so_id}")
     assert r.status_code == 404
-    gecmis = (await client.get(f"{ONEK}/seri-gecmisi", params={"marka": "HYTERA", "seri": "SN-0001"})).json()
+    gecmis = (
+        await client.get(f"{ONEK}/seri-gecmisi", params={"marka": "HYTERA", "seri": "SN-0001"})
+    ).json()
     assert gecmis["kayitlar"] == []
     await db.refresh(kayit)
     assert (kayit.version, kayit.notes, kayit.status) == once

@@ -6,6 +6,7 @@
  * - Bekleme nedeni ortak katalogdur; düzenleme `operasyon.yonet`.
  *   "Sistem" nedenleri (ör. bakım uygunsuzluğu) ekrandan seçilemez, burada
  *   yalnız görünür ve sistem bayrağı değiştirilemez.
+ * - SLA politikaları (TS-081): okuma herkes, düzenleme `operasyon.yonet`.
  * - Silme yoktur: geçmiş kayıtlar nedene bağlı olduğu için pasifleştirilir.
  * - İyimser kilit: düzenlemede `version` gönderilir; 409'da "kayıt değişti,
  *   yenileyin" mesajı verilir ve liste tazelenir.
@@ -26,11 +27,14 @@ import {
   Table,
   Tabs,
   Tag,
+  Typography,
   message,
 } from "antd";
+import dayjs from "dayjs";
 import { useState } from "react";
 
 import { ApiError, api } from "../api/client";
+import { operasyonApi, type PolitikaGirdisi, type SlaPolitikasi } from "../api/servisOperasyon";
 import { useAuth } from "../auth/AuthContext";
 
 const TS = "/api/teknik-servis";
@@ -316,11 +320,159 @@ function BeklemeNedenleri() {
   );
 }
 
+/**
+ * SLA politikaları (TS-081). Okuma `servis.gor`, yazma `operasyon.yonet`.
+ * Hedef işe açılışta DAMGALANIR: burada yapılan değişiklik açık işleri
+ * etkilemez. Takvim bu sürümde yalnız 7/24. Öncelik ve birim kimliktir.
+ */
+function SlaPolitikalari() {
+  const { yetkili } = useAuth();
+  const duzenleyebilir = yetkili("operasyon.yonet");
+  const qc = useQueryClient();
+  const [pencere, setPencere] = useState<{ acik: boolean; kayit?: SlaPolitikasi }>({ acik: false });
+  const [form] = Form.useForm();
+  const sozluk = useQuery({ queryKey: ["sla-sozluk"], queryFn: operasyonApi.sozluk });
+  const liste = useQuery({ queryKey: ["sla-politikalari"], queryFn: operasyonApi.politikalar });
+  const kaydet = useMutation({
+    mutationFn: (g: PolitikaGirdisi) => operasyonApi.politikaKaydet(g),
+    onSuccess: () => {
+      message.success("SLA politikası kaydedildi");
+      setPencere({ acik: false });
+      qc.invalidateQueries({ queryKey: ["sla-politikalari"] });
+    },
+    onError: (e) => {
+      message.error(hataMesaji(e));
+      if (e instanceof ApiError && e.cakisma) qc.invalidateQueries({ queryKey: ["sla-politikalari"] });
+    },
+  });
+  const ac = (kayit?: SlaPolitikasi) => {
+    form.resetFields();
+    form.setFieldsValue(kayit ?? { oncelik: "NORMAL", is_active: true });
+    setPencere({ acik: true, kayit });
+  };
+  const s = sozluk.data;
+  return (
+    <>
+      {s && (
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+          {s.sla_yururlukte
+            ? `SLA yürürlük anı: ${dayjs(s.yururluk_at).format("DD.MM.YYYY HH:mm")}. `
+            : "SLA henüz yürürlükte değil (Ayarlar → servis_sla_yururluk_at); işlere hedef damgalanmaz. "}
+          Hedef iş açılırken damgalanır; politika değişikliği açık işleri etkilemez. Planlı bakım (PB) ve
+          atölye işleri SLA dışıdır. "Riskte" eşiği: hedefin %{s.risk_yuzde}'i.
+        </Typography.Paragraph>
+      )}
+      {duzenleyebilir && (
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => ac()} style={{ marginBottom: 12 }}>
+          Birime özel politika
+        </Button>
+      )}
+      <Table<SlaPolitikasi>
+        rowKey="id"
+        size="small"
+        loading={liste.isLoading}
+        dataSource={liste.data ?? []}
+        pagination={false}
+        scroll={{ x: true }}
+        columns={[
+          { title: "Öncelik", dataIndex: "oncelik" },
+          { title: "Birim", dataIndex: "birim_adi" },
+          { title: "Çözüm hedefi (saat)", dataIndex: "cozum_saat", align: "right" },
+          {
+            title: "Müdahale hedefi (saat)",
+            dataIndex: "mudahale_saat",
+            align: "right",
+            render: (v: number | null) => v ?? "—",
+          },
+          { title: "Takvim", dataIndex: "takvim_turu", render: (t: string) => (t === "7_24" ? "7/24" : t) },
+          {
+            title: "Durum",
+            dataIndex: "is_active",
+            render: (a: boolean) => (a ? <Tag color="green">Aktif</Tag> : <Tag>Pasif</Tag>),
+          },
+          ...(duzenleyebilir
+            ? [
+                {
+                  title: "",
+                  key: "islem",
+                  width: 60,
+                  render: (_: unknown, r: SlaPolitikasi) => (
+                    <Button size="small" icon={<EditOutlined />} aria-label="Düzenle" onClick={() => ac(r)} />
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
+      <Modal
+        title={pencere.kayit ? "SLA politikasını düzenle" : "Birime özel SLA politikası"}
+        open={pencere.acik}
+        onCancel={() => setPencere({ acik: false })}
+        onOk={() => form.submit()}
+        okText="Kaydet"
+        cancelText="Vazgeç"
+        confirmLoading={kaydet.isPending}
+        destroyOnHidden
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(v) =>
+            kaydet.mutate({
+              id: pencere.kayit?.id,
+              version: pencere.kayit?.version,
+              oncelik: v.oncelik,
+              birim: v.birim ?? null,
+              cozum_saat: v.cozum_saat,
+              mudahale_saat: v.mudahale_saat ?? null,
+              takvim_turu: "7_24",
+              is_active: v.is_active,
+            })
+          }
+        >
+          <Form.Item name="oncelik" label="Öncelik" rules={[{ required: true, message: "Öncelik seçin" }]}>
+            <Select
+              disabled={!!pencere.kayit}
+              options={(s?.oncelikler ?? []).map((o) => ({ value: o, label: o }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="birim"
+            label="Birim"
+            rules={pencere.kayit ? [] : [{ required: true, message: "Birim seçin" }]}
+            extra={pencere.kayit && !pencere.kayit.birim ? "Tüm birimler için geçerli politika" : undefined}
+          >
+            <Select
+              disabled={!!pencere.kayit}
+              allowClear
+              options={(s?.birimler ?? []).map((b) => ({ value: b.kod, label: b.ad }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="cozum_saat"
+            label="Çözüm hedefi (saat)"
+            rules={[{ required: true, message: "Çözüm hedefi girin" }]}
+          >
+            <InputNumber min={0.25} max={9999} step={1} style={{ width: 160 }} />
+          </Form.Item>
+          <Form.Item name="mudahale_saat" label="Müdahale hedefi (saat, isteğe bağlı)">
+            <InputNumber min={0.25} max={9999} step={1} style={{ width: 160 }} />
+          </Form.Item>
+          <Form.Item name="is_active" label="Aktif" valuePropName="checked">
+            <Switch disabled={!!pencere.kayit && !pencere.kayit.birim && pencere.kayit.is_active} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
 export default function ServisTanimlarPage() {
   const { yetkili } = useAuth();
   const sekmeler = [
     { key: "ariza", label: "Arıza nedenleri", children: <ArizaNedenleri /> },
     { key: "bekleme", label: "Bekleme nedenleri", children: <BeklemeNedenleri /> },
+    { key: "sla", label: "SLA politikaları", children: <SlaPolitikalari /> },
   ];
   // Menü izni [servis.tanim, operasyon.yonet]; yetkili olunan sekme önce açılır.
   const varsayilan = yetkili("servis.tanim") || !yetkili("operasyon.yonet") ? "ariza" : "bekleme";

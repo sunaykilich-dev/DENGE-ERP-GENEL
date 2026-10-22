@@ -24,6 +24,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import EkYukleyici from "../components/EkYukleyici";
 import SayacDugmeleri, { ManuelKayitPenceresi } from "../components/SayacDugmeleri";
+import SlaEtiketi from "../components/SlaEtiketi";
 import { SURE_DURUMU_ADLARI, servisZaman, sureMetni } from "../api/servisZaman";
 
 export default function ServisIsKartiMobil() {
@@ -88,6 +89,7 @@ export default function ServisIsKartiMobil() {
             <Tag>{k.durum.replaceAll("_", " ")}</Tag>
             <Tag color="blue">{k.tur}</Tag>
             {k.oncelik !== "NORMAL" && <Tag color="red">{k.oncelik}</Tag>}
+            <SlaEtiketi sla={k.sla} kisa={false} />
           </Space>
           <Typography.Paragraph style={{ margin: "6px 0 0", overflowWrap: "anywhere" }}>
             {k.konu}

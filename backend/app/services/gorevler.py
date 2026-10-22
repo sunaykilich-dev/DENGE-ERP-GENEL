@@ -24,12 +24,16 @@ from app.models import (
     Order,
     PartnerSettlement,
     Quote,
+    Rental,
     RmaCase,
     ServiceEquipment,
     ServiceOrder,
     SimCard,
+    TrainingCorrectiveAction,
+    User,
     Vehicle,
     WorkOrder,
+    WorkshopRecord,
 )
 
 
@@ -61,8 +65,7 @@ KAYIT_TIPLERI: tuple[KayitTipi, ...] = (
     # Görev uçlarında kayıt kapsamı bilerek uygulanmaz (api/gorevler.py); bu
     # yüzden etiket alanı KİŞİSEL VERİ ya da müşteri adı taşımaz: yalnız belge
     # numarası. Ekipmanın seri numarası bile yazılmaz (müşteri malı kütüğü):
-    # alan listesi boş, kart "Ekipman #id" görünür. Kiralama, atölye ve eğitim
-    # tipleri tabloları geldiği dalgada eklenir.
+    # alan listesi boş, kart "Ekipman #id" görünür.
     KayitTipi("servis_isi", "Servis İşi", ServiceOrder, ("so_no",), "/servis-isleri/{id}"),
     KayitTipi("ekipman", "Ekipman", ServiceEquipment, (), "/servis-ekipman/{id}"),
     KayitTipi(
@@ -72,6 +75,14 @@ KAYIT_TIPLERI: tuple[KayitTipi, ...] = (
         ("contract_no",),
         "/bakim?sozlesme={id}",
     ),
+    # --- Dalga 2 (TS-091, TS-110, TS-155, TS-165) ------------------------------
+    KayitTipi("atolye", "Atölye Kaydı", WorkshopRecord, ("atolye_no",), "/atolye/{id}"),
+    KayitTipi("kiralama", "Kiralama", Rental, ("rental_no",), "/kiralamalar/{id}"),
+    # Düzeltici faaliyet kişisel performans kaydıdır: etiket kişi adı ya da
+    # gözlem notu taşımaz, kart "#id" görünür; adres eğitim ekranının listesi.
+    KayitTipi("egitim_faaliyet", "Düzeltici Faaliyet", TrainingCorrectiveAction, (), "/egitim"),
+    # Personel kartı adı da taşımaz (görev uçları kapsamsız); "#id" + kart adresi.
+    KayitTipi("personel", "Personel", User, (), "/personel/{id}"),
 )
 
 _TIPE_GORE = {t.kod: t for t in KAYIT_TIPLERI}

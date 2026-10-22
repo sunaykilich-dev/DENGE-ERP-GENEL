@@ -277,10 +277,10 @@ async def test_ters_kayit_kurallari(ortam, servis_isi_ac, db) -> None:
     r = await _cikis(ortam.depocu, ortam.so, ortam.depo, ortam.urun, 3)
     cikis_id = r.json()[0]["id"]
     # Gerekçesiz 422.
-    r = await ortam.depocu.post(f"{URL}/hareketler/{cikis_id}/ters-kayit", json={})
+    r = await ortam.depocu.post(f"{URL}/ters-kayit", json={"hareket_id": cikis_id})
     assert r.status_code == 422
     r = await ortam.depocu.post(
-        f"{URL}/hareketler/{cikis_id}/ters-kayit", json={"gerekce": "Yanlış iş"}
+        f"{URL}/ters-kayit", json={"hareket_id": cikis_id, "gerekce": "Yanlış iş"}
     )
     assert r.status_code == 201, r.text
     ters_id = r.json()[0]["id"]
@@ -288,10 +288,10 @@ async def test_ters_kayit_kurallari(ortam, servis_isi_ac, db) -> None:
     assert await svc.net_cikis(db, ortam.so.id, ortam.urun.id) == 0
     # İkinci kez ve ters kaydın ters kaydı 409.
     r = await ortam.depocu.post(
-        f"{URL}/hareketler/{cikis_id}/ters-kayit", json={"gerekce": "Tekrar"}
+        f"{URL}/ters-kayit", json={"hareket_id": cikis_id, "gerekce": "Tekrar"}
     )
     assert r.status_code == 409
-    r = await ortam.depocu.post(f"{URL}/hareketler/{ters_id}/ters-kayit", json={"gerekce": "Xxx"})
+    r = await ortam.depocu.post(f"{URL}/ters-kayit", json={"hareket_id": ters_id, "gerekce": "Xxx"})
     assert r.status_code == 409
 
 
@@ -299,7 +299,7 @@ async def test_tuketilmis_girisin_ters_kaydi_409(ortam, db) -> None:
     g = await _giris(ortam.depocu, ortam.depo, ortam.urun, 3)
     assert (await _cikis(ortam.depocu, ortam.so, ortam.depo, ortam.urun, 2)).status_code == 201
     r = await ortam.depocu.post(
-        f"{URL}/hareketler/{g[0]['id']}/ters-kayit", json={"gerekce": "Yanlış giriş"}
+        f"{URL}/ters-kayit", json={"hareket_id": g[0]["id"], "gerekce": "Yanlış giriş"}
     )
     assert r.status_code == 409 and "Stok yetersiz" in r.json()["detail"]
     assert await _bakiye(db, ortam.urun, ortam.depo) == 1
@@ -314,7 +314,7 @@ async def test_kapali_iste_iade_ters_kaydi_409(ortam, db, client) -> None:
     so.status = "KAPATILDI"
     await db.commit()
     r = await ortam.depocu.post(
-        f"{URL}/hareketler/{iade_id}/ters-kayit", json={"gerekce": "Yanlış iade"}
+        f"{URL}/ters-kayit", json={"hareket_id": iade_id, "gerekce": "Yanlış iade"}
     )
     assert r.status_code == 409
     # Kapalı işte çıkışın ters kaydı (stoğa geri alma) serbest.
@@ -322,7 +322,7 @@ async def test_kapali_iste_iade_ters_kaydi_409(ortam, db, client) -> None:
         select(StockMovement.id).where(StockMovement.hareket_turu == "CIKIS_SERVIS")
     )
     r = await ortam.depocu.post(
-        f"{URL}/hareketler/{cikis_id}/ters-kayit", json={"gerekce": "Kullanılmadı"}
+        f"{URL}/ters-kayit", json={"hareket_id": cikis_id, "gerekce": "Kullanılmadı"}
     )
     # Net çıkış 1 (2 − 1 iade); 2'lik ters kayıt neti eksiye düşürür → 409.
     assert r.status_code == 409
@@ -500,7 +500,7 @@ async def test_transfer_grubu_ve_ters_kaydi(ortam, depo_ac, db) -> None:
     bacak = r_id = await db.scalar(
         select(StockMovement.id).where(StockMovement.hareket_turu == "TRANSFER_GIRIS")
     )
-    r = await ortam.depocu.post(f"{URL}/hareketler/{bacak}/ters-kayit", json={"gerekce": "Geri"})
+    r = await ortam.depocu.post(f"{URL}/ters-kayit", json={"hareket_id": bacak, "gerekce": "Geri"})
     assert r.status_code == 201, r.text
     assert len(r.json()) == 2 and all(h["transfer_grup"] == grup for h in r.json())
     assert await _bakiye(db, ortam.urun, ortam.depo) == 5 and r_id
@@ -518,8 +518,11 @@ async def test_sayim_onayi_ve_sapma(ortam, db) -> None:
     r = await ortam.depocu.post(f"{URL}/sayimlar", json={"depo_id": ortam.depo.id})
     assert r.status_code == 409
     r = await ortam.depocu.put(
-        f"{URL}/sayimlar/{sayim['id']}/satirlar",
-        json={"satirlar": [{"product_id": ortam.urun.id, "sayilan_adet": 8}]},
+        f"{URL}/sayim/satirlar",
+        json={
+            "sayim_id": sayim["id"],
+            "satirlar": [{"product_id": ortam.urun.id, "sayilan_adet": 8}],
+        },
     )
     assert r.status_code == 200
     # Onaysız sayım bakiyeyi değiştirmez.
@@ -527,14 +530,14 @@ async def test_sayim_onayi_ve_sapma(ortam, db) -> None:
     # Sayım sırasında 1 çıkış: onay 409 + sapma listesi.
     await _cikis(ortam.depocu, ortam.so, ortam.depo, ortam.urun, 1)
     r = await ortam.depocu.post(
-        f"{URL}/sayimlar/{sayim['id']}/onayla", json={"gerekce": "Dönem sonu"}
+        f"{URL}/sayim/onayla", json={"sayim_id": sayim["id"], "gerekce": "Dönem sonu"}
     )
     assert r.status_code == 409
     assert r.json()["detail"]["sapmalar"][0]["onay_anindaki_adet"] == 9
     assert await _bakiye(db, ortam.urun, ortam.depo) == 9
     r = await ortam.depocu.post(
-        f"{URL}/sayimlar/{sayim['id']}/onayla",
-        json={"gerekce": "Dönem sonu", "degisimi_kabul": True},
+        f"{URL}/sayim/onayla",
+        json={"sayim_id": sayim["id"], "gerekce": "Dönem sonu", "degisimi_kabul": True},
     )
     assert r.status_code == 200, r.text
     assert r.json()["durum"] == "ONAYLANDI"
@@ -544,7 +547,7 @@ async def test_sayim_onayi_ve_sapma(ortam, db) -> None:
     )
     assert fark.qty == -1 and fark.stock_count_id == sayim["id"]
     # Sayım farkının ters kaydı yasak.
-    r = await ortam.depocu.post(f"{URL}/hareketler/{fark.id}/ters-kayit", json={"gerekce": "Xxx"})
+    r = await ortam.depocu.post(f"{URL}/ters-kayit", json={"hareket_id": fark.id, "gerekce": "Xxx"})
     assert r.status_code == 409
 
 

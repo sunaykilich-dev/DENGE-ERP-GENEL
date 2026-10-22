@@ -1,4 +1,6 @@
-"""Atölye çekirdeği: kabul, ATOLYE makinesi, servis işi eşlemesi, iş kuralları (TS-090/093/094/096/098).
+"""Atölye çekirdeği: kabul, ATOLYE makinesi, servis işi eşlemesi, iş kuralları.
+
+Maddeler: TS-090/093/094/096/098.
 
 Gerçek hikâye (E05 §1.1): eski sistemde atölye kaydı ile iş emri iki ayrı
 durum, iki ayrı atama ve iki ayrı seri taşıyordu; iptal edilen atölye kaydının
@@ -25,7 +27,7 @@ from atolye_yardimci import (
     teslim_govdesi,
     teslime_hazirla,
 )
-from servis_yardimci import giris, musteri, tazele, teknisyen
+from servis_yardimci import giris, musteri, teknisyen
 from sqlalchemy import func, select
 
 from app.models import (
@@ -72,7 +74,12 @@ async def test_kabul_is_ve_kayit_tek_islemde_durum_istemciden_alinmaz(
     kayit = await _kayit(db, d["so_id"])
     assert kayit.received_at == client.clock.now()
     so = await _so(db, d["so_id"])
-    assert (so.tur, so.kategori, so.status, so.birim) == ("ATOLYE", "ATOLYE", "ATOLYEDE", "HABERLESME")
+    assert (so.tur, so.kategori, so.status, so.birim) == (
+        "ATOLYE",
+        "ATOLYE",
+        "ATOLYEDE",
+        "HABERLESME",
+    )
     assert so.equipment_id == kayit.equipment_id
     ekipman = await db.get(ServiceEquipment, kayit.equipment_id)
     assert ekipman.serial_no == "00ab12"  # baştaki sıfır korunur
@@ -110,9 +117,7 @@ async def test_tam_akis_bekleme_senkronu_ve_teslim(client, db, birimli_kullanici
     await gec(client, so_id, "TESHISTE")
     # Teşhis eksik → TESHISTE'den çıkış 400.
     await gec(client, so_id, "ONAY_BEKLIYOR", 400)
-    await duzelt(
-        client, so_id, fault_reason_id=await ariza_nedeni_id(db), is_repairable=True
-    )
+    await duzelt(client, so_id, fault_reason_id=await ariza_nedeni_id(db), is_repairable=True)
     await gec(client, so_id, "ONAY_BEKLIYOR")
     so = await _so(db, so_id)
     assert so.status == "BEKLEMEDE"
@@ -152,9 +157,7 @@ async def test_tam_akis_bekleme_senkronu_ve_teslim(client, db, birimli_kullanici
     r = await gec(client, so_id, "TESLIM_EDILDI", 409, teslim=teslim_govdesi(dd))
     assert "Süre kaydı eksik" in r.json()["detail"]
     client.clock.advance(hours=1)
-    r = await gec(
-        client, so_id, "TESLIM_EDILDI", teslim=teslim_govdesi(dd), sure_eksik_onay=True
-    )
+    r = await gec(client, so_id, "TESLIM_EDILDI", teslim=teslim_govdesi(dd), sure_eksik_onay=True)
     assert r.json()["uyarilar"] == []
     kayit = await _kayit(db, so_id)
     assert kayit.status == "TESLIM_EDILDI" and kayit.delivered_at == client.clock.now()
@@ -181,7 +184,9 @@ async def test_tam_akis_bekleme_senkronu_ve_teslim(client, db, birimli_kullanici
         metin = (o.ozet + str(o.veri)).casefold()
         assert "ahmet" not in metin and "teslim alan kişi" not in metin
     # Teslimden sonra aksesuar değişikliği ve düzeltme 409.
-    r = await client.put(f"{ONEK}/{so_id}/aksesuarlar", json={"version": kayit.version, "aksesuarlar": []})
+    r = await client.put(
+        f"{ONEK}/{so_id}/aksesuarlar", json={"version": kayit.version, "aksesuarlar": []}
+    )
     assert r.status_code == 409
     await duzelt(client, so_id, 409, notes="geç not")
     # Şef kapatır (genel kapat ucu atölye işinde açık).
@@ -219,9 +224,7 @@ async def test_onarilamaz_cihaz_yalniz_iade_ve_sonuc_cozulemedi(
         teslim=teslim_govdesi(dd, teslim_tipi=None),
         sure_eksik_onay=True,
     )
-    sonuc = await db.scalar(
-        select(ServiceResult).where(ServiceResult.service_order_id == so_id)
-    )
+    sonuc = await db.scalar(select(ServiceResult).where(ServiceResult.service_order_id == so_id))
     assert sonuc.sonuc == "COZULEMEDI"
 
 
@@ -345,13 +348,20 @@ async def test_genel_servis_uclari_atolye_isinde_kilitli(client, db, birimli_kul
     assert r.status_code == 409
     r = await client.post(
         f"{is_ucu}/sonuc",
-        json={"sonuc": "COZULDU", "cozum_kanali": "ATOLYE", "yapilan_islem": "x", "sure_eksik_onay": True},
+        json={
+            "sonuc": "COZULDU",
+            "cozum_kanali": "ATOLYE",
+            "yapilan_islem": "x",
+            "sure_eksik_onay": True,
+        },
     )
     assert r.status_code == 409
     so = await _so(db, so_id)
     assert so.status == "ATOLYEDE"
     sonuc_sayisi = await db.scalar(
-        select(func.count()).select_from(ServiceResult).where(ServiceResult.service_order_id == so_id)
+        select(func.count())
+        .select_from(ServiceResult)
+        .where(ServiceResult.service_order_id == so_id)
     )
     assert sonuc_sayisi == 0
     # Genel açılıştan ATOLYE işi açılamaz (yetim iş yok).
@@ -385,14 +395,21 @@ async def test_kargo_teslim_aksesuar_kurallari(client, db, birimli_kullanici_ac)
     so_id = d["so_id"]
     await teslime_hazirla(client, db, so_id)
     dd = await detay(client, so_id)
-    await gec(client, so_id, "TESLIM_EDILDI", 400, teslim={"teslim_tipi": "ELDEN"}, sure_eksik_onay=True)
+    await gec(
+        client, so_id, "TESLIM_EDILDI", 400, teslim={"teslim_tipi": "ELDEN"}, sure_eksik_onay=True
+    )
     # İşaretlenmemiş aksesuar 400.
     yarim = teslim_govdesi(dd)
     yarim["aksesuar_iade"] = yarim["aksesuar_iade"][:1]
     await gec(client, so_id, "TESLIM_EDILDI", 400, teslim=yarim, sure_eksik_onay=True)
     # Eksik aksesuar açıklamasız 400; açıklamalı 200 + uyarı.
     await gec(
-        client, so_id, "TESLIM_EDILDI", 400, teslim=teslim_govdesi(dd, eksik=True), sure_eksik_onay=True
+        client,
+        so_id,
+        "TESLIM_EDILDI",
+        400,
+        teslim=teslim_govdesi(dd, eksik=True),
+        sure_eksik_onay=True,
     )
     r = await gec(
         client,
@@ -432,7 +449,9 @@ async def test_acik_sayacla_teslim_409(client, db, birimli_kullanici_ac) -> None
     )
     await db.commit()
     dd = await detay(client, so_id)
-    r = await gec(client, so_id, "TESLIM_EDILDI", 409, teslim=teslim_govdesi(dd), sure_eksik_onay=True)
+    r = await gec(
+        client, so_id, "TESLIM_EDILDI", 409, teslim=teslim_govdesi(dd), sure_eksik_onay=True
+    )
     assert "Açık sayaç" in r.json()["detail"]
     kayit = await _kayit(db, so_id)
     assert kayit.status == "TESLIME_HAZIR" and kayit.delivered_to_name is None
@@ -479,7 +498,9 @@ async def test_ekipman_duzeltme_tek_kaynak(client, db, birimli_kullanici_ac) -> 
     ).all()
     assert seriler == ["00A-123"]
     assert len(await atolye_olaylari(db, so_id, "DUZELTME")) == 1
-    gecmis = (await client.get(f"{ONEK}/seri-gecmisi", params={"marka": "hytera", "seri": "00a-123"})).json()
+    gecmis = (
+        await client.get(f"{ONEK}/seri-gecmisi", params={"marka": "hytera", "seri": "00a-123"})
+    ).json()
     assert [k["so_id"] for k in gecmis["kayitlar"]] == [so_id]
 
 
@@ -505,7 +526,9 @@ async def test_coklu_aktif_eslesme_409_aday_listesi(
     await sef(birimli_kullanici_ac)
     hesap = await musteri(db)
     for _ in range(2):
-        await ekipman_ac(birim="HABERLESME", musteri=hesap, tip="TELSIZ", seri="DUP-1", brand="HYTERA")
+        await ekipman_ac(
+            birim="HABERLESME", musteri=hesap, tip="TELSIZ", seri="DUP-1", brand="HYTERA"
+        )
     await giris(client, "atl_sef")
     r = await client.post(ONEK, json=kabul_govdesi(hesap.id, "DUP-1"))
     assert r.status_code == 409
@@ -568,7 +591,9 @@ async def test_aksesuar_satirlari(client, db, birimli_kullanici_ac) -> None:
         json=kabul_govdesi(hesap.id, aksesuarlar=[{"kind": "DIGER", "qty": 1}]),
     )
     assert r.status_code == 400
-    r = await client.post(ONEK, json=kabul_govdesi(hesap.id, aksesuarlar=[{"kind": "ANTEN", "qty": 0}]))
+    r = await client.post(
+        ONEK, json=kabul_govdesi(hesap.id, aksesuarlar=[{"kind": "ANTEN", "qty": 0}])
+    )
     assert r.status_code == 400
     d = await kabul_et(client, hesap.id)
     alti = [{"kind": k, "qty": 1} for k in ("BATARYA", "ANTEN", "KILIF", "KULAKLIK", "KABLO")]
@@ -590,11 +615,15 @@ async def test_dis_servis_bilgisi_zorunlu(client, db, birimli_kullanici_ac) -> N
     so_id = d["so_id"]
     await teshis_et(client, db, so_id)
     await gec(client, so_id, "DIS_SERVISTE", 400)
-    await duzelt(client, so_id, 400, external_sent_at="2026-01-10", external_returned_at="2026-01-05")
+    await duzelt(
+        client, so_id, 400, external_sent_at="2026-01-10", external_returned_at="2026-01-05"
+    )
     await duzelt(client, so_id, external_vendor_id=tedarikci.id, external_sent_at="2026-01-10")
     await gec(client, so_id, "DIS_SERVISTE")
     bekleme = await db.scalar(
-        select(ServiceHold).where(ServiceHold.service_order_id == so_id, ServiceHold.released_at.is_(None))
+        select(ServiceHold).where(
+            ServiceHold.service_order_id == so_id, ServiceHold.released_at.is_(None)
+        )
     )
     assert bekleme.neden == "DIS_SERVIS"
 
@@ -622,7 +651,10 @@ async def test_toplu_kabul_hepsi_ya_da_hicbiri(client, db, birimli_kullanici_ac)
     once = await db.scalar(select(func.count()).select_from(WorkshopRecord))
     r = await client.post(
         f"{ONEK}/toplu-kabul",
-        json={**ortak, "cihazlar": [{"marka": "HYTERA", "seri": "YENI-1"}, {"marka": "HYTERA", "seri": "T-3"}]},
+        json={
+            **ortak,
+            "cihazlar": [{"marka": "HYTERA", "seri": "YENI-1"}, {"marka": "HYTERA", "seri": "T-3"}],
+        },
     )
     assert r.status_code == 409
     assert await db.scalar(select(func.count()).select_from(WorkshopRecord)) == once
@@ -643,7 +675,10 @@ async def test_atama_ve_toplu_atama_e01_kaynagindan(client, db, birimli_kullanic
     b = await kabul_et(client, hesap.id, "AT-B")
     r = await client.post(
         f"{ONEK}/toplu-ata",
-        json={"so_idler": [a["so_id"], b["so_id"]], "atamalar": [{"user_id": tek.id, "is_lead": True}]},
+        json={
+            "so_idler": [a["so_id"], b["so_id"]],
+            "atamalar": [{"user_id": tek.id, "is_lead": True}],
+        },
     )
     assert r.status_code == 200, r.text
     liste = (await client.get(ONEK, params={"teknisyen_id": tek.id})).json()
@@ -669,7 +704,9 @@ async def test_teslim_kancasi_ayni_islemde_cagrilir(client, db, birimli_kullanic
         d = await kabul_et(client, hesap.id)
         await teslime_hazirla(client, db, d["so_id"])
         dd = await detay(client, d["so_id"])
-        await gec(client, d["so_id"], "TESLIM_EDILDI", teslim=teslim_govdesi(dd), sure_eksik_onay=True)
+        await gec(
+            client, d["so_id"], "TESLIM_EDILDI", teslim=teslim_govdesi(dd), sure_eksik_onay=True
+        )
         assert cagrilar == [d["kayit_id"]]
     finally:
         atolye.TESLIM_KANCALARI.remove(_kanca)
@@ -684,7 +721,9 @@ async def test_detay_parca_ve_sure_salt_okunur(client, db, birimli_kullanici_ac,
     d = await kabul_et(client, hesap.id)
     assert d["sure"]["kisi_saat_dk"] is None  # kayıt yoksa 0 yazılmaz
     urun = await urun_ac("PARCA-1", "YOK", yedek_parca=True)
-    depo = Warehouse(code="SRV-HAB", name="Haberleşme servis", servis_deposu=True, birim="HABERLESME")
+    depo = Warehouse(
+        code="SRV-HAB", name="Haberleşme servis", servis_deposu=True, birim="HABERLESME"
+    )
     db.add(depo)
     await db.flush()
     for _ in range(2):

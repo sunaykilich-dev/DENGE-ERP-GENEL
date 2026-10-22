@@ -26,7 +26,9 @@ def _kullanici(scope: str, code: str = "X", birimler=(), uid: int = 1):
 
 
 def _teklif(birim=None, owner_id=1, status="TASLAK"):
-    return Quote(quote_no="TKF2026-00001", customer_id=1, birim=birim, owner_id=owner_id, status=status)
+    return Quote(
+        quote_no="TKF2026-00001", customer_id=1, birim=birim, owner_id=owner_id, status=status
+    )
 
 
 class TestKapsam:

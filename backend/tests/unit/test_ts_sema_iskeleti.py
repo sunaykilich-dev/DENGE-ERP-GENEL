@@ -108,6 +108,8 @@ async def test_kayitsiz_kanca_no_op_ve_kayit_sirasi() -> None:
 
     onceki = kancalar.kayitlilar("oncelik_birim_degisti")
     try:
+        # Gerçek kayıtlar (D2-G `sla.yeniden_damgala`) None argümanla çalışamaz: boşalt.
+        kancalar._KAYIT["oncelik_birim_degisti"].clear()
         kancalar.kaydet("oncelik_birim_degisti", birinci)
         kancalar.kaydet("oncelik_birim_degisti", ikinci)
         kancalar.kaydet("oncelik_birim_degisti", birinci)  # ikinci kez eklenmez

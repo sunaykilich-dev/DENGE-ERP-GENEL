@@ -1,0 +1,3 @@
+﻿WorkOrderDeviceId,WorkOrderId,SerialNo,ProductName,Brand,Model,IsActive,AddedAt
+601,101,00123-B,X-Ray,Smiths,HI-SCAN,1,2026-01-05T09:31:00
+602,101,00123-A,X-Ray,Smiths,HI-SCAN,1,2026-01-05T09:31:00

@@ -273,9 +273,8 @@ async def test_kayip_bulundu_ve_atolye_kopru(ist, db) -> None:
     r = await ist.post(f"{URL}/envanter/bulundu", json={**govde, "gerekce": "Sahada bulundu"})
     assert r.status_code == 200, r.text
     assert await cihaz_durumlari(db, h["seri"]) == {"KONTROLDE": 2}
-    # Arızalı + atölye: atölye kabulü D2-B'ye bağlı; hazır değilse 409 ve hiçbir şey yazılmaz.
-    from app.services.teknik_servis import atolye
-
+    # Arızalı + atölye: KIRALAMA_TAKIP atölye kaydı açılır, cihaz ATOLYEDE (TS-102;
+    # atölye teslimiyle dönüş `test_servis_uctan_uca_d2.py`'de).
     r = await ist.post(
         f"{URL}/envanter/kontrol",
         json={
@@ -289,12 +288,8 @@ async def test_kayip_bulundu_ve_atolye_kopru(ist, db) -> None:
             ]
         },
     )
-    if getattr(atolye, "kiralik_kabul", None) is None:
-        assert r.status_code == 409, r.text
-        assert await cihaz_durumlari(db, h["seri"]) == {"KONTROLDE": 2}
-    else:
-        assert r.status_code == 200, r.text
-        assert (await ist.get(f"{URL}/envanter/{c2}")).json()["durum"] == "ATOLYEDE"
+    assert r.status_code == 200, r.text
+    assert (await ist.get(f"{URL}/envanter/{c2}")).json()["durum"] == "ATOLYEDE"
     # Hurda seri: KONTROLDE cihaz gerekçeyle hurdaya ayrılır, kayıt silinmez.
     r = await ist.post(f"{URL}/envanter/hurda", json={"kiralik_id": c1, "gerekce": "Ekran kırık"})
     assert r.status_code == 200, r.text
@@ -409,3 +404,23 @@ async def test_katalog_birim_degisikligi_ve_pasiflestirme(ist, db) -> None:
         )
         >= 2
     )
+
+
+async def test_envanterli_urunde_kimlik_tipi_degismez(ist, db, kullanici_ac) -> None:
+    """TS-118: kiralık envanteri olan ürünün seri takibi ürün kartında değişmez (409)."""
+    depo = await depo_ac(db, "KT-D1", birim="GUVENLIK")
+    seri = await kiralik_urun_ac(db, "KT-SERI", seri=True)
+    bos = await kiralik_urun_ac(db, "KT-BOS", seri=True)
+    await stok_gir(ist, seri, depo, seriler=["KT-1"])
+    await kullanici_ac("kt_admin", "ADMIN")
+    adm = await istemci("kt_admin")
+    try:
+        r = await adm.patch(f"/api/urunler/{seri.id}", json={"identity_kind": "YOK"})
+        assert r.status_code == 409, r.text
+        await db.refresh(seri)
+        assert seri.identity_kind == "SERI_NO"  # veri değişmedi
+        # Envanteri olmayan katalog ürününde değişiklik serbest.
+        r = await adm.patch(f"/api/urunler/{bos.id}", json={"identity_kind": "YOK"})
+        assert r.status_code == 200, r.text
+    finally:
+        await adm.aclose()

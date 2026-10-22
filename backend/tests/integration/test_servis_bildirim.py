@@ -120,7 +120,9 @@ async def test_rozet_anlik_ve_kapsamli(client, db, veri) -> None:
     # Panel "geciken" = Operasyon sla_asildi = zil = açık SLA_ASILDI bildirimi (tur sonrası).
     await _uret(db)
     await giris(client, "mudur")
-    ozet = {s["kod"]: s["deger"] for s in (await client.get(f"{TS}/operasyon/ozet")).json()["sayaclar"]}  # noqa: E501
+    ozet = {
+        s["kod"]: s["deger"] for s in (await client.get(f"{TS}/operasyon/ozet")).json()["sayaclar"]
+    }  # noqa: E501
     assert ozet["sla_asildi"] == len(await _acik(db, "SLA_ASILDI")) == 3
     assert (await zil("mudur"))["sla.sla_asildi"] == 3
 
@@ -134,7 +136,9 @@ async def test_bildirim_listesi_ve_goruldu(client, db, veri) -> None:
     assert r.status_code == 200 and int(r.headers["X-Toplam-Kayit"]) == 1
     h_id = r.json()[0]["id"]
     g_alert = (await _acik(db, "SLA_ASILDI"))[veri["g1"].id]
-    r = await client.post(f"{TS}/operasyon/bildirimler/goruldu", json={"bildirim_idler": [h_id, g_alert]})  # noqa: E501
+    r = await client.post(
+        f"{TS}/operasyon/bildirimler/goruldu", json={"bildirim_idler": [h_id, g_alert]}
+    )  # noqa: E501
     assert r.status_code == 404
     assert await db.scalar(select(func.count()).select_from(ServiceAlertRead)) == 0
     r = await client.post(f"{TS}/operasyon/bildirimler/goruldu", json={"bildirim_idler": [h_id]})

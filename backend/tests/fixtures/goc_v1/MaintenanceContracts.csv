@@ -1,0 +1,4 @@
+﻿MaintenanceContractId,SourceKey,CustomerName,CurrentAddress,ProductsText,FrequencyText,AnnualFrequency,MaintenanceFeeText,PeriodText,CompletedCount,ContractTotal,IsActive,ImportedAt,UpdatedAt
+11,BAKIM-0011,Akyaka Park AVM,Örnek Mah. 1. Sok. No:1,9 X-RAY + 8 KAPI DEDEKTÖRÜ,Yılda 4,4,"12.500 TL",01.01.2026 - 31.12.2026,1,50000.00,1,2025-01-10T10:00:00,
+12,BAKIM-0012,Örnek Lojistik,,X-RAY (2),Yılda 2,2,,,0,,1,2025-01-10T10:00:00,
+13,ESKI-13,Kapanmış Firma,,1 X-RAY,Yılda 1,1,,01.01.2020 - 31.12.2020,1,,0,2025-01-10T10:00:00,

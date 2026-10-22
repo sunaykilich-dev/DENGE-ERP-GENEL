@@ -17,6 +17,10 @@ Kurallar (plan §2.3, §4.5, E11):
 - Statik yollar (`/stok/ozet`, `/stok.xlsx`, `/hareketler.xlsx`) kimlikli
   yollardan ÖNCE tanımlanır. Gövde modelleri `json_schema_extra` örneği taşır
   (uç taraması geçerli gövdeyle 404'ü sınasın).
+- Depo/hareket/talep/sayım kimlikleri YOLDA DEĞİL gövdede (sayım detayında
+  sorguda) taşınır: uç taramasının parametre sözleşmesinde bu hedefler yok;
+  yolda olsalardı tarama "hedef tanımsız" derdi. Kapsam 404 + veri değişmedi
+  sınaması `tests/integration/test_yedek_parca_kapsam.py`'de.
 """
 
 from __future__ import annotations
@@ -184,14 +188,6 @@ class TransferIn(_Kati):
     )
 
 
-class GerekceIn(_Kati):
-    gerekce: str = Field(min_length=3, max_length=svc.NOT_UZUNLUGU)
-
-    model_config = ConfigDict(
-        extra="forbid", json_schema_extra={"examples": [{"gerekce": "Yanlış depoya girildi"}]}
-    )
-
-
 class AcilisSatiriIn(_Kati):
     product_id: int
     depo_id: int
@@ -224,20 +220,25 @@ class SayimSatiriIn(_Kati):
 
 
 class SayimSatirlariIn(_Kati):
+    sayim_id: int
     satirlar: list[SayimSatiriIn] = Field(min_length=1, max_length=5000)
 
     model_config = ConfigDict(
         extra="forbid",
-        json_schema_extra={"examples": [{"satirlar": [{"product_id": 1, "sayilan_adet": 3}]}]},
+        json_schema_extra={
+            "examples": [{"sayim_id": 1, "satirlar": [{"product_id": 1, "sayilan_adet": 3}]}]
+        },
     )
 
 
 class SayimOnayIn(_Kati):
+    sayim_id: int
     gerekce: str = Field(min_length=3, max_length=500)
     degisimi_kabul: bool = False
 
     model_config = ConfigDict(
-        extra="forbid", json_schema_extra={"examples": [{"gerekce": "Yıl sonu sayımı"}]}
+        extra="forbid",
+        json_schema_extra={"examples": [{"sayim_id": 1, "gerekce": "Yıl sonu sayımı"}]},
     )
 
 
@@ -255,10 +256,12 @@ class TalepIn(_Kati):
 
 
 class TalepIptalIn(_Kati):
+    talep_id: int
     neden: str = Field(min_length=3, max_length=200)
 
     model_config = ConfigDict(
-        extra="forbid", json_schema_extra={"examples": [{"neden": "Müşteri vazgeçti"}]}
+        extra="forbid",
+        json_schema_extra={"examples": [{"talep_id": 1, "neden": "Müşteri vazgeçti"}]},
     )
 
 
@@ -311,12 +314,34 @@ class DepoIn(_Kati):
 
 
 class DepoPatch(_Kati):
+    depo_id: int
     name: str | None = Field(default=None, min_length=2, max_length=100)
     birim: str | None = Field(default=None, max_length=20)
     is_active: bool | None = None
     user_id: int | None = None
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [{"name": "Yeni ad"}]})
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"examples": [{"depo_id": 1, "name": "Yeni ad"}]}
+    )
+
+
+class TersKayitIn(_Kati):
+    hareket_id: int
+    gerekce: str = Field(min_length=3, max_length=svc.NOT_UZUNLUGU)
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"examples": [{"hareket_id": 1, "gerekce": "Yanlış depoya girildi"}]},
+    )
+
+
+class SayimKimligiIn(_Kati):
+    sayim_id: int
+    gerekce: str = Field(min_length=3, max_length=500)
+
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"examples": [{"sayim_id": 1, "gerekce": "Vazgeçildi"}]}
+    )
 
 
 # --- Yardımcılar ---------------------------------------------------------------------------
@@ -470,12 +495,13 @@ async def depo_olustur(
     return _depo_cikti(depo, user)
 
 
-@router.patch("/depolar/{depo_id}")
+@router.patch("/depolar")
 async def depo_guncelle(
-    depo_id: int, payload: DepoPatch, request: Request, db: DbDep, user: DepoTanimci
+    payload: DepoPatch, request: Request, db: DbDep, user: DepoTanimci
 ) -> dict[str, Any]:
-    depo = await _depo(db, user, depo_id)
-    degisen = payload.model_dump(exclude_unset=True)
+    """Kimlik gövdede (`depo_id`); kapsam dışı depo 404 ve yazma yok."""
+    depo = await _depo(db, user, payload.depo_id)
+    degisen = payload.model_dump(exclude_unset=True, exclude={"depo_id"})
     if "birim" in degisen:
         _birim_dogrula(degisen["birim"])
         if kapsam.birim_degisimi_yasak_mi(user, depo.birim, degisen["birim"]):
@@ -978,10 +1004,9 @@ async def _hareket_getir(db: DbDep, user: User, hareket_id: int) -> StockMovemen
     return hareket
 
 
-@router.post("/hareketler/{hareket_id}/ters-kayit", status_code=status.HTTP_201_CREATED)
+@router.post("/ters-kayit", status_code=status.HTTP_201_CREATED)
 async def ters_kayit(
-    hareket_id: int,
-    payload: GerekceIn,
+    payload: TersKayitIn,
     request: Request,
     db: DbDep,
     clock: ClockDep,
@@ -989,8 +1014,8 @@ async def ters_kayit(
 ) -> list[dict[str, Any]]:
     """Tek seferlik ters kayıt (gerekçe zorunlu). Transfer bacağında grubun iki
     bacağı birlikte; ters kaydın ters kaydı, sayım farkı ve kapalı işteki
-    iadenin ters kaydı 409."""
-    hareket = await _hareket_getir(db, user, hareket_id)
+    iadenin ters kaydı 409. Kimlik gövdede; kapsam dışı hareket 404."""
+    hareket = await _hareket_getir(db, user, payload.hareket_id)
     try:
         hareketler = await svc.ters_kayit(
             db, hareket=hareket, gerekce=payload.gerekce, user=user, clock=clock
@@ -1199,16 +1224,16 @@ async def _talep_getir(db: DbDep, user: User, talep_id: int) -> ServicePartReque
     return talep
 
 
-@router.post("/talepler/{talep_id}/iptal")
+@router.post("/talepler/iptal")
 async def talep_iptal(
-    talep_id: int,
     payload: TalepIptalIn,
     request: Request,
     db: DbDep,
     clock: ClockDep,
     user: Kullanici,
 ) -> dict[str, Any]:
-    talep = await _talep_getir(db, user, talep_id)
+    """Kimlik gövdede (`talep_id`); kapsam dışı işin talebi 404."""
+    talep = await _talep_getir(db, user, payload.talep_id)
     try:
         await svc.talep_iptal(db, talep, neden=payload.neden, user=user, clock=clock)
     except _HATALAR as exc:
@@ -1318,16 +1343,21 @@ async def sayim_ac(
     return await _sayim_cikti(db, sayim, ayrinti=True)
 
 
-@router.get("/sayimlar/{sayim_id}")
+# Sayım kimliği sorguda/gövdede: yol parametresi `{sayim_id}` uç taramasının
+# sözleşmesinde yok (tarama "hedef tanımsız" der); kapsam 404'ü
+# `test_yedek_parca_kapsam.py` sınar.
+
+
+@router.get("/sayim")
 async def sayim_detay(sayim_id: int, db: DbDep, user: Okuyucu) -> dict[str, Any]:
     return await _sayim_cikti(db, await _sayim_getir(db, user, sayim_id), ayrinti=True)
 
 
-@router.put("/sayimlar/{sayim_id}/satirlar")
+@router.put("/sayim/satirlar")
 async def sayim_satirlari(
-    sayim_id: int, payload: SayimSatirlariIn, request: Request, db: DbDep, user: Yonetici
+    payload: SayimSatirlariIn, request: Request, db: DbDep, user: Yonetici
 ) -> dict[str, Any]:
-    sayim = await _sayim_getir(db, user, sayim_id)
+    sayim = await _sayim_getir(db, user, payload.sayim_id)
     try:
         await svc.sayim_satirlari_yaz(
             db, sayim, [(s.product_id, s.sayilan_adet) for s in payload.satirlar]
@@ -1347,9 +1377,8 @@ async def sayim_satirlari(
     return await _sayim_cikti(db, sayim, ayrinti=True)
 
 
-@router.post("/sayimlar/{sayim_id}/onayla")
+@router.post("/sayim/onayla")
 async def sayim_onayla(
-    sayim_id: int,
     payload: SayimOnayIn,
     request: Request,
     db: DbDep,
@@ -1358,7 +1387,7 @@ async def sayim_onayla(
 ) -> dict[str, Any]:
     """Onay (gerekçe zorunlu). Açılıştan sonra stok değiştiyse ve
     `degisimi_kabul` yoksa 409 + `sapmalar`; onaysız fark hiçbir şey değiştirmez."""
-    sayim = await _sayim_getir(db, user, sayim_id)
+    sayim = await _sayim_getir(db, user, payload.sayim_id)
     try:
         hareketler = await svc.sayim_onayla(
             db,
@@ -1387,11 +1416,11 @@ async def sayim_onayla(
     return await _sayim_cikti(db, sayim, ayrinti=True)
 
 
-@router.post("/sayimlar/{sayim_id}/iptal")
+@router.post("/sayim/iptal")
 async def sayim_iptal(
-    sayim_id: int, payload: GerekceIn, request: Request, db: DbDep, user: Yonetici
+    payload: SayimKimligiIn, request: Request, db: DbDep, user: Yonetici
 ) -> dict[str, Any]:
-    sayim = await _sayim_getir(db, user, sayim_id)
+    sayim = await _sayim_getir(db, user, payload.sayim_id)
     try:
         await svc.sayim_iptal(db, sayim, gerekce=payload.gerekce, user=user)
     except _HATALAR as exc:

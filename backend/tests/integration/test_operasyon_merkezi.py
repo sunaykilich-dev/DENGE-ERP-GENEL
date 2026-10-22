@@ -56,9 +56,7 @@ async def _pb(db, servis_isi_ac, sozlesme_ac, hedef: date):
 
 @pytest.fixture
 async def veri(client, db, kullanici_ac, birimli_kullanici_ac, servis_isi_ac, sozlesme_ac):
-    tek = await birimli_kullanici_ac(
-        "tek", "SERVIS_TEKNISYEN", ["GUVENLIK"], saha_rolu="TEKNISYEN"
-    )
+    tek = await birimli_kullanici_ac("tek", "SERVIS_TEKNISYEN", ["GUVENLIK"], saha_rolu="TEKNISYEN")
     tek_b = await birimli_kullanici_ac(
         "tek_b", "SERVIS_TEKNISYEN", ["HABERLESME"], saha_rolu="TEKNISYEN"
     )
@@ -68,12 +66,16 @@ async def veri(client, db, kullanici_ac, birimli_kullanici_ac, servis_isi_ac, so
     await kullanici_ac("yonetim", "YONETIM")
     await kullanici_ac("satis", "SATIS")
     isler = {
-        "asildi": await servis_isi_ac(durum="ISLEMDE", oncelik="KRITIK", atananlar=[tek], **_sla(13)),  # noqa: E501
+        "asildi": await servis_isi_ac(
+            durum="ISLEMDE", oncelik="KRITIK", atananlar=[tek], **_sla(13)
+        ),  # noqa: E501
         "riskte": await servis_isi_ac(durum="PLANLANDI", **_sla(11)),
         "zamaninda": await servis_isi_ac(durum="MUSTERI_TALEBI", **_sla(1, 24)),
         "durduruldu": await servis_isi_ac(durum="BEKLEMEDE", **_sla(14)),
         "damgasiz": await servis_isi_ac(durum="MUSTERI_TALEBI"),
-        "b_asildi": await servis_isi_ac(birim="HABERLESME", durum="SAHADA", atananlar=[tek_b], **_sla(20)),  # noqa: E501
+        "b_asildi": await servis_isi_ac(
+            birim="HABERLESME", durum="SAHADA", atananlar=[tek_b], **_sla(20)
+        ),  # noqa: E501
         "pb_gecmis": await _pb(db, servis_isi_ac, sozlesme_ac, date(2025, 11, 1)),
         "pb_toleransta": await _pb(db, servis_isi_ac, sozlesme_ac, date(2025, 12, 20)),
     }
@@ -235,7 +237,9 @@ async def test_personel_is_yuku(client, veri) -> None:
     assert all("bugun_calisilan_dk" not in s for s in govde["personel"])
 
     await giris(client, "mudur")
-    satirlar = {s["ad"]: s for s in (await client.get(f"{TS}/operasyon/personel")).json()["personel"]}  # noqa: E501
+    satirlar = {
+        s["ad"]: s for s in (await client.get(f"{TS}/operasyon/personel")).json()["personel"]
+    }  # noqa: E501
     assert satirlar["Tek_B"]["acik_sayac"]["so_no"] == veri["b_asildi"].so_no
     assert satirlar["Tek_B"]["acik_sayac"]["faaliyet"] == "SAHA"
 

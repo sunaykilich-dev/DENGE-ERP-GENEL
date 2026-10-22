@@ -101,11 +101,11 @@ async def test_python_ve_sql_ayni_durumu_verir(db, servis_isi_ac, sozlesme_ac) -
     assert gorulen & {"KARSILANDI", "KARSILANMADI"}
 
     # Sıralama: işleyen SLA en yakın hedef önce, durdurulanlar sonra, ölçülmeyen en sonda.
-    sirali = (
-        await db.scalars(select(ServiceOrder.id).order_by(*ifade["siralama"]))
-    ).all()
+    sirali = (await db.scalars(select(ServiceOrder.id).order_by(*ifade["siralama"]))).all()
     gruplar = []
     for so_id in sirali:
         d = sql[so_id][0]
-        gruplar.append(0 if d in ("ZAMANINDA", "RISKTE", "ASILDI") else 1 if d == "DURDURULDU" else 2)
+        gruplar.append(
+            0 if d in ("ZAMANINDA", "RISKTE", "ASILDI") else 1 if d == "DURDURULDU" else 2
+        )
     assert gruplar == sorted(gruplar)

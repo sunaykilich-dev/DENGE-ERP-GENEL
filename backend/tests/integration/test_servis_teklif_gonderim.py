@@ -73,6 +73,14 @@ async def smtp(db, monkeypatch):
     _SahteSmtp.gonderilen = []
     _SahteSmtp.hata = None
     monkeypatch.setattr(mail.smtplib, "SMTP", _SahteSmtp)
+    # E-posta testleri PDF motorundan bağımsız: WeasyPrint sistem kitaplıkları
+    # (Pango/Cairo) olmayan makinede de koşsun. PDF içeriği `TestPdf`'te.
+    from app.services import quotes as teklif_svc
+
+    async def _sahte_pdf(db, t, v):
+        return b"%PDF-1.7 sahte " + f"{t.quote_no}-{v.version_no}".encode()
+
+    monkeypatch.setattr(teklif_svc, "teklif_pdf", _sahte_pdf)
     return _SahteSmtp
 
 
@@ -98,7 +106,9 @@ class TestElleGonderim:
         yol = f"/api/teklifler/{t['id']}/elle-gonderildi"
         assert (await ortam["sef"].post(yol, json={"kanal": "FAKS", "not": "x"})).status_code == 422
         assert (await ortam["sef"].post(yol, json={"not": "elden verildi"})).status_code == 422
-        assert (await ortam["sef"].post(yol, json={"kanal": "ELDEN", "not": " "})).status_code == 400
+        assert (
+            await ortam["sef"].post(yol, json={"kanal": "ELDEN", "not": " "})
+        ).status_code == 400
 
     async def test_onaysiz_birimli_409(self, ortam, db):
         t = await teklif_ac(ortam["sef"], ortam["musteri"].id)
@@ -122,7 +132,9 @@ class TestElleGonderim:
 
         v = await db.get(QuoteVersion, r["guncel"]["id"])
         await db.refresh(v)
-        karar = await client.post(f"/api/public/teklif/{v.public_token}/karar", json={"kabul": True})
+        karar = await client.post(
+            f"/api/public/teklif/{v.public_token}/karar", json={"kabul": True}
+        )
         assert karar.status_code == 200, karar.text
 
 
@@ -207,7 +219,12 @@ class TestPdf:
         q = await db.get(Quote, t["id"])
         v = await db.get(QuoteVersion, q.current_version_id)
         await db.refresh(v)
-        pdf = await svc.teklif_pdf(db, q, v)
+        from app.services.pdf import PdfUretilemedi
+
+        try:
+            pdf = await svc.teklif_pdf(db, q, v)
+        except PdfUretilemedi:
+            pytest.skip("WeasyPrint sistem kitaplıkları bu makinede yok")
         okuyucu = pypdf.PdfReader(io.BytesIO(pdf), strict=True)
         sayfa = len(okuyucu.pages)
         assert sayfa >= 2

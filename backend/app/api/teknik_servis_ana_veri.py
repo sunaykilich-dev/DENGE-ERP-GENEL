@@ -21,7 +21,7 @@ kuralı gereken tek uçta gövdede `_herhangi` ile kontrol edilir.
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
@@ -416,3 +416,51 @@ async def saha_onerisi(lokasyon_id: int, db: DbDep, user: Arayici) -> dict[str, 
             if kisi:
                 kisi["telefon"] = kvkk.maskele(kisi["telefon"])
     return oneri
+
+
+# --- Serbest metin eşleştirme (TS-171, E14-09 Faz 1) ---------------------------------
+#
+# Aday listesi yalnız OKUR (kabul 1); karar `musteri_eslestirme` içe aktarma
+# profiliyle verilir. İkisi de `hesap.birlestir` ister (bağ kurmak birleştirme
+# yetkisidir); izinsiz kullanıcı 403.
+
+
+@router.get("/eslestirme/ozet")
+async def eslestirme_ozeti(db: DbDep, user: Birlestirici) -> dict[str, dict[str, int]]:
+    """Kaynak başına eşleşmemiş / hesapsız / müşterisiz / belirsiz sayıları.
+
+    Sayılar indirilen aday listesinin satırlarıyla AYNI listeden sayılır.
+    """
+    from app.services.teknik_servis import veri_kalitesi
+
+    return await veri_kalitesi.eslestirme_ozeti(db, user)
+
+
+@router.get("/eslestirme/adaylar.xlsx")
+async def eslestirme_adaylari_xlsx(
+    db: DbDep,
+    user: Birlestirici,
+    kaynak: Annotated[str, Query(pattern="^(sozlesme|ekipman)$")] = "sozlesme",
+) -> Response:
+    """Eşleşmemiş kayıtların aday Excel'i (`musteri_eslestirme` profil şablonu).
+
+    Müşterisi ve lokasyonu boş kayıtlar ayrı sayfadadır (kabul 4). Hiçbir
+    şey yazmaz; ham metin kişisel veri taşımaz (irtibat adı yok).
+    """
+    from app.services import export
+    from app.services.teknik_servis import veri_kalitesi
+
+    satirlar = await veri_kalitesi.eslestirme_adaylari(db, user, kaynak)
+    adaylar = [veri_kalitesi.aday_satiri(r) for r in satirlar if not r["musterisiz"]]
+    bos = [veri_kalitesi.aday_satiri(r) for r in satirlar if r["musterisiz"]]
+    icerik = await export.sayfalari_xlsx_async(
+        [
+            export.Sayfa("Adaylar", list(veri_kalitesi.ADAY_BASLIKLARI), adaylar),
+            export.Sayfa("Musterisi Bos", list(veri_kalitesi.ADAY_BASLIKLARI), bos),
+        ]
+    )
+    return Response(
+        content=icerik,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="eslestirme-{kaynak}.xlsx"'},
+    )

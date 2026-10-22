@@ -86,9 +86,7 @@ async def test_eslesme_kurallari(client, db, ortam) -> None:
     assert (await _kayit(db, c["id"])).tekrar_ariza_aday is False
     h = await _ac(client, hesap, ["ZZ-1", "AB-001"])
     assert (await _kayit(db, h["id"])).tekrar_ariza_aday is True
-    d = await _ac(
-        client, hesap, ["AB-001"], iliskili_is_id=c["id"], iliski_turu="MUKERRER"
-    )
+    d = await _ac(client, hesap, ["AB-001"], iliskili_is_id=c["id"], iliski_turu="MUKERRER")
     kd = await _kayit(db, d["id"])
     assert kd.tekrar_ariza_aday is True
     assert (kd.iliskili_is_id, kd.iliski_turu) == (c["id"], "MUKERRER")  # üzerine yazılmadı

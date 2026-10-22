@@ -248,13 +248,17 @@ class TestYetkiVeKapsam:
         yol = f"/api/teknik-servis/maliyet/isler/{so.id}"
         # Servis şefinde maliyet izni yok (KD-11).
         assert (await ortam["sef_g"].get(yol)).status_code == 403
-        assert (await ortam["sef_g"].get("/api/teknik-servis/maliyet/analiz?donem=2025-10")).status_code == 403
+        assert (
+            await ortam["sef_g"].get("/api/teknik-servis/maliyet/analiz?donem=2025-10")
+        ).status_code == 403
         # Satış müdürü görür ama yazamaz (maliyet.yaz yalnız ADMIN + istisna).
         assert (await ortam["smd"].get(yol)).status_code == 200
         r = await ortam["smd"].put(f"{yol}/gelir", json={"kaynak": "ELLE", "tutar": 1, "not": "x"})
         assert r.status_code == 403
         # Analiz `servis_rapor.gor` de ister (menü ile aynı çift).
-        assert (await ortam["smd"].get("/api/teknik-servis/maliyet/analiz?donem=2025-10")).status_code == 403
+        assert (
+            await ortam["smd"].get("/api/teknik-servis/maliyet/analiz?donem=2025-10")
+        ).status_code == 403
 
     async def test_kapsam_disi_is_404_ve_yazma_yok(self, ortam, db, servis_isi_ac):
         so = await _kapali_is(servis_isi_ac, ortam, birim="GUVENLIK")
@@ -273,15 +277,23 @@ class TestTarife:
     async def test_tarife_kurallari(self, ortam, db):
         y = ortam["yonetici"]
         yol = "/api/teknik-servis/maliyet/tarifeler"
-        r = await y.post(yol, json={"birim": "GUVENLIK", "valid_from": "2026-02-01", "hourly_cost": 0})
+        r = await y.post(
+            yol, json={"birim": "GUVENLIK", "valid_from": "2026-02-01", "hourly_cost": 0}
+        )
         assert r.status_code == 422
-        r = await y.post(yol, json={"birim": "GUVENLIK", "valid_from": "2026-02-01", "hourly_cost": 500})
+        r = await y.post(
+            yol, json={"birim": "GUVENLIK", "valid_from": "2026-02-01", "hourly_cost": 500}
+        )
         assert r.status_code == 201, r.text
         ilk = r.json()
         # Açık tarifeden önce başlayan yeni tarife 409.
-        r = await y.post(yol, json={"birim": "GUVENLIK", "valid_from": "2026-01-15", "hourly_cost": 450})
+        r = await y.post(
+            yol, json={"birim": "GUVENLIK", "valid_from": "2026-01-15", "hourly_cost": 450}
+        )
         assert r.status_code == 409
-        r = await y.post(yol, json={"birim": "GUVENLIK", "valid_from": "2026-03-01", "hourly_cost": 550})
+        r = await y.post(
+            yol, json={"birim": "GUVENLIK", "valid_from": "2026-03-01", "hourly_cost": 550}
+        )
         assert r.status_code == 201
         ikinci = r.json()
         liste = (await y.get(f"{yol}?birim=GUVENLIK")).json()
@@ -290,7 +302,11 @@ class TestTarife:
         # Henüz başlamamış ikinci tarife kapatılır; öncül yeniden açılır.
         r = await y.post(
             f"{yol}/kapat",
-            json={"tarife_id": ikinci["id"], "version": ikinci["version"], "gerekce": "Hatalı giriş"},
+            json={
+                "tarife_id": ikinci["id"],
+                "version": ikinci["version"],
+                "gerekce": "Hatalı giriş",
+            },
         )
         assert r.status_code == 200, r.text
         liste = {t["id"]: t for t in (await y.get(f"{yol}?birim=GUVENLIK")).json()}
@@ -308,7 +324,9 @@ class TestTarife:
         r = await ortam["yonetici"].post(yol, json={**govde, "gerekce": "Eski dönem düzeltmesi"})
         assert r.status_code == 201
         # Birim kapsamı: HABERLESME kullanıcısı GUVENLIK tarifesi açamaz (404).
-        r = await h.post(yol, json={"birim": "GUVENLIK", "valid_from": "2026-05-01", "hourly_cost": 1})
+        r = await h.post(
+            yol, json={"birim": "GUVENLIK", "valid_from": "2026-05-01", "hourly_cost": 1}
+        )
         assert r.status_code == 404
         assert {t["birim"] for t in (await h.get(yol)).json()} == {"HABERLESME"}
 
@@ -361,7 +379,9 @@ class TestAnaliz:
         assert len(eksik["satirlar"]) == 1
 
         # Kişisel istisnayla maliyet gören HABERLESME kullanıcısı GUVENLIK görmez.
-        h = (await ortam["maliyetci_h"].get("/api/teknik-servis/maliyet/analiz?donem=2025-10")).json()
+        h = (
+            await ortam["maliyetci_h"].get("/api/teknik-servis/maliyet/analiz?donem=2025-10")
+        ).json()
         assert {s["birim"] for s in h["satirlar"]} == {"HABERLESME"}
 
     async def test_donem_sinirlari(self, ortam):

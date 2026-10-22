@@ -470,47 +470,222 @@ ayrı uygulama yoktur.
 
 ## 11. Teknik servis — Dalga 2 ekranları
 
-> Bu bölümün iskeleti şema paketinde (D2-S) açıldı; her alt başlığı ilgili
-> modül paketi ekranı bitirince doldurur. Menü kalemleri yalnız izni olan
-> kullanıcıya görünür; mobilite kullanıcısının menüsü değişmez.
+> Menü kalemleri yalnız izni olan kullanıcıya görünür; mobilite
+> kullanıcısının menüsü değişmez.
 
 ### 11.1 Operasyon Merkezi ve SLA
 
 Menü: **Teknik Servis → Operasyon Merkezi** (`operasyon.gor`). SLA tanımları
 ve bekleme nedeni kataloğu **Servis Tanımları** ekranındadır
 (`operasyon.yonet`). SLA hedefi işe açılışta damgalanır; SLA durumu yalnız
-sunucuda hesaplanır. *(D2-G dolduracak.)*
+sunucuda hesaplanır.
+
+- **SLA politikası:** varsayılan çözüm hedefleri KRİTİK 12, YÜKSEK 24,
+  NORMAL 72 saattir (7/24). Hedef, SLA yürürlük anı ayarı girildikten sonra
+  açılan işlere damgalanır; planlı bakım ve atölye işleri SLA dışıdır (PB'de
+  vade ayı görünür). İş beklemesi (müşteri onayı, malzeme gibi) hedefi ileri
+  alır; personel beklemesi almaz. Öncelik ya da tür değişince hedef yeniden
+  damgalanır. Sonuç işin ilk *Tamamlandı* anında donar.
+- **Operasyon Merkezi:** üstteki sayaçlar tıklanınca aynı sayıda satırlık
+  listeyi SLA sırasıyla açar; birim ve öncelik süzülür. Toplu atama ve toplu
+  plan servis işleri ekranındaki aynı işlemlerdir. *Personel iş yükü*
+  sekmesinde çalışılan dakika yalnız `servis_rapor.personel` sahibine görünür.
+- **Bildirimler:** SLA uyarıları kalıcıdır ve rozet sayısı anlık hesaplanır;
+  *Görüldü* işareti kişiseldir.
+- **SLA kartı:** servis işi detayındaki etiket ve **SLA kartı** düğmesi
+  hedefleri, ilk müdahaleyi ve tekrar arıza adayını gösterir. SLA'sı aşılmış
+  işte *gecikme nedeni*, tekrar arıza adayı işte *kök neden teyidi*
+  girilmeden iş **Kapatıldı**'ya geçemez; bu bilgi SLA kartından girilir.
+  Benim İşlerim ekranında da aynı etiket görünür.
 
 ### 11.2 Atölye
 
 Menü: **Teknik Servis → Atölye** (`atolye.gor`, yazma `atolye.yaz`). Her
 atölye kaydı bir cihaz ve bir servis işidir; tamir bedeli yalnız maliyet
-yetkisi olana görünür. *(D2-B dolduracak.)*
+yetkisi olana görünür (ekranda, Excel'de ve PDF'te).
+
+- **Kabul:** müşteri, cihaz (kütükten seçilir ya da tip + marka + seri ile
+  bulunur/açılır), şikâyet ve aksesuarlar girilir. Kabul anı ve durum
+  sunucudan gelir. Aynı cihazın açık atölye kaydı varsa kabul reddedilir;
+  aynı seriyle birden çok kayıtlı cihaz varsa aday listesinden seçilir.
+  Garanti durumu kabulde hesaplanıp dondurulur. *Toplu kabul* aynı
+  müşteriden birden çok cihazı tek fişle alır; bir cihaz hatalıysa hiçbiri
+  kaydedilmez.
+- **Akış:** Kabul → Teşhis (arıza nedeni katalogdan) → gerekiyorsa Onay
+  bekliyor (müşteri onayı; bağlı teklifin kabulü onay sayılır) → Onarım →
+  Test → Teslime hazır → Teslim edildi. Test *Kaldı* ise teslime
+  geçilemez. Teslimde aksesuarlar tek tek işaretlenir; eksik varsa açıklama
+  zorunludur. Teslimle servis işi tamamlanır.
+- Atölye işinde servis işleri ekranındaki genel durum/bekleme/iptal
+  düğmeleri çalışmaz; işlemler atölye ekranından yapılır. Kabul fişi ve
+  teslim tutanağı PDF'tir; imzalı tarama servis işinin eki olarak yüklenir.
+- **Kiralık cihaz:** kiralamadan arızalı dönen cihaz, dönüş kontrolünde
+  *Atölye kaydı aç* seçilirse kiracı adına "Kiralama takip" kaydıyla
+  atölyeye girer; atölye teslimi cihazı son deposuna *Kontrolde* döndürür.
+- Teslim alan ve onaylayan adları KVKK anonimleştirmesinde silinir.
 
 ### 11.3 Kiralama ve kiralık envanter
 
 Menü: **Teknik Servis → Kiralamalar / Kiralık Envanter** (`kiralama.gor`).
 Kiralık cihazlar mobilite stoğundan ayrı izlenir; kiralama depoları mobilite
-depo listesinde görünmez. *(D2-C dolduracak.)*
+depo listesinde görünmez. Mobilite ve Araç Takip birimlerinde kiralama yoktur.
+Kiralama bedeli ERP'de tutulmaz; ekranlarda ve tutanakta fiyat yer almaz.
+
+**Kiralamalar.** Üstteki kutular (Talep, Planlı, Hazırlanıyor, Kirada,
+Geciken iade, Eksik tahsis) tıklanınca aynı sayıdaki listeyi açar.
+*Yeni kiralama* (`kiralama.yaz`): birim, müşteri/lokasyon, başlangıç ve iade
+tarihi, kalemler (yalnız birimin kiralama kataloğundaki ürünler; kalem
+satırında seçilen tarihler için müsait adet görünür) ve müşterinin irtibat
+kişileri girilir. Kayıt **Talep** olarak açılır ve stok ayırmaz.
+
+Aşamalar sırasıyla kiralama kartındaki düğmelerle ilerler; durum elle
+değiştirilmez:
+
+1. **Planla** — tarih aralığında yeterli müsait adet yoksa "X adet eksik"
+   uyarısıyla reddedilir.
+2. **Tahsis** (`kiralama.envanter`) — seri takipli üründe depodaki *Hazır*
+   cihazlar tek tek, toplu üründe depo + adet seçilir. Kısmi tahsis
+   yapılabilir; kalem adedi aşılamaz, aynı cihaz tarihi çakışan iki
+   kiralamaya verilemez. İlk tahsisle kiralama *Hazırlanıyor* olur. Sevk
+   edilmemiş tahsis *Çöz* ile geri bırakılır.
+3. **Sevk et** (`kiralama.asama`) — ilk sevkte her kalem tamamen tahsisli
+   olmalıdır; sonradan eklenen tahsisler *Ek sevk* ile gönderilir.
+4. **Aşama gir** — Kurulum yapıldı / Devreye alındı / Toplandı. Kurulum ya da
+   toplama servis işi tamamlandığında kartta önerilen aşama görünür; onay
+   yine aşama yetkilisindedir.
+5. **İade al** — her tahsis için *Depoya iade* (cihaz seçilen depoya
+   *Kontrolde* girer), *Kayıp* ya da *Müşteride (not)*. Kurulumlu
+   kiralamada son iadeden önce *Toplandı* girilmelidir. Bütün cihazlar
+   dönünce kiralama *Depoya alındı* olur; **Kapat** ile kapanır.
+
+Yanlış girilen son aşama *Son aşamayı geri al* ile gerekçe yazılarak geri
+alınır (ters hareket yazılır, kayıt silinmez; kapanmış/iptal kiralamada
+yapılamaz). Sevk edilmemiş kiralama gerekçeyle iptal edilir, tahsisler
+çözülür. *Servis işleri* sekmesinden kurulum/toplama işi açılır
+(`kiralama.yaz` + `servis.yaz`; aynı türde ikinci açık iş açılamaz).
+*Teslim tutanağı* ve *İade tutanağı* fiyatsız PDF'tir; sevkten önce
+"TASLAK" filigranı taşır.
+
+**Kiralık Envanter.** *Seri cihazlar* sekmesinde cihazlar durum (Hazır,
+Kontrolde, Hazır değil, Kirada, Kayıp, Atölyede, Hurda) ve depoya göre
+süzülür; *Uzun süredir kontrolde* kutusu uyarı listesini açar. Cihaz
+kartında seri no, eksik notu ve not düzeltilir; durum, depo ve ürün
+yalnız işlemlerle değişir. Seçili cihazlar için *Dönüş kontrolü*
+(Uygun → Hazır; Eksik/Arızalı → Hazır değil, açıklama zorunlu),
+*Transfer*, *Bulundu* (kayıp cihaz depoya *Kontrolde* döner) ve
+*Hurdaya ayır* (gerekçeli çıkış) yapılır. Seri takipsiz ürünler için aynı
+işlemler üst sağdaki düğmelerle ürün + depo + adet girilerek yapılır.
+*Excel'den toplu giriş* önce önizleme gösterir, hiçbir şey yazmaz; onayda
+yalnız hatasız satırlar yazılır, dosya arada değiştiyse işlem reddedilir.
+Hareket defteri silinmez ve düzenlenmez. *Kiralama kataloğu* sekmesinde
+ürünler birime bağlanır ya da pasifleştirilir; IMEI'li ürün kataloğa
+alınamaz, envanteri olan ürünün seri takibi ürün kartında değiştirilemez.
 
 ### 11.4 Yedek parça
 
 Menü: **Teknik Servis → Yedek Parça** (`parca.gor`). Parça çıkışı açık servis
-işine yapılır; düzeltme silme değil ters kayıttır. *(D2-D dolduracak.)*
+işine yapılır; düzeltme silme değil ters kayıttır.
+
+- **Sekmeler:** Stok, Hareketler (belge no ile arama, Excel), Talepler,
+  Sayım, İş Emri Parçaları, Depolar (depo tanımı `sistem.ayar`). Üstteki
+  kutular tıklanınca aynı sayıda satırlık listeyi açar.
+- **Çıkış ve iade:** stok yetmezse çıkış reddedilir (stok eksiye düşmez);
+  kapalı işe çıkış yapılamaz. İade, işe yapılan net çıkışı aşamaz. Servis
+  işi detayının **Parçalar** sekmesi, bakım formu ve atölye kaydı aynı
+  parça bölümünü gösterir. Maliyet sütunları yalnız `maliyet.gor` sahibine
+  görünür.
+- **Transfer ve sayım:** transfer iki depoyu birlikte yazar. Sayım açıldığı
+  anın stoğunu saklar; onay anında stok değişmişse fark gösterilir ve
+  onaylayan değişimi kabul eder. Onaylanmayan sayım stoğu değiştirmez.
+- **Parça talebi:** işe parça talebi açılırken iş *Malzeme* beklemesine
+  alınabilir; talepten sonraki çıkışla talep karşılanır ve bekleme biter. İş
+  kapanınca açık talepler iptal olur.
+- **Açılış stoğu:** **İçe Aktarma** ekranındaki "Parça açılış stoğu"
+  profiliyle yüklenir; hatalı tek satır varsa hiçbir satır yazılmaz.
+- Mobilite stok ekranları servis ve kiralama depolarını göstermez.
 
 ### 11.5 Servis teklifi ve maliyet
 
 Servis teklifleri **Teklifler** ekranında birimli teklif olarak durur (iç
 onaydan geçer); maliyet ve gelir **Teknik Servis → Servis Maliyet**
-ekranındadır (`maliyet.gor`). *(D2-E dolduracak.)*
+ekranındadır (`maliyet.gor`).
+
+- **Servis teklifi:** servis işi detayındaki **Teklif hazırla** düğmesi
+  teklif formunu işin müşterisi ve adresiyle açar. Birimli teklif önce iç
+  onaya gönderilir (hazırlayan kendi teklifini onaylayamaz), onaydan sonra
+  e-postayla (en çok 3 alıcı, gönderene kopya) ya da *Elle gönderildi*
+  (kanal + not) olarak gönderilir. Servis teklifi siparişe dönüşmez; satış
+  panel ve raporlarında sayılmaz. Kabul edilen teklifin KDV hariç tutarı
+  işin geliri olarak yazılır.
+- **Servis Maliyet:** dönem/birim/tür/müşteri süzgeci, eksik veri kutuları
+  (süre eksik, tarife eksik, maliyet eksik) ve birim × tür özeti. Gelir
+  girilmemiş iş ile ücretsiz (garanti) iş ayrı tutulur. Fatura devrinden
+  sonra gelir değiştirilemez. *İşçilik tarifeleri* sekmesinde tarife eklenir;
+  geçmiş tarihli tarife `sistem.ayar` ve gerekçe ister. Analiz sekmesi
+  `servis_rapor.gor` da ister.
 
 ### 11.6 Eğitim ve Gelişim Kartım
 
 Menü: **İnsan Kaynakları → Eğitim ve Gelişim** (`egitim.gor`) ve **Gelişim
-Kartım** (`egitim.kendim`). *(D2-F dolduracak.)*
+Kartım** (`egitim.kendim`). Kayıt ve düzeltme `egitim.yaz`, saha gözlemi ve
+yetkinlik değerlendirmesi `egitim.gozlem`, not/kanıt gibi kişisel ayrıntılar
+`egitim.detay` ister. Kişi listesi yalnız kapsamınızdaki personeli gösterir.
+
+- **Özet:** üstteki kutular tıklanınca aynı sayıda satırlık listeyi açar.
+  Henüz verisi olmayan kutu (ör. hiç belge girilmemişse) "0" olarak değil,
+  hiç gösterilmez.
+- **Katalog ve yıllık plan:** kurs ve kriterler silinmez, pasiflenir; pasif
+  kursa plan veya oturum açılamaz. Toplu plan aynı kişi + kurs + yıl için ikinci
+  plan üretmez; iptal edilen planın yerine yenisi açılabilir. Erteleme eski
+  tarihi saklar. Plan listesi Excel olarak indirilebilir (indirme denetime
+  yazılır).
+- **Oturum ve katılım:** ileri tarihli oturum açılamaz. Katılım işlenince
+  kişinin o kurstaki en eski açık planı tamamlanır; "katılmadı" düzeltmesi planı
+  yeniden açar. Toplu katılım tablosunda tek bir hatalı satır varsa hiçbir satır
+  yazılmaz ve hatalı satır gösterilir. Katılımı olan oturum silinemez.
+- **Saha gözlemi:** servis işinin **Saha Gözlemleri** sekmesinden de açılır;
+  birim işten alınır, kişi kendi kendini gözleyemez. Puan ve sonuç sunucuda
+  hesaplanır: kritik maddede 0 → KRİTİK, gerekçeli "gözlenmedi" → EKSİK GÖZLEM,
+  %85 ve üstü → BAŞARILI, altı → GELİŞİM GEREKLİ. KRİTİK sonuç bir düzeltici
+  faaliyet açar; kişinin aynı kurstaki kritik maddeleri tam puan aldığı sonraki
+  gözlem faaliyeti kendiliğinden kapatır, elle kapanış kanıt ister.
+- **Takip ve belgeler:** 30/60/90 gün takipleri ve süresi dolan belgeler hem
+  ekranda hem uyarılarda aynı sayıyla görünür; uyarılar birim kapsamına göre
+  süzülür.
+- **Gelişim Kartım:** teknisyen yalnız kendi planlarını, gözlemlerini (not ve
+  aksiyon planı dahil) ve eklerini görür; gözleme "Gördüm" onayı verir. Onay
+  geri alınamaz.
 
 ### 11.7 Ana veri kalitesi ve eski sistem verisi
 
 Menü: **Teknik Servis → Ana Veri Kalitesi** (`hesap.birlestir`). Eski
 sistemden gelen serbest metin müşteri/lokasyon eşleştirmesi burada onaylanır.
-*(D2-I dolduracak.)*
+
+- Ekran kaynak bazında eşleşmemiş kayıt sayılarını ve aday listesini
+  (Excel) gösterir. Sistem yalnız kesin eşleşmeyi (takma ad, tek hesaba düşen
+  unvan) kendisi bağlar; iki hesaba düşen ad ve benzer adlar yalnız öneridir.
+- Aday listesi Excel'de `Onay=E` işaretlenip **İçe Aktarma** ekranındaki
+  "Müşteri eşleştirme" profiliyle yüklenir; onaylanan satır hesaba takma ad
+  ekler. Aynı dosya ikinci kez yüklenince hiçbir şey değişmez.
+- Eski zaman kayıtlarındaki personel adları "Ad eşleme" profiliyle (İK
+  onayı, `personel.yaz`) kullanıcılara bağlanır. Bakım sözleşmesi teyidi ve
+  servis işleri göç profilleri `sistem.goc` ister; göç adımları
+  `deploy/KURULUM.md` EK G'dedir.
+
+### 11.8 İşten çıkış ve personel KVKK
+
+Menü: **Personel** kartında **İşten çıkış** (`personel.cikis`).
+
+- Önce önizleme gösterilir: kişinin açık servis işleri, açık sayacı, oturum
+  sayısı, eğitim planları ve düzeltici faaliyetleri. Önizleme hiçbir şey
+  yazmaz.
+- Onayda tek işlemle giriş kapatılır, oturumlar düşer, kişi açık işlerin
+  ekiplerinden çıkarılır (atama silinmez, sonlandırılır). İş durumları
+  değişmez; sorumlusu kalmayan iş "Atanmamış" listesine düşer. Kişi kendini
+  çıkaramaz; son yönetici çıkarılamaz.
+- **Açık sayaç kapatılmaz:** uyarı merkezine kritik uyarı düşer ve görev
+  panosunda inceleme kartı açılır; o işte kişi sayaç kapanınca ekipten
+  çıkarılır.
+- Ayrılmış personel `kvkk.yonet` ile **KVKK anonimleştir** penceresinden
+  (açık onay + gerekçe) anonimleştirilir: not, e-posta ve iki adımlı giriş
+  sırrı temizlenir; ad iş geçmişi için kalır.

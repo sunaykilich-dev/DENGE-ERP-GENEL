@@ -38,7 +38,9 @@ async def oturum(username: str, password: str = "parola1234") -> httpx.AsyncClie
     return ist
 
 
-async def musteri(db, ad: str = "Servis Teklif Müşterisi A.Ş.", email: str | None = None) -> Account:
+async def musteri(
+    db, ad: str = "Servis Teklif Müşterisi A.Ş.", email: str | None = None
+) -> Account:
     h = Account(title=ad, is_musteri=True, email=email)
     db.add(h)
     await db.commit()

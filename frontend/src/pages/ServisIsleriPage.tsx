@@ -51,6 +51,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { BIRIM_ETIKETLERI, personelApi } from "../api/personel";
+import { operasyonApi } from "../api/servisOperasyon";
 import {
   DONEMLER,
   DURUM_RENKLERI,
@@ -71,6 +72,8 @@ import EkYukleyici from "../components/EkYukleyici";
 import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
 import { PlanGecmisiSekmesi, ZamanSekmesi } from "../components/ServisIsSekmeleri";
+import ServisParcalari from "../components/ServisParcalari";
+import SlaEtiketi, { SlaKartiPenceresi } from "../components/SlaEtiketi";
 import BakimFormu from "./BakimFormu";
 import ServisIsFormu from "./ServisIsFormu";
 
@@ -491,8 +494,16 @@ function IsDetayCekmecesi({
   const [form] = Form.useForm();
   const [notMetni, setNotMetni] = useState("");
   const [bakimFormuAcik, setBakimFormuAcik] = useState(false);
+  const [slaKartiAcik, setSlaKartiAcik] = useState(false);
 
   const detay = useQuery({ queryKey: ["servis-is", id], queryFn: () => teknikServisApi.getir(id) });
+  // SLA kartı (TS-081/084): etiket sunucudan; PB ve atölye işleri SLA dışı.
+  const slaTabi = !!detay.data && !["PB", "ATOLYE"].includes(detay.data.tur);
+  const slaKarti = useQuery({
+    queryKey: ["is-sla", id],
+    queryFn: () => operasyonApi.isSla(id),
+    enabled: slaTabi,
+  });
   const gecmis = useQuery({ queryKey: ["servis-is-gecmis", id], queryFn: () => teknikServisApi.gecmis(id) });
   const onaylar = useQuery({ queryKey: ["servis-is-onay", id], queryFn: () => teknikServisApi.onaylar(id) });
   const beklemeler = useQuery({
@@ -506,6 +517,7 @@ function IsDetayCekmecesi({
     void qc.invalidateQueries({ queryKey: ["servis-is-onay", id] });
     void qc.invalidateQueries({ queryKey: ["servis-is-bekleme", id] });
     void qc.invalidateQueries({ queryKey: ["servis-isleri"] });
+    void qc.invalidateQueries({ queryKey: ["is-sla", id] });
   };
   const hata = useHata(yenile);
   const d = detay.data;
@@ -636,6 +648,7 @@ function IsDetayCekmecesi({
             </Typography.Text>
             <DurumEtiketi kod={d.status} sozluk={sozluk} />
             {d.oncelik !== "NORMAL" && <Tag color={ONCELIK_RENKLERI[d.oncelik]}>{ONCELIK_ADLARI[d.oncelik]}</Tag>}
+            {slaTabi && <SlaEtiketi sla={slaKarti.data?.sla} />}
           </Space>
         ) : (
           "Servis işi"
@@ -683,7 +696,37 @@ function IsDetayCekmecesi({
                 Bakım Formu
               </Button>
             )}
+            {slaTabi && (
+              <Button
+                danger={(slaKarti.data?.kapanis_icin_gerekenler.length ?? 0) > 0}
+                onClick={() => setSlaKartiAcik(true)}
+              >
+                SLA kartı
+              </Button>
+            )}
+            {yetkili("teklif.yaz") && !["IPTAL", "KAPATILDI"].includes(d.status) && (
+              <Button onClick={() => git(`/teklifler?servis_isi=${d.id}`)}>Teklif hazırla</Button>
+            )}
           </Space>
+          {slaKarti.data && slaKarti.data.kapanis_icin_gerekenler.length > 0 && (
+            <Alert
+              type="warning"
+              showIcon
+              title="Kapatmadan önce SLA kartından kapanış bilgisi girilmeli"
+              action={
+                <Button size="small" onClick={() => setSlaKartiAcik(true)}>
+                  Gir
+                </Button>
+              }
+            />
+          )}
+          <SlaKartiPenceresi
+            soId={slaKartiAcik ? d.id : null}
+            onKapat={() => {
+              setSlaKartiAcik(false);
+              void qc.invalidateQueries({ queryKey: ["is-sla", id] });
+            }}
+          />
           <BakimFormu
             soId={bakimFormuAcik ? d.id : null}
             onKapat={() => {
@@ -919,6 +962,12 @@ function IsDetayCekmecesi({
                 key: "plan",
                 label: "Plan Geçmişi",
                 children: <PlanGecmisiSekmesi isId={d.id} />,
+              },
+              // Kullanılan parçalar (TS-133, D2-D): PB formu ve atölyeyle aynı bileşen.
+              {
+                key: "parca",
+                label: "Parçalar",
+                children: <ServisParcalari soId={d.id} />,
               },
               // Saha gözlemi (TS-156, D2-F): iş no ve birim kilitli form.
               ...(yetkili("egitim.gor") || yetkili("egitim.gozlem")

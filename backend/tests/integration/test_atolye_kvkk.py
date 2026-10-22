@@ -77,9 +77,7 @@ async def test_olay_yazici_kisisel_anahtari_reddeder(client, db, birimli_kullani
     hesap = await musteri(db)
     await giris(client, "atl_sef")
     d = await kabul_et(client, hesap.id)
-    so, kayit = await atolye.kapsamli_kayit(
-        db, await _kullanici(db, "atl_sef"), d["so_id"]
-    )
+    so, kayit = await atolye.kapsamli_kayit(db, await _kullanici(db, "atl_sef"), d["so_id"])
     with pytest.raises(gecmis.KisiselVeriHatasi):
         await atolye.olay_yaz(
             db, so, kayit, "NOT", "x", user=None, clock=client.clock,

@@ -3,7 +3,8 @@ UV := $(HOME)/.local/bin/uv
 
 .PHONY: help kur db db-durdur api worker web test test-goc migrate makemigration \
         seed lint build paket audit goc-onizleme goc-uygula goc-rapor pdf-ornek \
-        openapi yedek-prova
+        openapi yedek-prova goc-servis-onizleme goc-servis-uygula goc-servis-rapor \
+        goc-servis-ad-oner goc-servis-ad-uygula goc-servis-bakim-teyit
 
 help:
 	@echo "make kur            - Bagimliliklari kur (uv sync + npm ci), .env yoksa uret"
@@ -20,6 +21,12 @@ help:
 	@echo "make goc-onizleme   - Veri gocu onizlemesi (HICBIR SEY YAZMAZ)"
 	@echo "make goc-uygula     - Veri gocunu uygula (tek transaction)"
 	@echo "make goc-rapor      - Karantina raporu (xlsx)"
+	@echo "make goc-servis-onizleme KAYNAK=dizin - Eski .NET servis verisi gocu onizlemesi (YAZMAZ)"
+	@echo "make goc-servis-uygula   KAYNAK=dizin - Servis gocunu uygula (tek transaction, idempotent)"
+	@echo "make goc-servis-rapor    KAYNAK=dizin - Uzlasma raporu: kaynak = aktarilan+karantina+reddedilen"
+	@echo "make goc-servis-ad-oner  KAYNAK=dizin - Personel ad esleme onerisi (IK Excel'i)"
+	@echo "make goc-servis-ad-uygula            - Onayli ad eslemesini goc zaman kayitlarina isle"
+	@echo "make goc-servis-bakim-teyit KAYNAK=dizin - Bakim sozlesmesi teyit Excel'i (ucretsiz)"
 	@echo "make lint           - ruff + oxlint"
 	@echo "make build          - Arayuz build + docker compose build"
 	@echo "make paket          - Canliya cikis paketini uret (~/Downloads/denge-canli)"
@@ -73,6 +80,31 @@ goc-uygula:
 
 goc-rapor:
 	cd backend && $(UV) run python -m app.migration.rapor
+
+# --- Eski .NET DengeERP V1.20.1 servis verisi gocu (Goc-1, plan §5.3, TS-170…177) ---
+# KAYNAK: teknik_servis/sql/disa_aktar.ps1 ile uretilmis CSV dizini (tablo basina bir dosya).
+# Sira: ad-oner -> (IK karari, Ice Aktarma) -> onizleme -> uygula -> rapor. ONCE YEDEK AL.
+KAYNAK ?= ../goc/v1
+CIKTI ?= goc_servis_rapor.xlsx
+BIRIM ?=
+
+goc-servis-onizleme:
+	cd backend && $(UV) run python -m app.migration.servis_uzlasma onizleme --kaynak "$(KAYNAK)" --cikti "$(CIKTI)" $(if $(BIRIM),--birim $(BIRIM),)
+
+goc-servis-uygula:
+	cd backend && $(UV) run python -m app.migration.servis_uzlasma uygula --kaynak "$(KAYNAK)" --cikti "$(CIKTI)" $(if $(BIRIM),--birim $(BIRIM),)
+
+goc-servis-rapor:
+	cd backend && $(UV) run python -m app.migration.servis_uzlasma rapor --kaynak "$(KAYNAK)" --cikti "$(CIKTI)" $(if $(BIRIM),--birim $(BIRIM),)
+
+goc-servis-ad-oner:
+	cd backend && $(UV) run python -m app.migration.servis_ad_esleme oner --kaynak "$(KAYNAK)" --cikti ad_esleme_oneri.xlsx
+
+goc-servis-ad-uygula:
+	cd backend && $(UV) run python -m app.migration.servis_ad_esleme uygula
+
+goc-servis-bakim-teyit:
+	cd backend && $(UV) run python -m app.migration.bakim_sozlesme --kaynak "$(KAYNAK)" --cikti bakim_teyit.xlsx
 
 lint:
 	cd backend && $(UV) run ruff check . && $(UV) run ruff format --check .

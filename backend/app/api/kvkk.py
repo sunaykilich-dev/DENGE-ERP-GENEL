@@ -98,6 +98,12 @@ async def veri_bul_xlsx(arama: str, request: Request, db: DbDep, user: Yonetici)
         satirlar.append(["Lokasyon", t["id"], ad, "", ""])
     for t in sonuc.get("takma_adlar", []):
         satirlar.append(["Takma ad", t["id"], t["metin"], "", ""])
+    # Personel (TS-165, E13-D03): çalışan / eski çalışan kaydı.
+    for p in sonuc.get("personel", []):
+        ad = p["ad"] + (f" (sicil {p['sicil_no']})" if p.get("sicil_no") else "")
+        if p.get("ayrildi"):
+            ad += " — ayrıldı"
+        satirlar.append(["Personel", p["id"], ad, "", p.get("eposta") or ""])
 
     await svc.erisim_kaydet(
         db,

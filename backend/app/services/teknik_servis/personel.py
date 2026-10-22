@@ -24,6 +24,11 @@ Kurallar (hepsi burada, tek yerde; `flush` yapar, `commit` YAPMAZ):
   (sicil, not, ayrılış nedeni kişisel veridir; işaretsiz satır ileride KVKK
   imhasında maskelenemez).
 
+**İşten çıkış (TS-165, E13-09, E08-D02)** önizleme + TEK transaction'dır
+(`cikis_onizleme`, `cikis_uygula`; ayrıntı bölüm başında). Açık sayaç
+kapatılmaz, süre üretilmez (E13 K-11); uyarı ve görev kartıyla yöneticiye
+düşer. Ayrılmış personelin KVKK anonimleştirmesi `services/kvkk.py`'dedir.
+
 **Atanabilir personel (TS-009)** tek kaynaktır: planlama kaynak listesi,
 plan penceresi ve atama (D1-B/D1-D) kişi seçicileri yalnız buradan beslenir;
 gömülü isim listesi kalmaz. Ölçüt: aktif, ayrılmamış, saha rolü
@@ -40,17 +45,33 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from sqlalchemy import Select, exists, false, func, or_, select
+from sqlalchemy import Select, column, exists, false, func, or_, select, table
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Role, User, UserUnit
+from app.clock import Clock
+from app.models import (
+    Board,
+    BoardColumn,
+    Card,
+    CardMember,
+    Role,
+    ServiceOrder,
+    ServiceOrderAssignment,
+    ServiceTimeEntry,
+    Session,
+    TrainingCorrectiveAction,
+    TrainingPlan,
+    User,
+    UserUnit,
+)
 from app.models.rbac import BIRIM_KODLARI
-from app.models.user import SAHA_ROLLERI
+from app.models.teknik_servis import DURUM_GRUPLARI
+from app.models.user import AYRILIS_NEDENLERI, SAHA_ROLLERI
 from app.permissions import ATANABILIR_SAHA_ROLLERI, SCOPE_ALL, SCOPE_OWN_JOBS
 from app.services import audit, yetki
 from app.services import auth as auth_service
 from app.services.normalize import tr_normkey
-from app.services.teknik_servis import kapsam
+from app.services.teknik_servis import kancalar, kapsam
 
 # Girişsiz personelin rolü (E13 K-12): giriş kapalıyken etkisizdir; giriş
 # açılırken rol bilinçli seçilir.
@@ -630,3 +651,617 @@ async def atanabilir_mi(
             select(User.id).where(User.id == kisi_id, atanabilir_kosulu(birim, saha_rolleri))
         )
     ) is not None
+
+
+# --- İşten çıkış (TS-165, E13-09, E08-D02) ---------------------------------------
+#
+# Akış: `cikis_onizleme` (yazmaz) → kullanıcı onaylar → `cikis_uygula` (TEK
+# transaction; `flush` yapar, `commit` çağıranın işi). Herhangi bir adım hata
+# verirse çağıran geri alır ve HİÇBİR adım uygulanmamış olur.
+#
+# Kararlar:
+# - **Açık sayaç kapatılmaz** (E13 K-11): gerçek bitiş bilinmeden süre
+#   üretmek "tahmini süre gerçek sürenin yerine geçmez" kuralına aykırı.
+#   Bölüm açık kalır; kişi pasif olduğu için yeni bölüm açamaz. Uyarı
+#   merkezi "İşten çıkış: açık sayaç inceleme bekliyor" sayar, görev
+#   panosunda inceleme kartı açılır.
+# - **Atamalardan çıkarma `ekip_degisiyor` kuralına uyar** (plan TS-165):
+#   kişi açık sayacının bulunduğu işin ekibinden ÇIKARILMAZ (kural: açık
+#   sayaçlı kişi ekipten çıkarılamaz). O iş önizlemede ve kartta "sayaç
+#   kapatılınca ekipten çıkarın" notuyla görünür; yönetici sayacı
+#   `yonetici-kapat` ile kapatıp normal atama ekranından çıkarır. Diğer açık
+#   işlerde atama `removed_at` alır (satır silinmez), ATAMA olayı yazılır ve
+#   `ekip_degisti` kancası (aktif planda EKIP_DEGISIMI) çalışır. İş durumu
+#   DEĞİŞMEZ; sorumlusu kalmayan iş "Atanmamış" (`kpi=atanmamis`) listesine
+#   düşer.
+# - Kapalı işlerdeki atamalar geçmiştir, dokunulmaz.
+# - Mobilite `work_orders.assigned_id` DEĞİŞTİRİLMEZ; yalnız bilgi olarak sayılır.
+# - Eğitim (E08-D02): açık planlar ve düzeltici faaliyetler DEĞİŞMEZ (geçmiş
+#   ve yeniden işe alımda devam). Önizleme sayıları gösterir; sorumlusu
+#   ayrılmış açık düzeltici faaliyet uyarı merkezinde "sorumlusuz" sayılır.
+# - `user_units` satırları silinmez (geçmiş raporu birimi kaybetmesin);
+#   atanabilirlik zaten `is_active`/`ayrilis_tarihi` ile kesilir.
+
+KAPALI_SERVIS_DURUMLARI = tuple(sorted(DURUM_GRUPLARI["KAPALI"]))
+ACIK_DUZELTICI = "ACIK"
+ACIK_PLAN_DURUMLARI = ("PLANLANDI", "ERTELENDI", "BASARISIZ_TEKRAR")
+
+# Mobilite iş emirleri YALNIZ OKUNUR ve yalnız sayılır (E13-09). Model import
+# EDİLMEZ (`test_servis_bagimsizlik`: teknik servis mobilite zincirine
+# bağlanmaz); salt okuma için hafif tablo tanımı yeter, yazma yolu yoktur.
+_MOBILITE_IS_EMRI = table(
+    "work_orders", column("assigned_id"), column("status"), column("is_deleted")
+)
+_MOBILITE_ACIK_DURUMLAR = ("ACIK", "ATANDI", "YOLDA", "BASLADI")
+
+CIKIS_PANOSU = "Personel İşten Çıkış İncelemeleri"
+CIKIS_KOLON_BEKLIYOR = "İnceleme bekliyor"
+CIKIS_KOLON_BITTI = "Tamamlandı"
+
+
+def ayrilmis_kosulu():
+    """Ayrılmış/pasif personel ölçütü (atanabilirliğin tersi; tek tanım)."""
+    return or_(User.is_active.is_(False), User.ayrilis_tarihi.is_not(None))
+
+
+@dataclass
+class CikisIsi:
+    id: int
+    so_no: str
+    durum: str
+    birim: str
+    sorumlu: bool
+    sayac_acik: bool  # True → ekipten ÇIKARILMAZ (ekip_degisiyor kuralı)
+
+
+@dataclass
+class CikisOnizleme:
+    personel_id: int
+    kendisi: bool
+    ust_yetkili: bool
+    son_admin: bool
+    zaten_ayrildi: bool
+    aktif_isler: list[CikisIsi]
+    kapsam_disi_is_sayisi: int
+    acik_sayac: dict[str, Any] | None
+    acik_oturum_sayisi: int
+    mobilite_acik_is_sayisi: int
+    egitim: dict[str, int]
+    uyarilar: list[str]
+    gorev_karti_acilacak: bool
+
+
+@dataclass
+class CikisSonucu:
+    personel_id: int
+    cikarilan_isler: list[str]
+    ekipte_kalan_isler: list[str]
+    acik_sayac_bolum_id: int | None
+    gorev_karti_id: int | None
+    kapanan_oturum: int
+
+
+async def _aktif_atamalar(
+    db: AsyncSession, kisi_id: int
+) -> list[tuple[ServiceOrder, list[ServiceOrderAssignment]]]:
+    """Kişinin AÇIK işlerdeki aktif atamaları, iş başına gruplu (iş no sırası)."""
+    satirlar = (
+        await db.execute(
+            select(ServiceOrder, ServiceOrderAssignment)
+            .join(ServiceOrder, ServiceOrder.id == ServiceOrderAssignment.service_order_id)
+            .where(
+                ServiceOrderAssignment.user_id == kisi_id,
+                ServiceOrderAssignment.removed_at.is_(None),
+                ServiceOrder.is_deleted.is_(False),
+                ServiceOrder.status.not_in(KAPALI_SERVIS_DURUMLARI),
+            )
+            .order_by(ServiceOrder.so_no, ServiceOrderAssignment.id)
+        )
+    ).all()
+    gruplu: dict[int, tuple[ServiceOrder, list[ServiceOrderAssignment]]] = {}
+    for so, atama in satirlar:
+        gruplu.setdefault(so.id, (so, []))[1].append(atama)
+    return list(gruplu.values())
+
+
+async def _acik_bolum(db: AsyncSession, kisi_id: int) -> ServiceTimeEntry | None:
+    """Kişinin açık sayacı (`uq_ste_acik_kisi`: en çok bir tane)."""
+    return await db.scalar(
+        select(ServiceTimeEntry)
+        .where(
+            ServiceTimeEntry.user_id == kisi_id,
+            ServiceTimeEntry.ended_at.is_(None),
+            ServiceTimeEntry.is_deleted.is_(False),
+        )
+        .limit(1)
+    )
+
+
+async def _egitim_ozeti(db: AsyncSession, kisi_id: int) -> dict[str, int]:
+    acik_plan = await db.scalar(
+        select(func.count())
+        .select_from(TrainingPlan)
+        .where(
+            TrainingPlan.user_id == kisi_id,
+            TrainingPlan.is_deleted.is_(False),
+            TrainingPlan.status.in_(ACIK_PLAN_DURUMLARI),
+        )
+    )
+    kendi_faaliyet = await db.scalar(
+        select(func.count())
+        .select_from(TrainingCorrectiveAction)
+        .where(
+            TrainingCorrectiveAction.user_id == kisi_id,
+            TrainingCorrectiveAction.status == ACIK_DUZELTICI,
+        )
+    )
+    sorumlu_faaliyet = await db.scalar(
+        select(func.count())
+        .select_from(TrainingCorrectiveAction)
+        .where(
+            TrainingCorrectiveAction.sorumlu_user_id == kisi_id,
+            TrainingCorrectiveAction.status == ACIK_DUZELTICI,
+        )
+    )
+    return {
+        "acik_plan": int(acik_plan or 0),
+        "acik_duzeltici_faaliyet": int(kendi_faaliyet or 0),
+        "sorumlu_oldugu_acik_faaliyet": int(sorumlu_faaliyet or 0),
+    }
+
+
+def _ayrildi_mi(kisi: User) -> bool:
+    return (not kisi.is_active) or kisi.ayrilis_tarihi is not None
+
+
+async def cikis_onizleme(
+    db: AsyncSession, kisi: User, *, aktor: User, clock: Clock
+) -> CikisOnizleme:
+    """İşten çıkışın ne yapacağını gösterir; HİÇBİR ŞEY YAZMAZ.
+
+    Aktörün kapsamı dışındaki işler numarasıyla gösterilmez, yalnız sayılır
+    (sayı sızıntı değildir; numara başka birimin müşteri işini açardı).
+    Kapsam çağıranın işidir: kişi kapsam dışıysa API önizlemeye gelmeden 404.
+    """
+    gruplar = await _aktif_atamalar(db, kisi.id)
+    bolum = await _acik_bolum(db, kisi.id)
+    sayacli_is = bolum.service_order_id if bolum is not None else None
+
+    isler: list[CikisIsi] = []
+    kapsam_disi = 0
+    for so, atamalar in gruplar:
+        if await kapsam.is_erisimi_yok_mu(db, aktor, so):
+            kapsam_disi += 1
+            continue
+        isler.append(
+            CikisIsi(
+                id=so.id,
+                so_no=so.so_no,
+                durum=so.status,
+                birim=so.birim,
+                sorumlu=any(a.is_lead for a in atamalar),
+                sayac_acik=so.id == sayacli_is,
+            )
+        )
+
+    acik_sayac: dict[str, Any] | None = None
+    if bolum is not None:
+        so = await db.get(ServiceOrder, bolum.service_order_id)
+        gorunur = so is not None and not await kapsam.is_erisimi_yok_mu(db, aktor, so)
+        acik_sayac = {
+            "bolum_id": bolum.id,
+            "so_no": so.so_no if gorunur and so is not None else None,
+            "baslangic": bolum.started_at,
+            "faaliyet": bolum.faaliyet,
+        }
+
+    oturum = await db.scalar(
+        select(func.count())
+        .select_from(Session)
+        .where(Session.user_id == kisi.id, Session.expires_at > clock.now())
+    )
+    mobilite = await db.scalar(
+        select(func.count())
+        .select_from(_MOBILITE_IS_EMRI)
+        .where(
+            _MOBILITE_IS_EMRI.c.assigned_id == kisi.id,
+            _MOBILITE_IS_EMRI.c.is_deleted.is_(False),
+            _MOBILITE_IS_EMRI.c.status.in_(_MOBILITE_ACIK_DURUMLAR),
+        )
+    )
+    egitim = await _egitim_ozeti(db, kisi.id)
+    son_admin = await yetki.son_admin_mi(db, kisi)
+
+    uyarilar: list[str] = []
+    if kisi.id == aktor.id:
+        uyarilar.append("Kendi işten çıkışınızı yapamazsınız.")
+    if _ayrildi_mi(kisi):
+        uyarilar.append("Personel zaten ayrılmış görünüyor.")
+    if son_admin:
+        uyarilar.append("Giriş yapabilen son sistem yöneticisi işten çıkarılamaz.")
+    if yetki.ust_yetkili_mi(kisi) and not yetki.admin_mi(aktor):
+        uyarilar.append("Üst yetkili bir kullanıcıyı yalnız sistem yöneticisi çıkarabilir.")
+    if bolum is not None:
+        uyarilar.append(
+            "Açık sayaç KAPATILMAZ ve süre üretilmez. Gerçek bitişi yönetici girmeli "
+            "ya da kaydı iptal etmeli; o işte kişi sayaç kapanana kadar ekipte kalır."
+        )
+    if egitim["sorumlu_oldugu_acik_faaliyet"]:
+        uyarilar.append(
+            f"Sorumlusu olduğu {egitim['sorumlu_oldugu_acik_faaliyet']} açık düzeltici "
+            "faaliyet sorumlusuz kalacak; yeni sorumlu atayın."
+        )
+    if mobilite:
+        uyarilar.append(
+            f"Mobilite iş emirlerinde {mobilite} açık ataması var; bu akış onları "
+            "değiştirmez (iş emri ekranından devredin)."
+        )
+
+    return CikisOnizleme(
+        personel_id=kisi.id,
+        kendisi=kisi.id == aktor.id,
+        ust_yetkili=yetki.ust_yetkili_mi(kisi),
+        son_admin=son_admin,
+        zaten_ayrildi=_ayrildi_mi(kisi),
+        aktif_isler=isler,
+        kapsam_disi_is_sayisi=kapsam_disi,
+        acik_sayac=acik_sayac,
+        acik_oturum_sayisi=int(oturum or 0),
+        mobilite_acik_is_sayisi=int(mobilite or 0),
+        egitim=egitim,
+        uyarilar=uyarilar,
+        gorev_karti_acilacak=bool(gruplar) or bolum is not None,
+    )
+
+
+async def _cikis_kurallari(
+    db: AsyncSession,
+    kisi: User,
+    *,
+    aktor: User,
+    ayrilis_tarihi: date,
+    ayrilis_nedeni: str,
+    surum: int,
+) -> str:
+    """E13-01 kuralları + girdi; ihlalde hiçbir şey yazılmadan hata."""
+    if kisi.id == aktor.id:
+        raise PersonelGirdiHatasi("Kendi işten çıkışınızı yapamazsınız.")
+    yetki.hedef_kontrol(aktor, kisi)
+    if await yetki.son_admin_mi(db, kisi):
+        raise PersonelKuralHatasi("Giriş yapabilen son sistem yöneticisi işten çıkarılamaz.")
+    if surum != kisi.version:
+        raise PersonelKuralHatasi(
+            "Bu kaydı siz görüntülerken başka biri değiştirdi. Sayfayı yenileyip tekrar deneyin."
+        )
+    if _ayrildi_mi(kisi):
+        raise PersonelKuralHatasi("Personel zaten ayrılmış.")
+    neden = (ayrilis_nedeni or "").strip().upper()
+    if neden not in AYRILIS_NEDENLERI:
+        raise PersonelGirdiHatasi(
+            f"Bilinmeyen ayrılış nedeni: {ayrilis_nedeni} (geçerli: {', '.join(AYRILIS_NEDENLERI)})"
+        )
+    if kisi.ise_giris_tarihi is not None and ayrilis_tarihi < kisi.ise_giris_tarihi:
+        raise PersonelGirdiHatasi("Ayrılış tarihi işe giriş tarihinden önce olamaz.")
+    return neden
+
+
+async def _ekipten_cikar(
+    db: AsyncSession,
+    so: ServiceOrder,
+    atamalar: list[ServiceOrderAssignment],
+    kisi: User,
+    *,
+    aktor: User,
+    clock: Clock,
+) -> None:
+    """Kişiyi tek işin ekibinden çıkarır — `atama._uygula` ile aynı kanca sırası.
+
+    `ekip_degisiyor` (açık sayaç → 409) → `removed_at` → ATAMA olayı →
+    `ekip_degisti` (aktif planda EKIP_DEGISIMI). Olayda kişi ADI yok, kimlik
+    var (E01 K15; ad okunurken çözülür).
+    """
+    from app.services.teknik_servis import atama as atama_svc
+    from app.services.teknik_servis import gecmis
+
+    await kancalar.ekip_degisiyor(db, so, [kisi.id])
+    simdi = clock.now()
+    sorumluydu = any(a.is_lead for a in atamalar)
+    for a in atamalar:
+        a.removed_at = simdi
+        a.removed_by = aktor.id
+    so.updated_by = aktor.id
+    await db.flush()
+    await gecmis.olay_yaz(
+        db,
+        so,
+        "ATAMA",
+        "İşten çıkış: personel ekipten çıkarıldı"
+        + (" (sorumlu teknisyendi; yeni sorumlu atanmalı)" if sorumluydu else ""),
+        user=aktor,
+        clock=clock,
+        veri={"cikan": [kisi.id], "neden": "ISTEN_CIKIS", "sorumluydu": sorumluydu},
+    )
+    kalan = await atama_svc.aktif_ekip(db, so)
+    await kancalar.ekip_degisti(db, so, kalan, clock)
+
+
+async def _inceleme_karti_ac(
+    db: AsyncSession,
+    kisi: User,
+    *,
+    aktor: User,
+    ayrilis_tarihi: date,
+    cikarilan: list[str],
+    ekipte_kalan: list[str],
+    bolum: ServiceTimeEntry | None,
+    sayacli_so_no: str | None,
+    baglanti_so_id: int | None,
+) -> Card:
+    """Görev panosunda "İşten çıkış incelemesi" kartı (E13-09 adım 5).
+
+    Kart KİŞİ ADI taşımaz (görev uçlarında kayıt kapsamı uygulanmaz, bkz.
+    `services/gorevler.py`): "personel #id" ve iş numaraları. Pano yoksa
+    açılır (iki kolon: bekliyor / tamamlandı). Kart servis işine bağlanır:
+    önce açık sayaçlı iş, yoksa ekipten çıkarılan ilk iş.
+    """
+    pano = await db.scalar(
+        select(Board)
+        .where(Board.title == CIKIS_PANOSU, Board.arsivlendi.is_(False))
+        .order_by(Board.id)
+        .limit(1)
+    )
+    if pano is None:
+        pano = Board(
+            title=CIKIS_PANOSU,
+            description="İşten çıkışta açık iş ve sayaç incelemeleri (otomatik açılır).",
+            created_by=aktor.id,
+            updated_by=aktor.id,
+        )
+        db.add(pano)
+        await db.flush()
+        db.add_all(
+            [
+                BoardColumn(board_id=pano.id, title=CIKIS_KOLON_BEKLIYOR, sira=0),
+                BoardColumn(board_id=pano.id, title=CIKIS_KOLON_BITTI, sira=1, bitis_mi=True),
+            ]
+        )
+        await db.flush()
+    kolon = await db.scalar(
+        select(BoardColumn)
+        .where(BoardColumn.board_id == pano.id, BoardColumn.bitis_mi.is_(False))
+        .order_by(BoardColumn.sira, BoardColumn.id)
+        .limit(1)
+    )
+    if kolon is None:
+        kolon = BoardColumn(board_id=pano.id, title=CIKIS_KOLON_BEKLIYOR, sira=0)
+        db.add(kolon)
+        await db.flush()
+    sira = await db.scalar(
+        select(func.coalesce(func.max(Card.sira), -1)).where(Card.column_id == kolon.id)
+    )
+
+    satirlar = [f"Personel #{kisi.id} işten çıkarıldı ({ayrilis_tarihi.isoformat()})."]
+    if cikarilan:
+        satirlar.append(
+            "Ekipten çıkarılan açık işler (yeniden atanmalı): " + ", ".join(cikarilan) + "."
+        )
+    if bolum is not None:
+        satirlar.append(
+            f"Açık sayaç: bölüm #{bolum.id}"
+            + (f" ({sayacli_so_no})" if sayacli_so_no else "")
+            + ". Sayaç KAPATILMADI ve süre üretilmedi: gerçek bitişi 'Yönetici kapat' "
+            "ile girin ya da kaydı iptal edin; girilmezse rapor 'süre kaydı eksik' sayar."
+        )
+    if ekipte_kalan:
+        satirlar.append(
+            "Sayaç kapatılınca kişiyi şu işlerin ekibinden çıkarın: "
+            + ", ".join(ekipte_kalan)
+            + "."
+        )
+    kart = Card(
+        board_id=pano.id,
+        column_id=kolon.id,
+        title=f"İşten çıkış incelemesi — personel #{kisi.id}",
+        description="\n".join(satirlar),
+        sira=int(sira) + 1,
+        oncelik="YUKSEK",
+        entity="servis_isi" if baglanti_so_id is not None else None,
+        entity_id=baglanti_so_id,
+        created_by=aktor.id,
+        updated_by=aktor.id,
+    )
+    db.add(kart)
+    await db.flush()
+    db.add(CardMember(card_id=kart.id, user_id=aktor.id))
+    await db.flush()
+    return kart
+
+
+async def cikis_uygula(
+    db: AsyncSession,
+    kisi: User,
+    *,
+    aktor: User,
+    ayrilis_tarihi: date,
+    ayrilis_nedeni: str,
+    surum: int,
+    clock: Clock,
+    ip: str | None = None,
+) -> CikisSonucu:
+    """İşten çıkışı TEK transaction'da uygular (E13-09).
+
+    1. Kurallar: kendisi 400, üst yetkili + aktör ADMIN değil 403, son admin
+       409, sürüm 409, zaten ayrılmış 409, bilinmeyen neden 400.
+    2. `is_active=false`, `giris_acik=false`, ayrılış alanları; oturumlar düşer.
+    3. Açık işlerdeki aktif atamalar kapanır (açık sayaçlı iş hariç — bkz.
+       bölüm başı); iş durumu değişmez.
+    4. Açık sayaç KAPATILMAZ.
+    5. Atama ya da sayaç varsa görev kartı açılır.
+    6. Denetim (`personel.cikis`, kişisel veri).
+    """
+    neden = await _cikis_kurallari(
+        db,
+        kisi,
+        aktor=aktor,
+        ayrilis_tarihi=ayrilis_tarihi,
+        ayrilis_nedeni=ayrilis_nedeni,
+        surum=surum,
+    )
+    eski = {
+        "is_active": kisi.is_active,
+        "giris_acik": kisi.giris_acik,
+        "ayrilis_tarihi": None,
+        "ayrilis_nedeni": None,
+    }
+
+    kisi.is_active = False
+    kisi.giris_acik = False
+    kisi.ayrilis_tarihi = ayrilis_tarihi
+    kisi.ayrilis_nedeni = neden
+    kisi.ayrilisi_yapan_id = aktor.id
+    await db.flush()
+    oturum = await db.scalar(
+        select(func.count()).select_from(Session).where(Session.user_id == kisi.id)
+    )
+    await auth_service.revoke_all_sessions(db, kisi.id)
+
+    bolum = await _acik_bolum(db, kisi.id)
+    sayacli_is = bolum.service_order_id if bolum is not None else None
+    cikarilan: list[str] = []
+    ekipte_kalan: list[str] = []
+    cikarilan_ilk_id: int | None = None
+    for so, atamalar in await _aktif_atamalar(db, kisi.id):
+        if so.id == sayacli_is:
+            ekipte_kalan.append(so.so_no)
+            continue
+        await _ekipten_cikar(db, so, atamalar, kisi, aktor=aktor, clock=clock)
+        cikarilan.append(so.so_no)
+        cikarilan_ilk_id = cikarilan_ilk_id or so.id
+
+    sayacli_so_no: str | None = None
+    if bolum is not None:
+        sayacli_so = await db.get(ServiceOrder, bolum.service_order_id)
+        sayacli_so_no = sayacli_so.so_no if sayacli_so is not None else None
+
+    kart: Card | None = None
+    if cikarilan or ekipte_kalan or bolum is not None:
+        kart = await _inceleme_karti_ac(
+            db,
+            kisi,
+            aktor=aktor,
+            ayrilis_tarihi=ayrilis_tarihi,
+            cikarilan=cikarilan,
+            ekipte_kalan=ekipte_kalan,
+            bolum=bolum,
+            sayacli_so_no=sayacli_so_no,
+            baglanti_so_id=sayacli_is or cikarilan_ilk_id,
+        )
+
+    await audit.log(
+        db,
+        "users",
+        "personel.cikis",
+        entity_id=kisi.id,
+        old_value=eski,
+        new_value={
+            "is_active": False,
+            "giris_acik": False,
+            "ayrilis_tarihi": ayrilis_tarihi.isoformat(),
+            "ayrilis_nedeni": neden,
+            "cikarilan_is": len(cikarilan),
+            "ekipte_kalan_is": len(ekipte_kalan),
+            "acik_sayac_bolum_id": bolum.id if bolum is not None else None,
+            "gorev_karti_id": kart.id if kart is not None else None,
+        },
+        user_id=aktor.id,
+        ip=ip,
+        is_personal_data=True,
+    )
+    return CikisSonucu(
+        personel_id=kisi.id,
+        cikarilan_isler=cikarilan,
+        ekipte_kalan_isler=ekipte_kalan,
+        acik_sayac_bolum_id=bolum.id if bolum is not None else None,
+        gorev_karti_id=kart.id if kart is not None else None,
+        kapanan_oturum=int(oturum or 0),
+    )
+
+
+# --- Uyarılar (TS-165): ayrılmış personelin açık sayacı ve sorumlusuz faaliyet ------
+
+
+def cikis_sayac_sorgusu(user: User) -> Select:
+    """Ayrılmış personelin açık sayaçları — kapsamlı (uyarı sayısı = liste)."""
+    stmt = (
+        select(ServiceTimeEntry)
+        .join(User, User.id == ServiceTimeEntry.user_id)
+        .where(
+            ServiceTimeEntry.ended_at.is_(None),
+            ServiceTimeEntry.is_deleted.is_(False),
+            ayrilmis_kosulu(),
+        )
+    )
+    return kapsam.kapsam_isler(stmt, user, ServiceTimeEntry.service_order_id)
+
+
+def sorumlusuz_faaliyet_sorgusu(user: User) -> Select:
+    """Sorumlusu ayrılmış AÇIK düzeltici faaliyetler (E08-D02) — kapsamlı.
+
+    Kapsam, faaliyetin konusu olan personel üzerinden (eğitim kayıtlarının
+    birim kapsamı personelin birimidir).
+    """
+    sorumlu = select(User.id).where(ayrilmis_kosulu())
+    stmt = select(TrainingCorrectiveAction).where(
+        TrainingCorrectiveAction.status == ACIK_DUZELTICI,
+        TrainingCorrectiveAction.sorumlu_user_id.in_(sorumlu),
+    )
+    return kapsam.kapsam_personel(stmt, user, TrainingCorrectiveAction.user_id)
+
+
+async def _sayim(db: AsyncSession, stmt: Select) -> int:
+    return int(
+        await db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
+    )
+
+
+async def cikis_sayac_uyarisi(db: AsyncSession, user: User, clock: Clock) -> list[Any]:
+    from app.services.uyarilar import Uyari
+
+    return [
+        Uyari(
+            kod="personel.cikis_sayac",
+            baslik="İşten çıkış: açık sayaç inceleme bekliyor",
+            adet=await _sayim(db, cikis_sayac_sorgusu(user)),
+            yol="/benim-islerim?gorunum=tumu",
+            onem="kritik",
+            aciklama=(
+                "Ayrılan personelin açık sayacı kendiliğinden kapanmaz: gerçek bitişi "
+                "girin ya da kaydı iptal edin."
+            ),
+        )
+    ]
+
+
+async def sorumlusuz_faaliyet_uyarisi(db: AsyncSession, user: User, clock: Clock) -> list[Any]:
+    from app.services.uyarilar import Uyari
+
+    return [
+        Uyari(
+            kod="personel.sorumlusuz_duzeltici",
+            baslik="Sorumlusu ayrılmış düzeltici faaliyet",
+            adet=await _sayim(db, sorumlusuz_faaliyet_sorgusu(user)),
+            yol="/egitim",
+            onem="uyari",
+            aciklama="Faaliyetin sorumlusu işten ayrıldı; yeni sorumlu atayın.",
+        )
+    ]
+
+
+def _uyari_kaydi() -> None:
+    from app.services.teknik_servis import uyarilar as ts_uyarilar
+
+    ts_uyarilar.kaydet("personel", "servis.planla", cikis_sayac_uyarisi)
+    ts_uyarilar.kaydet("personel", ("egitim.yaz", "egitim.detay"), sorumlusuz_faaliyet_uyarisi)
+
+
+_uyari_kaydi()

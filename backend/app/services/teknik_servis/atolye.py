@@ -907,7 +907,64 @@ async def toplu_kabul(
     return kayitlar
 
 
-# --- Düzeltme (PATCH, TS-093/094/098) ---------------------------------------------------------
+async def kiralik_kabul(
+    db: AsyncSession,
+    cihaz: Any,
+    *,
+    aciklama: str,
+    user: User,
+    clock: Clock,
+    ip: str | None = None,
+) -> WorkshopRecord:
+    """Arızalı dönen kiralık cihaz → KIRALAMA_TAKIP atölye kaydı (TS-102, E05-27).
+
+    Kiralama modülünün dönüş kontrolü çağırır; cihazın envanter hareketini
+    (HAZIR_DEGIL → ATOLYEDE) kiralama tarafı yazar, bu fonksiyon yalnız olağan
+    kabul kapısından (`kabul`) geçer — kapsam, açık kayıt engeli, olay ve
+    denetim aynı kalır. Müşteri = cihazın son kiralamasının kiracısı (E05-27);
+    kiralanmamış cihaz için atölye kaydı açılamaz (409). Ekipman kütükte
+    (tip, marka, seri) ile bulunur ya da açılır; marka ürün kartından gelir.
+    """
+    from app.models import Product, Rental, RentalAllocation
+
+    kiraci = await db.scalar(
+        select(Rental.customer_id)
+        .join(RentalAllocation, RentalAllocation.rental_id == Rental.id)
+        .where(RentalAllocation.asset_id == cihaz.id)
+        .order_by(RentalAllocation.id.desc())
+        .limit(1)
+    )
+    if kiraci is None:
+        raise AtolyeHatasi(
+            "Cihaz hiç kiralanmamış; atölye kaydı kiracı olmadan açılamaz, "
+            "cihazı atölyeye olağan kabulle alın"
+        )
+    urun = await db.get(Product, cihaz.product_id)
+    marka = _bos(getattr(urun, "brand", None)) or _bos(getattr(urun, "name", None)) or "—"
+    sikayet = _bos(aciklama) or "Arızalı"
+    return await kabul(
+        db,
+        KabulGirdisi(
+            customer_id=int(kiraci),
+            service_type="KIRALAMA_TAKIP",
+            receive_type="ELDEN",
+            customer_complaint=f"Kiralık dönüş kontrolü: {sikayet}"[:500],
+            birim=cihaz.birim,
+            ekipman=EkipmanSecimi(
+                tip=VARSAYILAN_TIP if cihaz.birim == VARSAYILAN_BIRIM else "DIGER",
+                marka=marka[:60],
+                model=_bos(getattr(urun, "model", None)),
+                seri=cihaz.serial_no,
+            ),
+            rental_asset_id=cihaz.id,
+        ),
+        user=user,
+        clock=clock,
+        ip=ip,
+    )
+
+
+# --- Düzeltme (PATCH, TS-093/094/098)---------------------------------------------------------
 
 
 async def _ariza_nedeni_dogrula(db: AsyncSession, so: ServiceOrder, neden_id: int | None) -> None:

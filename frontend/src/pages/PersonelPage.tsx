@@ -8,12 +8,19 @@
  * Bu ekranda rol, izin, parola ve giriş YOK: girişsiz personel açılır, giriş
  * gerekirse Kullanıcılar ekranından ayrıca ve geçici parolayla açılır.
  * Yeniden aktifleştirme de girişi açmaz (E13-03).
+ *
+ * İşten çıkış (TS-165, E13-09): Drawer'daki düğme önce ÖNİZLEME açar (açık
+ * işler, açık sayaç, oturumlar, eğitim kayıtları), onayla tek işlemde uygulanır.
+ * Açık sayaç kapatılmaz; uyarı ve görev kartıyla yöneticiye düşer. Ayrılmış
+ * personelin KVKK anonimleştirmesi yalnız `kvkk.yonet` ile ve elle yapılır.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Alert,
   App,
   Button,
   Card,
+  Checkbox,
   Col,
   DatePicker,
   Descriptions,
@@ -32,7 +39,7 @@ import {
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
 
-import type { ApiError } from "../api/client";
+import { api, type ApiError } from "../api/client";
 import {
   BIRIM_ETIKETLERI,
   BIRIM_KODLARI,
@@ -74,6 +81,70 @@ function birimSatirlari(birimler: string[] | undefined, birincil: string | undef
 function hataMesaji(e: ApiError): string {
   return e.cakisma ? `${e.message} Gerekirse sayfayı yenileyip tekrar deneyin.` : e.message;
 }
+
+// --- İşten çıkış ve KVKK (TS-165; sunucu: `api/personel.py`) ---------------------
+
+const AYRILIS_NEDENLERI: Record<string, string> = {
+  ISTIFA: "İstifa",
+  FESIH: "Fesih",
+  EMEKLILIK: "Emeklilik",
+  SOZLESME_BITIMI: "Sözleşme bitimi",
+  DIGER: "Diğer",
+};
+
+interface CikisIsi {
+  id: number;
+  so_no: string;
+  durum: string;
+  birim: string;
+  sorumlu: boolean;
+  sayac_acik: boolean;
+}
+
+interface CikisOnizleme {
+  personel_id: number;
+  kendisi: boolean;
+  ust_yetkili: boolean;
+  son_admin: boolean;
+  zaten_ayrildi: boolean;
+  aktif_isler: CikisIsi[];
+  kapsam_disi_is_sayisi: number;
+  acik_sayac: { bolum_id: number; so_no: string | null; baslangic: string; faaliyet: string } | null;
+  acik_oturum_sayisi: number;
+  mobilite_acik_is_sayisi: number;
+  egitim: {
+    acik_plan: number;
+    acik_duzeltici_faaliyet: number;
+    sorumlu_oldugu_acik_faaliyet: number;
+  };
+  uyarilar: string[];
+  gorev_karti_acilacak: boolean;
+}
+
+interface CikisSonucu {
+  personel_id: number;
+  cikarilan_isler: string[];
+  ekipte_kalan_isler: string[];
+  acik_sayac_bolum_id: number | null;
+  gorev_karti_id: number | null;
+  kapanan_oturum: number;
+}
+
+interface CikisFormu {
+  ayrilis_tarihi: Dayjs;
+  ayrilis_nedeni: string;
+}
+
+const cikisApi = {
+  onizleme: (id: number) => api.get<CikisOnizleme>(`/api/personel/${id}/cikis-onizleme`),
+  uygula: (id: number, g: { ayrilis_tarihi: string; ayrilis_nedeni: string; version: number }) =>
+    api.post<CikisSonucu>(`/api/personel/${id}/cikis`, g),
+  anonimlestir: (id: number, gerekce: string) =>
+    api.post<{ temizlenen_alanlar: string[]; denetim_satiri: number }>(
+      `/api/personel/${id}/anonimlestir`,
+      { gerekce, onay: true },
+    ),
+};
 
 export default function PersonelPage() {
   const { yetkili } = useAuth();
@@ -163,6 +234,71 @@ export default function PersonelPage() {
     },
     onError: (e: ApiError) => message.error(hataMesaji(e)),
   });
+
+  const cikisYetkisi = yetkili("personel.cikis");
+  const kvkkYetkisi = yetkili("kvkk.yonet");
+  const [cikisAcik, setCikisAcik] = useState(false);
+  const [anonimAcik, setAnonimAcik] = useState(false);
+  const [anonimGerekce, setAnonimGerekce] = useState("");
+  const [anonimOnay, setAnonimOnay] = useState(false);
+  const [cikisForm] = Form.useForm<CikisFormu>();
+
+  const onizleme = useQuery({
+    queryKey: ["personel-cikis-onizleme", seciliId],
+    queryFn: () => cikisApi.onizleme(seciliId!),
+    enabled: cikisAcik && seciliId != null,
+  });
+
+  const cikis = useMutation({
+    mutationFn: (v: CikisFormu) =>
+      cikisApi.uygula(secili.data!.id, {
+        ayrilis_tarihi: v.ayrilis_tarihi.format("YYYY-MM-DD"),
+        ayrilis_nedeni: v.ayrilis_nedeni,
+        version: secili.data!.version,
+      }),
+    onSuccess: (r) => {
+      setCikisAcik(false);
+      cikisForm.resetFields();
+      tazele();
+      modal.info({
+        title: "İşten çıkış uygulandı",
+        content: (
+          <Space orientation="vertical">
+            <span>Personel ve giriş hesabı kapatıldı; {r.kapanan_oturum} oturum sonlandı.</span>
+            <span>
+              Ekipten çıkarılan açık işler:{" "}
+              {r.cikarilan_isler.length ? r.cikarilan_isler.join(", ") : "yok"}
+            </span>
+            {r.ekipte_kalan_isler.length > 0 && (
+              <span>
+                Açık sayaç nedeniyle ekipte kalan: {r.ekipte_kalan_isler.join(", ")} — sayaç
+                kapatılınca ekipten çıkarın.
+              </span>
+            )}
+            {r.gorev_karti_id != null && <span>Görev panosunda inceleme kartı açıldı.</span>}
+          </Space>
+        ),
+      });
+    },
+    onError: (e: ApiError) => message.error(hataMesaji(e)),
+  });
+
+  const anonimlestir = useMutation({
+    mutationFn: () => cikisApi.anonimlestir(secili.data!.id, anonimGerekce.trim()),
+    onSuccess: (r) => {
+      message.success(
+        `Kişisel veriler anonimleştirildi (${r.temizlenen_alanlar.length} alan, ${r.denetim_satiri} denetim satırı).`,
+      );
+      setAnonimAcik(false);
+      setAnonimGerekce("");
+      setAnonimOnay(false);
+      tazele();
+    },
+    onError: (e: ApiError) => message.error(hataMesaji(e)),
+  });
+
+  const o = onizleme.data;
+  const cikisEngelli = !o || o.kendisi || o.son_admin || o.zaten_ayrildi;
 
   const kartiAc = (p: Personel) => {
     setSeciliId(p.id);
@@ -444,6 +580,21 @@ export default function PersonelPage() {
               </Button>
             )}
 
+            {(cikisYetkisi && p.calisiyor) || (kvkkYetkisi && !p.calisiyor) ? (
+              <Space wrap>
+                {cikisYetkisi && p.calisiyor && (
+                  <Button danger onClick={() => setCikisAcik(true)}>
+                    İşten çıkış
+                  </Button>
+                )}
+                {kvkkYetkisi && !p.calisiyor && (
+                  <Button danger onClick={() => setAnonimAcik(true)}>
+                    KVKK anonimleştir
+                  </Button>
+                )}
+              </Space>
+            ) : null}
+
             {yazabilir ? (
               <Form
                 form={kartForm}
@@ -493,6 +644,142 @@ export default function PersonelPage() {
         <Form form={yeniForm} layout="vertical" onFinish={(v) => olustur.mutate(v)}>
           {kartAlanlari(yeniForm, true)}
         </Form>
+      </Modal>
+
+      <Modal
+        title={p ? `İşten çıkış: ${p.full_name}` : "İşten çıkış"}
+        open={cikisAcik}
+        width={720}
+        onCancel={() => setCikisAcik(false)}
+        onOk={() => cikisForm.submit()}
+        okText="Çıkışı uygula"
+        okButtonProps={{ danger: true, disabled: cikisEngelli }}
+        cancelText="Vazgeç"
+        confirmLoading={cikis.isPending}
+        destroyOnHidden
+      >
+        {onizleme.isLoading && <Typography.Text type="secondary">Önizleme hazırlanıyor…</Typography.Text>}
+        {onizleme.isError && (
+          <Alert type="error" showIcon title={(onizleme.error as ApiError).message} />
+        )}
+        {o && (
+          <Space orientation="vertical" style={{ width: "100%" }} size="middle">
+            {o.uyarilar.map((u) => (
+              <Alert key={u} type="warning" showIcon title={u} />
+            ))}
+            <Descriptions size="small" column={1} bordered>
+              <Descriptions.Item label="Açık oturum">{o.acik_oturum_sayisi} (sonlandırılacak)</Descriptions.Item>
+              <Descriptions.Item label="Açık sayaç">
+                {o.acik_sayac ? (
+                  <span>
+                    {o.acik_sayac.so_no ?? "kapsam dışı iş"} · {o.acik_sayac.faaliyet} ·{" "}
+                    {dayjs(o.acik_sayac.baslangic).format("DD.MM.YYYY HH:mm")}{" "}
+                    <Tag color="orange">kapatılmaz, inceleme bekler</Tag>
+                  </span>
+                ) : (
+                  "yok"
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="Eğitim">
+                {o.egitim.acik_plan} açık plan · {o.egitim.acik_duzeltici_faaliyet} açık düzeltici
+                faaliyet · sorumlu olduğu {o.egitim.sorumlu_oldugu_acik_faaliyet} açık faaliyet
+              </Descriptions.Item>
+              {o.mobilite_acik_is_sayisi > 0 && (
+                <Descriptions.Item label="Mobilite iş emri">
+                  {o.mobilite_acik_is_sayisi} açık (bu akış değiştirmez)
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+            <Table
+              rowKey="id"
+              size="small"
+              pagination={false}
+              dataSource={o.aktif_isler}
+              locale={{ emptyText: "Açık servis işinde ataması yok" }}
+              title={() =>
+                `Açık servis işleri (${o.aktif_isler.length}${
+                  o.kapsam_disi_is_sayisi ? ` + kapsamınız dışında ${o.kapsam_disi_is_sayisi}` : ""
+                })`
+              }
+              columns={[
+                { title: "İş", dataIndex: "so_no", className: "mono" },
+                { title: "Durum", dataIndex: "durum" },
+                { title: "Birim", dataIndex: "birim", render: (b: string) => BIRIM_ETIKETLERI[b] ?? b },
+                {
+                  title: "Sonuç",
+                  render: (_, r: CikisIsi) =>
+                    r.sayac_acik ? (
+                      <Tag color="orange">sayaç açık: ekipte kalır</Tag>
+                    ) : (
+                      <Tag color={r.sorumlu ? "red" : undefined}>
+                        ekipten çıkar{r.sorumlu ? " (sorumluydu)" : ""}
+                      </Tag>
+                    ),
+                },
+              ]}
+            />
+            {o.gorev_karti_acilacak && (
+              <Typography.Text type="secondary">
+                Görev panosunda “İşten çıkış incelemesi” kartı açılacak. İş durumları değişmez.
+              </Typography.Text>
+            )}
+            <Form
+              form={cikisForm}
+              layout="vertical"
+              initialValues={{ ayrilis_tarihi: dayjs() }}
+              onFinish={(v) => cikis.mutate(v)}
+            >
+              <Row gutter={12}>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="ayrilis_tarihi" label="Ayrılış tarihi" rules={[{ required: true }]}>
+                    <DatePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="ayrilis_nedeni"
+                    label="Ayrılış nedeni"
+                    rules={[{ required: true, message: "Neden seçin" }]}
+                  >
+                    <Select
+                      options={Object.entries(AYRILIS_NEDENLERI).map(([k, v]) => ({ value: k, label: v }))}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Form>
+          </Space>
+        )}
+      </Modal>
+
+      <Modal
+        title="KVKK anonimleştirme"
+        open={anonimAcik}
+        onCancel={() => setAnonimAcik(false)}
+        onOk={() => anonimlestir.mutate()}
+        okText="Anonimleştir"
+        okButtonProps={{ danger: true, disabled: !anonimOnay || anonimGerekce.trim().length < 5 }}
+        cancelText="Vazgeç"
+        confirmLoading={anonimlestir.isPending}
+        destroyOnHidden
+      >
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          <Alert
+            type="warning"
+            showIcon
+            title="Geri alınamaz"
+            description="Personel notu, e-posta ve ayrılış nedeni silinir; denetim kayıtlarındaki değerler maskelenir. Kayıt ve ad, iş geçmişi için kalır."
+          />
+          <Input
+            placeholder="Gerekçe (ör. başvuru numarası)"
+            maxLength={300}
+            value={anonimGerekce}
+            onChange={(e) => setAnonimGerekce(e.target.value)}
+          />
+          <Checkbox checked={anonimOnay} onChange={(e) => setAnonimOnay(e.target.checked)}>
+            İşlemin geri alınamayacağını biliyorum
+          </Checkbox>
+        </Space>
       </Modal>
     </Card>
   );

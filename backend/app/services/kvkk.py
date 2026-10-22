@@ -622,7 +622,123 @@ async def _takma_ad_bul(db: AsyncSession, arama: VeriBulAramasi) -> list[dict]:
     ]
 
 
+# --- Personel (TS-165, E13-D03) ---------------------------------------------------
+#
+# Personel = kullanıcı (`users`). Ayrılmış personelin kişisel verisi ELLE ve
+# `kvkk.yonet` ile anonimleştirilir; OTOMATİK SİLME YOKTUR. Kayıt ve `full_name`
+# iş geçmişi (atama, zaman, olay) için KALIR — ad atamalarda kimlikle bağlı,
+# raporlar onu okur. Temizlenen: personel notu, ayrılış nedeni (CHECK
+# `ck_users_ayrilis` tarih varken nedeni zorunlu tuttuğu için "DIGER"e
+# indirilir: FESİH gibi bir neden kişisel veridir), e-posta, TOTP sırrı.
+# Denetim satırlarının DEĞERLERİ maskelenir, olay kendisi durur; erişim
+# kayıtları (`kisisel.eris`) kişisel değer taşımadığı için korunur (kim, ne
+# zaman baktı sorusunun cevabı KVKK'nın kendisidir).
+
+PERSONEL_ANONIM_EYLEMI = "kvkk.personel_anonimlestir"
+PERSONEL_TEMIZLENEN_ALANLAR = ("personel_notu", "ayrilis_nedeni", "email", "totp_secret")
+
+
+async def personel_anonim_mi(db: AsyncSession, user_id: int) -> bool:
+    return (
+        await db.scalar(
+            select(AuditLog.id)
+            .where(
+                AuditLog.entity == "users",
+                AuditLog.entity_id == str(user_id),
+                AuditLog.action == PERSONEL_ANONIM_EYLEMI,
+            )
+            .limit(1)
+        )
+    ) is not None
+
+
+async def personeli_anonimlestir(
+    db: AsyncSession,
+    user_id: int,
+    *,
+    clock: Clock,
+    gerekce: str,
+    aktor_id: int | None = None,
+    ip: str | None = None,
+) -> dict:
+    """Ayrılmış personelin kişisel verisini anonimleştirir. GERİ ALINAMAZ.
+
+    Yalnız ayrılmış (`is_active=false` ve `ayrilis_tarihi` dolu) personel;
+    çalışan personel 409 (önce işten çıkış akışı). İkinci kez 409.
+    """
+    from app.models import User
+
+    if not gerekce or len(gerekce.strip()) < 5:
+        raise KvkkHatasi("Anonimleştirme gerekçesi zorunlu (silme talebi referansı).")
+    kisi = await db.get(User, user_id)
+    if kisi is None:
+        raise KvkkHatasi(f"Personel bulunamadı: {user_id}")
+    if kisi.is_active or kisi.ayrilis_tarihi is None:
+        raise KvkkHatasi("Yalnız işten ayrılmış personel anonimleştirilebilir.")
+    if await personel_anonim_mi(db, user_id):
+        raise KvkkHatasi("Bu personel zaten anonimleştirilmiş.")
+
+    temizlenen = sorted(
+        a
+        for a in PERSONEL_TEMIZLENEN_ALANLAR
+        if getattr(kisi, a, None) and not (a == "ayrilis_nedeni" and kisi.ayrilis_nedeni == "DIGER")
+    )
+    kisi.personel_notu = None
+    kisi.ayrilis_nedeni = "DIGER"
+    kisi.email = None
+    kisi.totp_secret = None
+    kisi.mfa_enabled = False
+    await db.flush()
+
+    sonuc = await db.execute(
+        sa_update(AuditLog)
+        .where(
+            AuditLog.entity == "users",
+            AuditLog.entity_id == str(user_id),
+            AuditLog.is_personal_data.is_(True),
+            AuditLog.action != "kisisel.eris",
+        )
+        .values(old_value=DEGER_SILINDI, new_value=DEGER_SILINDI)
+    )
+    maskelenen = sonuc.rowcount or 0
+    await audit.log(
+        db,
+        "users",
+        PERSONEL_ANONIM_EYLEMI,
+        entity_id=user_id,
+        old_value={"temizlenen_alanlar": temizlenen},
+        new_value={"gerekce": gerekce, "denetim_satiri": maskelenen},
+        user_id=aktor_id,
+        ip=ip,
+        is_personal_data=True,
+    )
+    return {"personel_id": user_id, "temizlenen_alanlar": temizlenen, "denetim_satiri": maskelenen}
+
+
+async def _personel_bul(db: AsyncSession, arama: VeriBulAramasi) -> list[dict]:
+    """İlgili kişi başvurusu: çalışan/eski çalışan kaydı (ad, sicil, e-posta)."""
+    from app.models import User
+
+    kosullar = [
+        _sql_katla(User.full_name).contains(arama.anahtar),
+        User.sicil_no == arama.arama,
+        User.email == arama.arama.lower(),
+    ]
+    kisiler = (await db.scalars(select(User).where(or_(*kosullar)).limit(50))).all()
+    return [
+        {
+            "id": k.id,
+            "ad": k.full_name,
+            "sicil_no": k.sicil_no,
+            "eposta": k.email,
+            "ayrildi": (not k.is_active) or k.ayrilis_tarihi is not None,
+        }
+        for k in kisiler
+    ]
+
+
 anonimlestirme_kaydet(_tesisleri_anonimlestir)
+veri_bul_kaydet("personel", _personel_bul)
 denetim_maske_kaydet("addresses", _adres_denetim_kosulu)
 denetim_maske_kaydet("account_aliases", _takma_ad_denetim_kosulu)
 veri_bul_kaydet("lokasyonlar", _tesis_bul)

@@ -989,3 +989,99 @@ gereksiz.
 
 Yine de gerekirse göç betikleri `backend/app/migration/` altında; hepsi
 `--uygula` olmadan hiçbir şey yazmaz ve idempotenttir.
+
+---
+
+# EK G — Eski .NET DengeERP servis verisinin göçü (Göç-1)
+
+Teknik servis verisi (cihaz kütüğü, bakım sözleşmeleri, servis işleri, planlar,
+zaman kayıtları) eski .NET DengeERP V1.20.1'den (SQL Server) **bir kez ve
+tekrarlanabilir** biçimde aktarılır. Göç idempotenttir: aynı döküm ikinci kez
+uygulanınca 0 yeni satır yazılır ve ekrandan yapılmış düzeltme ezilmez.
+Hiçbir adım uygulama açılışında koşmaz; hepsi elle, sırayla çalıştırılır.
+
+> **ÖNCE YEDEK.** Her yazan adımdan (`ad-uygula`, İçe Aktarma "Uygula",
+> `goc-servis-uygula`) önce `sudo UZAK_HEDEF=/mnt/yedek /opt/denge-erp/deploy/yedekle.sh`
+> çalıştırın; yedek dosyasının adını ve boyutunu göç tutanağına yazın. Geri
+> dönüş yalnız yedekten geri yüklemedir (`alembic downgrade` kullanılmaz).
+
+### G.1 Kaynağı dışa aktar (canlı SQL Server'a BAĞLANMAYIN)
+
+1. V1.20.1 `.bak` yedeğini **ayrı bir SQL Server test örneğine** geri yükleyin.
+2. O örneğe erişen bir Windows makinesinde (SqlServer PowerShell modülü kurulu):
+
+   ```powershell
+   powershell -File backend\app\migration\teknik_servis\sql\disa_aktar.ps1 `
+       -Sunucu "localhost\SQLTEST" -Veritabani DengeERP -Hedef C:\goc\v1
+   ```
+
+   Her `goc_NN_<Tablo>.sql` yalnız `SELECT` içerir ve `<Tablo>.csv` üretir
+   (UTF-8; seri no metin; tarih ISO 8601, eski sistemin **yerel saati** —
+   göç UTC'ye kendisi çevirir). Kişi notları ve telefonlar bilerek alınmaz.
+3. Dizini sunucuya kopyalayın (ör. `/opt/denge-erp/goc/v1`) ve konteynere verin:
+   `docker compose cp /opt/denge-erp/goc/v1 api:/tmp/goc_v1`.
+
+Aşağıda `GOC="docker compose exec -T api python -m app.migration"` kısaltması
+kullanılır (geliştirmede aynı komutların `make` hedefleri vardır, `make help`).
+
+### G.2 İnsan kararı gereken adımlar (sıra zorunlu)
+
+| Sıra | Ne | Komut / ekran | İzin |
+|---|---|---|---|
+| 1 | Personel listesi | İçe Aktarma → **Personel** | `personel.yaz` |
+| 2 | Ad eşleme önerisi | `$GOC.servis_ad_esleme oner --kaynak /tmp/goc_v1 --cikti /tmp/ad.xlsx` (`make goc-servis-ad-oner`) | — |
+| 3 | İK ad kararları | İçe Aktarma → **Personel Ad Eşleme (göç)**; `Karar`: E / H / ESLESMEDI | `personel.yaz` |
+| 4 | Cihaz kütüğü | G.3 komutları `--adim kutuk` ile | sunucu erişimi |
+| 5 | Bakım sözleşmesi teyidi | `$GOC.bakim_sozlesme --kaynak /tmp/goc_v1 --cikti /tmp/bakim.xlsx` → servis yöneticisi doldurur → İçe Aktarma → **Bakım Sözleşmesi (göç/teyit)** | `bakim.yaz` |
+| 6 | Müşteri/tesis eşleştirme | Teknik Servis → **Ana Veri Kalitesi** → aday listesi (sözleşme, ekipman); İçe Aktarma → **Müşteri/Lokasyon Eşleştirme** (`Onay=E`). Onaylanan yazımlar takma ad olur; sonraki adım bunları kullanır | `hesap.birlestir` |
+| 7 | Servis işleri + plan + zaman | G.3 komutları `--adim servis,plan,zaman` ile | sunucu erişimi |
+| 8 | Servis işi karantinası | G.3 raporunun `_servis_isleri_karantina.xlsx` dosyası → `Tür/Durum` doldurulur → İçe Aktarma → **Servis İşleri (göç karantinası)** | `sistem.goc` |
+
+Notlar:
+
+- Ad eşleme **önerisi uydurma değildir**: sistem yalnız birebir ad ve benzerlik
+  önerir, karar İK'nındır. Onaylanmayan ad "eşleşmedi" kalır; zaman kaydı
+  `user_id` boş + ham adla gelir. Sonradan onay verilirse
+  `$GOC.servis_ad_esleme uygula` (`make goc-servis-ad-uygula`) bu satırları
+  bağlar, `goc-servis-uygula` yeniden koşulursa eksik atamalar eklenir.
+- Bakım teyit Excel'inde **ücret kolonları yoktur**. Ücretli liste yalnız
+  `maliyet.gor` sahibine `--ucret` ile üretilir; ücretsiz kullanıcının yüklediği
+  dosyadaki ücretler yok sayılır. Ekrandan yönetilen (TEYIT_BEKLIYOR dışı)
+  sözleşme yüklemede **korunur**.
+- Birden çok müşteri adayı olan satır karantinaya düşer; `Hesap Id`
+  yazılarak karar verilir.
+
+### G.3 Önizleme → uygulama → uzlaşma
+
+```bash
+$GOC.servis_uzlasma onizleme --kaynak /tmp/goc_v1 --cikti /tmp/goc_onizleme.xlsx   # yazmaz
+$GOC.servis_uzlasma uygula   --kaynak /tmp/goc_v1 --cikti /tmp/goc_uygulama.xlsx  # tek transaction
+$GOC.servis_uzlasma rapor    --kaynak /tmp/goc_v1 --cikti /tmp/goc_uzlasma.xlsx   # salt okunur
+docker compose cp api:/tmp/goc_uzlasma.xlsx .
+```
+
+Rapor her kaynak tablo için **kaynak = aktarılan + karantina + reddedilen
+(+ ertelenen)** eşitliğini sınar; tutmayan tabloda çıkış kodu 2'dir. Ayrıca
+karantina/red nedenleri, uyarılar (`SERISIZ`, `MUKERRER_SERI`,
+`MUSTERI_ESLESMEDI`, `SONUCSUZ_KAPALI`, `CIFT_AKTIF_PLAN`,
+`KAPALI_IKEN_PLANLI` ...) ve eski sistem ekranıyla elle karşılaştırılacak
+**5 örnek iş** listelenir. `uygula` ikinci kez koşulunca bütün tablolarda
+"yeni" 0 olmalıdır.
+
+**Birim bazlı geçiş:** `--birim GUVENLIK` (sonra `HABERLESME,POC`, sonra
+`MOBILITE,ARAC_TAKIP`) yalnız o birimlerin servis işlerini aktarır; diğerleri
+raporda "ertelenen" görünür. Plan ve zaman kayıtları yalnız aktarılmış işe
+bağlanır, kalanlar karantinada bekler ve sonraki koşuda kendiliğinden gelir.
+SLA yürürlük anı (`servis_sla_yururluk_at`) yalnız ilk birim geçişinden sonra
+bir kez ayarlanır.
+
+**Bilinçli karantina (bu göçte aktarılmaz):** planlı bakım işleri (bakım
+dönemi göçü yok), atölye ve kiralık telsiz işleri (Dalga 3), tanınmayan
+durum/tür, okunamayan tarih. Eski parça hareketleri ve kullanıcı parolaları
+göç kapsamı dışındadır.
+
+### G.4 Prova sırası
+
+Canlı döküm kopyası (`paket-uret.sh`) → `alembic upgrade head` → G.2/G.3 →
+altın kayıt ve mobilite testleri (`make test-goc`) → uzlaşma raporu tutanağa →
+canlı.

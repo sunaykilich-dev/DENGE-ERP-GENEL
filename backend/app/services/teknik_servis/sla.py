@@ -59,7 +59,6 @@ from app.models import (
 )
 from app.models.teknik_servis import (
     DURUM_GRUPLARI,
-    SLA_DURUMLARI,
 )
 from app.services import audit
 from app.services import settings as ayarlar

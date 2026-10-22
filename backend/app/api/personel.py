@@ -23,12 +23,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import DbDep, client_ip, require_permission, sayfala
+from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala
 from app.models import User
 from app.services import audit, kvkk, yetki
 from app.services import export as export_svc
 from app.services.teknik_servis import kapsam
 from app.services.teknik_servis import personel as svc
+from app.services.teknik_servis.gecmis import KisiselVeriHatasi
+from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 
 router = APIRouter(prefix="/api/personel", tags=["personel"])
 
@@ -36,6 +38,8 @@ Okuyucu = Annotated[User, Depends(require_permission("personel.gor"))]
 Yazici = Annotated[User, Depends(require_permission("personel.yaz"))]
 Aktarici = Annotated[User, Depends(require_permission("personel.gor", "servis_rapor.disaaktar"))]
 Planlayici = Annotated[User, Depends(require_permission("servis.gor"))]
+Cikisci = Annotated[User, Depends(require_permission("personel.cikis"))]
+KvkkYonetici = Annotated[User, Depends(require_permission("kvkk.yonet"))]
 
 # Yalnız `personel.yaz` sahibine dönen alanlar (E13-05, TS-008).
 GIZLI_ALANLAR = ("email", "username", "personel_notu", "ayrilis_nedeni")
@@ -127,6 +131,65 @@ class KpiOut(BaseModel):
     suzgec: dict[str, Any]
 
 
+class CikisIn(BaseModel):
+    """İşten çıkış onayı (TS-165). Neden katalogu: `AYRILIS_NEDENLERI`."""
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{"ayrilis_tarihi": "2026-01-15", "ayrilis_nedeni": "ISTIFA", "version": 1}]
+        }
+    }
+
+    ayrilis_tarihi: date
+    # Katalog doğrulaması serviste (400 + anlaşılır mesaj).
+    ayrilis_nedeni: str = Field(min_length=1, max_length=20)
+    version: int
+
+
+class CikisIsiOut(BaseModel):
+    id: int
+    so_no: str
+    durum: str
+    birim: str
+    sorumlu: bool
+    sayac_acik: bool
+
+
+class CikisOnizlemeOut(BaseModel):
+    personel_id: int
+    kendisi: bool
+    ust_yetkili: bool
+    son_admin: bool
+    zaten_ayrildi: bool
+    aktif_isler: list[CikisIsiOut]
+    kapsam_disi_is_sayisi: int
+    acik_sayac: dict[str, Any] | None
+    acik_oturum_sayisi: int
+    mobilite_acik_is_sayisi: int
+    egitim: dict[str, int]
+    uyarilar: list[str]
+    gorev_karti_acilacak: bool
+
+
+class CikisSonucOut(BaseModel):
+    personel_id: int
+    cikarilan_isler: list[str]
+    ekipte_kalan_isler: list[str]
+    acik_sayac_bolum_id: int | None
+    gorev_karti_id: int | None
+    kapanan_oturum: int
+
+
+class PersonelAnonimIn(BaseModel):
+    model_config = {
+        "json_schema_extra": {"examples": [{"gerekce": "KVKK başvurusu #1", "onay": True}]}
+    }
+
+    gerekce: str = Field(min_length=5, max_length=300)
+    # Geri alınamaz: açık onay kutusu.
+    onay: bool = False
+
+
 # --- Yardımcılar ------------------------------------------------------------------
 
 
@@ -136,7 +199,7 @@ def _hata(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
     if isinstance(exc, svc.PersonelKapsamDisi):
         return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
-    if isinstance(exc, svc.PersonelKuralHatasi):
+    if isinstance(exc, (svc.PersonelKuralHatasi, ServisHatasi, KisiselVeriHatasi)):
         return HTTPException(status.HTTP_409_CONFLICT, str(exc))
     return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
@@ -147,6 +210,8 @@ _SERVIS_HATALARI = (
     svc.PersonelKuralHatasi,
     svc.PersonelGirdiHatasi,
 )
+# İşten çıkış servis işi kancalarını da çalıştırır (ekip_degisiyor → 409).
+_CIKIS_HATALARI = (*_SERVIS_HATALARI, ServisHatasi, ServisGirdiHatasi, KisiselVeriHatasi)
 
 
 async def _kapsamli_personel(db, personel_id: int, user: User) -> User:
@@ -446,3 +511,94 @@ async def aktiflestir(personel_id: int, request: Request, db: DbDep, user: Yazic
             else "Personel yeniden aktif."
         ),
     }
+
+
+# --- İşten çıkış (TS-165, E13-09) ------------------------------------------------------
+
+
+@router.get("/{personel_id}/cikis-onizleme", response_model=CikisOnizlemeOut)
+async def cikis_onizleme(
+    personel_id: int, db: DbDep, clock: ClockDep, user: Cikisci
+) -> CikisOnizlemeOut:
+    """İşten çıkışın etkisi: açık işler, açık sayaç, oturumlar, eğitim kayıtları.
+
+    HİÇBİR ŞEY YAZMAZ. Kapsam dışı kişi 404; kapsam dışı işler numarasız sayılır.
+    """
+    kisi = await _kapsamli_personel(db, personel_id, user)
+    o = await svc.cikis_onizleme(db, kisi, aktor=user, clock=clock)
+    return CikisOnizlemeOut(
+        **{k: v for k, v in o.__dict__.items() if k != "aktif_isler"},
+        aktif_isler=[CikisIsiOut(**i.__dict__) for i in o.aktif_isler],
+    )
+
+
+@router.post("/{personel_id}/cikis", response_model=CikisSonucOut)
+async def cikis(
+    personel_id: int,
+    payload: CikisIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Cikisci,
+) -> CikisSonucOut:
+    """İşten çıkışı TEK transaction'da uygular (E13-09).
+
+    Personel ve giriş kapanır, oturumlar düşer, açık işlerdeki atamalar
+    kapanır (iş durumu değişmez), açık sayaç KAPATILMAZ (uyarı + görev
+    kartı). Kendisi 400, üst yetkili hedef (ADMIN olmayan aktör) 403, son
+    yönetici / sürüm / zaten ayrılmış 409. Hata olursa hiçbir adım kalmaz.
+    """
+    kisi = await _kapsamli_personel(db, personel_id, user)
+    try:
+        sonuc = await svc.cikis_uygula(
+            db,
+            kisi,
+            aktor=user,
+            ayrilis_tarihi=payload.ayrilis_tarihi,
+            ayrilis_nedeni=payload.ayrilis_nedeni,
+            surum=payload.version,
+            clock=clock,
+            ip=client_ip(request),
+        )
+    except _CIKIS_HATALARI as exc:
+        await db.rollback()
+        raise _hata(exc) from exc
+    await db.commit()
+    return CikisSonucOut(**sonuc.__dict__)
+
+
+@router.post("/{personel_id}/anonimlestir")
+async def anonimlestir(
+    personel_id: int,
+    payload: PersonelAnonimIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: KvkkYonetici,
+) -> dict:
+    """Ayrılmış personelin kişisel verisini anonimleştirir (E13-D03). GERİ ALINAMAZ.
+
+    `kvkk.yonet` ister; elle yapılır, otomatik silme yoktur. Kayıt ve ad iş
+    geçmişi için kalır; not, ayrılış nedeni, e-posta temizlenir; denetim
+    satırlarının değerleri maskelenir. Çalışan personel / ikinci kez 409.
+    """
+    kisi = await _kapsamli_personel(db, personel_id, user)
+    if not payload.onay:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Anonimleştirme geri alınamaz; onay kutusu işaretlenmeden uygulanmaz.",
+        )
+    try:
+        sonuc = await kvkk.personeli_anonimlestir(
+            db,
+            kisi.id,
+            clock=clock,
+            gerekce=payload.gerekce,
+            aktor_id=user.id,
+            ip=client_ip(request),
+        )
+    except kvkk.KvkkHatasi as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    await db.commit()
+    return sonuc

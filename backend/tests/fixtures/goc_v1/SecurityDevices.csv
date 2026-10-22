@@ -1,0 +1,7 @@
+﻿SecurityDeviceId,SourceKey,DeviceType,Brand,Model,ProductRaw,SerialNo,CustomerName,Location,ContactName,DeliveryDateText,InstallStatus,Notes,IsActive,ImportedAt
+1,SD-0001,X-Ray,Smiths,HI-SCAN 6040,Smiths HI-SCAN 6040 X-Ray,00123-A,Akyaka Park AVM,Akyaka Park AVM,Örnek İrtibat,44083,Kurulu,,1,2025-01-10T10:00:00
+2,SD-0002,Kapı Tipi Metal Dedektörü,CEIA,PMD2 Plus,,KD-777,Akyaka Park AVM,Akyaka Park AVM,,15.03.2021,,,1,2025-01-10T10:00:00
+3,SD-0003,Kapı Dedektörü,CEIA,PMD2 Plus,,KD-777,Örnek Lojistik,Depo Girişi,,2019,,,1,2025-01-10T10:00:00
+4,SD-0004,X-RAY,Nuctech,CX6040,,,Örnek Lojistik,,,00.00.2015,,,1,2025-01-10T10:00:00
+5,SD-0005,Turnike,Gunnebo,SpeedStile,,TR-1,Bilinmeyen Müşteri Ltd,,,,Hurda,,0,2025-01-10T10:00:00
+,SD-0006,X-Ray,Smiths,HI-SCAN,,ZZ-9,Akyaka Park AVM,,,,,,1,2025-01-10T10:00:00

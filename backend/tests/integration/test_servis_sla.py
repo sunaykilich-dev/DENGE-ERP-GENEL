@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError
 
 from app.models import AuditLog, ServiceHold, ServiceOrder, ServiceOrderEvent, ServiceSlaPolicy
+from app.models.teknik_servis import VARSAYILAN_SLA_POLITIKALARI
 from app.services import settings as ayarlar
 
 pytestmark = pytest.mark.integration
@@ -59,6 +60,23 @@ async def tamamla(client, so_id: int) -> None:
         json={"sonuc": "COZULDU", "cozum_kanali": "TELEFON", "yapilan_islem": "Çözüldü"},
     )
     assert r.status_code == 200, r.text
+
+
+@pytest.fixture(autouse=True)
+async def _tohum_politikalari(db):
+    """SLA tohumu `_TRUNCATE` dışıdır: yarıda kesilmiş bir koşudan kalan değişiklik
+    sonraki testleri bozmasın diye her testten önce tohum değerlerine döndürülür
+    (genel politika = VARSAYILAN, aktif, müdahale hedefi yok; birime özel pasif)."""
+    varsayilan = dict(VARSAYILAN_SLA_POLITIKALARI)
+    for p in (await db.scalars(select(ServiceSlaPolicy))).all():
+        if p.birim is None and p.oncelik in varsayilan:
+            p.cozum_saat = Decimal(varsayilan[p.oncelik])
+            p.mudahale_saat = None
+            p.takvim_turu = "7_24"
+            p.is_active = True
+        else:
+            p.is_active = False
+    await db.commit()
 
 
 @pytest.fixture
@@ -160,7 +178,12 @@ async def test_politika_tanim_kurallari(client, db, mudur, kullanici_ac) -> None
         f"{TS}/sla-tanimlari/politikalar", json={"oncelik": "NORMAL", "cozum_saat": "5"}
     )
     assert r.status_code == 409
-    temel = {"id": politika.id, "version": politika.version, "oncelik": "NORMAL", "cozum_saat": "72"}
+    temel = {
+        "id": politika.id,
+        "version": politika.version,
+        "oncelik": "NORMAL",
+        "cozum_saat": "72",
+    }
     r = await client.put(f"{TS}/sla-tanimlari/politikalar", json={**temel, "is_active": False})
     assert r.status_code == 409
     r = await client.put(
@@ -224,7 +247,9 @@ async def test_oncelik_duzeltmesi_yeniden_damgalar(client, db, mudur) -> None:
     ilk = await kayit(db, so["id"])
     ilk_hedef = ilk.cozum_hedef_at
     await ileri(client, hours=2)
-    r = await client.patch(f"{TS}/isler/{so['id']}", json={"version": ilk.version, "oncelik": "kritik".upper()})
+    r = await client.patch(
+        f"{TS}/isler/{so['id']}", json={"version": ilk.version, "oncelik": "kritik".upper()}
+    )
     assert r.status_code == 200, r.text
     k = await kayit(db, so["id"])
     assert k.cozum_hedef_at == k.sla_baslangic_at + timedelta(hours=12)
@@ -261,8 +286,12 @@ async def test_durduran_bekleme_hedefi_ileri_alir(client, db, mudur) -> None:
     hedef_a = (await kayit(db, a["id"])).cozum_hedef_at
     hedef_b = (await kayit(db, b["id"])).cozum_hedef_at
     await ileri(client, hours=1)
-    assert (await client.post(f"{TS}/isler/{a['id']}/bekleme", json={"neden": "MUSTERI_ONAYI"})).status_code == 200  # noqa: E501
-    assert (await client.post(f"{TS}/isler/{b['id']}/bekleme", json={"neden": "MALZEME"})).status_code == 200  # noqa: E501
+    assert (
+        await client.post(f"{TS}/isler/{a['id']}/bekleme", json={"neden": "MUSTERI_ONAYI"})
+    ).status_code == 200  # noqa: E501
+    assert (
+        await client.post(f"{TS}/isler/{b['id']}/bekleme", json={"neden": "MALZEME"})
+    ).status_code == 200  # noqa: E501
     await ileri(client, hours=3)
     kart = (await sla_karti(client, a["id"]))["sla"]
     assert kart["durum"] == "DURDURULDU" and kart["kalan_dk"] == 11 * 60
@@ -395,7 +424,9 @@ async def test_pb_isine_sla_damgalanamaz(db, servis_isi_ac, sozlesme_ac) -> None
 
     sozlesme = await sozlesme_ac()
     kalem = MaintenanceContractItem(contract_id=sozlesme.id, equipment_type="XRAY", sira=1)
-    donem = MaintenancePeriod(contract_id=sozlesme.id, cycle_start=AN, sequence_no=1, target_date=AN.date())
+    donem = MaintenancePeriod(
+        contract_id=sozlesme.id, cycle_start=AN, sequence_no=1, target_date=AN.date()
+    )
     db.add_all([kalem, donem])
     await db.commit()
     so = await servis_isi_ac(tur="PB", contract_item_id=kalem.id, maintenance_period_id=donem.id)
