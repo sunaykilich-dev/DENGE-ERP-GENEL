@@ -45,6 +45,18 @@ async def update_settings(
             del incoming[key]
 
     before = await settings_service.get_all(db)
+    # TS-063: otomatik PB üretimi eşleştirme %100 olmadan açılamaz — bakım
+    # ekranındaki kapı (`bakim.otomatik_uretim_ayarla`) genel uçtan delinmesin.
+    if incoming.get("bakim_otomatik_uretim") is True and not before.get("bakim_otomatik_uretim"):
+        from app.services.teknik_servis import bakim as bakim_svc
+
+        oran = await bakim_svc.eslestirme_orani(db)
+        if oran["yuzde"] < 100:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Sözleşme–ekipman eşleştirmesi %{oran['yuzde']} ({oran['eslesen']}/"
+                f"{oran['toplam']}). Otomatik PB üretimi eşleştirme %100 olmadan açılamaz.",
+            )
     try:
         await settings_service.set_many(db, incoming, admin.id)
     except KeyError as exc:

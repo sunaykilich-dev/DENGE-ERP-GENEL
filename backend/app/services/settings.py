@@ -105,6 +105,8 @@ DEFAULTS: dict[str, Any] = {
     "servis_bolge_oneri_gun": 3,
     "servis_plan_bekleyen_uyari_gun": 3,
     "hesap_dogrulanmamis_uyari_gun": 7,
+    # Dalga 1 bütünleştirme ayar talebi (D1-F; önceden kod sabitiydi).
+    "bakim_sozlesme_bitis_uyari_gun": 60,
     # --- Ekipman / bakım ------------------------------------------------------
     "servis_varsayilan_garanti_ay": 24,
     "servis_garanti_uyari_gun": 30,
@@ -176,6 +178,7 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "servis_bolge_oneri_gun": ("tam", 0, 30),
     "servis_plan_bekleyen_uyari_gun": ("tam", 1, 90),
     "hesap_dogrulanmamis_uyari_gun": ("tam", 1, 365),
+    "bakim_sozlesme_bitis_uyari_gun": ("tam", 1, 365),
     "servis_varsayilan_garanti_ay": ("tam", 0, 120),
     "servis_garanti_uyari_gun": ("tam", 1, 365),
     "servis_kpi_bakim_gecikme_ay": ("tam", 1, 60),

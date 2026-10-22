@@ -40,6 +40,7 @@ markers = [
     "integration: gercek PostgreSQL gerektirir (TEST_DATABASE_URL)",
     "yetki_matrisi: tum korumali uclari rol x uc olarak tarayan yavas test (TS-013)",
     "kapsam_taramasi: {id} yollu teknik servis uclarinda kapsam disi 404 taramasi (TS-013)",
+    "slow: buyuk veriyle performans olcumu (ornegin takvim/liste < 1 sn); -m 'not slow' ile atlanir",
 ]
 
 [tool.ruff]

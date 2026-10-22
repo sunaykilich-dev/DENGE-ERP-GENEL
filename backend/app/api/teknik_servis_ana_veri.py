@@ -391,6 +391,28 @@ async def saha_onerisi(lokasyon_id: int, db: DbDep, user: Arayici) -> dict[str, 
     except AnaVeriHatasi as exc:
         raise _hata(exc) from exc
     oneri = await ana_veri.saha_onerisi_kaynak(db, lokasyon_id)
-    if oneri and oneri["irtibat"] and not user.has("servis.yaz"):
-        oneri["irtibat"]["telefon"] = kvkk.maskele(oneri["irtibat"]["telefon"])
-    return oneri or {}
+    if not oneri:
+        return {}
+    # TS-034: lokasyonun bütün irtibatları (birincil önce) — form listeden seçer.
+    from sqlalchemy import select
+
+    from app.models import Address, Contact
+
+    adres = await db.get(Address, lokasyon_id)
+    kisiler = (
+        await db.scalars(
+            select(Contact)
+            .where(Contact.address_id == lokasyon_id, Contact.account_id == adres.account_id)
+            .order_by(Contact.full_name, Contact.id)
+        )
+    ).all()
+    birincil = (oneri["irtibat"] or {}).get("id")
+    oneri["irtibatlar"] = sorted(
+        ({"id": k.id, "ad": k.full_name, "unvan": k.title, "telefon": k.phone} for k in kisiler),
+        key=lambda k: k["id"] != birincil,
+    )
+    if not user.has("servis.yaz"):
+        for kisi in [oneri["irtibat"], *oneri["irtibatlar"]]:
+            if kisi:
+                kisi["telefon"] = kvkk.maskele(kisi["telefon"])
+    return oneri

@@ -5,9 +5,12 @@ değiştirilebilir, koda gömülü değil (brief §6.5).
 """
 
 import asyncio
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -86,6 +89,104 @@ def satirlari_xlsx(
     tampon = BytesIO()
     wb.save(tampon)
     return tampon.getvalue()
+
+
+# --- Çok sayfalı, tipli dışa aktarım (teknik servis, TS-026 / E12-06) ---------------
+#
+# `satirlari_xlsx` DEĞİŞMEZ (mobilite raporları ona bağlı). Teknik servis
+# Excel'leri çok sayfalı olabilir ve hücre tipi SÜTUN ŞEMASINDAN gelir: seri
+# no, iş no, telefon her zaman METİN (`0012345` ve 19 haneli seri sayıya
+# dönüşüp bozulmasın), tarih gerçek tarih hücresi (Türkiye günü, `DD.MM.YYYY`).
+
+SUTUN_TIPLERI = ("metin", "tarih", "zaman", "tamsayi", "ondalik")
+
+
+@dataclass(frozen=True)
+class Sutun:
+    """Sütun şeması: başlık + hücre tipi (`SUTUN_TIPLERI`)."""
+
+    baslik: str
+    tip: str = "metin"
+
+    def __post_init__(self) -> None:
+        if self.tip not in SUTUN_TIPLERI:
+            raise ValueError(f"Bilinmeyen sütun tipi: {self.tip}")
+
+
+@dataclass
+class Sayfa:
+    """Bir çalışma sayfası. `sutunlar` düz başlık listesi de olabilir (tip = otomatik)."""
+
+    ad: str
+    sutunlar: list[Sutun | str]
+    satirlar: list[list[Any]] = field(default_factory=list)
+
+
+_TR = ZoneInfo("Europe/Istanbul")
+
+
+def _tipli(deger: Any, tip: str | None) -> tuple[Any, str | None]:
+    """(hücre değeri, number_format). Saat dilimli an Türkiye saatine çevrilir;
+    Excel saat dilimi taşımadığı için hücreye naif yerel değer yazılır."""
+    if deger is None or deger == "":
+        return None, None
+    if tip == "metin":
+        return str(deger), "@"
+    if tip in ("tarih", "zaman"):
+        if isinstance(deger, datetime):
+            if deger.tzinfo is not None:
+                deger = deger.astimezone(_TR).replace(tzinfo=None)
+            if tip == "tarih":
+                return deger.date(), "DD.MM.YYYY"
+            return deger, "DD.MM.YYYY HH:MM"
+        if isinstance(deger, date):
+            return deger, "DD.MM.YYYY"
+        return str(deger), "@"
+    if tip == "tamsayi":
+        return int(deger), "0"
+    if tip == "ondalik":
+        return float(deger), "#,##0.00"
+    return _hucre(deger), None
+
+
+def sayfalari_xlsx(sayfalar: list[Sayfa]) -> bytes:
+    """Çok sayfalı xlsx. Şemalı sütunda tip şemadan; formül enjeksiyonu kapalı."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    for sayfa in sayfalar:
+        ws = wb.create_sheet(title=(sayfa.ad or "Sayfa")[:31])
+        sema = [s if isinstance(s, Sutun) else None for s in sayfa.sutunlar]
+        basliklar = [s.baslik if isinstance(s, Sutun) else str(s) for s in sayfa.sutunlar]
+        ws.append(basliklar)
+        for h in ws[1]:
+            h.fill, h.font = BASLIK_DOLGU, BASLIK_YAZI
+            h.alignment = Alignment(vertical="center")
+        genislik = [len(b) for b in basliklar]
+        for satir in sayfa.satirlar:
+            ws.append([None] * len(basliklar))
+            r = ws.max_row
+            for i, deger in enumerate(satir[: len(basliklar)]):
+                tip = sema[i].tip if sema[i] is not None else None
+                hucre_degeri, bicim = _tipli(deger, tip)
+                hucre = ws.cell(row=r, column=i + 1)
+                hucre.value = hucre_degeri
+                if bicim:
+                    hucre.number_format = bicim
+                if tip == "metin" and hucre_degeri is not None:
+                    hucre.data_type = "s"
+                _formulu_metne_cevir(hucre)
+                genislik[i] = max(genislik[i], len(str(deger)) if deger is not None else 0)
+        for i, en in enumerate(genislik, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = min(max(en + 2, 10), 48)
+        ws.freeze_panes = "A2"
+    tampon = BytesIO()
+    wb.save(tampon)
+    return tampon.getvalue()
+
+
+async def sayfalari_xlsx_async(sayfalar: list[Sayfa]) -> bytes:
+    """`sayfalari_xlsx`'i ayrı iş parçacığında üretir (bkz. `satirlari_xlsx_async`)."""
+    return await asyncio.to_thread(sayfalari_xlsx, sayfalar)
 
 
 # Muhasebe şablonları: kolon başlığı → değer anahtarı.

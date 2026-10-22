@@ -22,6 +22,7 @@ kolonunun, ilişkili tabloların ve denetim izinin değişmediğini doğrular.
 | `lokasyon_id`, `adres_id` | tesis (başka temsilcinin hesabı) | müşteri |
 | `kisi_id` | irtibat (başka temsilcinin hesabı) | müşteri |
 | `takma_ad_id` | takma ad (başka temsilcinin hesabı) | müşteri |
+| `arac_id` | servis aracı (başka birim) | birim |
 
 Yalın `{id}` yolun önekinden çözülür (`_ONEK_HEDEFLERI`). Gövdeli uçlarda
 gövde modelin `json_schema_extra` örneğinden ya da şemadan üretilir; 422
@@ -44,6 +45,7 @@ from app.models import (
     AuditLog,
     Contact,
     ServiceOrderEvent,
+    ServiceVehicle,
     UserUnit,
 )
 from app.permissions import PERMISSIONS
@@ -63,6 +65,7 @@ _PARAM_HEDEFLERI = {
     "adres_id": "lokasyon",
     "kisi_id": "irtibat",
     "takma_ad_id": "takma_ad",
+    "arac_id": "arac",
 }
 
 # Yalın `{id}` için önek → hedef (uzun önek önce).
@@ -74,7 +77,7 @@ _ONEK_HEDEFLERI = (
     ("/api/lokasyonlar/", "lokasyon"),
 )
 
-_BIRIM_HEDEFLERI = {"servis_isi", "ekipman", "sozlesme", "personel"}
+_BIRIM_HEDEFLERI = {"servis_isi", "ekipman", "sozlesme", "personel", "arac"}
 
 # Yazma sızıntısını yakalamak için sayılan tablolar: kaydın kendisi dışında
 # kapsam dışı bir uç bunlara satır ekleyebilir/silebilir.
@@ -155,7 +158,8 @@ async def ortam(
     tesis = await lokasyon_ac(yabanci, ad="Yabancı Tesis")
     irtibat = Contact(account_id=yabanci.id, full_name="Yabancı Kişi", address_id=tesis.id)
     takma = AccountAlias(account_id=yabanci.id, alias_text="YABANCI PORTFOY", kaynak="ELLE")
-    db.add_all([irtibat, takma])
+    arac = ServiceVehicle(plate="34 HAB 001", birim="HABERLESME")
+    db.add_all([irtibat, takma, arac])
     await db.commit()
 
     o = Ortam()
@@ -168,6 +172,7 @@ async def ortam(
         "lokasyon": tesis,
         "irtibat": irtibat,
         "takma_ad": takma,
+        "arac": arac,
     }
     o.birim_istemci = await _giris(client, "tarayici_birim")
     o.musteri_istemci = await _giris(client, "tarayici_musteri")

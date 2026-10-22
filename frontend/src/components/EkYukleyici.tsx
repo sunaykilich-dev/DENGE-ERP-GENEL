@@ -28,6 +28,11 @@ interface Props {
   /** Yalnız bu türdeki ekler listelensin. */
   yalnizTur?: boolean;
   accept?: string;
+  /**
+   * Mobilde doğrudan kamerayı açar (`<input capture>`; TS-077). Yalnız
+   * ekleme: verilmezse davranış eskisi gibidir.
+   */
+  capture?: boolean | "user" | "environment";
 }
 
 const boyut = (b: number) =>
@@ -50,6 +55,7 @@ export default function EkYukleyici({
   yazabilir,
   yalnizTur = true,
   accept,
+  capture,
 }: Props) {
   const qc = useQueryClient();
   const { message } = App.useApp();
@@ -105,6 +111,7 @@ export default function EkYukleyici({
         yazabilir && (
           <Upload
             accept={accept}
+            capture={capture}
             showUploadList={false}
             customRequest={({ file, onSuccess, onError }) => {
               yukle(file as File)

@@ -417,7 +417,10 @@ işlemleri yumuşaktır (`is_deleted`); kayıt kaybolmaz.
 
 Bunlar eksiklik değil, **karar**:
 
-- **Mobil saha uygulaması yok** — işler ofisten girilir, kanıt dosya ekidir.
+- **Ayrı mobil saha uygulaması yok** — mobilite montajları ofisten girilir,
+  kanıt dosya ekidir. Teknik servis teknisyeni ise aynı ERP'yi telefondan
+  **Benim İşlerim** ekranıyla kullanır (aşağıda); kurulacak ayrı uygulama,
+  çevrimdışı çalışma ve GPS konum kaydı yoktur.
 - **Konsinye yok** — bayi satışı peşindir.
 - **Genel muhasebe yok** — resmî defter Logo'dadır; ERP tahsilat takibi yapar
   ve Logo kolon düzeninde Excel üretir.
@@ -426,3 +429,41 @@ Bunlar eksiklik değil, **karar**:
   platformda **elle** aktive edilir. Platform tarafı yazıldığında bu
   kendiliğinden devreye girer; ERP o ana kadar bekleyen işlemleri biriktirir,
   atmaz.
+
+### 10.1 Benim İşlerim — teknisyenin telefon ekranı (teknik servis)
+
+Menü: **Teknik Servis → Benim İşlerim** (`zaman.yaz` izni). Saha teknisyeni
+giriş yaptığında doğrudan bu ekran açılır. Telefonda tarayıcıdan kullanılır;
+ayrı uygulama yoktur.
+
+- **İşlerim:** size atanmış açık işler Geciken / Bugün / Yarın / Sonraki günler /
+  Plansız gruplarında. Aynı gün aynı tesise gidilecek işler tek **ziyaret
+  kartında** toplanır (ör. 17 cihazlık bakım); her iş ayrı açılır. Şef ve
+  müdür "Tümü (birimim)" görünümüne de geçebilir.
+- **İş kartı:** adres (Haritada aç yalnız dokununca), saha yetkilisi (telefona
+  dokununca arar), seri, plan ve ulaşım notu, süre durumu, fotoğraf ekleme
+  (kamera açılır), Sonuç Gir ve bakım işinde Bakım Formu. Fiyat görünmez.
+- **Sayaç:** "Yola Çıktım" yol süresini, "Sahaya Vardım" saha süresini başlatır
+  ve işin durumunu kendiliğinden Yola Çıkıldı / Sahada yapar. Açık sayaç
+  varken Mola, Bekleme (neden seçilir), Devam, Sonraki Cihaza Geç ve Bitir
+  çıkar. Saat **sunucudan** alınır; telefon saati yanlış olsa da süre doğrudur.
+  - Bir kişinin aynı anda tek sayacı olur; başka işte sayaç açıkken yenisi
+    başlamaz ("Önce açık sayacı bitirin: SRV-…").
+  - **Mola kişi-saate girmez.** Sahada beklemek (Bekleme) kişi-saate girer ama
+    işi beklemeye almaz.
+  - Yanlış başlattıysanız ilk **5 dakikada** "Yanlış başlattım" ile geri alın.
+  - Sayacı kapatmayı unuttuysanız **Unuttum** ile gerçek bitiş saatini ve
+    gerekçeyi girin; kayıt "düzeltilmiş" olarak işaretlenir. Sayaç kendiliğinden
+    kapanmaz; 10 saati aşan ya da dünden kalan sayaç şefe ve size uyarı verir.
+  - Açık sayaçlı iş tamamlanamaz ve iptal edilemez; açık sayaçlı kişi ekipten
+    çıkarılamaz. Önce sayacı bitirin.
+- **Bugünüm:** günün bölümleri, toplam kişi-saat (mola ayrı ve hariç) ve gün
+  sonunda **süre kaydı eksik** işler. Eksik işte "Elle gir" ile süreyi
+  sonradan girersiniz. Kayıt yoksa ekranda "Süre kaydı eksik" yazar, **0 dk
+  yazılmaz**.
+- **Elle süre:** kendi adınıza en çok 2 gün geriye girebilirsiniz; bitişi 30
+  dakikadan eski kayıtta gerekçe zorunludur. Daha eskisini ve başkası adına
+  kaydı şef/müdür (`servis.planla`) girer; yanlış kaydı da gerekçeyle iptal
+  eder (kayıt silinmez, iptal olarak görünür).
+- **Bağlantı yoksa** düğmeler kilitlenir: "Bağlantı yok — süreyi sonra elle
+  girin". Çevrimdışı basış biriktirilmez.

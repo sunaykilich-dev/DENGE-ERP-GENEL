@@ -67,9 +67,14 @@ VeriBulKancasi = Callable[[AsyncSession, VeriBulAramasi], Awaitable[list[dict]]]
 # (db, account_id) → bu hesaba ait denetim satırlarını seçen SQL koşulları
 DenetimMaskeKancasi = Callable[[AsyncSession, int], Awaitable[list[ColumnElement[bool]]]]
 
+# (sinir_tarihi) → "son N yılda hareketi olan" hesap kimliklerini seçen sorgu
+# (tek sütun `customer_id`; NULL'ları KENDİSİ ayıklamalı — bkz. NOT IN notu).
+SaklamaHaricKancasi = Callable[[date], Any]
+
 ANONIMLESTIRME_KANCALARI: list[AnonimlestirmeKancasi] = []
 VERI_BUL_KANCALARI: dict[str, VeriBulKancasi] = {}
 DENETIM_MASKE_VARLIKLARI: dict[str, DenetimMaskeKancasi] = {}
+SAKLAMA_HARIC_KANCALARI: dict[str, SaklamaHaricKancasi] = {}
 
 
 def anonimlestirme_kaydet(fn: AnonimlestirmeKancasi) -> AnonimlestirmeKancasi:
@@ -89,6 +94,15 @@ def veri_bul_kaydet(anahtar: str, fn: VeriBulKancasi) -> None:
 def denetim_maske_kaydet(entity: str, fn: DenetimMaskeKancasi) -> None:
     """`entity` denetim satırlarını anonimleştirmede maskelenecek varlıklara ekler."""
     DENETIM_MASKE_VARLIKLARI[entity] = fn
+
+
+def saklama_haric_kaydet(anahtar: str, fn: SaklamaHaricKancasi) -> None:
+    """Saklama listesinden çıkarılacak "yakın zamanda hareketli" hesapların
+    sorgusunu kaydeder (ör. son N yılda servis işi olan müşteri, TS-037).
+
+    `fn(sinir)` → `select(<hesap_id sütunu>)`; NULL içermemeli.
+    """
+    SAKLAMA_HARIC_KANCALARI[anahtar] = fn
 
 
 def denetim_hesap_kosulu(entity: str, account_id: int, idler: list[int]) -> ColumnElement[bool]:
@@ -480,17 +494,17 @@ async def saklama_suresi_dolanlar(
         func.date(WorkOrder.completed_at) >= sinir,
     )
 
-    hesaplar = (
-        await db.scalars(
-            select(Account).where(
-                Account.is_deleted.is_(False),
-                Account.is_musteri.is_(True),
-                Account.id.not_in(aktif_abonelik),
-                Account.id.not_in(acik_cihaz),
-                Account.id.not_in(son_isler),
-            )
-        )
-    ).all()
+    stmt = select(Account).where(
+        Account.is_deleted.is_(False),
+        Account.is_musteri.is_(True),
+        Account.id.not_in(aktif_abonelik),
+        Account.id.not_in(acik_cihaz),
+        Account.id.not_in(son_isler),
+    )
+    # Modül kancaları (ör. servis işleri): son N yılda hareketi olan hesap çıkar.
+    for kanca in SAKLAMA_HARIC_KANCALARI.values():
+        stmt = stmt.where(Account.id.not_in(kanca(sinir)))
+    hesaplar = (await db.scalars(stmt)).all()
 
     return [
         {

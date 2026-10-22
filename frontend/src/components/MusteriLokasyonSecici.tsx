@@ -8,12 +8,30 @@ import {
   type LokasyonSatiri,
   type MusteriSatiri,
 } from "../api/anaVeri";
+import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 export interface MusteriLokasyonSecimi {
   musteriId: number | null;
   musteriAdi?: string | null;
   lokasyonId: number | null;
+}
+
+/**
+ * Seçilen lokasyonun saha ön dolumu (`/ana-veri/saha-onerisi`, E14-16):
+ * adres + birincil irtibat. YALNIZ tesis satırından gelir; IBAN/VKN yoktur.
+ * Telefon `servis.yaz` olmayana maskeli döner.
+ */
+export interface SahaOnerisi {
+  lokasyon_id: number;
+  tesis_adi: string | null;
+  adres: string | null;
+  ilce: string | null;
+  il: string | null;
+  erisim_notu: string | null;
+  irtibat: { id: number; ad: string; telefon: string | null } | null;
+  /** Lokasyonun bütün irtibatları (birincil önce); formda listeden seçilir. */
+  irtibatlar?: { id: number; ad: string; unvan: string | null; telefon: string | null }[];
 }
 
 const ESLESEN_ETIKET: Record<MusteriSatiri["eslesen"], string> = {
@@ -45,14 +63,24 @@ export default function MusteriLokasyonSecici({
   value,
   onChange,
   disabled,
+  onSahaOnerisi,
 }: {
   value?: MusteriLokasyonSecimi;
   onChange?: (v: MusteriLokasyonSecimi) => void;
   disabled?: boolean;
+  /**
+   * TS-034: lokasyon seçilince tesis kartı (adres, erişim notu) gösterilir ve
+   * birincil irtibat bu geri çağırmayla forma ÖNERİLİR (kullanıcı değiştirebilir).
+   * Verilmezse seçici eskisi gibi yalnız müşteri/lokasyon seçer.
+   */
+  onSahaOnerisi?: (o: SahaOnerisi | null) => void;
 }) {
   const { message } = App.useApp();
   const { yetkili } = useAuth();
   const hizliEkleyebilir = yetkili("servis.yaz") && yetkili("lokasyon.yaz");
+  // Lokasyon kartını görebilen izin (sunucu da aynısını ister; teknisyen kimlik
+  // tarayarak tesis irtibatı okuyamasın).
+  const kartGorur = yetkili("hesap.gor") || yetkili("lokasyon.yaz");
   const [metin, setMetin] = useState(value?.musteriAdi ?? "");
   const aranan = useGecikmeli(metin.trim());
   const [hizliAcik, setHizliAcik] = useState(false);
@@ -70,6 +98,24 @@ export default function MusteriLokasyonSecici({
     queryFn: () => anaVeriApi.lokasyonAra(value!.musteriId!),
     enabled: !!value?.musteriId,
   });
+
+  const lokasyonId = value?.lokasyonId ?? null;
+  const saha = useQuery({
+    queryKey: ["saha-onerisi", lokasyonId],
+    queryFn: () =>
+      api.get<SahaOnerisi>(
+        `/api/teknik-servis/ana-veri/saha-onerisi?${new URLSearchParams({ lokasyon_id: String(lokasyonId) })}`,
+      ),
+    enabled: !!lokasyonId && kartGorur && !!onSahaOnerisi,
+  });
+  const oneriCb = onSahaOnerisi;
+  useEffect(() => {
+    if (!oneriCb) return;
+    if (!lokasyonId) oneriCb(null);
+    else if (saha.data) oneriCb(saha.data.lokasyon_id ? saha.data : null);
+    // Yalnız lokasyon/öneri değişince; geri çağırma kimliği her çizimde değişebilir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lokasyonId, saha.data]);
 
   const sec = (m: MusteriSatiri) => {
     setMetin(m.unvan);
@@ -166,6 +212,14 @@ export default function MusteriLokasyonSecici({
         }))}
         notFoundContent="Bu müşterinin aktif tesisi yok"
       />
+
+      {onSahaOnerisi && saha.data?.lokasyon_id && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {[saha.data.adres, saha.data.ilce, saha.data.il].filter(Boolean).join(" · ") ||
+            "Adres girilmemiş"}
+          {saha.data.erisim_notu ? ` — Erişim: ${saha.data.erisim_notu}` : ""}
+        </Typography.Text>
+      )}
 
       <Modal
         title="Hızlı müşteri ekle"

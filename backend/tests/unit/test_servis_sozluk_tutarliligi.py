@@ -129,11 +129,15 @@ _PLAN_1_9 = {
     "egitim_toplu_plan_ust_sinir", "egitim_takip_pencere_gun",
 }  # fmt: skip
 
+# Dalga 1 bütünleştirmesinde onaylanan ayar talepleri (eskiden kod sabiti).
+_DALGA1_EKLERI = {"bakim_sozlesme_bitis_uyari_gun"}
+
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
-    assert _PLAN_1_9 <= set(ayar.DEFAULTS)
+    beklenen = _PLAN_1_9 | _DALGA1_EKLERI
+    assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.
-    assert set(ayar.AYAR_SINIRLARI) == _PLAN_1_9
+    assert set(ayar.AYAR_SINIRLARI) == beklenen
 
 
 def test_varsayilanlar_kendi_sinirindan_gecer() -> None:

@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy import text as sa_text
 
-from app.api.deps import DbDep, client_ip, current_user
+from app.api.deps import ClockDep, DbDep, client_ip, current_user
 from app.models import Attachment, User
 from app.models.attachment import EK_SAHIPLERI, EK_TURLERI
 from app.services import audit
@@ -224,6 +224,7 @@ async def yukle(
     request: Request,
     db: DbDep,
     user: Kullanici,
+    clock: ClockDep,
     kind: str = "DIGER",
     notes: Annotated[str | None, Query(max_length=500)] = None,
 ) -> EkOut:
@@ -236,6 +237,13 @@ async def yukle(
         # Olmayan kayda ek bağlanırsa dosya diskte yer tutar ama hiçbir
         # ekranda görünmez: sessizce büyüyen çöp.
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"{entity} kaydı bulunamadı: {entity_id}")
+    # Sahip türüne özgü kural (ör. kapalı servis işine ek yalnız servis.kapat).
+    kurali = ek_kapsam.kural(entity)
+    if kurali is not None and kurali.yukleme_oncesi is not None:
+        try:
+            await kurali.yukleme_oncesi(db, user, entity_id, clock)
+        except ek_kapsam.EkKuralHatasi as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
     try:
         icerik = await depo.sinirli_oku(file)
@@ -243,6 +251,8 @@ async def yukle(
         # Teknik servis eklerinde içerik beyanla uyuşmalı (magic byte).
         ek_kapsam.icerik_dogrula(entity, icerik, mime)
         kayit = depo.yaz(icerik, mime_type=mime)
+    except ek_kapsam.IcerikUyusmazligi as exc:
+        raise HTTPException(exc.durum, str(exc)) from exc
     except depo.DepoHatasi as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
@@ -280,18 +290,26 @@ async def yukle(
         user_id=user.id,
         ip=client_ip(request),
     )
+    if kurali is not None and kurali.yuklendi is not None:
+        await kurali.yuklendi(db, user, ek, clock)
     await db.commit()
     return EkOut.of(ek)
 
 
 @router.delete("/{ek_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def sil(ek_id: int, request: Request, db: DbDep, user: Kullanici) -> None:
+async def sil(ek_id: int, request: Request, db: DbDep, clock: ClockDep, user: Kullanici) -> None:
     ek = await db.get(Attachment, ek_id)
     if ek is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ek bulunamadı")
     _, yazma = _sahip_dogrula(ek.entity)
     _izin(user, yazma)
     await _kapsam(db, ek.entity, ek.entity_id, user, yazma=True)
+    kurali = ek_kapsam.kural(ek.entity)
+    if kurali is not None and kurali.silme_oncesi is not None:
+        try:
+            await kurali.silme_oncesi(db, user, ek, clock)
+        except ek_kapsam.EkKuralHatasi as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
     # Ürün kapak görseli siliniyorsa bağ da kopar; FK SET NULL bunu yapar ama
     # aynı transaction içinde açıkça yapmak niyeti görünür kılıyor.
@@ -304,6 +322,13 @@ async def sil(ek_id: int, request: Request, db: DbDep, user: Kullanici) -> None:
 
     bilgi = {"dosya": ek.file_name, "tur": ek.kind}
     entity, entity_id = ek.entity, ek.entity_id
+    silinen = {
+        "ek_id": ek.id,
+        "entity_id": entity_id,
+        "dosya": ek.file_name,
+        "tur": ek.kind,
+        "sha256": ek.sha256,
+    }
     await db.delete(ek)
     await db.flush()
 
@@ -321,4 +346,6 @@ async def sil(ek_id: int, request: Request, db: DbDep, user: Kullanici) -> None:
         user_id=user.id,
         ip=client_ip(request),
     )
+    if kurali is not None and kurali.silindi is not None:
+        await kurali.silindi(db, user, silinen, clock)
     await db.commit()

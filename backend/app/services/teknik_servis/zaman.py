@@ -1,35 +1,123 @@
 """Saha zaman kaydı: sayaç, manuel kayıt, düzeltme, süre özeti (E09, TS-070…076).
 
-İSKELET (D0-S) — uygulama D1-G paketinindir. Kanca KAYDI bu dosyanın
-sonunda D1-G tarafından yapılır:
-`kancalar.kaydet("durum_dogrula", acik_sayac_dogrula)`,
-`kancalar.kaydet("ekip_degisiyor", acik_sayac_cikarma_dogrula)`.
+**Tek tablo** (`service_time_entries`): canlı sayaç bölümü, elle girilen kayıt,
+mola ve düzeltme aynı tabloda. Kişi aynı anda iki yerde olamaz: servis
+YAZMADAN ÖNCE çakışan bölümü ve açık sayacı sorgular ve okunur mesaj verir
+("10:00-10:30 MOLA (SRV-…) ile çakışıyor"); `ex_ste_kisi_cakisma` ve
+`uq_ste_acik_kisi` yalnız eşzamanlı yarışın son savunmasıdır (E09 kontrol B7 —
+global kısıt eşleyicisi kişi/iş adı veremez).
 
-Kayıt yoksa süre "eksik"tir, 0 DEĞİL (`kisi_saat_dk=None`, `sure_durumu=EKSIK`);
-`or 0` / `coalesce(...,0)` yasak. Mola kişi-saate girmez. Çakışma yazmadan
-önce sorgulanır ve okunur mesaj verilir; EXCLUDE yarışta son savunmadır.
-GECIS: kapat → flush → ekle.
+**Kayıt yoksa süre "eksik"tir, 0 DEĞİL** (`kisi_saat_dk=None`,
+`sure_durumu=EKSIK`); `or 0` / `coalesce(...,0)` yasaktır (TS-075, birim
+testiyle kilitli). Mola kişi-saate girmez (`KISI_SAATE_DAHIL`).
+
+**GECIS sırası: kapat → flush → ekle.** Aynı flush'ta UPDATE ve INSERT birlikte
+gitseydi `uq_ste_acik_kisi` ve EXCLUDE bir an iki açık bölüm görebilirdi;
+açık `flush` sırayı kesinleştirir.
+
+**Sahibi istisnası** (E09 §3.2): kişi KENDİ açık bölümünü iş erişimine ve
+atamaya bakılmadan bitirebilir, geri alabilir, unuttum ile kapatabilir —
+ataması kaldırılmış teknisyenin sayacı açık kalıp kişi-saati şişirmesin.
+Başkasının bölümü 403.
+
+**Worker sayacı asla kapatmaz** (K16): uydurma bitiş saati yazılmaz; uzun
+sayaç yalnız uyarı üretir (`zaman_uyarilari`).
+
+Servis katmanı commit yapmaz; commit API'dedir. Denetim izi ve olay geçmişi
+aynı transaction'da, commit'ten önce yazılır.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import datetime
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from app.services.teknik_servis.kancalar import ServisHatasi
+from sqlalchemy import and_, exists, func, not_, or_, select
+
+from app.models import (
+    ServiceHoldReason,
+    ServiceOrder,
+    ServiceOrderAssignment,
+    ServicePlan,
+    ServiceResult,
+    ServiceTimeEntry,
+    User,
+)
+from app.models.teknik_servis import DURUM_GRUPLARI, KISI_SAATE_DAHIL
+from app.services import audit
+from app.services import settings as ayarlar
+from app.services.teknik_servis import kancalar, kapsam, yerel_zaman
+from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
+from app.services.uyarilar import Uyari
 
 if TYPE_CHECKING:
     from sqlalchemy import ColumnElement
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.clock import Clock
-    from app.models import ServiceOrder, ServiceTimeEntry, User
+
+
+# --- Hata sınıfları (API → HTTP kodu) ---------------------------------------------
 
 
 class ZamanHatasi(ServisHatasi):
     """Zaman kaydı kural ihlali → 409 (açık mesaj: hangi sayaç, hangi iş)."""
+
+
+class ZamanGirdiHatasi(ServisGirdiHatasi):
+    """Girdi hatası (gelecek bitiş, 1 dk altı, gerekçesiz düzeltme ...) → 400."""
+
+
+class ZamanYetkiHatasi(PermissionError):
+    """Başkasının bölümü / başkası adına kayıt (servis.planla yok) → 403."""
+
+
+class ZamanKapsamDisi(LookupError):
+    """Kayıt bulunamadı ya da kapsam dışı → 404 (varlığı sızdırılmaz)."""
+
+
+# --- Sabitler ------------------------------------------------------------------------
+
+# 18 saatlik bölüm sınırı kod sabitidir ve `ck_ste_azami_sure` ile aynıdır
+# (plan §1.9: şemaya bağlı sınır ayardan değiştirilemez).
+AZAMI_BOLUM = timedelta(hours=18)
+
+# Hiç çalışılmamış ya da çalışmanın durumdan anlaşılamadığı durumlar: kayıt
+# yoksa "eksik" DEĞİL, "beklenmiyor". Telefonla çözülen ya da planda bekleyen
+# işi eksik saymak sayacı şişirirdi (E09 §2.4, denetimin "şişik sayaç" bulgusu).
+# BEKLEMEDE ve TEKRAR_ACILDI da burada: iş sahaya hiç çıkmadan beklemeye
+# alınabilir / yeniden açılabilir; tamamlandığında zaten EKSIK olarak görünür.
+BEKLENMIYOR_DURUMLAR = frozenset(
+    {"MUSTERI_TALEBI", "PLANLAMADA", "PLANLANDI", "BEKLEMEDE", "TEKRAR_ACILDI", "IPTAL"}
+)
+# Sahaya gidilmeden çözülen işlerde süre beklenmez (E01-06 çözüm kanalı).
+UZAKTAN_KANALLAR = frozenset({"UZAKTAN", "TELEFON"})
+
+SURE_DURUMLARI = ("TAM", "KISMI", "EKSIK", "BEKLENMIYOR")
+SURE_EKSIK_DURUMLARI = frozenset({"EKSIK", "KISMI"})
+
+# K4: sayaç yalnız bu geçişleri sürer (kaynak='sayac'); diğer durumlar değişmez.
+_OTOMATIK_DURUM: dict[str, tuple[frozenset[str], str]] = {
+    "YOL": (frozenset({"PLANLANDI"}), "YOLA_CIKILDI"),
+    "SAHA": (frozenset({"PLANLANDI", "YOLA_CIKILDI"}), "SAHADA"),
+}
+
+FAALIYET_ADLARI = {
+    "YOL": "Yol",
+    "SAHA": "Saha",
+    "UZAKTAN": "Uzaktan",
+    "ATOLYE": "Atölye",
+    "TEST": "Test",
+    "BEKLEME": "Bekleme",
+    "MOLA": "Mola",
+    "DIGER": "Diğer",
+}
+
+
+# --- Veri sınıfları ---------------------------------------------------------------------
 
 
 @dataclass
@@ -46,11 +134,296 @@ class ManuelKayitGirdisi:
 
 @dataclass(frozen=True)
 class SureOzeti:
-    """Tek kaynak süre özeti; kayıt yoksa `kisi_saat_dk=None`."""
+    """Tek kaynak süre özeti; kayıt yoksa `kisi_saat_dk=None` (0 DEĞİL).
+
+    Ekran, liste, Excel, panel KPI'sı, bakım formu ve rapor bu nesneyi
+    `sure_ozeti_toplu` üzerinden alır; ikinci bir hesap yazılmaz (E09-D02).
+    """
 
     kisi_saat_dk: int | None
     sure_durumu: str  # TAM | KISMI | EKSIK | BEKLENMIYOR
     eksik_kisiler: tuple[str, ...] = ()
+    mola_dk: int | None = None
+    faaliyet_kirilimi: dict[str, int] = field(default_factory=dict)
+    kisi_bazli: dict[int, int] = field(default_factory=dict)
+    ilk_yol_at: datetime | None = None
+    ilk_varis_at: datetime | None = None
+    son_bitis_at: datetime | None = None
+    sapma_dk: int | None = None
+    acik_bolum_sayisi: int = 0
+
+    @property
+    def sure_eksik(self) -> bool:
+        """`sure_eksik_ifadesi()` SQL tanımının Python karşılığı."""
+        return self.sure_durumu in SURE_EKSIK_DURUMLARI
+
+
+# --- Küçük yardımcılar --------------------------------------------------------------------
+
+
+def _dk(sure: timedelta) -> int:
+    """Süre → tam dakika (yuvarlanmış). Negatif süre üretilmez (CHECK)."""
+    return round(sure.total_seconds() / 60)
+
+
+def _saat(an: datetime | None) -> str:
+    return yerel_zaman.yerel_an(an).strftime("%H:%M") if an is not None else "…"
+
+
+def _aralik_metni(bolum: ServiceTimeEntry) -> str:
+    gun = yerel_zaman.yerel_an(bolum.started_at).strftime("%d.%m.%Y")
+    return f"{gun} {_saat(bolum.started_at)}-{_saat(bolum.ended_at)}"
+
+
+async def _ayar(db: AsyncSession, anahtar: str) -> Any:
+    return await ayarlar.get(db, anahtar)
+
+
+def gecerli_bolum() -> ColumnElement[bool]:
+    """İptal edilmemiş bölüm koşulu (iptal = yumuşak silme)."""
+    return ServiceTimeEntry.is_deleted.is_(False)
+
+
+async def _so_no(db: AsyncSession, so_id: int) -> str:
+    return await db.scalar(select(ServiceOrder.so_no).where(ServiceOrder.id == so_id)) or "?"
+
+
+async def _ad(db: AsyncSession, user_id: int | None) -> str:
+    if user_id is None:
+        return "?"
+    return await db.scalar(select(User.full_name).where(User.id == user_id)) or "?"
+
+
+def _sahibi_mi(bolum: ServiceTimeEntry, user: User) -> None:
+    if bolum.user_id != user.id:
+        raise ZamanYetkiHatasi("Yalnız kendi sayacınızı yönetebilirsiniz")
+
+
+def _acik_mi(bolum: ServiceTimeEntry) -> None:
+    if bolum.is_deleted or bolum.ended_at is not None:
+        raise ZamanHatasi("Bu sayaç bölümü artık açık değil; ekranı yenileyin.")
+
+
+async def _aktif_atamali_mi(db: AsyncSession, so_id: int, user_id: int) -> bool:
+    return (
+        await db.scalar(
+            select(ServiceOrderAssignment.id).where(
+                ServiceOrderAssignment.service_order_id == so_id,
+                ServiceOrderAssignment.user_id == user_id,
+                ServiceOrderAssignment.removed_at.is_(None),
+            )
+        )
+        is not None
+    )
+
+
+async def _hic_atanmis_mi(db: AsyncSession, so_id: int, user_id: int) -> bool:
+    return (
+        await db.scalar(
+            select(ServiceOrderAssignment.id)
+            .where(
+                ServiceOrderAssignment.service_order_id == so_id,
+                ServiceOrderAssignment.user_id == user_id,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+async def _bekleme_nedeni_dogrula(db: AsyncSession, faaliyet: str, neden: str | None) -> None:
+    """BEKLEME faaliyetinde neden zorunlu ve iş bekleme kataloğundan (K24)."""
+    if faaliyet != "BEKLEME":
+        if neden is not None:
+            raise ZamanGirdiHatasi("Bekleme nedeni yalnız BEKLEME faaliyetinde girilir")
+        return
+    if not neden:
+        raise ZamanGirdiHatasi("Bekleme faaliyeti için neden seçin")
+    kayit = await db.scalar(select(ServiceHoldReason).where(ServiceHoldReason.kod == neden))
+    if kayit is None or not kayit.is_active or kayit.sadece_sistem:
+        raise ZamanGirdiHatasi(f"Geçersiz bekleme nedeni: {neden}")
+
+
+async def acik_bolum(
+    db: AsyncSession, user_id: int, *, kilitle: bool = False
+) -> ServiceTimeEntry | None:
+    """Kişinin açık (canlı) bölümü; `kilitle` → `SELECT ... FOR UPDATE`."""
+    stmt = select(ServiceTimeEntry).where(
+        ServiceTimeEntry.user_id == user_id,
+        ServiceTimeEntry.ended_at.is_(None),
+        gecerli_bolum(),
+    )
+    if kilitle:
+        stmt = stmt.with_for_update()
+    return await db.scalar(stmt)
+
+
+async def _acik_bolum_yok(db: AsyncSession, user: User) -> None:
+    """Tek aktif sayaç: açık bölüm varsa hangi işte olduğunu söyleyerek 409."""
+    mevcut = await acik_bolum(db, user.id, kilitle=True)
+    if mevcut is not None:
+        raise ZamanHatasi(
+            f"Önce açık sayacı bitirin: {await _so_no(db, mevcut.service_order_id)} "
+            f"({FAALIYET_ADLARI.get(mevcut.faaliyet, mevcut.faaliyet)}, "
+            f"{_saat(mevcut.started_at)}'dan beri)"
+        )
+
+
+async def cakisan_bolum(
+    db: AsyncSession,
+    user_id: int,
+    bas: datetime,
+    bit: datetime | None,
+    *,
+    haric_id: int | None = None,
+) -> ServiceTimeEntry | None:
+    """`[bas, bit)` ile çakışan geçerli bölüm (açık bölümün bitişi = sonsuz).
+
+    EXCLUDE kısıtının (`tstzrange(started_at, ended_at, '[)') &&`) birebir
+    karşılığıdır; ardışık bölümler (bitiş = başlangıç) çakışmaz.
+    """
+    kosullar = [
+        ServiceTimeEntry.user_id == user_id,
+        gecerli_bolum(),
+        or_(ServiceTimeEntry.ended_at.is_(None), ServiceTimeEntry.ended_at > bas),
+    ]
+    if bit is not None:
+        kosullar.append(ServiceTimeEntry.started_at < bit)
+    if haric_id is not None:
+        kosullar.append(ServiceTimeEntry.id != haric_id)
+    return await db.scalar(
+        select(ServiceTimeEntry).where(*kosullar).order_by(ServiceTimeEntry.started_at).limit(1)
+    )
+
+
+async def _cakisma_yok(
+    db: AsyncSession, user_id: int, bas: datetime, bit: datetime | None, *, haric_id=None
+) -> None:
+    cakisan = await cakisan_bolum(db, user_id, bas, bit, haric_id=haric_id)
+    if cakisan is not None:
+        raise ZamanHatasi(
+            f"{_aralik_metni(cakisan)} {cakisan.faaliyet} "
+            f"({await _so_no(db, cakisan.service_order_id)}) ile çakışıyor"
+        )
+
+
+async def _sure_sinirlari(db: AsyncSession, bas: datetime, bit: datetime) -> None:
+    """Asgari bölüm (ayar) ve azami 18 saat (kod sabiti)."""
+    asgari = timedelta(minutes=int(await _ayar(db, "zaman_asgari_bolum_dk")))
+    if bit - bas < asgari:
+        raise ZamanGirdiHatasi(
+            f"Bölüm en az {int(asgari.total_seconds() // 60)} dakika olmalı; yanlış "
+            "başlattıysanız ilk dakikalarda 'Yanlış başlattım' ile geri alın."
+        )
+    if bit - bas > AZAMI_BOLUM:
+        raise ZamanGirdiHatasi(
+            "Bölüm 18 saati aşamaz. Sayacı unuttuysanız 'Unuttum' ile gerçek bitiş saatini girin."
+        )
+
+
+def _sayac_acilabilir(so: ServiceOrder) -> None:
+    if so.status not in DURUM_GRUPLARI["SAYAC_ACILABILIR"]:
+        raise ZamanHatasi(
+            f"{so.so_no} {so.status} durumunda; bu işte sayaç başlatılamaz "
+            "(kapalı ya da beklemedeki iş)."
+        )
+
+
+async def _durum_isle(
+    db: AsyncSession, so: ServiceOrder, faaliyet: str, user: User, clock: Clock
+) -> None:
+    """K4: Yola Çıktım → YOLA_CIKILDI, Sahaya Vardım → SAHADA (tek kapıdan)."""
+    kural = _OTOMATIK_DURUM.get(faaliyet)
+    if kural is None or so.status not in kural[0]:
+        return
+    from app.services.teknik_servis import is_emirleri
+
+    await is_emirleri.durum_degistir(db, so, kural[1], kaynak="sayac", user=user, clock=clock)
+
+
+async def _yeni_bolum(
+    db: AsyncSession,
+    so: ServiceOrder,
+    faaliyet: str,
+    *,
+    user: User,
+    an: datetime,
+    onceki: ServiceTimeEntry | None = None,
+    bekleme_nedeni: str | None = None,
+    konum_notu: str | None = None,
+) -> ServiceTimeEntry:
+    bolum = ServiceTimeEntry(
+        service_order_id=so.id,
+        user_id=user.id,
+        faaliyet=faaliyet,
+        bekleme_nedeni=bekleme_nedeni,
+        started_at=an,
+        ended_at=None,
+        kaynak="CANLI",
+        onceki_bolum_id=onceki.id if onceki is not None else None,
+        girildi_at=an,
+        konum_notu=konum_notu,
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    db.add(bolum)
+    await db.flush()
+    return bolum
+
+
+async def _olay(
+    db: AsyncSession,
+    so_id: int,
+    olay_turu: str,
+    ozet: str,
+    *,
+    user: User,
+    clock: Clock,
+    veri: dict[str, Any],
+) -> None:
+    """Zaman düzeltmeleri iş geçmişine `DUZELTME`/`NOT` ile yazılır (K10)."""
+    from app.services.teknik_servis import gecmis
+
+    so = await db.get(ServiceOrder, so_id)
+    await gecmis.olay_yaz(db, so, olay_turu, ozet, user=user, clock=clock, veri=veri)
+
+
+def _denetim_degeri(bolum: ServiceTimeEntry) -> dict[str, Any]:
+    return {
+        "service_order_id": bolum.service_order_id,
+        "user_id": bolum.user_id,
+        "faaliyet": bolum.faaliyet,
+        "started_at": bolum.started_at.isoformat() if bolum.started_at else None,
+        "ended_at": bolum.ended_at.isoformat() if bolum.ended_at else None,
+        "kaynak": bolum.kaynak,
+        "kapanis_turu": bolum.kapanis_turu,
+        "iptal_turu": bolum.iptal_turu,
+        "gerekce": bolum.gerekce or bolum.iptal_gerekcesi,
+    }
+
+
+async def _denetle(
+    db: AsyncSession,
+    bolum: ServiceTimeEntry,
+    eylem: str,
+    *,
+    user: User,
+    eski: dict[str, Any] | None = None,
+) -> None:
+    await audit.log(
+        db,
+        "service_time_entries",
+        eylem,
+        entity_id=bolum.id,
+        old_value=eski,
+        new_value=_denetim_degeri(bolum),
+        user_id=user.id,
+        # Konum notu kişinin nerede olduğunu söyler (KVKK, E09 kontrol E09-01).
+        is_personal_data=bool(bolum.konum_notu),
+    )
+
+
+# --- Canlı sayaç (TS-071) -------------------------------------------------------------------
 
 
 async def baslat(
@@ -61,14 +434,58 @@ async def baslat(
     user: User,
     clock: Clock,
     konum_notu: str | None = None,
+    bekleme_nedeni: str | None = None,
 ) -> ServiceTimeEntry:
-    raise NotImplementedError("zaman.baslat: D1-G paketi (TS-071) uygular")
+    """Yeni canlı bölüm açar. İş erişimi (404) API'de çözülmüştür.
+
+    Kurallar: iş `SAYAC_ACILABILIR` (409), kişi işte aktif atamalı (400), kişinin
+    açık bölümü yok (409, hangi işte olduğu yazılır). Yola Çıktım/Sahaya Vardım
+    işin durumunu `durum_degistir(kaynak='sayac')` ile ilerletir.
+    """
+    _sayac_acilabilir(so)
+    if not await _aktif_atamali_mi(db, so.id, user.id):
+        raise ZamanGirdiHatasi(f"{so.so_no} işine atanmadığınız için sayaç başlatamazsınız")
+    await _bekleme_nedeni_dogrula(db, faaliyet, bekleme_nedeni)
+    await _acik_bolum_yok(db, user)
+    an = clock.now()
+    # Açık bölüm yokken bile ileri tarihli manuel kayıt olamaz (bitiş ≤ şimdi),
+    # ama geçmişte bitip şimdiye uzanan kayıt yoktur; yine de EXCLUDE'tan önce
+    # okunur mesaj için sorgulanır.
+    await _cakisma_yok(db, user.id, an, None)
+    bolum = await _yeni_bolum(
+        db,
+        so,
+        faaliyet,
+        user=user,
+        an=an,
+        bekleme_nedeni=bekleme_nedeni,
+        konum_notu=konum_notu,
+    )
+    await _durum_isle(db, so, faaliyet, user, clock)
+    await kancalar.zaman_bolumu_acildi(db, bolum)
+    return bolum
 
 
 async def bitir(
-    db: AsyncSession, bolum: ServiceTimeEntry, *, user: User, clock: Clock
+    db: AsyncSession,
+    bolum: ServiceTimeEntry,
+    *,
+    user: User,
+    clock: Clock,
+    aciklama: str | None = None,
 ) -> ServiceTimeEntry:
-    raise NotImplementedError("zaman.bitir: D1-G paketi (TS-071) uygular")
+    """Sahibi açık bölümünü kapatır (atama/erişim aranmaz; iş IPTAL olsa bile)."""
+    _sahibi_mi(bolum, user)
+    _acik_mi(bolum)
+    an = clock.now()
+    await _sure_sinirlari(db, bolum.started_at, an)
+    bolum.ended_at = an
+    bolum.kapanis_turu = "BITIR"
+    bolum.updated_by = user.id
+    if aciklama:
+        bolum.aciklama = aciklama
+    await db.flush()
+    return bolum
 
 
 async def gecis(
@@ -79,15 +496,117 @@ async def gecis(
     user: User,
     clock: Clock,
     hedef_is: ServiceOrder | None = None,
+    bekleme_nedeni: str | None = None,
 ) -> ServiceTimeEntry:
-    """Faaliyet değiştir / mola / devam / sonraki işe taşı (kapat → flush → ekle)."""
-    raise NotImplementedError("zaman.gecis: D1-G paketi (TS-071/074) uygular")
+    """Faaliyet değiştir / mola / devam / sonraki işe taşı (kapat → flush → ekle).
+
+    `hedef_is` verilirse (TS-074) bölüm o işte aynı anda devam eder: hedef
+    `SAYAC_ACILABILIR` ve kişiye aktif atanmış olmalı (değilse 409); hedef
+    işin erişimi (404) API'de çözülür. Hedefte hata olursa kaynak bölüm açık
+    kalır (aynı transaction geri alınır).
+    """
+    _sahibi_mi(bolum, user)
+    _acik_mi(bolum)
+    kaynak_so = await db.get(ServiceOrder, bolum.service_order_id)
+    if hedef_is is not None:
+        if hedef_is.id == bolum.service_order_id:
+            raise ZamanGirdiHatasi("Sayaç zaten bu işte; başka bir iş seçin")
+        hedef = hedef_is
+        _sayac_acilabilir(hedef)
+        if not await _aktif_atamali_mi(db, hedef.id, user.id):
+            raise ZamanHatasi(f"{hedef.so_no} işine atanmadığınız için sayaç oraya taşınamaz")
+    else:
+        hedef = kaynak_so
+        if yeni_faaliyet == bolum.faaliyet and bekleme_nedeni == bolum.bekleme_nedeni:
+            raise ZamanGirdiHatasi("Sayaç zaten bu faaliyette")
+        _sayac_acilabilir(hedef)
+    await _bekleme_nedeni_dogrula(db, yeni_faaliyet, bekleme_nedeni)
+    an = clock.now()
+    await _sure_sinirlari(db, bolum.started_at, an)
+
+    bolum.ended_at = an
+    bolum.kapanis_turu = "GECIS"
+    bolum.updated_by = user.id
+    await db.flush()  # kapat → flush → ekle (uq_ste_acik_kisi / EXCLUDE sırası)
+    yeni = await _yeni_bolum(
+        db,
+        hedef,
+        yeni_faaliyet,
+        user=user,
+        an=an,
+        onceki=bolum,
+        bekleme_nedeni=bekleme_nedeni,
+        konum_notu=bolum.konum_notu if hedef_is is None else None,
+    )
+    await _durum_isle(db, hedef, yeni_faaliyet, user, clock)
+    await kancalar.zaman_bolumu_acildi(db, yeni)
+    return yeni
 
 
-async def manuel_kaydet(
-    db: AsyncSession, so: ServiceOrder, girdi: ManuelKayitGirdisi, user: User, clock: Clock
+async def mola(
+    db: AsyncSession, bolum: ServiceTimeEntry, *, user: User, clock: Clock
 ) -> ServiceTimeEntry:
-    raise NotImplementedError("zaman.manuel_kaydet: D1-G paketi (TS-070) uygular")
+    if bolum.faaliyet == "MOLA":
+        raise ZamanGirdiHatasi("Zaten moladasınız")
+    return await gecis(db, bolum, "MOLA", user=user, clock=clock)
+
+
+async def devam_faaliyeti(db: AsyncSession, bolum: ServiceTimeEntry) -> str:
+    """Mola/bekleme öncesindeki son faaliyet (zincirde geriye yürür; yoksa SAHA)."""
+    adim = bolum
+    gorulen: set[int] = set()
+    while adim.onceki_bolum_id is not None and adim.onceki_bolum_id not in gorulen:
+        gorulen.add(adim.onceki_bolum_id)
+        onceki = await db.get(ServiceTimeEntry, adim.onceki_bolum_id)
+        if onceki is None:
+            break
+        if onceki.service_order_id != bolum.service_order_id:
+            break  # taşınmış bölüm: önceki işin faaliyeti bu işe taşınmaz
+        if onceki.faaliyet not in ("MOLA", "BEKLEME"):
+            return onceki.faaliyet
+        adim = onceki
+    return "SAHA"
+
+
+async def devam(
+    db: AsyncSession, bolum: ServiceTimeEntry, *, user: User, clock: Clock
+) -> ServiceTimeEntry:
+    if bolum.faaliyet not in ("MOLA", "BEKLEME"):
+        raise ZamanGirdiHatasi("Devam yalnız mola ya da bekleme sonrasında kullanılır")
+    _sahibi_mi(bolum, user)
+    faaliyet = await devam_faaliyeti(db, bolum)
+    return await gecis(db, bolum, faaliyet, user=user, clock=clock)
+
+
+# --- Düzeltmeler (TS-072) -------------------------------------------------------------------
+
+
+async def geri_al(
+    db: AsyncSession, bolum: ServiceTimeEntry, *, user: User, clock: Clock
+) -> ServiceTimeEntry:
+    """İlk `zaman_geri_alma_dk` dakikada yanlış başlatılan bölümü iptal eder.
+
+    Satır silinmez (`GERI_ALINDI` iz bırakır), kişi-saate girmez. GECIS ile
+    açılmışsa önceki bölüm YENİDEN AÇILMAZ (öngörülebilir; boşluk ≤ 5 dk).
+    """
+    _sahibi_mi(bolum, user)
+    _acik_mi(bolum)
+    an = clock.now()
+    pencere = timedelta(minutes=int(await _ayar(db, "zaman_geri_alma_dk")))
+    if an >= bolum.started_at + pencere:
+        raise ZamanGirdiHatasi(
+            f"Geri alma yalnız ilk {int(pencere.total_seconds() // 60)} dakikada yapılabilir; "
+            "sayacı bitirin ya da 'Unuttum' ile düzeltin."
+        )
+    eski = _denetim_degeri(bolum)
+    bolum.is_deleted = True
+    bolum.deleted_at = an
+    bolum.deleted_by = user.id
+    bolum.iptal_turu = "GERI_ALINDI"
+    bolum.updated_by = user.id
+    await db.flush()
+    await _denetle(db, bolum, "geri_al", user=user, eski=eski)
+    return bolum
 
 
 async def unuttum(
@@ -99,36 +618,626 @@ async def unuttum(
     user: User,
     clock: Clock,
 ) -> ServiceTimeEntry:
-    raise NotImplementedError("zaman.unuttum: D1-G paketi (TS-072) uygular")
+    """Sahibi açık sayacını gerçek bitişle kapatır (KULLANICI_DUZELTMESI).
+
+    E09 kontrol B18: ön koşul (>10 sa / gün değişmiş) YOK — 15:00'te işi bırakıp
+    19:00'da fark eden teknisyen 4 saatlik sahte süre yazmak zorunda kalmasın.
+    Gerekçe zorunlu; kayıt disiplin sütununda "düzeltilmiş" sayılır.
+    """
+    _sahibi_mi(bolum, user)
+    _acik_mi(bolum)
+    gerekce = (gerekce or "").strip()
+    if not gerekce:
+        raise ZamanGirdiHatasi("Gerçek bitişle kapatmak için gerekçe yazın")
+    _farkindalik(gercek_bitis)
+    an = clock.now()
+    if gercek_bitis <= bolum.started_at:
+        raise ZamanGirdiHatasi("Gerçek bitiş, sayacın başlangıcından sonra olmalı")
+    if gercek_bitis > an:
+        raise ZamanGirdiHatasi("Gerçek bitiş ileri bir saat olamaz")
+    await _sure_sinirlari(db, bolum.started_at, gercek_bitis)
+    eski = _denetim_degeri(bolum)
+    bolum.ended_at = gercek_bitis
+    bolum.kaynak = "KULLANICI_DUZELTMESI"
+    bolum.kapanis_turu = "UNUTULDU"
+    bolum.gerekce = gerekce[:300]
+    bolum.updated_by = user.id
+    await db.flush()
+    await _denetle(db, bolum, "kullanici_duzeltme", user=user, eski=eski)
+    await _olay(
+        db,
+        bolum.service_order_id,
+        "DUZELTME",
+        f"Unutulan sayaç gerçek bitişle kapatıldı ({_aralik_metni(bolum)} {bolum.faaliyet})",
+        user=user,
+        clock=clock,
+        veri={"alan": "zaman", "bolum_id": bolum.id, "tur": "UNUTULDU"},
+    )
+    return bolum
+
+
+async def yonetici_kapat(
+    db: AsyncSession,
+    bolum: ServiceTimeEntry,
+    gercek_bitis: datetime | None,
+    gerekce: str,
+    *,
+    user: User,
+    clock: Clock,
+) -> ServiceTimeEntry:
+    """Uzun/unutulmuş sayacı yönetici kapatır (`servis.planla` + iş erişimi API'de).
+
+    Gerçek bitiş yoksa bölüm İPTAL edilir (kişi-saat oluşmaz); varsa
+    `YONETICI_DUZELTMESI` ile kapanır. MOLA düzeltilse de MOLA kalır.
+    """
+    _acik_mi(bolum)
+    gerekce = (gerekce or "").strip()
+    if not gerekce:
+        raise ZamanGirdiHatasi("Yönetici düzeltmesi için gerekçe zorunlu")
+    an = clock.now()
+    eski = _denetim_degeri(bolum)
+    if gercek_bitis is None:
+        bolum.is_deleted = True
+        bolum.deleted_at = an
+        bolum.deleted_by = user.id
+        bolum.iptal_turu = "YONETICI_IPTAL"
+        bolum.iptal_gerekcesi = gerekce[:300]
+        eylem, ozet = "yonetici_iptal", "Açık sayaç yönetici tarafından iptal edildi"
+    else:
+        _farkindalik(gercek_bitis)
+        if gercek_bitis <= bolum.started_at:
+            raise ZamanGirdiHatasi("Gerçek bitiş, sayacın başlangıcından sonra olmalı")
+        if gercek_bitis > an:
+            raise ZamanGirdiHatasi("Gerçek bitiş ileri bir saat olamaz")
+        if gercek_bitis - bolum.started_at > AZAMI_BOLUM:
+            raise ZamanGirdiHatasi("Bölüm 18 saati aşamaz")
+        bolum.ended_at = gercek_bitis
+        bolum.kaynak = "YONETICI_DUZELTMESI"
+        bolum.kapanis_turu = "YONETICI"
+        bolum.gerekce = gerekce[:300]
+        eylem, ozet = "yonetici_duzeltme", "Açık sayaç yönetici tarafından gerçek bitişle kapatıldı"
+    bolum.updated_by = user.id
+    await db.flush()
+    await _denetle(db, bolum, eylem, user=user, eski=eski)
+    await _olay(
+        db,
+        bolum.service_order_id,
+        "DUZELTME",
+        f"{ozet} ({await _ad(db, bolum.user_id)}, {bolum.faaliyet})",
+        user=user,
+        clock=clock,
+        veri={"alan": "zaman", "bolum_id": bolum.id, "tur": eylem.upper()},
+    )
+    return bolum
+
+
+def _farkindalik(an: datetime) -> None:
+    if an.tzinfo is None or an.tzinfo.utcoffset(an) is None:
+        raise ZamanGirdiHatasi("Saat dilimi bilgisi olmayan zaman kabul edilmez")
+
+
+# --- Manuel kayıt ve kayıt iptali (TS-070) ------------------------------------------------------
+
+
+async def manuel_kaydet(
+    db: AsyncSession, so: ServiceOrder, girdi: ManuelKayitGirdisi, user: User, clock: Clock
+) -> ServiceTimeEntry:
+    """Elle süre kaydı (kaynak=MANUEL). İş erişimi (404) API'de çözülür.
+
+    - başkası adına ya da `zaman_manuel_geri_gun`'den eski: `servis.planla` (403 / 400);
+    - bitiş ileri olamaz, aralık ≤ 18 sa; bitişi eşikten eski kayıtta gerekçe (400);
+    - kişi işte aktif atamalı (yönetici geçmiş atamalı kişi adına da girebilir) (400);
+    - IPTAL işe kayıt 409; çakışma okunur mesajla 409 (EXCLUDE son savunma).
+    """
+    yonetici = user.has("servis.planla")
+    kisi_id = girdi.user_id if girdi.user_id is not None else user.id
+    if kisi_id != user.id and not yonetici:
+        raise ZamanYetkiHatasi("Başkası adına süre kaydı için yetkiniz yok (servis.planla)")
+    if so.status == "IPTAL":
+        raise ZamanHatasi(f"{so.so_no} iptal edilmiş; bu işe süre kaydı girilemez")
+    _farkindalik(girdi.started_at)
+    _farkindalik(girdi.ended_at)
+    an = clock.now()
+    bas, bit = girdi.started_at, girdi.ended_at
+    if bit > an:
+        raise ZamanGirdiHatasi("Bitiş saati ileri bir zaman olamaz")
+    if bit <= bas:
+        raise ZamanGirdiHatasi("Bitiş, başlangıçtan sonra olmalı")
+    if bit - bas > AZAMI_BOLUM:
+        raise ZamanGirdiHatasi("Bir kayıt 18 saati aşamaz; birden fazla kayıt girin")
+    esik = timedelta(minutes=int(await _ayar(db, "zaman_manuel_gerekce_esik_dk")))
+    gerekce = (girdi.gerekce or "").strip() or None
+    if an - bit > esik and gerekce is None:
+        raise ZamanGirdiHatasi(
+            f"Bitişi {int(esik.total_seconds() // 60)} dakikadan eski kayıt için gerekçe yazın"
+        )
+    if not yonetici:
+        geri_gun = int(await _ayar(db, "zaman_manuel_geri_gun"))
+        sinir = yerel_zaman.yerel_bugun(clock) - timedelta(days=geri_gun)
+        if yerel_zaman.yerel_gun(bas) < sinir:
+            raise ZamanGirdiHatasi(
+                f"En çok {geri_gun} gün öncesine kayıt girebilirsiniz; daha eskisi için "
+                "şefinize başvurun."
+            )
+    if yonetici and kisi_id != user.id:
+        atamali = await _hic_atanmis_mi(db, so.id, kisi_id)
+    else:
+        atamali = await _aktif_atamali_mi(db, so.id, kisi_id)
+    if not atamali:
+        raise ZamanGirdiHatasi(f"Kişi {so.so_no} işine atanmış değil")
+    await _bekleme_nedeni_dogrula(db, girdi.faaliyet, girdi.bekleme_nedeni)
+    await _cakisma_yok(db, kisi_id, bas, bit)
+    kayit = ServiceTimeEntry(
+        service_order_id=so.id,
+        user_id=kisi_id,
+        faaliyet=girdi.faaliyet,
+        bekleme_nedeni=girdi.bekleme_nedeni,
+        started_at=bas,
+        ended_at=bit,
+        kaynak="MANUEL",
+        gerekce=gerekce[:300] if gerekce else None,
+        girildi_at=an,
+        konum_notu=girdi.konum_notu,
+        aciklama=girdi.aciklama,
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    db.add(kayit)
+    await db.flush()
+    await _denetle(db, kayit, "olustur", user=user)
+    return kayit
 
 
 async def kaydi_iptal_et(
     db: AsyncSession, kayit: ServiceTimeEntry, gerekce: str | None, user: User, clock: Clock
 ) -> ServiceTimeEntry:
-    raise NotImplementedError("zaman.kaydi_iptal_et: D1-G paketi (TS-072) uygular")
+    """Kapalı kaydı yönetici iptal eder (`servis.planla` API'de); satır silinmez."""
+    gerekce = (gerekce or "").strip()
+    if not gerekce:
+        raise ZamanGirdiHatasi("İptal gerekçesi zorunlu")
+    if kayit.is_deleted:
+        raise ZamanHatasi("Bu kayıt zaten iptal edilmiş")
+    if kayit.ended_at is None:
+        raise ZamanHatasi("Açık sayaç bu işlemle iptal edilemez; 'Kapat / Düzelt' kullanın")
+    an = clock.now()
+    eski = _denetim_degeri(kayit)
+    kayit.is_deleted = True
+    kayit.deleted_at = an
+    kayit.deleted_by = user.id
+    kayit.iptal_turu = "KAYIT_IPTAL"
+    kayit.iptal_gerekcesi = gerekce[:300]
+    kayit.updated_by = user.id
+    await db.flush()
+    await _denetle(db, kayit, "iptal", user=user, eski=eski)
+    await _olay(
+        db,
+        kayit.service_order_id,
+        "DUZELTME",
+        f"Süre kaydı iptal edildi ({_aralik_metni(kayit)} {kayit.faaliyet}, "
+        f"{await _ad(db, kayit.user_id)})",
+        user=user,
+        clock=clock,
+        veri={"alan": "zaman", "bolum_id": kayit.id, "tur": "KAYIT_IPTAL"},
+    )
+    return kayit
+
+
+# --- Kancalar (TS-073) ------------------------------------------------------------------------
+
+
+async def acik_sayaclar(
+    db: AsyncSession, is_idler: Iterable[int], user_idler: Iterable[int] | None = None
+) -> list[tuple[str, int, str]]:
+    """Açık sayaçlar: `(so_no, user_id, ad)` — tek sorgu."""
+    is_idler = list(is_idler)
+    if not is_idler:
+        return []
+    stmt = (
+        select(ServiceOrder.so_no, ServiceTimeEntry.user_id, User.full_name)
+        .join(ServiceOrder, ServiceOrder.id == ServiceTimeEntry.service_order_id)
+        .join(User, User.id == ServiceTimeEntry.user_id)
+        .where(
+            ServiceTimeEntry.service_order_id.in_(is_idler),
+            ServiceTimeEntry.ended_at.is_(None),
+            gecerli_bolum(),
+        )
+        .order_by(ServiceOrder.so_no, User.full_name)
+    )
+    if user_idler is not None:
+        user_idler = list(user_idler)
+        if not user_idler:
+            return []
+        stmt = stmt.where(ServiceTimeEntry.user_id.in_(user_idler))
+    return [(s, u, a) for s, u, a in (await db.execute(stmt)).all()]
 
 
 async def acik_sayac_dogrula(db: AsyncSession, so: ServiceOrder, hedef: str, kaynak: str) -> None:
-    """`durum_dogrula` kancası: TAMAMLANDI/IPTAL'de açık sayaç → 409."""
-    raise NotImplementedError("zaman.acik_sayac_dogrula: D1-G paketi (TS-073) uygular")
+    """`durum_dogrula` kancası: TAMAMLANDI/IPTAL'de açık sayaç → 409.
+
+    Onayla geçilemez (TS-076 onayı yalnız eksik süreyi kabul eder).
+    """
+    if hedef not in ("TAMAMLANDI", "IPTAL"):
+        return
+    acik = await acik_sayaclar(db, [so.id])
+    if acik:
+        kisiler = ", ".join(a for _, _, a in acik)
+        raise ZamanHatasi(f"Açık sayaç var: {kisiler} ({so.so_no}). Önce sayacı bitirin.")
 
 
 async def acik_sayac_cikarma_dogrula(
     db: AsyncSession, so: ServiceOrder, cikan_user_ids: Sequence[int]
 ) -> None:
     """`ekip_degisiyor` kancası: açık sayaçlı kişiyi ekipten çıkarma → 409."""
-    raise NotImplementedError("zaman.acik_sayac_cikarma_dogrula: D1-G paketi (TS-073) uygular")
+    acik = await acik_sayaclar(db, [so.id], cikan_user_ids)
+    if acik:
+        parcalar = [f"{iyelik(ad)} {so_no}" for so_no, _, ad in acik]
+        raise ZamanHatasi(f"Önce {', '.join(parcalar)} işindeki sayacını bitirin veya iptal edin.")
 
 
-async def sure_ozeti_toplu(db: AsyncSession, so_idler: Sequence[int]) -> dict[int, SureOzeti]:
-    raise NotImplementedError("zaman.sure_ozeti_toplu: D1-G paketi (TS-075) uygular")
+_UNLULER = "aeıioöuüAEIİOÖUÜ"
+
+
+def iyelik(ad: str) -> str:
+    """Türkçe tamlayan eki: "Ali Veli" → "Ali Veli'nin", "Ayşe Kaya" → "Ayşe Kaya'nın".
+
+    Mesaj okunur olsun diye (kontrol B7); son ünlüye göre büyük ünlü uyumu.
+    """
+    son_unlu = next((h for h in reversed(ad) if h in _UNLULER), "e").lower()
+    ek = {"a": "ın", "ı": "ın", "e": "in", "i": "in", "o": "un", "u": "un", "ö": "ün", "ü": "ün"}
+    ek_ = ek.get(son_unlu, "in")
+    return f"{ad}'{'n' if ad and ad[-1] in _UNLULER else ''}{ek_}"
+
+
+# --- Süre özeti (TS-075) ------------------------------------------------------------------------
+
+
+def _uzaktan_cozum_ifadesi() -> ColumnElement[bool]:
+    return exists().where(
+        ServiceResult.service_order_id == ServiceOrder.id,
+        ServiceResult.gecersiz_at.is_(None),
+        ServiceResult.cozum_kanali.in_(sorted(UZAKTAN_KANALLAR)),
+    )
+
+
+def _dahil_bolum_var(kisi_sutunu=None) -> ColumnElement[bool]:
+    kosullar = [
+        ServiceTimeEntry.service_order_id == ServiceOrder.id,
+        gecerli_bolum(),
+        ServiceTimeEntry.faaliyet.in_(sorted(KISI_SAATE_DAHIL)),
+    ]
+    if kisi_sutunu is not None:
+        kosullar.append(ServiceTimeEntry.user_id == kisi_sutunu)
+    return exists().where(*kosullar)
+
+
+def _eksik_teknisyen_var() -> ColumnElement[bool]:
+    return exists().where(
+        ServiceOrderAssignment.service_order_id == ServiceOrder.id,
+        ServiceOrderAssignment.removed_at.is_(None),
+        ServiceOrderAssignment.rol == "TEKNISYEN",
+        not_(_dahil_bolum_var(ServiceOrderAssignment.user_id)),
+    )
+
+
+def calisilmis_ifadesi() -> ColumnElement[bool]:
+    """Süre BEKLENEN iş: çalışılmış durumda ve uzaktan/telefonla çözülmemiş."""
+    return and_(
+        ServiceOrder.status.not_in(sorted(BEKLENMIYOR_DURUMLAR)),
+        not_(_uzaktan_cozum_ifadesi()),
+    )
 
 
 def sure_eksik_ifadesi() -> ColumnElement[bool]:
-    """SQL tarafı "süre eksik" ifadesi — Python tanımıyla eşit (parametrik test)."""
-    raise NotImplementedError("zaman.sure_eksik_ifadesi: D1-G paketi (TS-075) uygular")
+    """SQL tarafı "süre eksik" (= `sure_durumu ∈ {EKSIK, KISMI}`) — Python tanımıyla
+    eşit (parametrik test `t/unit/test_zaman_hesap.py` + entegrasyon eşitlik testi).
+
+    `service_orders` satırına uygulanır (panel KPI, liste süzgeci, rapor):
+    - EKSIK: çalışılmış iş ve kişi-saate dahil geçerli bölüm yok;
+    - KISMI: bölüm var ama aktif TEKNISYEN atamalarından birinin bölümü yok
+      (iş IPTAL değil, uzaktan çözülmemiş).
+    """
+    var = _dahil_bolum_var()
+    return or_(
+        and_(calisilmis_ifadesi(), not_(var)),
+        and_(
+            var,
+            ServiceOrder.status != "IPTAL",
+            not_(_uzaktan_cozum_ifadesi()),
+            _eksik_teknisyen_var(),
+        ),
+    )
+
+
+def sure_durumu_hesapla(
+    *,
+    durum: str,
+    uzaktan_cozum: bool,
+    dahil_bolumu_olanlar: set[int],
+    teknisyenler: dict[int, str],
+) -> tuple[str, tuple[str, ...]]:
+    """Saf kural (birim testli): `(sure_durumu, eksik_kisiler)`.
+
+    `dahil_bolumu_olanlar`: kişi-saate dahil (MOLA dışı) geçerli bölümü olan
+    kişiler (açık bölüm dahil). `teknisyenler`: aktif TEKNISYEN atamaları.
+    """
+    if not dahil_bolumu_olanlar:
+        if durum in BEKLENMIYOR_DURUMLAR or uzaktan_cozum:
+            return "BEKLENMIYOR", ()
+        return "EKSIK", tuple(sorted(teknisyenler.values()))
+    if durum == "IPTAL" or uzaktan_cozum:
+        return ("BEKLENMIYOR" if durum == "IPTAL" else "TAM"), ()
+    eksik = tuple(sorted(ad for uid, ad in teknisyenler.items() if uid not in dahil_bolumu_olanlar))
+    return ("KISMI", eksik) if eksik else ("TAM", ())
+
+
+async def sure_ozeti_toplu(db: AsyncSession, so_idler: Sequence[int]) -> dict[int, SureOzeti]:
+    """İş başına süre özeti — ekran, liste, Excel, KPI ve uyarının TEK kaynağı.
+
+    Toplama SQL'de yapılır (iş+kişi+faaliyet kırılımı tek sorgu); kişi-saat
+    yalnız KAPALI, iptal edilmemiş, MOLA dışı bölümlerden. Kapalı bölüm yoksa
+    `kisi_saat_dk=None` — 0 yazılmaz.
+    """
+    idler = sorted({int(i) for i in so_idler})
+    if not idler:
+        return {}
+    saniye = func.extract("epoch", ServiceTimeEntry.ended_at - ServiceTimeEntry.started_at)
+    satirlar = (
+        await db.execute(
+            select(
+                ServiceTimeEntry.service_order_id,
+                ServiceTimeEntry.user_id,
+                ServiceTimeEntry.faaliyet,
+                func.sum(saniye),
+                func.count(ServiceTimeEntry.id),
+                func.count(ServiceTimeEntry.ended_at),
+                func.min(ServiceTimeEntry.started_at),
+                func.max(ServiceTimeEntry.ended_at),
+            )
+            .where(ServiceTimeEntry.service_order_id.in_(idler), gecerli_bolum())
+            .group_by(
+                ServiceTimeEntry.service_order_id,
+                ServiceTimeEntry.user_id,
+                ServiceTimeEntry.faaliyet,
+            )
+        )
+    ).all()
+    isler = {
+        i: (d, sure)
+        for i, d, sure in (
+            await db.execute(
+                select(ServiceOrder.id, ServiceOrder.status, ServicePlan.duration_min)
+                .outerjoin(
+                    ServicePlan,
+                    and_(
+                        ServicePlan.service_order_id == ServiceOrder.id,
+                        ServicePlan.is_active.is_(True),
+                        ServicePlan.is_deleted.is_(False),
+                    ),
+                )
+                .where(ServiceOrder.id.in_(idler))
+            )
+        ).all()
+    }
+    teknisyenler: dict[int, dict[int, str]] = defaultdict(dict)
+    for so_id, uid, ad in (
+        await db.execute(
+            select(
+                ServiceOrderAssignment.service_order_id,
+                ServiceOrderAssignment.user_id,
+                User.full_name,
+            )
+            .join(User, User.id == ServiceOrderAssignment.user_id)
+            .where(
+                ServiceOrderAssignment.service_order_id.in_(idler),
+                ServiceOrderAssignment.removed_at.is_(None),
+                ServiceOrderAssignment.rol == "TEKNISYEN",
+            )
+        )
+    ).all():
+        teknisyenler[so_id][uid] = ad
+    uzaktan = set(
+        (
+            await db.scalars(
+                select(ServiceResult.service_order_id).where(
+                    ServiceResult.service_order_id.in_(idler),
+                    ServiceResult.gecersiz_at.is_(None),
+                    ServiceResult.cozum_kanali.in_(sorted(UZAKTAN_KANALLAR)),
+                )
+            )
+        ).all()
+    )
+
+    toplam_sn: dict[int, float] = defaultdict(float)
+    kapali_var: dict[int, bool] = defaultdict(bool)
+    mola_sn: dict[int, float] = defaultdict(float)
+    mola_var: dict[int, bool] = defaultdict(bool)
+    kirilim: dict[int, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    kisi: dict[int, dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    dahil_kisiler: dict[int, set[int]] = defaultdict(set)
+    ilk_yol: dict[int, datetime] = {}
+    ilk_varis: dict[int, datetime] = {}
+    son_bitis: dict[int, datetime] = {}
+    acik: dict[int, int] = defaultdict(int)
+    for so_id, uid, faaliyet, sn, adet, kapali, ilk, son in satirlar:
+        acik[so_id] += int(adet) - int(kapali)
+        if son is not None and (so_id not in son_bitis or son > son_bitis[so_id]):
+            son_bitis[so_id] = son
+        if faaliyet == "YOL" and (so_id not in ilk_yol or ilk < ilk_yol[so_id]):
+            ilk_yol[so_id] = ilk
+        if faaliyet == "SAHA" and (so_id not in ilk_varis or ilk < ilk_varis[so_id]):
+            ilk_varis[so_id] = ilk
+        if faaliyet not in KISI_SAATE_DAHIL:
+            if kapali:
+                mola_var[so_id] = True
+                mola_sn[so_id] += float(sn)
+            continue
+        if uid is not None:
+            dahil_kisiler[so_id].add(uid)
+        if kapali:
+            kapali_var[so_id] = True
+            toplam_sn[so_id] += float(sn)
+            kirilim[so_id][faaliyet] += float(sn)
+            if uid is not None:
+                kisi[so_id][uid] += float(sn)
+
+    sonuc: dict[int, SureOzeti] = {}
+    for so_id in idler:
+        if so_id not in isler:
+            continue
+        durum, tahmini = isler[so_id]
+        sure_durumu, eksikler = sure_durumu_hesapla(
+            durum=durum,
+            uzaktan_cozum=so_id in uzaktan,
+            dahil_bolumu_olanlar=dahil_kisiler[so_id],
+            teknisyenler=teknisyenler[so_id],
+        )
+        kisi_saat = round(toplam_sn[so_id] / 60) if kapali_var[so_id] else None
+        sonuc[so_id] = SureOzeti(
+            kisi_saat_dk=kisi_saat,
+            sure_durumu=sure_durumu,
+            eksik_kisiler=eksikler,
+            mola_dk=round(mola_sn[so_id] / 60) if mola_var[so_id] else None,
+            faaliyet_kirilimi={f: round(s / 60) for f, s in kirilim[so_id].items()},
+            kisi_bazli={u: round(s / 60) for u, s in kisi[so_id].items()},
+            ilk_yol_at=ilk_yol.get(so_id),
+            ilk_varis_at=ilk_varis.get(so_id),
+            son_bitis_at=son_bitis.get(so_id),
+            sapma_dk=(kisi_saat - tahmini) if kisi_saat is not None and tahmini else None,
+            acik_bolum_sayisi=acik[so_id],
+        )
+    return sonuc
+
+
+async def sure_ozeti(db: AsyncSession, so_id: int) -> SureOzeti:
+    """Tek iş için `sure_ozeti_toplu` (ayrı hesap yok)."""
+    return (await sure_ozeti_toplu(db, [so_id]))[so_id]
+
+
+# --- Kapanışta "süre kaydı eksik" onayı (TS-076) ------------------------------------
+
+
+async def sure_eksik_kapanis_dogrula(
+    db: AsyncSession,
+    so: ServiceOrder,
+    *,
+    onay: bool,
+    user: User | None,
+    clock: Clock,
+) -> SureOzeti:
+    """TAMAMLANDI'ya götüren uçlar (sonuç, bakım formu, atölye) çağırır.
+
+    Süre EKSIK/KISMI ve `sure_eksik_onay` yoksa 409 — iş ENGELLENMEZ, istemci
+    onay penceresi gösterip onayla yeniden gönderir (E09-12). Onaylı kapanışta
+    geçmişe NOT yazılır. Açık sayaç kuralı (`acik_sayac_dogrula`) ayrıdır ve
+    onayla geçilemez. BEKLENMIYOR (telefonla çözüm) sorulmaz.
+    """
+    ozet = await sure_ozeti(db, so.id)
+    if not ozet.sure_eksik:
+        return ozet
+    if ozet.eksik_kisiler:
+        kimler = ", ".join(ozet.eksik_kisiler)
+    else:
+        kimler = "işte hiç süre kaydı yok"
+    if not onay:
+        raise ZamanHatasi(f"Süre kaydı eksik: {kimler}. Onaylayarak kapatın.")
+    from app.services.teknik_servis import gecmis
+
+    await gecmis.olay_yaz(
+        db,
+        so,
+        "NOT",
+        f"Süre kaydı eksik olarak kapatıldı: {kimler}",
+        user=user,
+        clock=clock,
+        veri={"alan": "zaman", "sure_durumu": ozet.sure_durumu},
+    )
+    return ozet
+
+
+# --- Uyarılar (TS-072) ----------------------------------------------------------------
+
+
+async def _uzun_sayac_kosulu(db: AsyncSession, clock: Clock) -> ColumnElement[bool]:
+    """Açık bölüm `zaman_uzun_sayac_uyari_saat`'ten uzun ya da dünden kalmış."""
+    saat = int(await _ayar(db, "zaman_uzun_sayac_uyari_saat"))
+    an = clock.now()
+    bugun_bas, _ = yerel_zaman.yerel_gun_araligi(yerel_zaman.yerel_bugun(clock))
+    return and_(
+        ServiceTimeEntry.ended_at.is_(None),
+        gecerli_bolum(),
+        or_(
+            ServiceTimeEntry.started_at <= an - timedelta(hours=saat),
+            ServiceTimeEntry.started_at < bugun_bas,
+        ),
+    )
+
+
+async def uzun_sayac_sorgusu(db: AsyncSession, user: User, clock: Clock):
+    """Kapsamlı uzun sayaç listesi (uyarı sayısı = bu listenin satır sayısı)."""
+    stmt = select(ServiceTimeEntry).where(await _uzun_sayac_kosulu(db, clock))
+    return kapsam.kapsam_isler(stmt, user, ServiceTimeEntry.service_order_id)
 
 
 async def zaman_uyarilari(db: AsyncSession, user: User, clock: Clock) -> list[Any]:
-    """Uzun açık sayaç vb. (`s/uyarilar.py` toplar; birim kapsamlı)."""
-    return []
+    """Uzun açık sayaç (yönetici: kapsamlı; herkes: kendi). Ack yok (K7):
+    sayaç kapanınca uyarı kendiliğinden kaybolur. Worker kapatmaz (K16)."""
+    sonuc: list[Uyari] = []
+    if user.has("servis.planla"):
+        stmt = await uzun_sayac_sorgusu(db, user, clock)
+        # COUNT her zaman bir satır döner (NULL değil); süre değil, adet.
+        adet = await db.scalar(select(func.count()).select_from(stmt.subquery()))
+        sonuc.append(
+            Uyari(
+                kod="zaman.uzun_sayac",
+                baslik="Uzun süredir açık sayaç",
+                adet=int(adet),
+                yol="/benim-islerim?gorunum=tumu",
+                onem="kritik",
+                aciklama="Gerçek bitişle düzeltin ya da iptal edin; sayaç kendiliğinden kapanmaz.",
+            )
+        )
+    return sonuc
+
+
+async def kendi_uzun_sayac_uyarisi(db: AsyncSession, user: User, clock: Clock) -> list[Any]:
+    kosul = await _uzun_sayac_kosulu(db, clock)
+    adet = await db.scalar(
+        select(func.count())
+        .select_from(ServiceTimeEntry)
+        .where(kosul, ServiceTimeEntry.user_id == user.id)
+    )
+    return [
+        Uyari(
+            kod="zaman.kendi_uzun_sayac",
+            baslik="Sayacınız uzun süredir açık",
+            adet=int(adet),
+            yol="/benim-islerim",
+            onem="uyari",
+            aciklama="Unuttuysanız gerçek bitiş saatini girin.",
+        )
+    ]
+
+
+def uzun_sayac_mi(bolum: ServiceTimeEntry, an: datetime, esik_saat: int) -> bool:
+    """Tek bölüm için uyarı koşulu (bant ve kart bunu gösterir)."""
+    if bolum.ended_at is not None or bolum.is_deleted:
+        return False
+    return an - bolum.started_at >= timedelta(hours=esik_saat) or (
+        yerel_zaman.yerel_gun(bolum.started_at) < yerel_zaman.yerel_gun(an)
+    )
+
+
+# --- Kanca ve uyarı kayıtları (dosyanın EN ALTINDA, plan §1.8) ----------------------
+
+kancalar.kaydet("durum_dogrula", acik_sayac_dogrula)
+kancalar.kaydet("ekip_degisiyor", acik_sayac_cikarma_dogrula)
+
+
+def _uyari_kaydi() -> None:
+    from app.services.teknik_servis import uyarilar as ts_uyarilar
+
+    ts_uyarilar.kaydet("zaman", "servis.planla", zaman_uyarilari)
+    ts_uyarilar.kaydet("zaman", "zaman.yaz", kendi_uzun_sayac_uyarisi)
+
+
+_uyari_kaydi()

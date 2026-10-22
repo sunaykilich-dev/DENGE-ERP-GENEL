@@ -13,6 +13,13 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /**
+     * Yanıt gövdesinin tamamı (JSON ise). Planlama çakışması gibi 409'lar
+     * `detail` dışında makine okunur alanlar taşır (`kod: "PLAN_CAKISMA"`,
+     * `cakismalar`); `cakisma` getter'ı yalnız durum koduna baktığı için
+     * çağıran, iyimser kilit 409'unu planlama çakışmasından buradan ayırır.
+     */
+    readonly govde?: unknown,
   ) {
     super(message);
   }
@@ -36,14 +43,16 @@ async function istek<T>(yol: string, init: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     let mesaj = `Beklenmeyen hata (${res.status})`;
+    let govde: unknown;
     try {
-      const govde = await res.json();
-      if (typeof govde?.detail === "string") mesaj = govde.detail;
-      else if (Array.isArray(govde?.detail)) mesaj = govde.detail[0]?.msg ?? mesaj;
+      govde = await res.json();
+      const g = govde as { detail?: unknown } | null;
+      if (typeof g?.detail === "string") mesaj = g.detail;
+      else if (Array.isArray(g?.detail)) mesaj = g.detail[0]?.msg ?? mesaj;
     } catch {
       /* gövde JSON değil — varsayılan mesaj kalsın */
     }
-    throw new ApiError(res.status, mesaj);
+    throw new ApiError(res.status, mesaj, govde);
   }
 
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
@@ -89,7 +98,12 @@ export const api = {
     istek<T>(yol, { method: "PATCH", body: JSON.stringify(govde) }),
   put: <T>(yol: string, govde: unknown) =>
     istek<T>(yol, { method: "PUT", body: JSON.stringify(govde) }),
-  delete: <T>(yol: string) => istek<T>(yol, { method: "DELETE" }),
+  /** Gövde isteğe bağlı (ör. plan geri alma nedeni: `DELETE .../plan {neden, not}`). */
+  delete: <T>(yol: string, govde?: unknown) =>
+    istek<T>(yol, {
+      method: "DELETE",
+      ...(govde === undefined ? {} : { body: JSON.stringify(govde) }),
+    }),
 };
 
 // --- Sunucu tipleri ---------------------------------------------------------

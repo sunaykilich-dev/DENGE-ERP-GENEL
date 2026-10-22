@@ -117,11 +117,36 @@ async def ek_dosya_temizligi(db: AsyncSession, clock: Clock) -> str:
     return f"{silinen} yetim dosya silindi ({len(kullanilan)} dosya kullanımda)"
 
 
+async def pb_uretimi(db: AsyncSession, clock: Clock) -> str:
+    """Vadesi gelen bakım dönemlerinin PB işlerini üretir (TS-062).
+
+    `bakim_otomatik_uretim=False` iken hiçbir şey yazmaz (R1 yayını, KD-21).
+    İdempotent: `uq_so_pb_cihaz_donem` + `ON CONFLICT DO NOTHING`; yeniden
+    deneme aynı turu tekrar koşsa da çift PB açılmaz.
+    """
+    from app.services.teknik_servis import bakim_uretim
+
+    return await bakim_uretim.pb_uretimi_gorevi(db, clock)
+
+
+async def bakim_donem_uzlastirma(db: AsyncSession, clock: Clock) -> str:
+    """Bakım dönem kapanışlarını PB durumlarından yeniden türetir (TS-065).
+
+    Kapanış durum kancasıyla anında güncellenir; bu görev kancayı atlayan bir
+    yolun bıraktığı farkı düzeltir ve log'a yazar.
+    """
+    from app.services.teknik_servis import bakim_formu
+
+    return await bakim_formu.donem_uzlastirma_gorevi(db, clock)
+
+
 GOREVLER: tuple[Gorev, ...] = (
     Gorev("cihaz-uzlastirma", timedelta(hours=24), cihaz_uzlastirma),
     Gorev("oturum-temizligi", timedelta(hours=6), oturum_temizligi),
     Gorev("is-uyarilari", timedelta(hours=24), is_uyarilari),
     Gorev("ek-dosya-temizligi", timedelta(hours=24), ek_dosya_temizligi),
+    Gorev("pb-uretimi", timedelta(hours=24), pb_uretimi),
+    Gorev("bakim-donem-uzlastirma", timedelta(hours=24), bakim_donem_uzlastirma),
 )
 
 

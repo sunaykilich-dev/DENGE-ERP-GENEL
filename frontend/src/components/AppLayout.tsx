@@ -35,6 +35,7 @@ import { useMemo } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import AktifSayacBandi from "./AktifSayacBandi";
 import GlobalSearch from "./GlobalSearch";
 import UyariZili from "./UyariZili";
 import { marka } from "../theme";
@@ -361,6 +362,8 @@ export default function AppLayout() {
           />
         </Sider>
         <Content style={{ padding: 20 }}>
+          {/* TS-077: açık sayaç her sayfada görünür; `zaman.yaz` yoksa ne çizer ne istek atar. */}
+          <AktifSayacBandi />
           <Outlet />
         </Content>
       </Layout>
