@@ -1182,3 +1182,112 @@ async def musteri_ozetleri(db: AsyncSession, hesap_idler: set[int]) -> dict[int,
 def bos_sorgu() -> Select:
     """Kapsam dışı/boş sonuç için yardımcı."""
     return select(ServiceOrder).where(false())
+
+
+# --- Seri → mobilite cihaz kütüğü bağı (TS-193, E01-10; D3-C — YALNIZ OKUMA) ----------
+#
+# MOBILITE / ARAC_TAKIP işlerinde seri, canlı `devices` kütüğüyle IMEI ya da
+# seri no üzerinden eşleşir. Eşleşme OKUMA ANINDA kurulur: `devices`'a ve
+# `service_order_serials.device_id`'ye HİÇBİR ŞEY YAZILMAZ (cihaz durum
+# makinesi, `uq_devices_seri` ve mobilite stok raporları etkilenmez). Güvenlik,
+# Haberleşme ve POC işleri cihaz kütüğüne bakmaz (bağları `service_equipment`).
+# Kurallar (E01 kontrol): IMEI aynen (`devices.imei` 15 hane, normalize
+# edilmiş saklanır), seri `upper(trim(devices.serial_no))` = `seri_norm`.
+
+CIHAZ_KUTUGU_BIRIMLERI = ("MOBILITE", "ARAC_TAKIP")
+
+
+def _cihaz_seri_kosulu(cihaz_tablosu, seri_sutunu) -> Any:
+    """Bir `service_order_serials` satırının bir cihaza eşleşme koşulu."""
+    return or_(
+        cihaz_tablosu.imei == seri_sutunu,
+        func.upper(func.trim(cihaz_tablosu.serial_no)) == seri_sutunu,
+    )
+
+
+def _cihaz_anahtarlari(imei: str | None, seri: str | None) -> list[str]:
+    anahtarlar = []
+    if imei:
+        anahtarlar.append(imei.strip())
+    if seri and seri.strip():
+        anahtarlar.append(seri.strip().upper())
+    return anahtarlar
+
+
+def cihaz_servis_isleri_sorgusu(user: User, imei: str | None, seri: str | None) -> Select:
+    """Bir mobilite cihazının servis işleri (kapsamla). Cihaz kartının
+    "Servis İşleri" sekmesi ve sayısı aynı sorgudan gelir."""
+    anahtarlar = _cihaz_anahtarlari(imei, seri)
+    if not anahtarlar:
+        return bos_sorgu()
+    stmt = select(ServiceOrder).where(
+        ServiceOrder.is_deleted.is_(False),
+        ServiceOrder.birim.in_(CIHAZ_KUTUGU_BIRIMLERI),
+        exists().where(
+            ServiceOrderSerial.service_order_id == ServiceOrder.id,
+            ServiceOrderSerial.is_active.is_(True),
+            ServiceOrderSerial.seri_norm.in_(anahtarlar),
+        ),
+    )
+    return kapsam.kapsam_isler(stmt, user, ServiceOrder.id).order_by(ServiceOrder.created_at.desc())
+
+
+async def seri_cihaz_eslesmeleri(db: AsyncSession, so: ServiceOrder) -> list[dict[str, Any]]:
+    """İşin her aktif serisi için cihaz kütüğü eşleşmesi: `cihaz_id` ya da
+    `None` ("kütükte yok"). Birim MOBILITE/ARAC_TAKIP değilse boş liste."""
+    from app.models import Device
+
+    if so.birim not in CIHAZ_KUTUGU_BIRIMLERI:
+        return []
+    seriler = (
+        await db.scalars(
+            select(ServiceOrderSerial)
+            .where(
+                ServiceOrderSerial.service_order_id == so.id,
+                ServiceOrderSerial.is_active.is_(True),
+            )
+            .order_by(ServiceOrderSerial.id)
+        )
+    ).all()
+    sonuc = []
+    for s in seriler:
+        cihazlar = (
+            await db.execute(
+                select(Device.id, Device.imei, Device.serial_no)
+                .where(Device.is_deleted.is_(False), _cihaz_seri_kosulu(Device, s.seri_norm))
+                .order_by(Device.id)
+                .limit(2)
+            )
+        ).all()
+        tek = cihazlar[0] if len(cihazlar) == 1 else None
+        sonuc.append(
+            {
+                "seri_id": s.id,
+                "seri_no": s.seri_no,
+                "cihaz_id": tek.id if tek else None,
+                "imei": tek.imei if tek else None,
+                "durum": "TEK" if tek else ("BELIRSIZ" if cihazlar else "KUTUKTE_YOK"),
+            }
+        )
+    return sonuc
+
+
+def kutukte_olmayan_seri_kosulu() -> Any:
+    """MOBILITE/ARAC_TAKIP işinde cihaz kütüğünde karşılığı olmayan aktif seri
+    var mı (rapor: `kutukte_olmayan_seriler`; kayıt engellenmez)."""
+    from sqlalchemy.orm import aliased
+
+    from app.models import Device
+
+    cihaz = aliased(Device)
+    return and_(
+        ServiceOrder.birim.in_(CIHAZ_KUTUGU_BIRIMLERI),
+        exists().where(
+            ServiceOrderSerial.service_order_id == ServiceOrder.id,
+            ServiceOrderSerial.is_active.is_(True),
+            ~exists().where(
+                cihaz.is_deleted.is_(False),
+                _cihaz_seri_kosulu(cihaz, ServiceOrderSerial.seri_norm),
+            ),
+        ),
+    )

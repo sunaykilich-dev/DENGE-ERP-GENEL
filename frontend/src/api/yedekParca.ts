@@ -374,7 +374,63 @@ export const parcaApi = {
     api.post<Sayim>(`${PARCA_ONEK}/sayim/onayla`, { sayim_id: id, gerekce, degisimi_kabul }),
   sayimIptal: (id: number, gerekce: string) =>
     api.post<Sayim>(`${PARCA_ONEK}/sayim/iptal`, { sayim_id: id, gerekce }),
+
+  /** Parça tüketim raporu (TS-196): `parca.gor + servis_rapor.gor`; tutar yalnız `maliyet.gor`. */
+  tuketim: (s: TuketimSuzgeci) =>
+    api.get<TuketimRaporu>(`${PARCA_ONEK}/raporlar/tuketim?${parametreler(s)}`),
+  tuketimExcelYolu: (s: TuketimSuzgeci) => `${PARCA_ONEK}/raporlar/tuketim.xlsx?${parametreler(s)}`,
 };
+
+export const TUKETIM_KIRILIMLARI: Record<string, string> = {
+  parca_ay: "Parça × ay",
+  birim: "Birim",
+  musteri: "Müşteri",
+  is_turu: "İş türü",
+  is: "Servis işi",
+  ekipman: "Ekipman (tek ekipmanlı iş)",
+};
+
+export interface TuketimSuzgeci {
+  bas?: string;
+  bit?: string;
+  kirilim?: string;
+  birim?: string;
+  musteri_id?: number;
+  is_grubu?: string;
+  product_id?: number;
+  depo_id?: number;
+  ekipman_id?: number;
+  so_id?: number;
+}
+
+export interface TuketimSatiri {
+  is_grubu: "PLANLI_BAKIM" | "SERVIS";
+  is_grubu_adi: string;
+  net_cikis: number;
+  hareket: number;
+  ay?: string;
+  product_id?: number;
+  urun_kodu?: string | null;
+  urun_adi?: string | null;
+  birim?: string;
+  musteri_id?: number | null;
+  musteri?: string | null;
+  is_turu?: string;
+  so_id?: number;
+  so_no?: string | null;
+  ekipman_id?: number;
+  ekipman?: { id: number; tip: string; seri: string | null } | null;
+  /** Yalnız `maliyet.gor`; yoksa anahtar hiç gelmez. */
+  tutar?: string | null;
+  maliyet_eksik?: boolean;
+}
+
+export interface TuketimRaporu {
+  donem: { bas: string; bit: string };
+  kirilim: string;
+  satirlar: TuketimSatiri[];
+  toplam: { net_cikis: number; tutar?: string; maliyet_eksik_hareket?: number };
+}
 
 /** 409 gövdesindeki makine okunur alanlar (`{detail: {mesaj, sapmalar|hatalar}}`). */
 export interface ParcaHataGovdesi {

@@ -39,6 +39,7 @@ from sqlalchemy import (
     or_,
     select,
 )
+from sqlalchemy.orm import aliased
 
 from app.models import (
     Account,
@@ -69,6 +70,7 @@ from app.services.accounts import kapsam_disinda_mi, kapsam_musteri
 from app.services.normalize import normalize_seri, tr_normkey
 from app.services.statemachine import SERVIS_EKIPMANI, IzinsizGecis
 from app.services.teknik_servis import ek_kapsam
+from app.services.teknik_servis import kancalar as _kancalar
 from app.services.teknik_servis.ana_veri import lokasyon_dogrula, unvan_anahtari
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 from app.services.teknik_servis.kapsam import (
@@ -890,6 +892,10 @@ class EkipmanSuzgeci:
     pasifler_dahil: bool = False
     kpi: str | None = None
     idler: list[int] | None = field(default=None)
+    # Veri kalitesi listesi (TS-188, E03-13): `KALITE_KODLARI`'ndan biri.
+    kalite: str | None = None
+    # Analitik KPI eşikleri (E03-15); `kpi_esikleri(db)` ile ayardan okunur.
+    esikler: dict[str, int] | None = field(default=None)
 
 
 @dataclass(frozen=True)
@@ -909,12 +915,94 @@ KPI_TANIMLARI: tuple[KpiTanimi, ...] = (
     KpiTanimi("seri_eksik", "Seri No Eksik", "Seri numarası boş kayıtlar"),
     KpiTanimi("garanti_bilinmiyor", "Garanti Bilinmiyor", "Garanti bitiş tarihi girilmemiş"),
     KpiTanimi("serviste", "Serviste", "Açık arıza servis işi olan ekipmanlar"),
+    # Analitik KPI'lar (E03-15, TS-191). Eşikler ayardan; seri no'suz ekipman
+    # tekrar arıza listesine girmez (eşleşme yalnız `equipment_id` ile).
+    KpiTanimi(
+        "bakim_gecikmis",
+        "Bakımı Gecikmiş",
+        "Aktif sözleşmeli KURULU ekipman; son tamamlanan PB eşik aydan eski ya da hiç yok",
+    ),
+    KpiTanimi(
+        "tekrar_ariza",
+        "Tekrarlayan Arıza",
+        "Son N günde eşik sayıda PB dışı servis işi açılmış (seri no'lu) ekipman",
+    ),
 )
 KPI_KODLARI = frozenset(k.kod for k in KPI_TANIMLARI)
 GARANTI_SUZGECLERI = ("GECERLI", "BITTI", "BILINMIYOR")
 
+# Analitik KPI eşiklerinin ayar anahtarları ve (ayar okunamadığında) varsayılanı.
+ESIK_AYARLARI = {
+    "bakim_gecikme_ay": ("servis_kpi_bakim_gecikme_ay", 12),
+    "tekrar_ariza_gun": ("ekipman_tekrar_ariza_gun", 90),
+    "tekrar_ariza_esik": ("ekipman_tekrar_ariza_esik", 2),
+}
 
-def _kpi_kosulu(kod: str) -> ColumnElement[bool] | None:
+
+async def kpi_esikleri(db: AsyncSession) -> dict[str, int]:
+    """Analitik KPI eşikleri (ayar değişince sayı ve liste birlikte değişir)."""
+    return {k: int(await ayar_svc.get(db, anahtar)) for k, (anahtar, _) in ESIK_AYARLARI.items()}
+
+
+def _esik(esikler: dict[str, int] | None, ad: str) -> int:
+    if esikler and ad in esikler:
+        return int(esikler[ad])
+    return ESIK_AYARLARI[ad][1]
+
+
+def _bakim_gecikmis_kosulu(an: datetime, esikler: dict[str, int] | None) -> ColumnElement[bool]:
+    """Aktif sözleşme kalemi olan KURULU ekipman; son tamamlanan PB'si eşikten eski/yok."""
+    from datetime import UTC, time
+
+    sinir_gun = ay_ekle(an.date(), -_esik(esikler, "bakim_gecikme_ay"))
+    sinir = datetime.combine(sinir_gun, time(0), tzinfo=UTC)
+    tamamlanma = func.coalesce(ServiceOrder.completed_at, ServiceOrder.first_completed_at)
+    son_pb = select(ServiceOrder.id).where(
+        ServiceOrder.equipment_id == ServiceEquipment.id,
+        ServiceOrder.tur == "PB",
+        ServiceOrder.is_deleted.is_(False),
+        ServiceOrder.status.in_(sorted(DURUM_GRUPLARI["COZULDU"])),
+        tamamlanma >= sinir,
+    )
+    return and_(
+        ServiceEquipment.lifecycle_status == "KURULU",
+        ServiceEquipment.id.in_(
+            select(MaintenanceContractItem.equipment_id).where(_aktif_kalem_kosulu(an))
+        ),
+        ~son_pb.exists(),
+    )
+
+
+def _tekrar_ariza_kosulu(an: datetime, esikler: dict[str, int] | None) -> ColumnElement[bool]:
+    """Son N günde ≥ eşik PB dışı servis işi (iptaller hariç); seri no'suz sayılmaz."""
+    from datetime import timedelta
+
+    sinir = an - timedelta(days=_esik(esikler, "tekrar_ariza_gun"))
+    sayim = (
+        select(func.count(ServiceOrder.id))
+        .where(
+            ServiceOrder.equipment_id == ServiceEquipment.id,
+            ServiceOrder.tur != "PB",
+            ServiceOrder.is_deleted.is_(False),
+            ServiceOrder.status != "IPTAL",
+            ServiceOrder.created_at >= sinir,
+        )
+        .scalar_subquery()
+    )
+    return and_(
+        ServiceEquipment.serial_key.is_not(None), sayim >= _esik(esikler, "tekrar_ariza_esik")
+    )
+
+
+def _kpi_kosulu(
+    kod: str, *, an: datetime | None = None, esikler: dict[str, int] | None = None
+) -> ColumnElement[bool] | None:
+    if kod in ("bakim_gecikmis", "tekrar_ariza"):
+        if an is None:
+            raise ServisGirdiHatasi("Analitik KPI için an gerekli")
+        if kod == "bakim_gecikmis":
+            return _bakim_gecikmis_kosulu(an, esikler)
+        return _tekrar_ariza_kosulu(an, esikler)
     if kod == "toplam":
         return None
     if kod == "xray":
@@ -1006,9 +1094,11 @@ def liste_sorgusu(user: User, s: EkipmanSuzgeci, *, bugun: date, an: datetime) -
         kosul = _kpi_kosulu("serviste")
         stmt = stmt.where(kosul if s.serviste else ~kosul)  # type: ignore[operator]
     if s.kpi:
-        kosul = _kpi_kosulu(s.kpi)
+        kosul = _kpi_kosulu(s.kpi, an=an, esikler=s.esikler)
         if kosul is not None:
             stmt = stmt.where(kosul)
+    if s.kalite:
+        stmt = stmt.where(_kalite_kosulu(user, s.kalite, an))
     if s.q and s.q.strip():
         stmt = stmt.where(_arama_kosulu(s.q))
     return stmt.order_by(ServiceEquipment.id.desc())
@@ -1050,13 +1140,570 @@ async def say(db: AsyncSession, stmt: Select) -> int:
 async def ozet(db: AsyncSession, user: User, clock: Clock) -> list[dict[str, Any]]:
     """KPI kutuları: her biri `?kpi=<kod>` listesinin toplamıyla aynı sorgu."""
     bugun, an = yerel_bugun(clock), clock.now()
+    esikler = await kpi_esikleri(db)
     sonuc = []
     for k in KPI_TANIMLARI:
-        stmt = liste_sorgusu(user, EkipmanSuzgeci(kpi=k.kod), bugun=bugun, an=an)
+        stmt = liste_sorgusu(user, EkipmanSuzgeci(kpi=k.kod, esikler=esikler), bugun=bugun, an=an)
         sonuc.append(
             {"kod": k.kod, "baslik": k.baslik, "tanim": k.tanim, "deger": await say(db, stmt)}
         )
     return sonuc
+
+
+# --- Veri kalitesi listeleri (TS-188, E03-13) ----------------------------------------
+#
+# Her kalite kodu `liste_sorgusu(kalite=<kod>)`'na bağlanır: ekrandaki sayı,
+# tıklanınca açılan listenin `X-Toplam-Kayit`'ıdır (sayı = liste). Mükerrer
+# GRUP sayısı ve saha farkları satır listesi değil kendi sayfalı uçlarındadır;
+# sayıları da aynı sorgulardan sayılır.
+
+
+@dataclass(frozen=True)
+class KaliteTanimi:
+    kod: str
+    baslik: str
+    tanim: str
+    # Listenin açıldığı yer: "liste" (= `?kalite=`), "mukerrer" ya da "saha".
+    liste: str = "liste"
+
+
+KALITE_TANIMLARI: tuple[KaliteTanimi, ...] = (
+    KaliteTanimi(
+        "mukerrer_grup",
+        "Mükerrer Seri Grubu",
+        "Aynı tip + marka + seri no ile birden çok aktif kayıt ('farklı cihaz' onayı olmayan)",
+        "mukerrer",
+    ),
+    KaliteTanimi("mukerrer", "Mükerrer Gruptaki Kayıt", "Mükerrer gruplara düşen aktif kayıtlar"),
+    KaliteTanimi("seri_eksik", "Seri No'suz", "Seri numarası boş aktif kayıtlar"),
+    KaliteTanimi("lokasyonsuz", "Lokasyonsuz", "Tesise (lokasyona) bağlanmamış kayıtlar"),
+    KaliteTanimi("hesapsiz", "Hesaba Bağlanmamış", "Müşteri hesabı boş (göçten eşleşmemiş)"),
+    KaliteTanimi(
+        "sozlesmesiz_kurulu", "Sözleşmesiz Kurulu", "KURULU ama aktif bakım sözleşmesi kalemi yok"
+    ),
+    KaliteTanimi("durum_bilinmiyor", "Durumu Bilinmiyor", "Yaşam döngüsü durumu BILINMIYOR"),
+    KaliteTanimi(
+        "saha_farki",
+        "Sahadan Gelen Fark",
+        "Servis/PB kapanışında kütükten farklı seri/bölge girilmiş, karar bekleyen",
+        "saha",
+    ),
+)
+KALITE_KODLARI = frozenset(k.kod for k in KALITE_TANIMLARI if k.liste == "liste")
+
+
+def _mukerrer_aday_kosulu(tablo) -> ColumnElement[bool]:
+    """Mükerrer gruba girebilen kayıt: aktif, silinmemiş, seri dolu, onaysız."""
+    return and_(
+        tablo.is_active.is_(True),
+        tablo.is_deleted.is_(False),
+        tablo.serial_key.is_not(None),
+        tablo.duplicate_ack_reason.is_(None),
+    )
+
+
+def mukerrer_gruplari_sorgusu(user: User) -> Select:
+    """Kapsamdaki mükerrer seri grupları (`GROUP BY tip, marka anahtarı, seri
+    anahtarı HAVING count > 1`). "Farklı cihaz" gerekçesi (`duplicate_ack_reason`)
+    girilmiş kayıt gruba sayılmaz: karar verilmiş çift tekrar listeye düşmez.
+    Kapsam gruplamadan ÖNCE uygulanır (başka birimin kaydı grubu büyütmez)."""
+    stmt = select(
+        ServiceEquipment.equipment_type.label("tip"),
+        ServiceEquipment.brand_key.label("marka_anahtari"),
+        ServiceEquipment.serial_key.label("seri_anahtari"),
+        func.count(ServiceEquipment.id).label("adet"),
+        func.array_agg(ServiceEquipment.id).label("idler"),
+    ).where(_mukerrer_aday_kosulu(ServiceEquipment))
+    stmt = ekipman_kosulu(user)(stmt)
+    return stmt.group_by(
+        ServiceEquipment.equipment_type, ServiceEquipment.brand_key, ServiceEquipment.serial_key
+    ).having(func.count(ServiceEquipment.id) > 1)
+
+
+def _kalite_kosulu(user: User, kod: str, an: datetime) -> ColumnElement[bool]:
+    if kod == "seri_eksik":
+        return ServiceEquipment.serial_key.is_(None)
+    if kod == "lokasyonsuz":
+        return ServiceEquipment.address_id.is_(None)
+    if kod == "hesapsiz":
+        return ServiceEquipment.account_id.is_(None)
+    if kod == "durum_bilinmiyor":
+        return ServiceEquipment.lifecycle_status == "BILINMIYOR"
+    if kod == "sozlesmesiz_kurulu":
+        return and_(
+            ServiceEquipment.lifecycle_status == "KURULU",
+            ServiceEquipment.id.not_in(
+                select(MaintenanceContractItem.equipment_id).where(_aktif_kalem_kosulu(an))
+            ),
+        )
+    if kod == "mukerrer":
+        gruplar = mukerrer_gruplari_sorgusu(user).subquery()
+        uye = aliased(ServiceEquipment)
+        return ServiceEquipment.id.in_(
+            select(uye.id)
+            .join(
+                gruplar,
+                and_(
+                    uye.equipment_type == gruplar.c.tip,
+                    uye.brand_key.is_not_distinct_from(gruplar.c.marka_anahtari),
+                    uye.serial_key == gruplar.c.seri_anahtari,
+                ),
+            )
+            .where(_mukerrer_aday_kosulu(uye))
+        )
+    raise ServisGirdiHatasi(f"Bilinmeyen kalite kodu: {kod}")
+
+
+async def mukerrer_gruplari(
+    db: AsyncSession, user: User, *, limit: int, offset: int
+) -> tuple[int, list[dict[str, Any]]]:
+    """Mükerrer gruplar (sayfalı); toplam = grup sayısı = KPI kutusu."""
+    stmt = mukerrer_gruplari_sorgusu(user)
+    toplam = await say(db, stmt)
+    satirlar = (
+        await db.execute(
+            stmt.order_by(
+                ServiceEquipment.serial_key,
+                ServiceEquipment.equipment_type,
+                ServiceEquipment.brand_key,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    idler = sorted({i for r in satirlar for i in r.idler})
+    kayitlar: dict[int, tuple] = {}
+    if idler:
+        for e, unvan, tesis, il in (
+            await db.execute(
+                select(ServiceEquipment, Account.title, Address.site_name, Address.city)
+                .outerjoin(Account, Account.id == ServiceEquipment.account_id)
+                .outerjoin(Address, Address.id == ServiceEquipment.address_id)
+                .where(ServiceEquipment.id.in_(idler))
+            )
+        ).all():
+            kayitlar[e.id] = (e, unvan, tesis, il)
+    gruplar = []
+    for r in satirlar:
+        uyeler = [kayitlar[i] for i in sorted(r.idler) if i in kayitlar]
+        gruplar.append(
+            {
+                "tip": r.tip,
+                "seri_anahtari": r.seri_anahtari,
+                "adet": int(r.adet),
+                "kayitlar": [
+                    {
+                        "id": e.id,
+                        "birim": e.birim,
+                        "brand": e.brand,
+                        "model": e.model,
+                        "serial_no": e.serial_no,
+                        "hesap_unvan": unvan,
+                        "lokasyon_adi": tesis,
+                        "il": il,
+                        "lifecycle_status": e.lifecycle_status,
+                        "created_at": e.created_at,
+                    }
+                    for e, unvan, tesis, il in uyeler
+                ],
+            }
+        )
+    return toplam, gruplar
+
+
+async def kalite_ozeti(db: AsyncSession, user: User, clock: Clock) -> list[dict[str, Any]]:
+    """Ekipman veri kalitesi sayıları; her biri kendi listesinin toplamıdır."""
+    bugun, an = yerel_bugun(clock), clock.now()
+    sonuc = []
+    for k in KALITE_TANIMLARI:
+        if k.liste == "mukerrer":
+            deger = await say(db, mukerrer_gruplari_sorgusu(user))
+        elif k.liste == "saha":
+            deger = await say(db, saha_farklari_sorgusu(user))
+        else:
+            deger = await say(
+                db, liste_sorgusu(user, EkipmanSuzgeci(kalite=k.kod), bugun=bugun, an=an)
+            )
+        sonuc.append(
+            {"kod": k.kod, "baslik": k.baslik, "tanim": k.tanim, "liste": k.liste, "deger": deger}
+        )
+    return sonuc
+
+
+# --- Birleştirme (TS-191, E03-13) -------------------------------------------------------
+
+
+async def birlestirme_engelleri(
+    db: AsyncSession, ikincil: ServiceEquipment, an: datetime
+) -> dict[str, list]:
+    """İkincil kayda bağlı AÇIK bağlar: sözleşme kalemi, servis işi, atölye kaydı.
+
+    Plan kararı (TS-191): bunlardan biri varken birleştirme 409 + liste; hiçbir
+    bağ OTOMATİK taşınmaz (PB numaraları, dönem kalemleri ve atölye bileşik
+    FK'si yerinde kalır). Kullanıcı önce bağı kapatır/taşır, sonra birleştirir.
+    """
+    from app.models import WorkshopRecord
+    from app.models.servis_atolye import ATOLYE_ACIK_OLMAYAN
+
+    kalemler = (
+        await db.execute(
+            select(MaintenanceContractItem.id, MaintenanceContract.contract_no)
+            .join(
+                MaintenanceContract, MaintenanceContract.id == MaintenanceContractItem.contract_id
+            )
+            .where(
+                MaintenanceContractItem.equipment_id == ikincil.id,
+                _aktif_kalem_kosulu(an),
+            )
+            .order_by(MaintenanceContractItem.id)
+        )
+    ).all()
+    isler = (
+        await db.execute(
+            select(ServiceOrder.id, ServiceOrder.so_no)
+            .where(
+                ServiceOrder.equipment_id == ikincil.id,
+                ServiceOrder.is_deleted.is_(False),
+                ServiceOrder.status.in_(sorted(DURUM_GRUPLARI["ACIK"])),
+            )
+            .order_by(ServiceOrder.id)
+        )
+    ).all()
+    atolye = (
+        await db.execute(
+            select(WorkshopRecord.id, WorkshopRecord.atolye_no)
+            .where(
+                WorkshopRecord.equipment_id == ikincil.id,
+                WorkshopRecord.is_deleted.is_(False),
+                WorkshopRecord.status.not_in(ATOLYE_ACIK_OLMAYAN),
+            )
+            .order_by(WorkshopRecord.id)
+        )
+    ).all()
+    return {
+        "sozlesme_kalemleri": [{"id": i, "sozlesme_no": n} for i, n in kalemler],
+        "servis_isleri": [{"id": i, "so_no": n} for i, n in isler],
+        "atolye_kayitlari": [{"id": i, "atolye_no": n} for i, n in atolye],
+    }
+
+
+async def birlestir(
+    db: AsyncSession,
+    ikincil: ServiceEquipment,
+    ana_id: int,
+    gerekce: str | None,
+    *,
+    user: User,
+    clock: Clock,
+    ip: str | None = None,
+) -> ServiceEquipment:
+    """İkincil kaydı ana kayda birleştirir (`is_active=false`, `merged_into_id`).
+
+    Kapsam (404) ikincil için ÇAĞIRANDA, ana için burada sınanır. Açık bağ varsa
+    409 + liste ve hiçbir satır değişmez. Geçmiş, ekler ve kapanmış işler
+    ikincide kalır; kart "Birleştirildi → #ana" bağını gösterir. İki kayda da
+    denetim satırı yazılır.
+    """
+    metin = _gerekce(gerekce)
+    if ana_id == ikincil.id:
+        raise ServisGirdiHatasi("Kayıt kendisiyle birleştirilemez")
+    ana = await kapsamli_ekipman(db, user, ana_id)
+    if ikincil.merged_into_id is not None:
+        raise EkipmanHatasi(f"Kayıt zaten #{ikincil.merged_into_id} ile birleştirilmiş")
+    if not ana.is_active or ana.merged_into_id is not None:
+        raise EkipmanHatasi("Ana kayıt aktif olmalı (pasif/birleşmiş kayda birleştirilemez)")
+    if ana.birim != ikincil.birim:
+        raise EkipmanHatasi("Farklı birimlerin kayıtları birleştirilemez")
+    if ana.equipment_type != ikincil.equipment_type:
+        raise EkipmanHatasi("Farklı tipteki ekipmanlar birleştirilemez")
+    engeller = await birlestirme_engelleri(db, ikincil, clock.now())
+    if any(engeller.values()):
+        raise EkipmanHatasi(
+            "İkincil kayda bağlı açık sözleşme kalemi, servis işi ya da atölye kaydı var; "
+            "önce bunları kapatın veya ana kayda taşıyın.",
+            veri={"kod": "ACIK_BAG", **engeller},
+        )
+    eski = {"is_active": ikincil.is_active, "merged_into_id": None}
+    ikincil.is_active = False
+    ikincil.merged_into_id = ana.id
+    ikincil.updated_by = user.id
+    await db.flush()
+    await _denetim_yaz(
+        db,
+        ikincil,
+        "birlestir",
+        eski=eski,
+        yeni={"is_active": False, "merged_into_id": ana.id, "gerekce": metin},
+        user_id=user.id,
+        ip=ip,
+    )
+    await _denetim_yaz(
+        db,
+        ana,
+        "birlestir",
+        eski=None,
+        yeni={"birlesen_id": ikincil.id, "gerekce": metin},
+        user_id=user.id,
+        ip=ip,
+    )
+    return ana
+
+
+# --- Saha farkı kütüğe dönüş (TS-191, E03-14) --------------------------------------------
+#
+# Ayrı öneri tablosu YOK: fark `service_results.kutuk_fark_durumu='ACIK'`'tır.
+# Kapanışta (`durum_degisti` → TAMAMLANDI) iş ekipmansızsa ve saha serisi AYNI
+# müşteri + AYNI birimde TEK aktif ekipmana denk geliyorsa iş ona bağlanır;
+# kütükle gerçek fark yoksa durum temizlenir. Kütük ASLA otomatik değişmez:
+# "Kütüğe uygula" insan kararıdır.
+
+
+def _bolge_farkli(saha: str | None, kutuk: str | None) -> bool:
+    if not (saha or "").strip():
+        return False
+    return tr_normkey(saha) != tr_normkey(kutuk or "")
+
+
+async def _is_serisi(db: AsyncSession, so_id: int) -> str | None:
+    """İşin ilk aktif serisi (PB'de saha serisi burada; form yalnız bölge tutar)."""
+    return await db.scalar(
+        select(ServiceOrderSerial.seri_no)
+        .where(ServiceOrderSerial.service_order_id == so_id, ServiceOrderSerial.is_active.is_(True))
+        .order_by(ServiceOrderSerial.id)
+        .limit(1)
+    )
+
+
+async def _acik_fark(db: AsyncSession, so_id: int):
+    from app.models import ServiceResult
+
+    return await db.scalar(
+        select(ServiceResult)
+        .where(
+            ServiceResult.service_order_id == so_id,
+            ServiceResult.gecersiz_at.is_(None),
+            ServiceResult.kutuk_fark_durumu == "ACIK",
+        )
+        .order_by(ServiceResult.id.desc())
+        .limit(1)
+    )
+
+
+async def _saha_serisi(db: AsyncSession, sonuc, so_id: int) -> str | None:
+    return sonuc.saha_seri_no or await _is_serisi(db, so_id)
+
+
+async def _tek_eslesme(
+    db: AsyncSession, ham_seri: str, *, account_id: int | None, birim: str
+) -> int | None:
+    """Aynı müşteri + aynı birimde TEK aktif ekipman (yoksa/çoksa None)."""
+    anahtar = normalize_seri(ham_seri) if ham_seri else ""
+    if not anahtar or account_id is None:
+        return None
+    idler = (
+        await db.scalars(
+            select(ServiceEquipment.id)
+            .where(
+                ServiceEquipment.serial_key == anahtar,
+                ServiceEquipment.account_id == account_id,
+                ServiceEquipment.birim == birim,
+                ServiceEquipment.is_active.is_(True),
+                ServiceEquipment.is_deleted.is_(False),
+            )
+            .limit(2)
+        )
+    ).all()
+    return idler[0] if len(idler) == 1 else None
+
+
+async def _saha_farki_kapanista(
+    db: AsyncSession, so: ServiceOrder, onceki: str, hedef: str, kaynak: str, clock: Clock
+) -> None:
+    """`durum_degisti` kancası: TAMAMLANDI'da otomatik bağlama + gerçek fark tespiti."""
+    if hedef != "TAMAMLANDI":
+        return
+    sonuc = await _acik_fark(db, so.id)
+    if sonuc is None:
+        return
+    if so.equipment_id is None and sonuc.saha_seri_no:
+        bulunan = await _tek_eslesme(
+            db, sonuc.saha_seri_no, account_id=so.customer_id, birim=so.birim
+        )
+        if bulunan is not None:
+            so.equipment_id = bulunan
+            await db.flush()
+            await audit.log(
+                db,
+                ENTITY,
+                "saha.otomatik_bagla",
+                entity_id=bulunan,
+                new_value={"is_no": so.so_no, "is_id": so.id, "seri": sonuc.saha_seri_no},
+                user_id=sonuc.created_by,
+            )
+    if so.equipment_id is None:
+        return  # bağlanacak kütük kaydı yok; fark listede kalır (insan kararı)
+    ekipman = await db.get(ServiceEquipment, so.equipment_id)
+    if ekipman is None:
+        return
+    saha_seri = await _saha_serisi(db, sonuc, so.id)
+    seri_farkli = bool(saha_seri) and normalize_seri(saha_seri) != (ekipman.serial_key or "")
+    if not seri_farkli and not _bolge_farkli(sonuc.saha_bolge, ekipman.zone):
+        sonuc.kutuk_fark_durumu = None
+        await db.flush()
+
+
+def saha_farklari_sorgusu(user: User) -> Select:
+    """Açık saha farkları (geçerli sonuç, silinmemiş iş); işin kapsamıyla süzülür."""
+    from app.models import ServiceResult
+
+    stmt = (
+        select(ServiceResult, ServiceOrder, ServiceEquipment)
+        .join(ServiceOrder, ServiceOrder.id == ServiceResult.service_order_id)
+        .outerjoin(ServiceEquipment, ServiceEquipment.id == ServiceOrder.equipment_id)
+        .where(
+            ServiceResult.gecersiz_at.is_(None),
+            ServiceResult.kutuk_fark_durumu == "ACIK",
+            ServiceOrder.is_deleted.is_(False),
+        )
+    )
+    from app.services.teknik_servis.kapsam import kapsam_isler
+
+    return kapsam_isler(stmt, user, ServiceOrder.id).order_by(ServiceResult.id.desc())
+
+
+async def saha_farki_satirlari(db: AsyncSession, satirlar: list) -> list[dict[str, Any]]:
+    kisi_idleri = {r.created_by for r, _, _ in satirlar if r.created_by}
+    adlar: dict[int, str] = {}
+    if kisi_idleri:
+        adlar = dict(
+            (await db.execute(select(User.id, User.full_name).where(User.id.in_(kisi_idleri))))
+            .tuples()
+            .all()
+        )
+    sonuc = []
+    for r, so, e in satirlar:
+        saha_seri = await _saha_serisi(db, r, so.id)
+        sonuc.append(
+            {
+                "sonuc_id": r.id,
+                "so_id": so.id,
+                "so_no": so.so_no,
+                "birim": so.birim,
+                "tur": so.tur,
+                "ekipman_id": e.id if e else None,
+                "kutuk_seri": e.serial_no if e else None,
+                "kutuk_bolge": e.zone if e else None,
+                "saha_seri": saha_seri,
+                "saha_bolge": r.saha_bolge,
+                "teknisyen_id": r.created_by,
+                "teknisyen": adlar.get(r.created_by) if r.created_by else None,
+                "tarih": r.created_at,
+            }
+        )
+    return sonuc
+
+
+async def _farkli_kapsamli_is(db: AsyncSession, user: User, so: ServiceOrder):
+    from app.services.teknik_servis.kapsam import is_erisimi_yok_mu
+
+    if so.is_deleted or await is_erisimi_yok_mu(db, user, so):
+        raise EkipmanBulunamadi("Servis işi bulunamadı")
+    sonuc = await _acik_fark(db, so.id)
+    if sonuc is None:
+        raise EkipmanHatasi("Bu işte karar bekleyen kütük farkı yok")
+    return sonuc
+
+
+async def _form_farkini_kapat(db: AsyncSession, so_id: int, durum: str) -> None:
+    from app.models import MaintenanceForm
+
+    form = await db.scalar(select(MaintenanceForm).where(MaintenanceForm.service_order_id == so_id))
+    if form is not None and form.kutuk_fark_durumu == "ACIK":
+        form.kutuk_fark_durumu = durum
+
+
+async def saha_farki_uygula(
+    db: AsyncSession, so: ServiceOrder, *, user: User, ip: str | None = None
+) -> ServiceEquipment:
+    """Sahadaki seri/bölgeyi kütüğe yazar (insan kararı). Hedef seri başka AKTİF
+    kayıttaysa 409 — çakışma otomatik uygulanmaz. Denetimde teknisyen ve
+    onaylayan ayrı kimlikle durur."""
+    sonuc = await _farkli_kapsamli_is(db, user, so)
+    if so.equipment_id is None:
+        raise EkipmanHatasi(
+            "İşe bağlı ekipman yok; önce işi ekipmana bağlayın ya da farkı yok sayın"
+        )
+    ekipman = await kapsamli_ekipman(db, user, so.equipment_id)
+    saha_seri = await _saha_serisi(db, sonuc, so.id)
+    eski: dict[str, Any] = {}
+    yeni: dict[str, Any] = {}
+    if saha_seri and normalize_seri(saha_seri) != (ekipman.serial_key or ""):
+        cakisan = (
+            await db.scalars(
+                select(ServiceEquipment).where(
+                    ServiceEquipment.serial_key == normalize_seri(saha_seri),
+                    ServiceEquipment.id != ekipman.id,
+                    ServiceEquipment.is_active.is_(True),
+                    ServiceEquipment.is_deleted.is_(False),
+                )
+            )
+        ).all()
+        if cakisan:
+            gorunen = [e.id for e in cakisan if not await erisim_yok_mu(db, user, e)]
+            raise EkipmanHatasi(
+                f"'{saha_seri}' seri no başka aktif kayıtta var; çakışma otomatik uygulanmaz",
+                veri={
+                    "kod": "SERI_CAKISMASI",
+                    "mevcut": gorunen,
+                    "kapsam_disi": len(cakisan) - len(gorunen),
+                },
+            )
+        eski["serial_no"] = ekipman.serial_no
+        yeni["serial_no"] = saha_seri
+        ekipman.serial_no = saha_seri
+    if _bolge_farkli(sonuc.saha_bolge, ekipman.zone):
+        eski["zone"] = ekipman.zone
+        yeni["zone"] = sonuc.saha_bolge
+        ekipman.zone = sonuc.saha_bolge
+    sonuc.kutuk_fark_durumu = "UYGULANDI"
+    await _form_farkini_kapat(db, so.id, "UYGULANDI")
+    ekipman.updated_by = user.id
+    await db.flush()
+    await _denetim_yaz(
+        db,
+        ekipman,
+        "saha.uygula",
+        eski=eski or None,
+        yeni={
+            **yeni,
+            "teknisyen_id": sonuc.created_by,
+            "onaylayan_id": user.id,
+            "is_no": so.so_no,
+        },
+        user_id=user.id,
+        ip=ip,
+    )
+    return ekipman
+
+
+async def saha_farki_yoksay(
+    db: AsyncSession, so: ServiceOrder, gerekce: str | None, *, user: User, ip: str | None = None
+) -> None:
+    """Farkı gerekçeyle kapatır (`YOK_SAYILDI`); kütük değişmez, gerekçe geçmişte."""
+    metin = _gerekce(gerekce)
+    sonuc = await _farkli_kapsamli_is(db, user, so)
+    sonuc.kutuk_fark_durumu = "YOK_SAYILDI"
+    await _form_farkini_kapat(db, so.id, "YOK_SAYILDI")
+    await db.flush()
+    yeni = {"is_no": so.so_no, "gerekce": metin, "teknisyen_id": sonuc.created_by}
+    ekipman = await db.get(ServiceEquipment, so.equipment_id) if so.equipment_id else None
+    if ekipman is not None:
+        await _denetim_yaz(db, ekipman, "saha.yoksay", eski=None, yeni=yeni, user_id=user.id, ip=ip)
+    else:
+        await audit.log(
+            db, "service_results", "saha.yoksay", entity_id=sonuc.id, new_value=yeni,
+            user_id=user.id, ip=ip,
+        )  # fmt: skip
 
 
 # --- Toplu garanti (TS-056) ------------------------------------------------------
@@ -1496,7 +2143,42 @@ async def _kvkk_veri_bul(db: AsyncSession, arama: kvkk.VeriBulAramasi) -> list[d
     ]
 
 
+async def kalite_uyarilari(db: AsyncSession, user: User, clock: Clock) -> list:
+    """Uyarı zili (E03-13): seri no'su eksik ekipman ve mükerrer seri grubu —
+    `ekipman.yaz` sahibine, kendi birim/müşteri kapsamındaki sayılarla."""
+    from app.services.uyarilar import Uyari
+
+    bugun, an = yerel_bugun(clock), clock.now()
+    seri = await say(
+        db, liste_sorgusu(user, EkipmanSuzgeci(kalite="seri_eksik"), bugun=bugun, an=an)
+    )
+    grup = await say(db, mukerrer_gruplari_sorgusu(user))
+    return [
+        Uyari(
+            kod="ekipman_seri_eksik",
+            baslik="Seri no'su eksik ekipman",
+            adet=seri,
+            yol="/servis-ekipman?kalite=seri_eksik",
+            onem="bilgi",
+            aciklama="Kütükte seri numarası boş aktif ekipman.",
+        ),
+        Uyari(
+            kod="ekipman_mukerrer",
+            baslik="Mükerrer seri no grubu",
+            adet=grup,
+            yol="/servis-ekipman?sekme=kalite&liste=mukerrer",
+            onem="uyari",
+            aciklama="Aynı tip + marka + seri ile birden çok aktif kayıt.",
+        ),
+    ]
+
+
+# Uyarı kaydı modülün sonunda (ana_veri kalıbı: toplayıcıyla döngüsel import yok).
+from app.services.teknik_servis import uyarilar as _ts_uyarilar  # noqa: E402
+
 ek_kapsam.kaydet(ENTITY, _ek_kapsami)
+_kancalar.kaydet("durum_degisti", _saha_farki_kapanista)
+_ts_uyarilar.kaydet("servis", "ekipman.yaz", kalite_uyarilari)
 kvkk.anonimlestirme_kaydet(_kvkk_anonimlestir)
 kvkk.denetim_maske_kaydet(ENTITY, _kvkk_denetim_kosulu)
 kvkk.veri_bul_kaydet("servis_ekipmanlari", _kvkk_veri_bul)

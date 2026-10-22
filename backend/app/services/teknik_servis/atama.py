@@ -21,7 +21,9 @@ Kapalı işe atama 409.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -62,6 +64,33 @@ class AtamaSatiri:
 
 TopluAtamaModu = Literal["EKLE", "DEGISTIR"]
 TOPLU_MODLAR = ("EKLE", "DEGISTIR")
+
+# Atama uyarıları (Dalga 3, TS-198 / E08-22): `_uygula` yeni atanan kişiler için
+# `kancalar.atama_uyarilari`'nı çağırır; uyarı atamayı ENGELLEMEZ. Uç katmanı
+# (tekli/toplu atama, planlama) `uyari_toplayici()` bağlamında çağırıp yanıta
+# `uyarilar` olarak ekler. İmzalar değişmez (planlama/atölye aynı fonksiyonları
+# çağırır); toplayıcı yoksa uyarılar yalnız ATAMA olayına yazılır.
+_UYARI_TOPLAYICI: ContextVar[list[str] | None] = ContextVar("atama_uyari_toplayici", default=None)
+
+
+@contextmanager
+def uyari_toplayici() -> Iterator[list[str]]:
+    """Bağlam içindeki atamaların yetkinlik/belge uyarılarını toplar (tekrarsız)."""
+    liste: list[str] = []
+    belirtec = _UYARI_TOPLAYICI.set(liste)
+    try:
+        yield liste
+    finally:
+        _UYARI_TOPLAYICI.reset(belirtec)
+
+
+def _uyari_ekle(uyarilar: Sequence[str]) -> None:
+    liste = _UYARI_TOPLAYICI.get()
+    if liste is None:
+        return
+    for u in uyarilar:
+        if u not in liste:
+            liste.append(u)
 
 
 def _satirlari_dogrula(atamalar: Sequence[AtamaSatiri]) -> list[AtamaSatiri]:
@@ -167,22 +196,28 @@ async def _uygula(
     so.updated_by = user.id
     await db.flush()
     sorumlu = next((a.user_id for a in atamalar if a.is_lead), None)
-    await gecmis.olay_yaz(
-        db,
-        so,
-        "ATAMA",
-        f"Ekip güncellendi: {len(eklenen)} eklendi, {len(cikan)} çıkarıldı, "
-        f"{len(degisen)} rol değişti",
-        user=user,
-        clock=clock,
-        veri={
-            "eklenen": [a.user_id for a in eklenen],
-            "cikan": [a.user_id for a in cikan],
-            "degisen": [a.user_id for a in degisen],
-            "ekip": [{"user_id": a.user_id, "rol": a.rol} for a in atamalar],
-            "sorumlu": sorumlu,
-        },
+    # Yetkinlik/belge uyarısı yalnız yeni atanan (eklenen + rolü değişen) kişiler için;
+    # yalnız okur, atamayı engellemez (E08-22, K11).
+    uyarilar = await kancalar.atama_uyarilari(
+        db, so, [a.user_id for a in eklenen] + [a.user_id for a in degisen]
     )
+    ozet = (
+        f"Ekip güncellendi: {len(eklenen)} eklendi, {len(cikan)} çıkarıldı, "
+        f"{len(degisen)} rol değişti"
+    )
+    veri: dict = {
+        "eklenen": [a.user_id for a in eklenen],
+        "cikan": [a.user_id for a in cikan],
+        "degisen": [a.user_id for a in degisen],
+        "ekip": [{"user_id": a.user_id, "rol": a.rol} for a in atamalar],
+        "sorumlu": sorumlu,
+    }
+    if uyarilar:
+        ozet += " — yetkinlik uyarısıyla atandı"
+        veri["yetkinlik_uyarisi"] = True
+        veri["uyari_sayisi"] = len(uyarilar)
+        _uyari_ekle(uyarilar)
+    await gecmis.olay_yaz(db, so, "ATAMA", ozet, user=user, clock=clock, veri=veri)
     await kancalar.ekip_degisti(db, so, atamalar, clock)
     await db.refresh(so, attribute_names=["atamalar"])
     return await aktif_ekip(db, so), True

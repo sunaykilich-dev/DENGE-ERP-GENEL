@@ -1,0 +1,4 @@
+PersonnelCompetencyId,PersonnelId,CompetencyId,CurrentLevel,TargetLevel,AssessedAt,AssessedBy,Evidence,NextReviewDate
+1,1,1,2,3,2026-01-15,Şef A,Gözlem,2026-07-15
+2,2,1,1,3,2026-01-15,Şef A,,
+3,3,1,3,3,,Şef A,,

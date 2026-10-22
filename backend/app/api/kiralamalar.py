@@ -57,8 +57,10 @@ from app.services.accounts import kapsam_disinda_mi
 from app.services.pdf import PdfUretilemedi
 from app.services.statemachine import KIRALAMA, IzinsizGecis
 from app.services.teknik_servis import kiralama as svc
+from app.services.teknik_servis import kiralama_raporlar as rapor_svc
 from app.services.teknik_servis import kiralama_tahsis as tahsis_svc
 from app.services.teknik_servis import kiralik_envanter as envanter_svc
+from app.services.teknik_servis import kiralik_sayim as sayim_svc
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 from app.services.teknik_servis.kiralik_envanter import KiralamaHatasi
 from app.services.teknik_servis.yerel_zaman import yerel_bugun
@@ -523,6 +525,70 @@ class KatalogOut(BaseModel):
     sira: int
     is_active: bool
     version: int
+
+
+class DegisimIn(BaseModel):
+    """Sahada cihaz değişimi (E06-20): eski tahsis → yeni seri cihaz; eski cihaz
+    iade deposuna KONTROLDE döner."""
+
+    eski_tahsis_id: int
+    yeni_kiralik_id: int
+    iade_depo_id: int
+    not_: str | None = Field(default=None, alias="not", max_length=300)
+
+    model_config = {
+        "populate_by_name": True,
+        "json_schema_extra": {
+            "examples": [
+                {"eski_tahsis_id": 1, "yeni_kiralik_id": 2, "iade_depo_id": 1, "not": "Arızalı"}
+            ]
+        },
+    }
+
+
+class SayimAcIn(BaseModel):
+    depo_id: int
+    notes: str | None = Field(default=None, max_length=2000)
+
+    model_config = {"json_schema_extra": {"examples": [{"depo_id": 1}]}}
+
+
+class SayimSatiriIn(BaseModel):
+    product_id: int
+    seri: str | None = Field(default=None, max_length=200)
+    adet: int | None = Field(default=None, ge=0)
+    notes: str | None = Field(default=None, max_length=300)
+
+
+class SayimSatirlariIn(BaseModel):
+    sayim_id: int
+    satirlar: list[SayimSatiriIn] = Field(default_factory=list, max_length=2000)
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{"sayim_id": 1, "satirlar": [{"product_id": 1, "adet": 3}]}]
+        }
+    }
+
+
+class SayimOnayIn(BaseModel):
+    sayim_id: int
+    kararlar: list[str] = Field(default_factory=list, max_length=5000)
+    gerekce: str | None = Field(default=None, max_length=300)
+    degisimi_kabul: bool = False
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{"sayim_id": 1, "kararlar": ["T:1"], "gerekce": "Yıl sonu"}]
+        }
+    }
+
+
+class SayimIptalIn(BaseModel):
+    sayim_id: int
+    gerekce: str = Field(max_length=500)
+
+    model_config = {"json_schema_extra": {"examples": [{"sayim_id": 1, "gerekce": "Vazgeçildi"}]}}
 
 
 class DepoOut(BaseModel):
@@ -1375,6 +1441,306 @@ async def cihaz_guncelle(
 # --- Kiralama: oluşturma ------------------------------------------------------------------
 
 
+# --- Raporlar (TS-195, E06-21) — `servis_rapor.gor + kiralama.gor` ----------------------
+
+Raporcu = Annotated[User, Depends(require_permission("kiralama.gor", "servis_rapor.gor"))]
+RaporAktarici = Annotated[
+    User,
+    Depends(require_permission("kiralama.gor", "servis_rapor.gor", "servis_rapor.disaaktar")),
+]
+
+
+async def _rapor_denetimi(request: Request, db: AsyncSession, user: User, rapor: str, satir: int):
+    await audit.log(
+        db,
+        svc.ENTITY,
+        "rapor.disaaktar",
+        new_value={"rapor": rapor, "satir": satir},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+
+
+@router.get("/raporlar/depo-durumu")
+async def rapor_depo_durumu(db: DbDep, user: Raporcu) -> dict[str, Any]:
+    """Depo × ürün × durum adetleri (REZERVE = sevk edilmemiş AKTİF tahsis); fiyat yok."""
+    return await rapor_svc.depo_durumu(db, user)
+
+
+_DEPO_BASLIKLARI = [
+    "Depo",
+    "Ürün Kodu",
+    "Ürün",
+    "Hazır",
+    "Rezerve",
+    "Serbest",
+    "Kirada",
+    "Kontrolde",
+    "Hazır Değil",
+    "Kayıp",
+    "Atölyede",
+]
+
+
+@router.get("/raporlar/depo-durumu.xlsx")
+async def rapor_depo_durumu_xlsx(request: Request, db: DbDep, user: RaporAktarici) -> Response:
+    r = await rapor_svc.depo_durumu(db, user)
+    tablo = [
+        [s["depo_adi"], s["urun_kodu"], s["urun_adi"], *(s[k] for k in rapor_svc.DEPO_SUTUNLARI)]
+        for s in r["satirlar"]
+    ]
+    await _rapor_denetimi(request, db, user, "depo-durumu", len(tablo))
+    return await _xlsx("Depo Durumu", "kiralama-depo-durumu.xlsx", _DEPO_BASLIKLARI, tablo)
+
+
+@router.get("/raporlar/geciken-iade")
+async def rapor_geciken_iade(
+    db: DbDep, clock: ClockDep, user: Raporcu, response: Response
+) -> list[dict[str, Any]]:
+    """Geciken iadeler — sayı, `GET /api/kiralama?kpi=geciken` listesinin toplamıdır."""
+    satirlar = await rapor_svc.geciken_iade(db, user, clock)
+    response.headers["X-Toplam-Kayit"] = str(len(satirlar))
+    return satirlar
+
+
+_ASAMA_ADI = {"IS_YOK": "İş yok", "EKSIK": "Eksik"}
+
+
+def _asama_metni(a: dict[str, Any] | None) -> str:
+    if not a:
+        return ""
+    if a["dk"] is None:
+        return _ASAMA_ADI.get(a["durum"], "Eksik")
+    return f"{a['dk']} dk"
+
+
+@router.get("/raporlar/geciken-iade.xlsx")
+async def rapor_geciken_iade_xlsx(
+    request: Request, db: DbDep, clock: ClockDep, user: RaporAktarici
+) -> Response:
+    satirlar = await rapor_svc.geciken_iade(db, user, clock)
+    tablo = [
+        [
+            s["rental_no"],
+            BIRIMLER.get(s["birim"], s["birim"]),
+            s["musteri"] or "",
+            s["proje_adi"] or "",
+            s["bitis"],
+            s["gecikme_gun"],
+            s["musteride_adet"],
+            ", ".join(s["seriler"]),
+            _asama_metni(s["asama_sureleri"].get("KURULUM")),
+            _asama_metni(s["asama_sureleri"].get("TOPLAMA")),
+        ]
+        for s in satirlar
+    ]
+    await _rapor_denetimi(request, db, user, "geciken-iade", len(tablo))
+    return await _xlsx(
+        "Geciken Iade",
+        "kiralama-geciken-iade.xlsx",
+        [
+            "Kiralama No",
+            "Birim",
+            "Müşteri",
+            "Proje",
+            "Bitiş (iade)",
+            "Gecikme (gün)",
+            "Müşterideki Adet",
+            "Seriler",
+            "Kurulum Süresi",
+            "Toplama Süresi",
+        ],
+        tablo,
+    )
+
+
+@router.get("/raporlar/kontrolde-bekleme")
+async def rapor_kontrolde_bekleme(db: DbDep, clock: ClockDep, user: Raporcu) -> dict[str, Any]:
+    """KONTROLDE bekleyen cihaz/ürünler ve bekleme günü (seri sayısı = envanter listesi)."""
+    return await rapor_svc.kontrolde_bekleme(db, user, clock)
+
+
+@router.get("/raporlar/kontrolde-bekleme.xlsx")
+async def rapor_kontrolde_bekleme_xlsx(
+    request: Request, db: DbDep, clock: ClockDep, user: RaporAktarici
+) -> Response:
+    r = await rapor_svc.kontrolde_bekleme(db, user, clock)
+    tablo = [
+        [
+            s["urun_kodu"] or "",
+            s["urun_adi"] or "",
+            str(s["serial_no"]),
+            1,
+            s["depo_adi"] or "",
+            s["giris_at"],
+            s["bekleme_gun"],
+        ]
+        for s in r["seri"]
+    ] + [
+        [
+            s["urun_kodu"] or "",
+            s["urun_adi"] or "",
+            "",
+            s["adet"],
+            s["depo_adi"] or "",
+            s["son_giris_at"],
+            s["bekleme_gun"],
+        ]
+        for s in r["toplu"]
+    ]
+    await _rapor_denetimi(request, db, user, "kontrolde-bekleme", len(tablo))
+    S = export_svc.Sutun
+    icerik = await export_svc.sayfalari_xlsx_async(
+        [
+            export_svc.Sayfa(
+                "Kontrolde Bekleme",
+                [
+                    S("Ürün Kodu"),
+                    S("Ürün"),
+                    S("Seri No"),
+                    S("Adet", "tamsayi"),
+                    S("Depo"),
+                    S("Kontrole Giriş", "zaman"),
+                    S("Bekleme (gün)", "tamsayi"),
+                ],
+                tablo,
+            )
+        ]
+    )
+    return Response(
+        content=icerik,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="kiralama-kontrolde-bekleme.xlsx"'},
+    )
+
+
+# --- Depo sayımı (TS-195, E06-22 b) -----------------------------------------------------
+# Sayım kimliği sorguda/gövdede: yol parametresi `{sayim_id}` uç taramasının
+# sözleşmesinde yok; kapsam kontrolü yine yazmadan ÖNCE yapılır (404).
+
+
+async def _sayim(db: AsyncSession, user: User, sayim_id: int, *, kilit: bool = False):
+    try:
+        return await sayim_svc.kapsamli_sayim(db, user, sayim_id, kilit=kilit)
+    except KiralamaHatasi as exc:
+        raise _hata(exc) from exc
+
+
+def _sayim_hatasi(exc: Exception) -> HTTPException:
+    if isinstance(exc, KiralamaHatasi) and exc.veri and exc.kod == "KURAL":
+        return HTTPException(status.HTTP_409_CONFLICT, {"mesaj": exc.mesaj, **exc.veri})
+    return _hata(exc)
+
+
+@router.get("/sayimlar")
+async def sayimlar(
+    db: DbDep,
+    user: Okuyucu,
+    response: Response,
+    durum: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Kapsamdaki kiralama depolarının sayımları (`X-Toplam-Kayit`)."""
+    stmt = sayim_svc.sayim_sorgusu(user)
+    if durum:
+        from app.models.servis_kiralama import KIRALIK_SAYIM_DURUMLARI
+
+        if durum not in KIRALIK_SAYIM_DURUMLARI:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen durum: {durum}")
+        from app.models import RentalCount
+
+        stmt = stmt.where(RentalCount.durum == durum)
+    kayitlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    return [await sayim_svc.ozet_ciktisi(db, s) for s, _ in kayitlar]
+
+
+@router.post("/sayimlar", status_code=status.HTTP_201_CREATED)
+async def sayim_ac(
+    payload: SayimAcIn, request: Request, db: DbDep, clock: ClockDep, user: Envanterci
+) -> dict[str, Any]:
+    """Depoda sayım başlatır; aynı depoda ikinci açık sayım 409. Hiçbir bakiye değişmez."""
+    try:
+        sayim = await sayim_svc.sayim_ac(
+            db, user, clock, depo_id=payload.depo_id, notes=payload.notes, ip=client_ip(request)
+        )
+    except KiralamaHatasi as exc:
+        raise _sayim_hatasi(exc) from exc
+    await db.commit()
+    return await sayim_svc.ozet_ciktisi(db, sayim, ayrinti=True)
+
+
+@router.get("/sayim")
+async def sayim_detay(sayim_id: int, db: DbDep, user: Okuyucu) -> dict[str, Any]:
+    return await sayim_svc.ozet_ciktisi(db, await _sayim(db, user, sayim_id), ayrinti=True)
+
+
+@router.put("/sayim/satirlar")
+async def sayim_satirlari(
+    payload: SayimSatirlariIn, request: Request, db: DbDep, user: Envanterci
+) -> dict[str, Any]:
+    """Sayılan seri/adetler (satırların tamamı). Onaysız sayım hiçbir şeyi değiştirmez."""
+    sayim = await _sayim(db, user, payload.sayim_id, kilit=True)
+    try:
+        await sayim_svc.satirlari_yaz(
+            db,
+            user,
+            sayim,
+            [sayim_svc.SayimSatiri(**s.model_dump()) for s in payload.satirlar],
+            ip=client_ip(request),
+        )
+    except KiralamaHatasi as exc:
+        raise _sayim_hatasi(exc) from exc
+    await db.commit()
+    return await sayim_svc.ozet_ciktisi(db, sayim, ayrinti=True)
+
+
+@router.get("/sayim/fark")
+async def sayim_farki(sayim_id: int, db: DbDep, user: Okuyucu) -> dict[str, Any]:
+    """Sistemde olup sayılmayan, sayılıp sistemde olmayan ve adet farkı satırları."""
+    sayim = await _sayim(db, user, sayim_id)
+    return await sayim_svc.fark(db, user, sayim)
+
+
+@router.post("/sayim/onayla")
+async def sayim_onayla(
+    payload: SayimOnayIn, request: Request, db: DbDep, clock: ClockDep, user: Envanterci
+) -> dict[str, Any]:
+    """Yalnız seçilen fark satırları `SAYIM` hareketi yazar (eksik seri → KAYIP)."""
+    sayim = await _sayim(db, user, payload.sayim_id, kilit=True)
+    try:
+        hareketler = await sayim_svc.onayla(
+            db,
+            user,
+            clock,
+            sayim,
+            kararlar=payload.kararlar,
+            gerekce=payload.gerekce,
+            degisimi_kabul=payload.degisimi_kabul,
+            ip=client_ip(request),
+        )
+    except KiralamaHatasi as exc:
+        raise _sayim_hatasi(exc) from exc
+    await db.commit()
+    cikti = await sayim_svc.ozet_ciktisi(db, sayim, ayrinti=True)
+    cikti["hareketler"] = [h.id for h in hareketler]
+    return cikti
+
+
+@router.post("/sayim/iptal")
+async def sayim_iptal(
+    payload: SayimIptalIn, request: Request, db: DbDep, user: Envanterci
+) -> dict[str, Any]:
+    sayim = await _sayim(db, user, payload.sayim_id, kilit=True)
+    try:
+        await sayim_svc.iptal(db, user, sayim, gerekce=payload.gerekce, ip=client_ip(request))
+    except KiralamaHatasi as exc:
+        raise _sayim_hatasi(exc) from exc
+    await db.commit()
+    return await sayim_svc.ozet_ciktisi(db, sayim)
+
+
 def _kalem_girdisi(k: KalemIn) -> svc.KalemGirdisi:
     return svc.KalemGirdisi(product_id=k.product_id, qty=k.qty, note=k.note, id=k.id)
 
@@ -1544,6 +1910,31 @@ async def sevk(
         clock,
         lambda: tahsis_svc.sevk_et(
             db, k, satirlar, at=payload.at, user=user, clock=clock, note=payload.not_
+        ),
+    )
+
+
+@router.post("/{kiralama_id}/degisim", response_model=KiralamaKarti)
+async def degisim(
+    kiralama_id: int, payload: DegisimIn, db: DbDep, clock: ClockDep, user: Asamaci
+) -> KiralamaKarti:
+    """Sahada seri cihaz değişimi: yeni tahsis + sevk + eski cihazın iadesi (tek işlem).
+    Başka kiralamaya tarih çakışan ya da hazır olmayan yeni cihaz 409."""
+    k = await _kiralama(db, user, kiralama_id, kilit=True)
+    return await _islem(
+        db,
+        k,
+        user,
+        clock,
+        lambda: tahsis_svc.degisim(
+            db,
+            k,
+            eski_tahsis_id=payload.eski_tahsis_id,
+            yeni_kiralik_id=payload.yeni_kiralik_id,
+            iade_depo_id=payload.iade_depo_id,
+            user=user,
+            clock=clock,
+            note=payload.not_,
         ),
     )
 

@@ -28,6 +28,7 @@ sayım yazmaz.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -103,6 +104,11 @@ class KpiTanimi:
     grup: str = "SERVIS"
     donemsel: bool = False
     vurgu: str = "normal"
+    # Dalga 3 rapor genişletmesi (E12-08, kontrol B1): ikinci kayıt defteri
+    # açılmaz, bu tanım genişler. `olcu_birimi` adet KPI'larında "adet";
+    # `kisisel` kutu `servis_rapor.personel` ister.
+    olcu_birimi: str = "adet"
+    kisisel: bool = False
 
 
 # --- Dönem -----------------------------------------------------------------------
@@ -111,14 +117,58 @@ class KpiTanimi:
 def donem_dogrula(donem: str | None) -> str:
     if donem is None or donem == "":
         return VARSAYILAN_DONEM
-    if donem not in DONEMLER:
-        raise PanelHatasi(f"Bilinmeyen dönem: {donem}. Geçerliler: {', '.join(DONEMLER)}")
-    return donem
+    if donem in DONEMLER:
+        return donem
+    if ARALIK_KALIBI.match(donem):
+        aralik_gunleri(donem)  # tarih, sıra ve azami uzunluk doğrulaması
+        return donem
+    raise PanelHatasi(
+        f"Bilinmeyen dönem: {donem}. Geçerliler: {', '.join(DONEMLER)} ya da YYYYAAGG-YYYYAAGG"
+    )
+
+
+# Rapor dönemi (Dalga 3, TS-181): `donem=20260101-20260131` — rapor KPI'sının
+# sayısı `/isler?kpi=<kod>&donem=<aralık>` listesinin toplamıyla aynı süzgeçten
+# gelsin diye serbest aralık da bir "dönem"dir. Uç: Türkiye günleri, iki uç dahil.
+ARALIK_KALIBI = re.compile(r"^(\d{8})-(\d{8})$")
+RAPOR_AZAMI_AY = 24
+
+
+def ay_ekle(gun: date, ay: int) -> date:
+    """Takvim ayı ekler; hedef ayda o gün yoksa ayın son günü (31 Oca + 1 = 28 Şub)."""
+    yil, ay_no = divmod(gun.month - 1 + ay, 12)
+    yeni_yil, yeni_ay = gun.year + yil, ay_no + 1
+    son = (date(yeni_yil + yeni_ay // 12, yeni_ay % 12 + 1, 1) - timedelta(days=1)).day
+    return date(yeni_yil, yeni_ay, min(gun.day, son))
+
+
+def aralik_metni(bas: date, bit: date) -> str:
+    return f"{bas:%Y%m%d}-{bit:%Y%m%d}"
+
+
+def aralik_gunleri(donem: str) -> tuple[date, date]:
+    """`YYYYAAGG-YYYYAAGG` → (ilk gün, son gün). Geçersiz tarih, ters sıra ya da
+    `RAPOR_AZAMI_AY` aydan uzun aralık → `PanelHatasi` (400)."""
+    eslesme = ARALIK_KALIBI.match(donem or "")
+    if eslesme is None:
+        raise PanelHatasi(f"Dönem aralığı YYYYAAGG-YYYYAAGG biçiminde olmalı: {donem}")
+    try:
+        bas, bit = (date(int(m[:4]), int(m[4:6]), int(m[6:])) for m in eslesme.groups())
+    except ValueError:
+        raise PanelHatasi(f"Geçersiz tarih: {donem}") from None
+    if bit < bas:
+        raise PanelHatasi("Bitiş tarihi başlangıçtan önce olamaz")
+    if bit >= ay_ekle(bas, RAPOR_AZAMI_AY):
+        raise PanelHatasi(f"Rapor aralığı en çok {RAPOR_AZAMI_AY} ay olabilir")
+    return bas, bit
 
 
 def donem_araligi(donem: str | None, clock: Clock) -> tuple[datetime, datetime]:
     """Dönemin UTC yarı açık aralığı `[bas, bit)` — Türkiye günlerine göre."""
     donem = donem_dogrula(donem)
+    if ARALIK_KALIBI.match(donem):
+        ilk, son = aralik_gunleri(donem)
+        return yerel_gun_araligi(ilk)[0], yerel_gun_araligi(son)[1]
     bugun = yerel_bugun(clock)
     if donem == "bugun":
         ilk = bugun
@@ -335,6 +385,8 @@ def _s_bakim_tamamlanan(stmt, user=None, clock=None, donem=None):
 # --- Kayıt ---------------------------------------------------------------------------
 
 KPI_TANIMLARI: dict[str, KpiTanimi] = {}
+# Panelde kutu olarak çizilmeyen gruplar (uyarı zili ve servis raporları).
+PANEL_DISI_GRUPLAR = frozenset({"UYARI", "RAPOR"})
 
 
 def kpi_kaydet(tanim: KpiTanimi) -> KpiTanimi:
@@ -493,7 +545,9 @@ async def panel_ozeti(
     kutular: list[dict[str, Any]] = []
     sayilar: dict[str, int] = {}
     for tanim in KPI_TANIMLARI.values():
-        if tanim.grup == "UYARI" or not user.has(tanim.izin):
+        # RAPOR grubu (Dalga 3) servis raporlarının dönemli KPI'larıdır; panelde
+        # aynı dönem ile ikinci bir kutu dizisi çizilmez.
+        if tanim.grup in PANEL_DISI_GRUPLAR or not user.has(tanim.izin):
             continue
         deger = await kpi_sayisi(db, tanim.kod, user, clock, donem=donem, birim=birim)
         sayilar[tanim.kod] = deger

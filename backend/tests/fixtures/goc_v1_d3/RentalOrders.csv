@@ -1,0 +1,4 @@
+RentalOrderId,RentalNo,UnitCode,Status,SerialNumbers,StartDate,EndDate,ClosedAt
+11,KR-0011,Güvenlik Sistemleri,Kapandı,SN-1,2026-01-01,2026-01-10,2026-01-11T10:00:00
+12,KR-0012,Güvenlik Sistemleri,Kirada,SN-2,2026-02-01,2026-03-01,
+13,KR-0013,Güvenlik Sistemleri,Teklif,,2026-04-01,2026-04-05,

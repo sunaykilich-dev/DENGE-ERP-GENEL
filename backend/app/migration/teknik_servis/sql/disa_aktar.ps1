@@ -14,8 +14,9 @@ param(
 $ErrorActionPreference = "Stop"
 Import-Module SqlServer
 New-Item -ItemType Directory -Force -Path $Hedef | Out-Null
-Get-ChildItem -Path $PSScriptRoot -Filter "goc_*.sql" | Sort-Object Name | ForEach-Object {
-    $tablo = ($_.BaseName -replace '^goc_\d+_', '')
+# Göç-1 (goc_NN_*) ve Göç-2 (goc2_NN_*: atölye, kiralama, eğitim, OpsHolds — D3-G) aynı dizine.
+Get-ChildItem -Path $PSScriptRoot -Filter "goc*_*.sql" | Sort-Object Name | ForEach-Object {
+    $tablo = ($_.BaseName -replace '^goc2?_\d+_', '')
     $cikti = Join-Path $Hedef "$tablo.csv"
     Write-Host "$($_.Name) -> $cikti"
     Invoke-Sqlcmd -ServerInstance $Sunucu -Database $Veritabani -InputFile $_.FullName `

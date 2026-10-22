@@ -508,13 +508,21 @@ async def liste(
     geciken: bool = False,
     kabul_grubu: int | None = None,
     musteri_id: int | None = None,
+    teslim_alinmayan: bool = False,
+    dis_servis: bool = False,
+    tedarikci_id: int | None = None,
+    sure_eksik: bool = False,
+    tamamlanma_bas: date | None = None,
+    tamamlanma_bit: date | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict[str, Any]]:
     """Sunucu süzgeçli ve sayfalı liste (`X-Toplam-Kayit`); kapsam SQL'de."""
     f = _filtre(**locals())
     try:
-        stmt = atolye_rapor.filtreli_sorgu(user, f, clock)
+        stmt = atolye_rapor.filtreli_sorgu(
+            user, f, clock, teslim_esik_gun=await atolye_rapor.teslim_esigi(db)
+        )
     except ServisGirdiHatasi as exc:
         raise _hata(exc) from exc
     satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
@@ -560,11 +568,19 @@ async def disaaktar(
     geciken: bool = False,
     kabul_grubu: int | None = None,
     musteri_id: int | None = None,
+    teslim_alinmayan: bool = False,
+    dis_servis: bool = False,
+    tedarikci_id: int | None = None,
+    sure_eksik: bool = False,
+    tamamlanma_bas: date | None = None,
+    tamamlanma_bit: date | None = None,
 ) -> Response:
     """Ekrandaki süzgecin AYNISIYLA Excel. Tamir bedeli sütunu yalnız `maliyet.gor`."""
     f = _filtre(**locals())
     try:
-        stmt = atolye_rapor.filtreli_sorgu(user, f, clock)
+        stmt = atolye_rapor.filtreli_sorgu(
+            user, f, clock, teslim_esik_gun=await atolye_rapor.teslim_esigi(db)
+        )
     except ServisGirdiHatasi as exc:
         raise _hata(exc) from exc
     toplam = await atolye_rapor.say(db, stmt)
@@ -600,6 +616,96 @@ async def disaaktar(
         headers={
             "Content-Disposition": 'attachment; filename="atolye.xlsx"',
             "X-Toplam-Kayit": str(len(satirlar)),
+        },
+    )
+
+
+# --- KPI raporu (TS-194) ------------------------------------------------------------------
+
+Raporcu = Annotated[User, Depends(require_permission("atolye.gor", "servis_rapor.gor"))]
+RaporAktarici = Annotated[
+    User,
+    Depends(require_permission("atolye.gor", "servis_rapor.gor", "servis_rapor.disaaktar")),
+]
+
+
+@router.get("/raporlar/kpi", response_model=None)
+async def kpi_raporu(
+    db: DbDep,
+    clock: ClockDep,
+    user: Raporcu,
+    bas: date | None = None,
+    bit: date | None = None,
+    birim: str | None = None,
+    servis_turu: str | None = None,
+    marka: str | None = Query(default=None, max_length=60),
+    teknisyen_id: int | None = None,
+    musteri_id: int | None = None,
+    tedarikci_id: int | None = None,
+) -> dict[str, Any]:
+    """Çevrim / dış servis / işçilik KPI'ları; dönem = ilk teslime hazır anı (Türkiye
+    günü). Tarih sırası ya da 24 ayı aşan dönem 400; bilinmeyen süzgeç değeri 400."""
+    f = _filtre(**locals())
+    try:
+        return await atolye_rapor.kpi_raporu(db, user, f, clock, bas=bas, bit=bit)
+    except ServisGirdiHatasi as exc:
+        raise _hata(exc) from exc
+
+
+@router.get("/raporlar/kpi.xlsx")
+async def kpi_raporu_xlsx(
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporAktarici,
+    bas: date | None = None,
+    bit: date | None = None,
+    birim: str | None = None,
+    servis_turu: str | None = None,
+    marka: str | None = Query(default=None, max_length=60),
+    teknisyen_id: int | None = None,
+    musteri_id: int | None = None,
+    tedarikci_id: int | None = None,
+) -> Response:
+    """KPI raporunun Excel'i (göstergeler, servis türü kırılımı, dönem kayıtları).
+    Fiyat sütunu yok; denetim satırı süzgeçleri ISO biçiminde taşır."""
+    f = _filtre(**locals())
+    try:
+        rapor = await atolye_rapor.kpi_raporu(db, user, f, clock, bas=bas, bit=bit)
+        donem = rapor["donem"]
+        kayitlar = await atolye_rapor.donem_satirlari(
+            db, user, f, clock, bas=donem["bas"], bit=donem["bit"]
+        )
+    except ServisGirdiHatasi as exc:
+        raise _hata(exc) from exc
+    if len(kayitlar) > EXCEL_UST_SINIR:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"{len(kayitlar)} kayıt var; Excel en çok {EXCEL_UST_SINIR} satır alır",
+        )
+    icerik = await export_svc.sayfalari_xlsx_async(
+        atolye_rapor.kpi_excel_sayfalari(rapor, kayitlar)
+    )
+    await audit.log(
+        db,
+        "workshop_records",
+        "atolye.kpi_disa_aktar",
+        new_value={
+            "bas": donem["bas"].isoformat(),
+            "bit": donem["bit"].isoformat(),
+            "filtre": {k: v for k, v in f.items() if v not in (None, False, "", [])},
+            "satir": len(kayitlar),
+        },
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return Response(
+        content=icerik,
+        media_type=XLSX,
+        headers={
+            "Content-Disposition": 'attachment; filename="atolye-kpi.xlsx"',
+            "X-Toplam-Kayit": str(len(kayitlar)),
         },
     )
 

@@ -1,0 +1,5 @@
+PersonnelId,FullName,ErpUserId,UnitCode,IsActive
+1,Ali Veli,10,Güvenlik Sistemleri,1
+2,Ayşe Yılmaz,,Haberleşme,1
+3,Mehmet Kaya,11,Güvenlik Sistemleri,1
+4,Can Demir,12,,1

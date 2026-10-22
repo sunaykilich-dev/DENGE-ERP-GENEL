@@ -68,6 +68,7 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import KpiKutusu from "../components/KpiKutusu";
 import ParcaHareketPenceresi, { type ParcaHareketTuru } from "../components/ParcaHareketPenceresi";
+import ParcaTuketimRaporu from "../components/ParcaTuketimRaporu";
 import ServisParcalari from "../components/ServisParcalari";
 
 const SAYFA = 25;
@@ -131,6 +132,9 @@ export default function YedekParcaPage() {
               ? [{ key: "isler", label: "İş Emri Parçaları", children: <IsSekmesi /> }]
               : []),
             { key: "depolar", label: "Depolar", children: <DepoSekmesi /> },
+            ...(yetkili("servis_rapor.gor")
+              ? [{ key: "tuketim", label: "Tüketim raporu", children: <ParcaTuketimRaporu /> }]
+              : []),
           ]}
         />
       </Card>

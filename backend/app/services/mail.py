@@ -66,6 +66,57 @@ def _smtp_gonder(ayarlar: dict, mesaj: EmailMessage) -> None:
         raise MailKapali(GENEL_HATA_MESAJI, sinif) from exc
 
 
+def yapilandirildi_mi(ayarlar: dict) -> bool:
+    """SMTP gönderimi için zorunlu ayarlar dolu mu (sunucu + gönderen)?
+
+    Saf yardımcı (E10-06): servis e-posta kuyruğu SMTP tanımsızken satırlara
+    HİÇ dokunmaz (deneme artmaz); karar `gonder` ile aynı ölçütten verilir.
+    """
+    return bool(ayarlar.get("smtp_host")) and bool(
+        ayarlar.get("smtp_from") or ayarlar.get("smtp_user")
+    )
+
+
+def sunucu_etiketi(ayarlar: dict) -> str:
+    """`sunucu:port` — hata kaydına yazılabilecek TEK SMTP bilgisi (parola/kullanıcı yok)."""
+    return f"{ayarlar.get('smtp_host') or '-'}:{int(ayarlar.get('smtp_port') or 587)}"
+
+
+def duz_metin_gonder(ayarlar: dict, *, alici: str, konu: str, govde: str) -> None:
+    """Eşzamanlı (thread içinde çağrılır) düz metin gönderim — servis e-posta kutusu.
+
+    `gonder`den farkı: olay döngüsünü bloklamamak için `asyncio.to_thread`
+    ile çağrılır (worker.py kuralı) ve hata logu istisna METNİNİ YAZMAZ —
+    yalnız sınıf adı ve sunucu:port (E10-06 kabul 4: bazı SMTP sunucuları
+    kimlik reddinde gönderilen kullanıcı adını yanıtta geri yansıtır).
+    Hata `MailKapali(sinif)` olarak yükselir; `__cause__` asıl istisnadır.
+    """
+    if not yapilandirildi_mi(ayarlar):
+        raise MailKapali("E-posta ayarları tanımlı değil.", "SMTP_KAPALI")
+    mesaj = EmailMessage()
+    mesaj["From"] = ayarlar.get("smtp_from") or ayarlar.get("smtp_user")
+    mesaj["To"] = alici
+    mesaj["Subject"] = konu
+    mesaj.set_content(govde)
+    sunucu = ayarlar.get("smtp_host")
+    port = int(ayarlar.get("smtp_port") or 587)
+    try:
+        with smtplib.SMTP(sunucu, port, timeout=20) as s:
+            s.starttls()
+            if ayarlar.get("smtp_user"):
+                s.login(ayarlar["smtp_user"], ayarlar.get("smtp_password") or "")
+            s.send_message(mesaj)
+    except (OSError, smtplib.SMTPException) as exc:
+        sinif = _hata_sinifi(exc)
+        logger.warning(
+            "Servis e-postası gönderilemedi (%s, %s, %s)",
+            sunucu_etiketi(ayarlar),
+            sinif,
+            type(exc).__name__,
+        )
+        raise MailKapali(GENEL_HATA_MESAJI, sinif) from exc
+
+
 async def gonder(
     db: AsyncSession,
     *,

@@ -10,6 +10,9 @@
  *   toplu plan `POST /planlama/toplu-plan` (PlanPenceresi) çağrılır.
  * - "Bugün çalışılan dk" sütunu yalnız `servis_rapor.personel` ile görünür.
  * - Bildirimler kalıcıdır; "görüldü" kişiye özeldir, rozet sayısı anlık hesaptır.
+ * - "E-posta kutusu" sekmesi (TS-200) yalnız `operasyon.yonet` ile görünür:
+ *   servis e-postasını aç/kapat, özet saati, deneme sınırı ve giden kutusu.
+ *   SMTP sırları bu ekrana gelmez (yalnız "tanımlı mı").
  */
 import { CheckOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -44,6 +47,7 @@ import {
   operasyonApi,
   sureMetni,
   type Bildirim,
+  type EpostaKutusuSatiri,
   type OperasyonSatiri,
   type OperasyonSuzgeci,
   type PersonelYuku,
@@ -475,8 +479,136 @@ function BildirimSekmesi() {
   );
 }
 
+const KUTU_DURUM_RENGI: Record<string, string> = { BEKLIYOR: "blue", GONDERILDI: "green", BASARISIZ: "red" };
+const KUTU_DURUM_ADI: Record<string, string> = {
+  BEKLIYOR: "Bekliyor",
+  GONDERILDI: "Gönderildi",
+  BASARISIZ: "Başarısız",
+};
+
+/** Servis e-posta kutusu ve ayarları (TS-200; yalnız `operasyon.yonet`). */
+function EpostaSekmesi() {
+  const { message } = App.useApp();
+  const qc = useQueryClient();
+  const [durum, setDurum] = useState<string | undefined>();
+  const [sayfa, setSayfa] = useState(1);
+  const ayar = useQuery({ queryKey: ["operasyon-eposta-ayar"], queryFn: operasyonApi.epostaAyarlari });
+  const kutu = useQuery({
+    queryKey: ["operasyon-eposta-kutusu", durum, sayfa],
+    queryFn: () => operasyonApi.epostaKutusu(SAYFA, (sayfa - 1) * SAYFA, durum),
+    refetchInterval: YENILEME_MS,
+  });
+  const yaz = useMutation({
+    mutationFn: operasyonApi.epostaAyarlariYaz,
+    onSuccess: (r) => {
+      qc.setQueryData(["operasyon-eposta-ayar"], r);
+      message.success("E-posta ayarı kaydedildi");
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const a = ayar.data;
+  const sutunlar: ColumnsType<EpostaKutusuSatiri> = [
+    {
+      title: "Durum",
+      dataIndex: "durum",
+      render: (d: string) => <Tag color={KUTU_DURUM_RENGI[d]}>{KUTU_DURUM_ADI[d] ?? d}</Tag>,
+    },
+    { title: "Tür", dataIndex: "tur", render: (t: string) => (t === "ANLIK" ? "Anlık" : "Günlük özet") },
+    { title: "Kişi", key: "kisi", render: (_, r) => r.kullanici.ad },
+    { title: "Alıcı", dataIndex: "alici", ellipsis: true },
+    { title: "Konu", dataIndex: "konu", ellipsis: true },
+    { title: "Deneme", dataIndex: "deneme", align: "right" },
+    {
+      title: "Son hata",
+      dataIndex: "son_hata",
+      ellipsis: true,
+      render: (h: string | null) => h ?? "—",
+    },
+    { title: "Oluşma", dataIndex: "created_at", render: (t: string) => dayjs(t).format("DD.MM.YYYY HH:mm") },
+    {
+      title: "Gönderim",
+      dataIndex: "gonderildi_at",
+      render: (t: string | null) => (t ? dayjs(t).format("DD.MM.YYYY HH:mm") : "—"),
+    },
+  ];
+  return (
+    <Space orientation="vertical" style={{ width: "100%" }} size={12}>
+      {a && !a.smtp_tanimli && (
+        <Alert
+          type="warning"
+          showIcon
+          message="SMTP ayarları tanımlı değil: e-postalar kutuda BEKLİYOR kalır, deneme sayılmaz. SMTP, Parametreler → Bildirim (e-posta) bölümünden tanımlanır."
+        />
+      )}
+      {a && (
+        <Card size="small" title="Servis e-postası">
+          <Space wrap size={16}>
+            <Space>
+              <Switch
+                checked={a.servis_eposta_acik}
+                loading={yaz.isPending}
+                onChange={(v) => yaz.mutate({ servis_eposta_acik: v })}
+              />
+              <Typography.Text>{a.servis_eposta_acik ? "Açık" : "Kapalı"}</Typography.Text>
+            </Space>
+            <Space>
+              <Typography.Text type="secondary">Günlük özet saati</Typography.Text>
+              <Select
+                style={{ width: 100 }}
+                value={a.servis_gunluk_ozet_saati}
+                onChange={(v) => yaz.mutate({ servis_gunluk_ozet_saati: v })}
+                options={Array.from({ length: 48 }, (_, i) => {
+                  const s = `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`;
+                  return { value: s, label: s };
+                })}
+              />
+            </Space>
+            <Space>
+              <Typography.Text type="secondary">Deneme sınırı</Typography.Text>
+              <Select
+                style={{ width: 80 }}
+                value={a.servis_eposta_deneme}
+                onChange={(v) => yaz.mutate({ servis_eposta_deneme: v })}
+                options={Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))}
+              />
+            </Space>
+          </Space>
+        </Card>
+      )}
+      <Select
+        allowClear
+        placeholder="Tüm durumlar"
+        style={{ width: 180 }}
+        value={durum}
+        onChange={(v) => {
+          setDurum(v);
+          setSayfa(1);
+        }}
+        options={Object.entries(KUTU_DURUM_ADI).map(([value, label]) => ({ value, label }))}
+      />
+      <Table<EpostaKutusuSatiri>
+        rowKey="id"
+        size="small"
+        loading={kutu.isLoading}
+        dataSource={kutu.data?.kayitlar ?? []}
+        columns={sutunlar}
+        scroll={{ x: true }}
+        locale={{ emptyText: <Empty description="E-posta kutusu boş" /> }}
+        pagination={{
+          current: sayfa,
+          pageSize: SAYFA,
+          total: kutu.data?.toplam ?? 0,
+          showSizeChanger: false,
+          onChange: setSayfa,
+        }}
+      />
+    </Space>
+  );
+}
+
 export default function OperasyonMerkeziPage() {
   const qc = useQueryClient();
+  const { yetkili } = useAuth();
   const [arama, setArama] = useSearchParams();
   const suzgec: OperasyonSuzgeci = useMemo(
     () => ({
@@ -610,6 +742,9 @@ export default function OperasyonMerkeziPage() {
               ),
               children: <BildirimSekmesi />,
             },
+            ...(yetkili("operasyon.yonet")
+              ? [{ key: "eposta", label: "E-posta kutusu", children: <EpostaSekmesi /> }]
+              : []),
           ]}
         />
       </Space>

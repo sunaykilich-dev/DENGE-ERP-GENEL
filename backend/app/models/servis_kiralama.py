@@ -20,6 +20,9 @@ denormalize alanlardır; doğruluk kaynağı hareket zinciridir.
 
 Kiralama durumu yalnız `KIRALAMA` makinesiyle, `services/teknik_servis/
 kiralama.py` aşama uçlarından ilerler; PUT durum kabul etmez. Fiyat alanı YOK.
+
+Dalga 3 (D3-S, `d3a000000001`): depo sayımı `rental_counts` /
+`rental_count_lines` — onaysız sayım hiçbir şeyi değiştirmez.
 """
 
 from datetime import date, datetime
@@ -117,6 +120,8 @@ KIRALAMA_OLAY_TURLERI = (
 KIRALAMA_SERVIS_TURLERI = ("KURULUM", "TOPLAMA")
 # Kiralık envanter ve kiralama bu birimlerde YOK (E06-D05).
 KIRALAMA_DISI_BIRIMLER = ("MOBILITE", "ARAC_TAKIP")
+# Kiralama deposu fiziksel sayımı (E06-22 b; Dalga 3). `KIRALIK_SAYIM` makinesi.
+KIRALIK_SAYIM_DURUMLARI = ("ACIK", "ONAYLANDI", "IPTAL")
 
 _MOBILITE_DISI = "birim NOT IN ('MOBILITE', 'ARAC_TAKIP')"
 _TAHSIS_ARALIGI = literal_column("daterange(baslangic, bitis, '[)')")
@@ -493,12 +498,124 @@ class RentalEvent(Base, PkMixin, TimestampMixin, ActorMixin):
     )
 
 
+class RentalCount(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, VersionedMixin):
+    """Kiralama deposu fiziksel sayımı (E06-22 b, TS-195; Dalga 3, D3-S).
+
+    Depo başına tek AÇIK sayım (`uq_rsayim_acik`). **Onaysız sayım hiçbir
+    durumu/bakiyeyi değiştirmez**; fark (`GET .../fark`) okuma anında hareket
+    defterinden hesaplanır ve saklanmaz. Onayda yalnız onaylı satırlar
+    `kind=SAYIM` hareketi yazar (eksik seri → KAYIP, toplu fark → düzeltme);
+    yazım tek yazıcı `kiralik_envanter.hareket_yaz()` üzerindendir. Durum
+    `KIRALIK_SAYIM` makinesiyle ilerler. Numara üretilmez (iç belge).
+    """
+
+    __tablename__ = "rental_counts"
+    __table_args__ = (
+        CheckConstraint(_in("durum", KIRALIK_SAYIM_DURUMLARI), name="ck_rsayim_durum"),
+        CheckConstraint(
+            "durum <> 'ONAYLANDI' OR (onaylayan_id IS NOT NULL AND onay_at IS NOT NULL)",
+            name="ck_rsayim_onay",
+        ),
+        CheckConstraint(
+            "durum <> 'IPTAL' OR length(trim(coalesce(iptal_gerekcesi, ''))) > 0",
+            name="ck_rsayim_iptal",
+        ),
+        Index(
+            "uq_rsayim_acik",
+            "warehouse_id",
+            unique=True,
+            postgresql_where=text("durum = 'ACIK' AND NOT is_deleted"),
+        ),
+    )
+
+    warehouse_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("warehouses.id", ondelete="RESTRICT")
+    )
+    durum: Mapped[str] = mapped_column(String(12), server_default=text("'ACIK'"), default="ACIK")
+    # Clock'tan (sayım başlangıcı; fark bu andan sonraki hareketleri ayrıca gösterir).
+    baslangic_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    onaylayan_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    onay_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    iptal_gerekcesi: Mapped[str | None] = mapped_column(String(500))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class RentalCountLine(Base, PkMixin, TimestampMixin, ActorMixin):
+    """Sayım satırı — üç biçim (CHECK ile ayrışır, tekillik kısmi indekslerle):
+
+    - **kayıtlı seri cihaz:** `asset_id` dolu, `sayilan_adet` 0/1;
+    - **sistemde olmayan seri:** `asset_id` NULL, `serial_text` dolu (anahtar
+      `serial_key`, tek normalizasyon fonksiyonu `normalize_seri`), adet 0/1;
+    - **toplu ürün:** `asset_id` ve `serial_text` NULL, `sayilan_adet` ≥ 0.
+
+    "Sistemde olup sayılmayan" satır AÇILMAZ; farkta hesaplanır.
+    """
+
+    __tablename__ = "rental_count_lines"
+    __table_args__ = (
+        CheckConstraint("sayilan_adet >= 0", name="ck_rsayim_satir_adet"),
+        CheckConstraint(
+            "asset_id IS NULL OR serial_text IS NULL", name="ck_rsayim_satir_tek_kimlik"
+        ),
+        CheckConstraint(
+            "(asset_id IS NULL AND serial_text IS NULL) OR sayilan_adet IN (0, 1)",
+            name="ck_rsayim_satir_seri_adet",
+        ),
+        Index(
+            "uq_rsayim_satir_cihaz",
+            "rental_count_id",
+            "asset_id",
+            unique=True,
+            postgresql_where=text("asset_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_rsayim_satir_seri",
+            "rental_count_id",
+            "product_id",
+            "serial_key",
+            unique=True,
+            postgresql_where=text("asset_id IS NULL AND serial_key IS NOT NULL"),
+        ),
+        Index(
+            "uq_rsayim_satir_toplu",
+            "rental_count_id",
+            "product_id",
+            unique=True,
+            postgresql_where=text("asset_id IS NULL AND serial_key IS NULL"),
+        ),
+    )
+
+    rental_count_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("rental_counts.id", ondelete="CASCADE")
+    )
+    product_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("products.id", ondelete="RESTRICT")
+    )
+    asset_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("rental_assets.id", ondelete="RESTRICT")
+    )
+    serial_text: Mapped[str | None] = mapped_column(String(200))
+    serial_key: Mapped[str | None] = mapped_column(String(200))
+    sayilan_adet: Mapped[int] = mapped_column(Integer, server_default=text("1"), default=1)
+    notes: Mapped[str | None] = mapped_column(String(300))
+
+
 # Seri anahtarı tek normalizasyon fonksiyonundan (servis işi `seri_norm` ile aynı).
 @event.listens_for(RentalAsset, "before_insert")
 @event.listens_for(RentalAsset, "before_update")
 def _kiralik_seri_anahtari(_mapper, _connection, target: RentalAsset) -> None:
     target.serial_no = (target.serial_no or "").strip()
     target.serial_key = _normalize.normalize_seri(target.serial_no)
+
+
+@event.listens_for(RentalCountLine, "before_insert")
+@event.listens_for(RentalCountLine, "before_update")
+def _sayim_seri_anahtari(_mapper, _connection, target: RentalCountLine) -> None:
+    metin = (target.serial_text or "").strip()
+    target.serial_text = metin or None
+    target.serial_key = _normalize.normalize_seri(metin) if metin else None
 
 
 __all__ = [
@@ -509,6 +626,7 @@ __all__ = [
     "KIRALAMA_SERVIS_TURLERI",
     "KIRALIK_DURUMLARI",
     "KIRALIK_HAREKET_TURLERI",
+    "KIRALIK_SAYIM_DURUMLARI",
     "KONTROL_SONUCLARI",
     "TAHSIS_DURUMLARI",
     "Rental",
@@ -517,6 +635,8 @@ __all__ = [
     "RentalCatalogItem",
     "RentalCheck",
     "RentalContact",
+    "RentalCount",
+    "RentalCountLine",
     "RentalEvent",
     "RentalInventoryMovement",
     "RentalItem",

@@ -22,6 +22,14 @@ tamamı geri alınır.
 | `ekip_degisti(db, so, yeni_ekip, clock)` | `atama.ata/toplu_ata` |
 | `oncelik_birim_degisti(db, so, clock)` | `is_emirleri.guncelle` |
 | `zaman_bolumu_acildi(db, bolum)` | `zaman.baslat/gecis` |
+| `atama_uyarilari(db, so, user_ids) -> list[str]` | atama/plan yanıtı (Dalga 3) |
+
+**Toplayan kanca (Dalga 3):** `atama_uyarilari` diğerlerinden farklı olarak
+DEĞER döndürür — kayıtlı fonksiyonların döndürdüğü uyarı metinleri kayıt
+sırasıyla birleştirilir. Yalnız OKUR, hiçbir şey yazmaz ve atamayı ENGELLEMEZ
+(E08-22 / K11: yetkinlik eksikliği uyarıdır). Eğitim modülü
+(`egitim_yetkinlik`, D3-E) buna kaydolur; çağıran atama/plan yanıtının
+`uyarilar` alanına ekler.
 """
 
 from __future__ import annotations
@@ -43,6 +51,8 @@ KANCALAR = (
     "ekip_degisti",
     "oncelik_birim_degisti",
     "zaman_bolumu_acildi",
+    # --- Dalga 3 (D3-S) ---
+    "atama_uyarilari",
 )
 
 KancaFn = Callable[..., Awaitable[None]]
@@ -128,3 +138,18 @@ async def oncelik_birim_degisti(db: AsyncSession, so: ServiceOrder, clock: Clock
 
 async def zaman_bolumu_acildi(db: AsyncSession, bolum: ServiceTimeEntry) -> None:
     await cagir("zaman_bolumu_acildi", db, bolum)
+
+
+async def atama_uyarilari(db: AsyncSession, so: ServiceOrder, user_ids: Iterable[int]) -> list[str]:
+    """Dalga 3: atanan kişiler için uyarı metinleri (yetkinlik/belge, E08-22).
+
+    Kayıtlı fonksiyon `(db, so, user_ids: tuple[int, ...]) -> list[str]`
+    imzasındadır; `None` dönerse uyarı yok sayılır. Kayıt yoksa boş liste.
+    Kanca çağıranın transaction'ında koşar; uyarı fonksiyonu yalnız okuduğu
+    için içindeki istisna programlama hatasıdır ve sessizce yutulmaz.
+    """
+    kimlikler = tuple(user_ids)
+    sonuc: list[str] = []
+    for fn in kayitlilar("atama_uyarilari"):
+        sonuc.extend(await fn(db, so, kimlikler) or ())
+    return sonuc

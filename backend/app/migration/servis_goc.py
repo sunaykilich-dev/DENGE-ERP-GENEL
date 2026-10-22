@@ -582,8 +582,12 @@ async def is_yaz(db: AsyncSession, t: IsTaslagi, bag: YazmaBaglami) -> int | Non
 
     olaylar = [
         {
+            # executemany ilk sözlüğün anahtarlarını kullanır: DURUM olaylarının
+            # eski/yeni durumu düşmesin diye anahtarlar burada da AÇIKÇA var (D3-G düzeltmesi).
             "service_order_id": so_id,
             "olay_turu": "OLUSTUR",
+            "eski_durum": None,
+            "yeni_durum": None,
             "ozet": f"Eski sistemden aktarıldı ({t.eski_no or so_no})"[:500],
             "veri": {"kaynak": t.ref, "eski_no": t.eski_no},
             "olusma_zamani": t.acilis,

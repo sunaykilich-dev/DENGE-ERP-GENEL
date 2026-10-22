@@ -60,12 +60,14 @@ from app.services.statemachine import IzinsizGecis
 from app.services.teknik_servis import (
     bakim,
     bakim_formu,
+    bakim_raporlari,
     bakim_sablonlari,
     bakim_uretim,
     kapsam,
 )
 from app.services.teknik_servis.ana_veri import AnaVeriHatasi
 from app.services.teknik_servis.bakim import BakimHatasi, BakimKapsamDisi
+from app.services.teknik_servis.bakim_raporlari import BakimRaporFiltresi, BakimRaporHatasi
 from app.services.teknik_servis.gecmis import KisiselVeriHatasi
 from app.services.teknik_servis.is_emirleri import IsEmriKapsamDisi, IsEmriYetkiHatasi
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
@@ -81,6 +83,8 @@ ArizaAcan = Annotated[User, Depends(require_permission("bakim.onayla", "servis.y
 ServisOkuyucu = Annotated[User, Depends(require_permission("servis.gor"))]
 FormYazici = Annotated[User, Depends(require_permission("servis.yaz"))]
 FormTamamlayici = Annotated[User, Depends(require_permission("servis.tamamla"))]
+# Bakım Excel'i: KD-06 — servis rollerine `rapor.disaaktar` verilmez.
+Aktarici = Annotated[User, Depends(require_permission("bakim.gor", "servis_rapor.disaaktar"))]
 
 _ACIK = DURUM_GRUPLARI["ACIK"]
 _COZULDU = DURUM_GRUPLARI["COZULDU"]
@@ -91,6 +95,8 @@ _UCRET_GIRDI = ("fee_per_visit", "contract_total")
 
 
 def _hata(exc: Exception) -> HTTPException:
+    if isinstance(exc, BakimRaporHatasi):
+        return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     if isinstance(exc, BakimKapsamDisi | IsEmriKapsamDisi):
         return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
     if isinstance(exc, PermissionError | IsEmriYetkiHatasi):
@@ -116,6 +122,7 @@ def _hata(exc: Exception) -> HTTPException:
 
 
 _HATALAR = (
+    BakimRaporHatasi,
     KisiselVeriHatasi,
     BakimKapsamDisi,
     PermissionError,
@@ -945,105 +952,160 @@ async def otomatik_uretim_ayarla(
 
 @router.get("/ozet")
 async def ozet(db: DbDep, clock: ClockDep, user: Okuyucu) -> dict[str, Any]:
+    """KPI kutuları (E04-18 adım 1 + E04-19 adım 2) — tanım ve hesap tek yerde
+    (`bakim_raporlari.KPI_TANIMLARI` / `kpi_degerleri`); para alanı yok."""
+    return {
+        "kutular": await bakim_raporlari.kpi_degerleri(db, user, clock),
+        "eslestirme": await bakim.eslestirme_orani(db, user),
+    }
+
+
+# =============================================================================
+# Bakım raporları (TS-185: E12-12 dönem tamamlama, E04-18/19 KPI listeleri, Excel)
+# =============================================================================
+
+
+def _rapor_filtresi(
+    user: User,
+    baslangic: date | None,
+    bitis: date | None,
+    birim: str | None,
+    sozlesme_id: int | None,
+    musteri_id: int | None,
+    kpi: str | None,
+) -> BakimRaporFiltresi:
+    """Süzgeç doğrulaması: tarih sırası / 24 ay / bilinmeyen birim-KPI 400,
+    yetkisiz birim 403 (E12-08 kuralları)."""
+    f = BakimRaporFiltresi(
+        baslangic=baslangic,
+        bitis=bitis,
+        birim=birim or None,
+        sozlesme_id=sozlesme_id,
+        musteri_id=musteri_id,
+        kpi=kpi or None,
+    )
+    try:
+        return bakim_raporlari.filtre_dogrula(f, user)
+    except (BakimRaporHatasi, PermissionError) as exc:
+        raise _hata(exc) from exc
+
+
+@router.get("/raporlar/donem-tamamlama")
+async def donem_tamamlama_raporu(
+    response: Response,
+    db: DbDep,
+    clock: ClockDep,
+    user: Okuyucu,
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    birim: str | None = None,
+    sozlesme_id: int | None = None,
+    musteri_id: int | None = None,
+    kpi: str | None = Query(default=None, max_length=40),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Planlı bakım tamamlama raporu (E12-12): sözleşme dönemi satırları,
+    `%oran (tamamlanan/PB) — durum`. `kpi=UYUM_ORANI` uyum paydasını açar
+    (sayısı = kutunun `payda`sı). Para alanı yoktur."""
+    f = _rapor_filtresi(user, baslangic, bitis, birim, sozlesme_id, musteri_id, kpi)
+    if f.kpi and f.kpi not in bakim_raporlari.DONEM_KPILERI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bu listede bilinmeyen KPI: {f.kpi}")
     bugun = yerel_bugun(clock)
-    tolerans = int(await ayar_svc.get(db, "bakim_tolerans_gun") or 0)
+    tolerans = await bakim_raporlari.tolerans_gun(db)
+    stmt = bakim_raporlari.donem_tamamlama_sorgusu(user, f, bugun=bugun, tolerans=tolerans)
+    satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    return [bakim_raporlari.donem_satiri(r, bugun=bugun, tolerans=tolerans) for r in satirlar]
 
-    async def _say(stmt) -> int:
-        return int(await db.scalar(stmt) or 0)
 
-    sozlesme_say = select(func.count(MaintenanceContract.id)).where(
-        MaintenanceContract.is_deleted.is_(False)
+@router.get("/raporlar/pb-isleri")
+async def pb_isleri_raporu(
+    response: Response,
+    db: DbDep,
+    user: Okuyucu,
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    birim: str | None = None,
+    sozlesme_id: int | None = None,
+    musteri_id: int | None = None,
+    kpi: str | None = Query(default=None, max_length=40),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """PB işi listesi; `kpi=` ile KPI kutusunun AYNI süzgeci (sayı = liste).
+    Süre kaydı yoksa `kisi_saat_dk` null ("eksik") döner — 0 yazılmaz."""
+    f = _rapor_filtresi(user, baslangic, bitis, birim, sozlesme_id, musteri_id, kpi)
+    if f.kpi and f.kpi not in bakim_raporlari.PB_KPILERI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bu listede bilinmeyen KPI: {f.kpi}")
+    stmt = bakim_raporlari.pb_isleri_sorgusu(user, f)
+    satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    return await bakim_raporlari.pb_satirlari(db, list(satirlar))
+
+
+@router.get("/raporlar/uygunsuzluk")
+async def uygunsuzluk_raporu(
+    db: DbDep,
+    clock: ClockDep,
+    user: Okuyucu,
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    birim: str | None = None,
+    sozlesme_id: int | None = None,
+    musteri_id: int | None = None,
+) -> dict[str, Any]:
+    """KPI adım 2 (E04-19): uygunsuzluk oranı, en sık 5 madde, açık aksiyon
+    yaşı (kovalar), onaysız kapanış."""
+    f = _rapor_filtresi(user, baslangic, bitis, birim, sozlesme_id, musteri_id, None)
+    return await _cagir(bakim_raporlari.uygunsuzluk_analizi(db, user, clock, f))
+
+
+def _iso_filtre(f: BakimRaporFiltresi) -> dict[str, Any]:
+    return {
+        k: (v.isoformat() if isinstance(v, date) else v)
+        for k, v in f.__dict__.items()
+        if v not in (None, "")
+    }
+
+
+@router.get("/raporlar/bakim.xlsx")
+async def bakim_raporu_xlsx(
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Aktarici,
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    birim: str | None = None,
+    sozlesme_id: int | None = None,
+    musteri_id: int | None = None,
+) -> Response:
+    """Bakım raporu kitabı (Dönem Tamamlama, Geciken, En Sık Uygunsuzluk, Açık
+    Aksiyonlar, Tanımlar). Ekrandaki AYNI fonksiyonlar; kapsam dışı dönem yok;
+    para kolonu yok. İndirme denetime yazılır (filtreler ISO)."""
+    from app.services import export as export_svc
+
+    f = _rapor_filtresi(user, baslangic, bitis, birim, sozlesme_id, musteri_id, None)
+    sayfalar, toplam = await _cagir(bakim_raporlari.excel_sayfalari(db, user, clock, f))
+    from app.services.teknik_servis import rapor_excel
+
+    # Tek denetim yardımcısı (D3-A `rapor_excel`); kişisel sayfa yok.
+    await rapor_excel.disa_aktarim_denetimi(
+        db,
+        user=user,
+        ip=client_ip(request),
+        rapor="bakim",
+        filtreler=_iso_filtre(f),
+        satir_sayisi=toplam,
+        kapsam=user.role.scope if user.role is not None else "",
+        kisisel_sayfalar=[],
     )
-    donem_say = (
-        select(func.count(MaintenancePeriod.id))
-        .join(MaintenanceContract, MaintenanceContract.id == MaintenancePeriod.contract_id)
-        .where(
-            MaintenancePeriod.is_deleted.is_(False),
-            MaintenanceContract.is_deleted.is_(False),
-            MaintenanceContract.status == "AKTIF",
-        )
+    await db.commit()
+    icerik = await export_svc.sayfalari_xlsx_async(sayfalar)
+    return Response(
+        content=icerik,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="bakim-raporu.xlsx"'},
     )
-    kutular = [
-        {
-            "kod": "AKTIF_SOZLESME",
-            "baslik": "Aktif Sözleşme",
-            "tanim": "Durumu AKTIF olan bakım sözleşmeleri",
-            "deger": await _say(
-                bakim.sozlesme_kapsami(
-                    sozlesme_say.where(MaintenanceContract.status == "AKTIF"), user
-                )
-            ),
-            "yol": "/bakim?sekme=sozlesmeler&durum=AKTIF",
-        },
-        {
-            "kod": "TEYIT_BEKLEYEN",
-            "baslik": "Teyit Bekleyen",
-            "tanim": "Tarih/kapsam teyidi bekleyen sözleşmeler",
-            "deger": await _say(
-                bakim.sozlesme_kapsami(
-                    sozlesme_say.where(MaintenanceContract.status == "TEYIT_BEKLIYOR"), user
-                )
-            ),
-            "yol": "/bakim?sekme=sozlesmeler&durum=TEYIT_BEKLIYOR",
-        },
-        {
-            "kod": "VADESI_GELEN",
-            "baslik": "Vadesi Gelen Dönem",
-            "tanim": "Hedef tarihi bugün ya da geçmiş, kapanmamış dönemler",
-            "deger": await _say(
-                bakim.donem_kapsami(
-                    donem_say.where(
-                        MaintenancePeriod.closed_at.is_(None),
-                        MaintenancePeriod.target_date <= bugun,
-                    ),
-                    user,
-                )
-            ),
-            "yol": "/bakim?sekme=donemler&vadesi_gelen=1",
-        },
-        {
-            "kod": "GECIKEN_DONEM",
-            "baslik": "Geciken Dönem",
-            "tanim": f"Hedef + {tolerans} gün toleransı geçmiş, kapanmamış dönemler",
-            "deger": await _say(
-                bakim.donem_kapsami(donem_say.where(bakim.gecikme_kosulu(bugun, tolerans)), user)
-            ),
-            "yol": "/bakim?sekme=donemler&gecikmis=1",
-        },
-        {
-            "kod": "ACIK_UYGUNSUZLUK",
-            "baslik": "Açık Uygunsuzluk",
-            "tanim": "Kapanmamış uygunsuzluk aksiyonları",
-            "deger": await _say(
-                kapsam.kapsam_isler(
-                    select(func.count(MaintenanceNonconformity.id)).where(
-                        MaintenanceNonconformity.status == "ACIK",
-                        MaintenanceNonconformity.is_deleted.is_(False),
-                    ),
-                    user,
-                    MaintenanceNonconformity.service_order_id,
-                )
-            ),
-            "yol": "/bakim?sekme=uygunsuzluklar&durum=ACIK",
-        },
-        {
-            "kod": "KAPSAM_DISI_TALEBI",
-            "baslik": "Kapsam Dışı Talebi",
-            "tanim": "Karar bekleyen kapsam dışı talepleri",
-            "deger": await _say(
-                kapsam.kapsam_isler(
-                    select(func.count(MaintenanceExclusionRequest.id)).where(
-                        MaintenanceExclusionRequest.status == "TALEP",
-                        MaintenanceExclusionRequest.is_deleted.is_(False),
-                    ),
-                    user,
-                    MaintenanceExclusionRequest.service_order_id,
-                )
-            ),
-            "yol": "/bakim?sekme=kapsam-disi&durum=TALEP",
-        },
-    ]
-    return {"kutular": kutular, "eslestirme": await bakim.eslestirme_orani(db, user)}
 
 
 # =============================================================================

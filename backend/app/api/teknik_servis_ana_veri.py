@@ -440,17 +440,30 @@ async def eslestirme_ozeti(db: DbDep, user: Birlestirici) -> dict[str, dict[str,
 async def eslestirme_adaylari_xlsx(
     db: DbDep,
     user: Birlestirici,
-    kaynak: Annotated[str, Query(pattern="^(sozlesme|ekipman)$")] = "sozlesme",
+    kaynak: Annotated[
+        str, Query(pattern="^(sozlesme|ekipman|servis_isi|ekipman_diger)$")
+    ] = "sozlesme",
 ) -> Response:
     """Eşleşmemiş kayıtların aday Excel'i (`musteri_eslestirme` profil şablonu).
 
     Müşterisi ve lokasyonu boş kayıtlar ayrı sayfadadır (kabul 4). Hiçbir
     şey yazmaz; ham metin kişisel veri taşımaz (irtibat adı yok).
+
+    Faz 2 kaynakları (`servis_isi`, `ekipman_diger`; TS-208) birim kapsamı
+    olmayan göç listesidir: yalnız `sistem.goc` sahibine açılır (aksi 403).
     """
     from app.services import export
+    from app.services.imports import musteri_eslestirme
     from app.services.teknik_servis import veri_kalitesi
 
-    satirlar = await veri_kalitesi.eslestirme_adaylari(db, user, kaynak)
+    if kaynak in musteri_eslestirme.FAZ2_KAYNAKLARI:
+        if not user.has("sistem.goc"):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Faz 2 aday listesi için yetkiniz yok (sistem.goc)"
+            )
+        satirlar = await musteri_eslestirme.faz2_adaylari(db, kaynak)
+    else:
+        satirlar = await veri_kalitesi.eslestirme_adaylari(db, user, kaynak)
     adaylar = [veri_kalitesi.aday_satiri(r) for r in satirlar if not r["musterisiz"]]
     bos = [veri_kalitesi.aday_satiri(r) for r in satirlar if r["musterisiz"]]
     icerik = await export.sayfalari_xlsx_async(
@@ -463,4 +476,274 @@ async def eslestirme_adaylari_xlsx(
         content=icerik,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="eslestirme-{kaynak}.xlsx"'},
+    )
+
+
+# --- Müşteri kartı servis sekmesi ve kapsam bilgisi (TS-192, E14-07/E14-17) -----------
+
+KartOkuyucu = Annotated[User, Depends(require_permission("hesap.gor", "servis.gor"))]
+
+
+@router.get("/musteriler/{hesap_id}/servis-karti")
+async def servis_karti(
+    hesap_id: int, db: DbDep, clock: ClockDep, user: KartOkuyucu
+) -> dict[str, Any]:
+    """Hesap kartının Lokasyonlar/Servis sekmeleri (canlı `/kart` DEĞİŞMEZ).
+
+    Açık iş sayısı = `/isler?musteri_id=<id>&durum_grubu=ACIK` `X-Toplam-Kayit`.
+    Tutar alanı yalnız `maliyet.gor` sahibinde anahtar olarak bulunur.
+    """
+    try:
+        hesap = await ana_veri.kapsamli_hesap(db, user, hesap_id)
+    except AnaVeriHatasi as exc:
+        raise _hata(exc) from exc
+    return await ana_veri.servis_karti(db, user, hesap, clock)
+
+
+@router.get("/kapsam-bilgisi")
+async def kapsam_bilgisi(
+    db: DbDep,
+    clock: ClockDep,
+    user: Arayici,
+    hesap_id: int | None = None,
+    lokasyon_id: int | None = None,
+    ekipman_id: int | None = None,
+) -> dict[str, Any]:
+    """Servis işi formunun kapsam kutusu (E14-17): aktif sözleşmeler, garanti,
+    son işler, kapsam durumu. **Tutar YOK** (maliyet.gor olsa bile).
+    Kapsam dışı hesap/lokasyon/ekipman 404."""
+    try:
+        if hesap_id is not None:
+            await ana_veri.kapsamli_hesap(db, user, hesap_id)
+        if lokasyon_id is not None:
+            adres = await ana_veri.kapsamli_lokasyon(db, user, lokasyon_id)
+            if hesap_id is not None and adres.account_id != hesap_id:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lokasyon bu müşteriye ait değil")
+    except AnaVeriHatasi as exc:
+        raise _hata(exc) from exc
+    if ekipman_id is not None:
+        from app.services.teknik_servis import ekipman as ekipman_svc
+
+        try:
+            await ekipman_svc.kapsamli_ekipman(db, user, ekipman_id)
+        except ekipman_svc.EkipmanBulunamadi as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ekipman bulunamadı") from exc
+    return await ana_veri.kapsam_bilgisi(
+        db,
+        customer_id=hesap_id,
+        address_id=lokasyon_id,
+        equipment_id=ekipman_id,
+        clock=clock,
+        user=user,
+    )
+
+
+# --- Hesap / lokasyon birleştirme (TS-192, E14-12) -----------------------------------
+
+
+class BirlestirmeIn(BaseModel):
+    tur: str = Field(pattern="^(HESAP|LOKASYON)$")
+    kaynak_id: int
+    hedef_id: int
+
+    model_config = {
+        "json_schema_extra": {"examples": [{"tur": "HESAP", "kaynak_id": 2, "hedef_id": 1}]}
+    }
+
+
+class BirlestirmeUygulaIn(BirlestirmeIn):
+    gerekce: str = Field(min_length=1, max_length=1000)
+    # Önizlemede görülen `tasinacak` sayıları; güncel önizlemeyle aynı olmalı.
+    beklenen: dict[str, int]
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "tur": "HESAP",
+                    "kaynak_id": 2,
+                    "hedef_id": 1,
+                    "gerekce": "Aynı firma iki kayıtta",
+                    "beklenen": {},
+                }
+            ]
+        }
+    }
+
+
+def _birlestirme_hatasi(exc) -> HTTPException:
+    if exc.veri:
+        return HTTPException(exc.kod, {"mesaj": exc.mesaj, **exc.veri})
+    return HTTPException(exc.kod, exc.mesaj)
+
+
+@router.post("/birlestirme/onizle")
+async def birlestirme_onizle(
+    payload: BirlestirmeIn, db: DbDep, user: Birlestirici
+) -> dict[str, Any]:
+    """Birleştirme önizlemesi — DB'ye YAZMAZ. Engeller (hak ediş referansı,
+    hedefte aynı adlı tesis) ve taşınacak satır sayıları döner."""
+    from app.services import hesap_birlestir
+
+    try:
+        return await hesap_birlestir.onizle(
+            db, payload.tur, payload.kaynak_id, payload.hedef_id, user=user
+        )
+    except hesap_birlestir.BirlestirmeHatasi as exc:
+        raise _birlestirme_hatasi(exc) from exc
+
+
+@router.post("/birlestirme/uygula", status_code=201)
+async def birlestirme_uygula(
+    payload: BirlestirmeUygulaIn, request: Request, db: DbDep, clock: ClockDep, user: Birlestirici
+) -> dict[str, Any]:
+    """Tek transaction'da birleştirir; `beklenen` güncel önizlemeyle uyuşmazsa
+    409 "veri değişti, yeniden önizleyin". Hak ediş referanslı hesap 409."""
+    from app.services import hesap_birlestir
+
+    try:
+        kayit = await hesap_birlestir.uygula(
+            db,
+            payload.tur,
+            payload.kaynak_id,
+            payload.hedef_id,
+            gerekce=payload.gerekce,
+            beklenen=payload.beklenen,
+            user=user,
+            clock=clock,
+        )
+    except hesap_birlestir.BirlestirmeHatasi as exc:
+        await db.rollback()
+        raise _birlestirme_hatasi(exc) from exc
+    await audit.log(
+        db,
+        "accounts" if payload.tur == "HESAP" else "addresses",
+        "hesap.birlestir" if payload.tur == "HESAP" else "lokasyon.birlestir",
+        entity_id=payload.kaynak_id,
+        new_value={
+            "hedef": payload.hedef_id,
+            "gerekce": payload.gerekce,
+            "tasinan": kayit.tasinan,
+            "kayit": kayit.id,
+        },
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(kayit)
+    return hesap_birlestir.kayit_satiri(kayit)
+
+
+@router.get("/birlestirmeler")
+async def birlestirmeler(
+    db: DbDep,
+    user: Birlestirici,
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Birleştirme kayıtları (salt okunur; `account_merges`)."""
+    from app.api.deps import sayfala
+    from app.models import AccountMerge
+    from app.services import hesap_birlestir
+
+    stmt = select(AccountMerge).order_by(AccountMerge.id.desc())
+    satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    return [hesap_birlestir.kayit_satiri(k) for (k,) in satirlar]
+
+
+# --- Veri Kalitesi (TS-188, E12-16 / E14-18) -----------------------------------------
+#
+# Salt okuma. Kutu sayısı = liste toplamı (`X-Toplam-Kayit`) = Excel satırı.
+# Kontrol başına ek izin gövdede sınanır (servis işleri `servis.gor`, hesap
+# kontrolleri `hesap.gor`, sözleşme `bakim.gor`); kapsam her listede aynı.
+
+KaliteOkuyucu = Annotated[User, Depends(require_permission("servis_rapor.gor"))]
+KaliteAktarici = Annotated[
+    User, Depends(require_permission("servis_rapor.gor", "servis_rapor.disaaktar"))
+]
+
+
+def _kalite_kontrolu(user: User, kod: str):
+    from app.services.teknik_servis import rapor_kalite
+
+    try:
+        k = rapor_kalite.kontrol_getir(kod)
+    except rapor_kalite.KaliteHatasi as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    eksik = [i for i in k.izinler if not user.has(i)]
+    if eksik:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, f"Bu işlem için yetkiniz yok ({', '.join(eksik)})"
+        )
+    return k
+
+
+@router.get("/veri-kalitesi")
+async def veri_kalitesi(db: DbDep, clock: ClockDep, user: KaliteOkuyucu) -> dict[str, Any]:
+    """Kontrol sayıları (kullanıcının görebildikleri). Ekipman kontrolleri
+    `ekipman.gor` ile gelir ve Ekipman Kütüğü listesine gider."""
+    from app.services.teknik_servis import rapor_kalite
+
+    kontroller = await rapor_kalite.ozet(db, user, clock)
+    payda = await rapor_kalite.is_paydasi(db, user) if user.has("servis.gor") else None
+    return {
+        "gruplar": [{"kod": k, "ad": a} for k, a in rapor_kalite.GRUPLAR.items()],
+        "kontroller": kontroller,
+        "is_paydasi": payda,
+    }
+
+
+@router.get("/veri-kalitesi/liste")
+async def veri_kalitesi_liste(
+    db: DbDep,
+    user: KaliteOkuyucu,
+    response: Response,
+    kontrol: str = Query(min_length=1, max_length=40),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Kontrolün satırları (sayfalı); `X-Toplam-Kayit` = kutudaki sayı."""
+    from app.services.teknik_servis import rapor_kalite
+
+    k = _kalite_kontrolu(user, kontrol)
+    toplam, satirlar = await rapor_kalite.listele(db, user, k.kod, limit=limit, offset=offset)
+    response.headers["X-Toplam-Kayit"] = str(toplam)
+    return satirlar
+
+
+@router.get("/veri-kalitesi/liste.xlsx")
+async def veri_kalitesi_xlsx(
+    request: Request,
+    db: DbDep,
+    user: KaliteAktarici,
+    kontrol: str = Query(min_length=1, max_length=40),
+) -> Response:
+    """Kontrol listesinin Excel'i (aynı satırlar); dışa aktarım denetime yazılır."""
+    from app.services import export
+    from app.services.teknik_servis import rapor_kalite
+
+    k = _kalite_kontrolu(user, kontrol)
+    toplam, satirlar = await rapor_kalite.listele(db, user, k.kod)
+    if toplam > 20_000:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"{toplam} satır var; Excel en çok 20000 satır alır."
+        )
+    sutunlar = [export.Sutun(b, t) for b, _, t in k.sutunlar]
+    tablo = [[r.get(a) for _, a, _ in k.sutunlar] for r in satirlar]
+    icerik = await export.sayfalari_xlsx_async([export.Sayfa(k.baslik[:31], sutunlar, tablo)])
+    await audit.log(
+        db,
+        "veri_kalitesi",
+        "ana_veri.disaaktar",
+        new_value={"kontrol": k.kod, "satir": len(tablo)},
+        user_id=user.id,
+        ip=client_ip(request),
+        is_personal_data=k.grup == "ana_veri",
+    )
+    await db.commit()
+    return Response(
+        content=icerik,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="veri-kalitesi-{k.kod}.xlsx"'},
     )

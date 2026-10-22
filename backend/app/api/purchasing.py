@@ -56,6 +56,8 @@ class KalemOut(BaseModel):
     id: int
     product_id: int
     urun_kodu: str | None = None
+    # Ürünün kimlik türü (IMEI | SERI_NO | YOK); YOK → mal kabul adetle (TS-196).
+    kimlik_turu: str | None = None
     description: str | None
     qty: Decimal
     unit_price: Decimal
@@ -85,8 +87,11 @@ class SiparisOut(BaseModel):
 
 
 class MalKabulIn(BaseModel):
+    """IMEI/seri kalemde `kimlikler`; serisiz kalemde `adet` (TS-196, E11-D02)."""
+
     kalem_id: int
-    kimlikler: list[str] = Field(min_length=1)
+    kimlikler: list[str] = Field(default_factory=list)
+    adet: int | None = Field(default=None, gt=0)
     import_file_id: int | None = None
     warehouse_id: int | None = None
 
@@ -181,6 +186,9 @@ async def _siparis_ciktisi(db: DbDep, s: PurchaseOrder, *, detay: bool = True) -
         for k in kalemler:
             ko = KalemOut.model_validate(k)
             ko.urun_kodu = urunler[k.product_id].code if k.product_id in urunler else None
+            ko.kimlik_turu = (
+                urunler[k.product_id].identity_kind if k.product_id in urunler else None
+            )
             cikti.append(ko)
         out.kalemler = cikti
     return out
@@ -310,22 +318,29 @@ async def mal_kabul(
     clock: ClockDep,
     user: Yazici,
 ) -> dict:
-    """IMEI listesini stoğa alır. İthalat dosyası verilirse cihazlar ITHALATTA doğar."""
+    """IMEI listesini stoğa alır. İthalat dosyası verilirse cihazlar ITHALATTA doğar.
+    Serisiz kalem `adet` ile kabul edilir (servis deposuna maliyet dondurularak)."""
     s = await _siparis(db, siparis_id)
     kalem = await db.get(PurchaseOrderLine, payload.kalem_id)
     if kalem is None or kalem.purchase_order_id != s.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kalem bulunamadı")
+    kimlikler = [k.strip() for k in payload.kimlikler if k.strip()]
+    if not kimlikler and payload.adet is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Kimlik listesi ya da (serisiz kalemde) adet girilmeli"
+        )
 
     try:
         fis = await svc.mal_kabul(
             db,
             s,
             kalem=kalem,
-            kimlikler=[k.strip() for k in payload.kimlikler if k.strip()],
+            kimlikler=kimlikler,
             clock=clock,
             import_file_id=payload.import_file_id,
             warehouse_id=payload.warehouse_id,
             user_id=user.id,
+            adet=payload.adet,
         )
     except svc.SatinAlmaHatasi as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

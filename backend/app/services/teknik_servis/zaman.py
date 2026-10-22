@@ -32,10 +32,10 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, exists, func, not_, or_, select
+from sqlalchemy import Select, and_, exists, func, not_, or_, select
 
 from app.models import (
     ServiceHoldReason,
@@ -1191,7 +1191,13 @@ async def zaman_uyarilari(db: AsyncSession, user: User, clock: Clock) -> list[An
                 kod="zaman.uzun_sayac",
                 baslik="Uzun süredir açık sayaç",
                 adet=int(adet),
-                yol="/benim-islerim?gorunum=tumu",
+                # Zaman Takibi ekranı açılabiliyorsa liste oradadır (TS-189);
+                # açılamıyorsa ekip görünümü (sayı aynı sorgudan).
+                yol=(
+                    "/zaman-takibi?kpi=uzun_sayac"
+                    if user.has("servis_rapor.gor")
+                    else "/benim-islerim?gorunum=tumu"
+                ),
                 onem="kritik",
                 aciklama="Gerçek bitişle düzeltin ya da iptal edin; sayaç kendiliğinden kapanmaz.",
             )
@@ -1225,6 +1231,495 @@ def uzun_sayac_mi(bolum: ServiceTimeEntry, an: datetime, esik_saat: int) -> bool
     return an - bolum.started_at >= timedelta(hours=esik_saat) or (
         yerel_zaman.yerel_gun(bolum.started_at) < yerel_zaman.yerel_gun(an)
     )
+
+
+# --- Zaman Takibi yönetim ekranı (TS-189, E09-14/15) --------------------------------
+#
+# **Sayı = liste:** her KPI tek bir sorgu üreticisinden gelir (`kpi_sorgusu`);
+# kutudaki adet `GET /zaman/kayitlar?kpi=` (ya da iş KPI'larında
+# `GET /zaman/isler?kpi=`) `X-Toplam-Kayit` başlığıyla, dakika toplamı
+# `X-Toplam-Dakika` başlığıyla AYNI sorgunun toplamıdır. Excel de aynı sorguyu
+# kullanır (ekran ≠ Excel olamaz).
+#
+# **Kişi-saat ortak fonksiyonu:** `personel_dagilimi` kişi bazlı kişi-saati ve
+# veri disiplini sütunlarını TEK sorguda üretir; rapor motorunun
+# `/kisi-saat` kırılımı (E12) ikinci bir sorgu yazmaz, bunu çağırır.
+#
+# **Eksik ≠ 0:** kayıt yoksa dakika toplamı `None` döner; oran paydası 0 ise
+# oran `None` ("%0" değil, E09-15 kabul 4). Tahmini (plan) süre burada HİÇ
+# kullanılmaz.
+#
+# **Kişi sütunları** (`user_id`, kişi adı, konum notu, gerekçe, personel
+# dağılımı) yalnız `servis_rapor.personel` ile; bu modül veriyi üretir, anahtarı
+# yanıttan çıkarmak API'nin işidir (`kisi_alanlari`).
+
+ZAMAN_RAPOR_AZAMI_GUN = 366
+ZAMAN_EXCEL_UST_SINIR = 20_000
+DAKIKA_BASLIGI = "X-Toplam-Dakika"
+# Kayıt (bölüm) listesi açan KPI'lar ve iş listesi açan KPI'lar ayrıdır; oran
+# KPI'sı liste açmaz (oranın "listesi" yoktur).
+KAYIT_KPI_KODLARI = ("kisi_saat", "yol", "saha", "bekleme", "mola", "aktif_sayac", "uzun_sayac")
+IS_KPI_KODLARI = ("farkli_is", "sure_eksik")
+# kod → (başlık, tanım, birim: "dk" | "adet" | "oran")
+ZAMAN_KPI_TANIMLARI: dict[str, tuple[str, str, str]] = {
+    "kisi_saat": (
+        "Kişi-saat (dk)",
+        "Aralıkta başlayan, kapanmış, iptal edilmemiş bölümler; MOLA hariç. Kayıt yoksa boş.",
+        "dk",
+    ),
+    "yol": ("Yol (dk)", "Kapanmış YOL bölümlerinin toplamı", "dk"),
+    "saha": ("Saha (dk)", "Kapanmış SAHA bölümlerinin toplamı", "dk"),
+    "bekleme": ("Bekleme (dk)", "Kapanmış BEKLEME bölümlerinin toplamı", "dk"),
+    "mola": ("Mola (dk, hariç)", "Bilgi amaçlı; kişi-saate EKLENMEZ", "dk"),
+    "farkli_is": ("Farklı iş", "Aralıkta süre kaydı olan farklı servis işi sayısı", "adet"),
+    "aktif_sayac": ("Aktif sayaç", "Şu an açık olan sayaçlar (tarih süzgecinden bağımsız)", "adet"),
+    "uzun_sayac": (
+        "Uzun sayaç",
+        "Uyarı eşiğinden uzun ya da dünden kalan açık sayaçlar",
+        "adet",
+    ),
+    "sure_eksik": (
+        "Süre kaydı eksik iş",
+        "Aralıkta tamamlanan ve süre kaydı eksik/kısmi olan işler (telefonla çözüm hariç)",
+        "adet",
+    ),
+    "canli_orani": (
+        "Canlı oranı (%)",
+        "CANLI sayaç dakikası ÷ toplam kişi-saat; kayıt yoksa boş",
+        "oran",
+    ),
+}
+_FAALIYET_KPI = {"yol": "YOL", "saha": "SAHA", "bekleme": "BEKLEME", "mola": "MOLA"}
+DUZELTME_KAYNAKLARI = ("KULLANICI_DUZELTMESI", "YONETICI_DUZELTMESI")
+IPTAL_TURLERI_DISIPLIN = ("YONETICI_IPTAL", "KAYIT_IPTAL")
+
+
+@dataclass(frozen=True)
+class ZamanSuzgeci:
+    """Yönetim ekranı süzgeci; tarih aralığı Türkiye günü, `started_at`'e göre."""
+
+    bas: date
+    bit: date
+    birim: str | None = None
+    kullanici_id: int | None = None
+    faaliyet: str | None = None
+
+    def iso(self) -> dict[str, Any]:
+        """Denetim kaydı için ISO biçimli süzgeç (TS-182)."""
+        return {
+            "bas": self.bas.isoformat(),
+            "bit": self.bit.isoformat(),
+            "birim": self.birim,
+            "kullanici_id": self.kullanici_id,
+            "faaliyet": self.faaliyet,
+        }
+
+
+async def zaman_suzgeci(
+    db: AsyncSession,
+    clock: Clock,
+    *,
+    bas: date | None = None,
+    bit: date | None = None,
+    birim: str | None = None,
+    kullanici_id: int | None = None,
+    faaliyet: str | None = None,
+) -> ZamanSuzgeci:
+    """Varsayılan aralık son `zaman_rapor_varsayilan_gun` gün (bugün dahil).
+
+    Bitiş başlangıçtan önce ya da aralık 366 günden uzunsa 400.
+    """
+    bugun = yerel_zaman.yerel_bugun(clock)
+    if bit is None:
+        bit = bugun
+    if bas is None:
+        gun = int(await _ayar(db, "zaman_rapor_varsayilan_gun"))
+        bas = bit - timedelta(days=max(gun, 1) - 1)
+    if bit < bas:
+        raise ZamanGirdiHatasi("Bitiş tarihi başlangıçtan önce olamaz")
+    if (bit - bas).days + 1 > ZAMAN_RAPOR_AZAMI_GUN:
+        raise ZamanGirdiHatasi(f"Tarih aralığı en çok {ZAMAN_RAPOR_AZAMI_GUN} gün olabilir")
+    if faaliyet is not None and faaliyet not in FAALIYET_ADLARI:
+        raise ZamanGirdiHatasi(f"Bilinmeyen faaliyet: {faaliyet}")
+    return ZamanSuzgeci(bas=bas, bit=bit, birim=birim, kullanici_id=kullanici_id, faaliyet=faaliyet)
+
+
+def _aralik_kosulu(f: ZamanSuzgeci) -> ColumnElement[bool]:
+    alt, _ = yerel_zaman.yerel_gun_araligi(f.bas)
+    _, ust = yerel_zaman.yerel_gun_araligi(f.bit)
+    return and_(ServiceTimeEntry.started_at >= alt, ServiceTimeEntry.started_at < ust)
+
+
+def _ortak_suzgec(stmt: Select, user: User, f: ZamanSuzgeci, *, faaliyet: bool = True) -> Select:
+    """İş kapsamı (birim / kendi işleri / müşteri) + birim + kişi + faaliyet."""
+    stmt = kapsam.kapsam_isler(stmt, user, ServiceTimeEntry.service_order_id)
+    if f.birim:
+        stmt = stmt.where(
+            ServiceTimeEntry.service_order_id.in_(
+                select(ServiceOrder.id).where(ServiceOrder.birim == f.birim)
+            )
+        )
+    if f.kullanici_id is not None:
+        stmt = stmt.where(ServiceTimeEntry.user_id == f.kullanici_id)
+    if faaliyet and f.faaliyet:
+        stmt = stmt.where(ServiceTimeEntry.faaliyet == f.faaliyet)
+    return stmt
+
+
+def kayit_sorgusu(user: User, f: ZamanSuzgeci, *, iptaller: bool = False) -> Select:
+    """Aralıkta BAŞLAYAN bölümler (kapsamlı). `iptaller` → iptal/geri alınanlar da."""
+    stmt = select(ServiceTimeEntry).where(_aralik_kosulu(f))
+    if not iptaller:
+        stmt = stmt.where(gecerli_bolum())
+    return _ortak_suzgec(stmt, user, f)
+
+
+def _kapali_dahil() -> ColumnElement[bool]:
+    return and_(
+        ServiceTimeEntry.ended_at.is_not(None),
+        ServiceTimeEntry.faaliyet.in_(sorted(KISI_SAATE_DAHIL)),
+    )
+
+
+async def kpi_kayit_sorgusu(db: AsyncSession, user: User, f: ZamanSuzgeci, kod: str, clock: Clock):
+    """Bölüm listesi açan KPI'ın TEK sorgusu (sayı, liste, Excel buradan)."""
+    if kod not in KAYIT_KPI_KODLARI:
+        raise ZamanGirdiHatasi(f"Bilinmeyen KPI: {kod}")
+    if kod == "aktif_sayac":
+        stmt = select(ServiceTimeEntry).where(ServiceTimeEntry.ended_at.is_(None), gecerli_bolum())
+        return _ortak_suzgec(stmt, user, f)
+    if kod == "uzun_sayac":
+        stmt = select(ServiceTimeEntry).where(await _uzun_sayac_kosulu(db, clock))
+        return _ortak_suzgec(stmt, user, f)
+    stmt = kayit_sorgusu(user, f)
+    if kod == "kisi_saat":
+        return stmt.where(_kapali_dahil())
+    return stmt.where(
+        ServiceTimeEntry.ended_at.is_not(None),
+        ServiceTimeEntry.faaliyet == _FAALIYET_KPI[kod],
+    )
+
+
+def _bitmis_tarih_kosulu(f: ZamanSuzgeci) -> ColumnElement[bool]:
+    alt, _ = yerel_zaman.yerel_gun_araligi(f.bas)
+    _, ust = yerel_zaman.yerel_gun_araligi(f.bit)
+    return and_(ServiceOrder.completed_at >= alt, ServiceOrder.completed_at < ust)
+
+
+def kpi_is_sorgusu(user: User, f: ZamanSuzgeci, kod: str) -> Select:
+    """İş listesi açan KPI'ın TEK sorgusu (`service_orders` satırları)."""
+    if kod not in IS_KPI_KODLARI:
+        raise ZamanGirdiHatasi(f"Bilinmeyen KPI: {kod}")
+    if kod == "farkli_is":
+        bolumlu = select(ServiceTimeEntry.service_order_id).where(
+            _aralik_kosulu(f), gecerli_bolum()
+        )
+        bolumlu = _ortak_suzgec(bolumlu, user, f)
+        stmt = select(ServiceOrder).where(ServiceOrder.id.in_(bolumlu))
+    else:
+        stmt = select(ServiceOrder).where(
+            ServiceOrder.is_deleted.is_(False),
+            _bitmis_tarih_kosulu(f),
+            sure_eksik_ifadesi(),
+        )
+        stmt = kapsam.kapsam_isler(stmt, user, ServiceOrder.id)
+        if f.birim:
+            stmt = stmt.where(ServiceOrder.birim == f.birim)
+        if f.kullanici_id is not None:
+            stmt = stmt.where(
+                ServiceOrder.id.in_(
+                    select(ServiceOrderAssignment.service_order_id).where(
+                        ServiceOrderAssignment.user_id == f.kullanici_id,
+                        ServiceOrderAssignment.removed_at.is_(None),
+                    )
+                )
+            )
+    return stmt.order_by(ServiceOrder.id)
+
+
+async def adet_ve_dakika(db: AsyncSession, stmt: Select) -> tuple[int, int | None]:
+    """Bölüm sorgusunun (adet, kapalı bölüm dakika toplamı). Kayıt yoksa dakika None.
+
+    Liste başlığı ve KPI kutusu bu fonksiyonla sayılır (aynı yuvarlama).
+    """
+    alt = stmt.order_by(None).subquery()
+    satir = (
+        await db.execute(
+            select(
+                func.count(),
+                func.sum(func.extract("epoch", alt.c.ended_at - alt.c.started_at)),
+            ).select_from(alt)
+        )
+    ).one()
+    # COUNT hiçbir zaman NULL dönmez; dakika toplamı ise kayıt yoksa NULL kalır.
+    adet, sn = int(satir[0]), satir[1]
+    return adet, (round(float(sn) / 60) if sn is not None else None)
+
+
+async def _adet(db: AsyncSession, stmt: Select) -> int:
+    return int(await db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())))
+
+
+async def zaman_ozeti(
+    db: AsyncSession, user: User, f: ZamanSuzgeci, clock: Clock
+) -> list[dict[str, Any]]:
+    """KPI kutuları: `{kod, baslik, tanim, birim, deger, adet, liste}`.
+
+    `adet` = açılan listenin `X-Toplam-Kayit`; dakika KPI'larında `deger` =
+    listenin `X-Toplam-Dakika` (kayıt yoksa None).
+    """
+    sonuc: list[dict[str, Any]] = []
+    for kod, (baslik, tanim, birim) in ZAMAN_KPI_TANIMLARI.items():
+        deger: float | int | None
+        adet: int | None = None
+        liste: str | None = None
+        if kod in KAYIT_KPI_KODLARI:
+            adet, dakika = await adet_ve_dakika(
+                db, await kpi_kayit_sorgusu(db, user, f, kod, clock)
+            )
+            deger = dakika if birim == "dk" else adet
+            liste = "kayitlar"
+        elif kod in IS_KPI_KODLARI:
+            adet = await _adet(db, kpi_is_sorgusu(user, f, kod))
+            deger = adet
+            liste = "isler"
+        else:  # canli_orani
+            deger = await _canli_orani(db, user, f)
+        sonuc.append(
+            {
+                "kod": kod,
+                "baslik": baslik,
+                "tanim": tanim,
+                "birim": birim,
+                "deger": deger,
+                "adet": adet,
+                "liste": liste,
+            }
+        )
+    return sonuc
+
+
+def canli_orani_hesapla(canli_sn: float | None, toplam_sn: float | None) -> float | None:
+    """CANLI ÷ toplam (yüzde, 1 ondalık). Payda 0/yok → None ("%0" değil)."""
+    if not toplam_sn:
+        return None
+    canli = float(canli_sn) if canli_sn is not None else 0.0  # payda var, CANLI yok
+    return round(100 * canli / float(toplam_sn), 1)
+
+
+async def _canli_orani(db: AsyncSession, user: User, f: ZamanSuzgeci) -> float | None:
+    alt = kayit_sorgusu(user, f).where(_kapali_dahil()).order_by(None).subquery()
+    sure = func.extract("epoch", alt.c.ended_at - alt.c.started_at)
+    toplam, canli = (
+        await db.execute(
+            select(
+                func.sum(sure),
+                func.sum(sure).filter(alt.c.kaynak == "CANLI"),
+            ).select_from(alt)
+        )
+    ).one()
+    return canli_orani_hesapla(canli, toplam)
+
+
+async def personel_dagilimi(db: AsyncSession, user: User, f: ZamanSuzgeci) -> list[dict[str, Any]]:
+    """Kişi bazlı kişi-saat + veri disiplini sütunları (E09-15) — TEK sorgu.
+
+    Kişi-saat ortak fonksiyonudur (rapor motorunun kişi-saat kırılımı bunu
+    çağırır). İptal/geri alınan bölümler yalnız disiplin sayılarına girer;
+    süre sütunları iptal edilmemiş, kapanmış bölümlerdendir. Gecikmeli manuel:
+    `girildi_at - ended_at > zaman_gecikmeli_manuel_saat`.
+    """
+    esik = timedelta(hours=int(await _ayar(db, "zaman_gecikmeli_manuel_saat")))
+    alt = kayit_sorgusu(user, f, iptaller=True).order_by(None).subquery()
+    c = alt.c
+    gecerli = c.is_deleted.is_(False)
+    kapali = and_(gecerli, c.ended_at.is_not(None))
+    dahil = and_(kapali, c.faaliyet.in_(sorted(KISI_SAATE_DAHIL)))
+    sure = func.extract("epoch", c.ended_at - c.started_at)
+
+    def faaliyet_sn(kod: str):
+        return func.sum(sure).filter(kapali, c.faaliyet == kod)
+
+    stmt = (
+        select(
+            c.user_id,
+            func.max(c.kaynak_personel_adi),
+            func.sum(sure).filter(dahil),
+            func.sum(sure).filter(dahil, c.kaynak == "CANLI"),
+            faaliyet_sn("YOL"),
+            faaliyet_sn("SAHA"),
+            faaliyet_sn("BEKLEME"),
+            faaliyet_sn("MOLA"),
+            func.count(func.distinct(c.service_order_id)).filter(gecerli),
+            func.count().filter(gecerli, c.kaynak == "MANUEL"),
+            func.count().filter(
+                gecerli,
+                c.kaynak == "MANUEL",
+                c.ended_at.is_not(None),
+                c.girildi_at - c.ended_at > esik,
+            ),
+            func.count().filter(gecerli, c.kaynak.in_(DUZELTME_KAYNAKLARI)),
+            func.count().filter(c.iptal_turu.in_(IPTAL_TURLERI_DISIPLIN)),
+            func.count().filter(c.iptal_turu == "GERI_ALINDI"),
+        )
+        .select_from(alt)
+        .group_by(c.user_id)
+    )
+    satirlar = (await db.execute(stmt)).all()
+    adlar = dict(
+        (
+            await db.execute(
+                select(User.id, User.full_name).where(
+                    User.id.in_({s[0] for s in satirlar if s[0] is not None} or {0})
+                )
+            )
+        ).all()
+    )
+
+    def dk_(sn) -> int | None:
+        return round(float(sn) / 60) if sn is not None else None
+
+    sonuc = []
+    for (
+        uid,
+        kaynak_ad,
+        dahil_sn,
+        canli_sn,
+        yol_sn,
+        saha_sn,
+        bekleme_sn,
+        mola_sn,
+        is_sayisi,
+        manuel,
+        gecikmeli,
+        duzeltilen,
+        iptal,
+        geri_alinan,
+    ) in satirlar:
+        sonuc.append(
+            {
+                "user_id": uid,
+                "ad": adlar.get(uid) if uid is not None else (kaynak_ad or "Eşleşmemiş (göç)"),
+                "kisi_saat_dk": dk_(dahil_sn),
+                "yol_dk": dk_(yol_sn),
+                "saha_dk": dk_(saha_sn),
+                "bekleme_dk": dk_(bekleme_sn),
+                "mola_dk": dk_(mola_sn),
+                "is_sayisi": int(is_sayisi),
+                "canli_orani": canli_orani_hesapla(canli_sn, dahil_sn),
+                "manuel_sayisi": int(manuel),
+                "gecikmeli_manuel_sayisi": int(gecikmeli),
+                "duzeltilen_sayisi": int(duzeltilen),
+                "iptal_sayisi": int(iptal),
+                "geri_alinan_sayisi": int(geri_alinan),
+            }
+        )
+    # Kişi-saati olmayan (eksik) en sona; 0 varsayılmaz.
+    sonuc.sort(
+        key=lambda s: (
+            s["kisi_saat_dk"] is None,
+            -s["kisi_saat_dk"] if s["kisi_saat_dk"] is not None else 0,
+            s["ad"] or "",
+        )
+    )
+    return sonuc
+
+
+async def kayit_satirlari(
+    db: AsyncSession, bolumler: Sequence[ServiceTimeEntry], clock: Clock
+) -> list[dict[str, Any]]:
+    """Bölüm satırları (kişi alanları DAHİL; izinsizde API çıkarır)."""
+    if not bolumler:
+        return []
+    so_idler = {b.service_order_id for b in bolumler}
+    isler = {
+        i: (no, birim)
+        for i, no, birim in (
+            await db.execute(
+                select(ServiceOrder.id, ServiceOrder.so_no, ServiceOrder.birim).where(
+                    ServiceOrder.id.in_(so_idler)
+                )
+            )
+        ).all()
+    }
+    adlar = dict(
+        (
+            await db.execute(
+                select(User.id, User.full_name).where(
+                    User.id.in_({b.user_id for b in bolumler if b.user_id} or {0})
+                )
+            )
+        ).all()
+    )
+    esik_saat = int(await _ayar(db, "zaman_uzun_sayac_uyari_saat"))
+    gecikme = timedelta(hours=int(await _ayar(db, "zaman_gecikmeli_manuel_saat")))
+    an = clock.now()
+    sonuc = []
+    for b in bolumler:
+        no, birim = isler.get(b.service_order_id, ("?", None))
+        sure = _dk(b.ended_at - b.started_at) if b.ended_at is not None else None
+        sonuc.append(
+            {
+                "id": b.id,
+                "version": b.version,
+                "service_order_id": b.service_order_id,
+                "so_no": no,
+                "birim": birim,
+                "faaliyet": b.faaliyet,
+                "bekleme_nedeni": b.bekleme_nedeni,
+                "started_at": b.started_at,
+                "ended_at": b.ended_at,
+                "sure_dk": sure,
+                "gecen_dk": _dk(an - b.started_at) if b.ended_at is None else None,
+                "uzun": uzun_sayac_mi(b, an, esik_saat),
+                "kaynak": b.kaynak,
+                "kapanis_turu": b.kapanis_turu,
+                "girildi_at": b.girildi_at,
+                "gecikmeli": (
+                    b.kaynak == "MANUEL"
+                    and b.ended_at is not None
+                    and b.girildi_at - b.ended_at > gecikme
+                ),
+                "iptal_turu": b.iptal_turu,
+                # --- kişi alanları (servis_rapor.personel) ---
+                "user_id": b.user_id,
+                "kisi_adi": adlar.get(b.user_id) if b.user_id else b.kaynak_personel_adi,
+                "konum_notu": b.konum_notu,
+                "gerekce": b.gerekce or b.iptal_gerekcesi,
+                "aciklama": b.aciklama,
+            }
+        )
+    return sonuc
+
+
+KISI_ALANLARI = ("user_id", "kisi_adi", "konum_notu", "gerekce", "aciklama")
+
+
+def kisi_alanlari_cikar(satirlar: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`servis_rapor.personel` yoksa kişi alanları ANAHTAR olarak yok (TS-182)."""
+    return [{k: v for k, v in s.items() if k not in KISI_ALANLARI} for s in satirlar]
+
+
+async def is_satirlari(db: AsyncSession, isler: Sequence[ServiceOrder]) -> list[dict[str, Any]]:
+    """İş KPI listesi satırları; süre `sure_ozeti_toplu`'dan (tek kaynak)."""
+    ozetler = await sure_ozeti_toplu(db, [s.id for s in isler])
+    sonuc = []
+    for s in isler:
+        o = ozetler.get(s.id)
+        sonuc.append(
+            {
+                "id": s.id,
+                "so_no": s.so_no,
+                "birim": s.birim,
+                "tur": s.tur,
+                "durum": s.status,
+                "konu": s.konu,
+                "completed_at": s.completed_at,
+                "kisi_saat_dk": o.kisi_saat_dk if o else None,
+                "sure_durumu": o.sure_durumu if o else None,
+            }
+        )
+    return sonuc
 
 
 # --- Kanca ve uyarı kayıtları (dosyanın EN ALTINDA, plan §1.8) ----------------------

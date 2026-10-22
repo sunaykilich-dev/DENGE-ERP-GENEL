@@ -25,7 +25,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ADRES_TURU_ETIKET, anaVeriApi, AnaVeriHatasi, type Lokasyon } from "../api/anaVeri";
 import { api, type ApiError } from "../api/client";
+import BirlestirmePenceresi from "../components/BirlestirmePenceresi";
 import EkYukleyici from "../components/EkYukleyici";
+import HesapServisKarti from "../components/HesapServisKarti";
 import LokasyonPenceresi from "../components/LokasyonPenceresi";
 import MontajTarifeleri from "../components/MontajTarifeleri";
 import { useAuth } from "../auth/AuthContext";
@@ -142,6 +144,10 @@ export default function HesaplarPage() {
   const [lokasyonPenceresi, setLokasyonPenceresi] = useState<number | null | undefined>(
     undefined,
   );
+  // Birleştirme (TS-192): hesap ya da bu hesabın bir tesisi kaynak olur.
+  const [birlestir, setBirlestir] = useState<
+    { tur: "HESAP" | "LOKASYON"; id: number; ad: string | null } | null
+  >(null);
   const [duzenlenen, setDuzenlenen] = useState<Hesap | null>(null);
   const [acik, setAcik] = useState(false);
   const [kisiDuzenlenen, setKisiDuzenlenen] = useState<Kisi | null>(null);
@@ -416,6 +422,11 @@ export default function HesaplarPage() {
                 </Button>
               )}
               {yetkili("hesap.yaz") && <Button onClick={() => duzenle(h)}>Düzenle</Button>}
+              {yetkili("hesap.birlestir") && (
+                <Button danger onClick={() => setBirlestir({ tur: "HESAP", id: h.id, ad: h.title })}>
+                  Birleştir
+                </Button>
+              )}
             </Space>
           )
         }
@@ -604,11 +615,44 @@ export default function HesaplarPage() {
                             render: (_: unknown, l: Lokasyon) =>
                               [l.city, l.district].filter(Boolean).join(" / ") || "—",
                           },
+                          ...(yetkili("hesap.birlestir")
+                            ? [
+                                {
+                                  title: "",
+                                  width: 100,
+                                  render: (_: unknown, l: Lokasyon) =>
+                                    l.kind === "TESIS" && l.is_active ? (
+                                      <Button
+                                        size="small"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setBirlestir({
+                                            tur: "LOKASYON",
+                                            id: l.id,
+                                            ad: l.site_name ?? l.label,
+                                          });
+                                        }}
+                                      >
+                                        Birleştir
+                                      </Button>
+                                    ) : null,
+                                },
+                              ]
+                            : []),
                         ]}
                       />
                     </Space>
                   ),
                 },
+                ...(yetkili("servis.gor")
+                  ? [
+                      {
+                        key: "servis",
+                        label: "Servis",
+                        children: <HesapServisKarti hesapId={h.id} />,
+                      },
+                    ]
+                  : []),
                 ...(h.is_montaj_noktasi
                   ? [
                       {
@@ -1012,6 +1056,20 @@ export default function HesaplarPage() {
           onKapat={() => setLokasyonPenceresi(undefined)}
         />
       )}
+
+      <BirlestirmePenceresi
+        acik={birlestir != null}
+        kapat={() => setBirlestir(null)}
+        tur={birlestir?.tur}
+        kaynak={birlestir ? { id: birlestir.id, ad: birlestir.ad } : undefined}
+        hesapId={h?.id}
+        onBitti={(hedefId) => {
+          void qc.invalidateQueries({ queryKey: ["hesaplar"] });
+          void qc.invalidateQueries({ queryKey: ["hesap-lokasyonlari"] });
+          void qc.invalidateQueries({ queryKey: ["hesap-servis-karti"] });
+          if (birlestir?.tur === "HESAP") navigate(`/hesaplar/${hedefId}`);
+        }}
+      />
     </Card>
   );
 }

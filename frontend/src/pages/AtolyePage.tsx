@@ -47,6 +47,8 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import {
   atolyeApi,
+  atolyeListeYolu,
+  KPI_SUZGEC_ANAHTARLARI,
   DURUM_RENKLERI,
   GARANTI_RENKLERI,
   ONAY_KANALI_ADLARI,
@@ -65,6 +67,7 @@ import { TIP_ETIKETLERI } from "../api/servisEkipman";
 import { useAuth } from "../auth/AuthContext";
 import AtolyeDurumPenceresi from "../components/AtolyeDurumPenceresi";
 import AtolyeKabulPenceresi from "../components/AtolyeKabulPenceresi";
+import AtolyeKpiRaporu from "../components/AtolyeKpiRaporu";
 import EkYukleyici from "../components/EkYukleyici";
 import KpiKutusu from "../components/KpiKutusu";
 import ServisParcalari from "../components/ServisParcalari";
@@ -79,6 +82,8 @@ const dk = (n: number) => `${Math.floor(n / 60)} sa ${n % 60} dk`;
 
 function suzgecOku(p: URLSearchParams): AtolyeSuzgeci {
   const sayi = (k: string) => (p.get(k) ? Number(p.get(k)) : undefined);
+  // Uyarı bağlantıları `=1`, ekran `=true` yazar; ikisi de kabul edilir.
+  const evet = (k: string) => (p.get(k) === "true" || p.get(k) === "1" ? true : undefined);
   return {
     q: p.get("q") ?? undefined,
     durum: p.get("durum") ?? undefined,
@@ -87,12 +92,34 @@ function suzgecOku(p: URLSearchParams): AtolyeSuzgeci {
     marka: p.get("marka") ?? undefined,
     servis_turu: p.get("servis_turu") ?? undefined,
     yas: p.get("yas") ?? undefined,
-    geciken: p.get("geciken") === "true" ? true : undefined,
+    geciken: evet("geciken"),
     teknisyen_id: sayi("teknisyen_id"),
     kabul_grubu: sayi("kabul_grubu"),
     musteri_id: sayi("musteri_id"),
+    teslim_alinmayan: evet("teslim_alinmayan"),
+    dis_servis: evet("dis_servis"),
+    tedarikci_id: sayi("tedarikci_id"),
+    sure_eksik: evet("sure_eksik"),
+    tamamlanma_bas: p.get("tamamlanma_bas") ?? undefined,
+    tamamlanma_bit: p.get("tamamlanma_bit") ?? undefined,
   };
 }
+
+/** Rapor/uyarı süzgeçlerinin ekrandaki etiketi (kapatılabilir). */
+const OZEL_SUZGECLER: { anahtar: keyof AtolyeSuzgeci; etiket: (s: AtolyeSuzgeci) => string }[] = [
+  { anahtar: "teslim_alinmayan", etiket: () => "Teslim alınmayan" },
+  { anahtar: "dis_servis", etiket: () => "Dış servise gönderilmiş" },
+  { anahtar: "tedarikci_id", etiket: (s) => `Dış servis firması #${s.tedarikci_id}` },
+  { anahtar: "sure_eksik", etiket: () => "Süre kaydı eksik" },
+  {
+    anahtar: "tamamlanma_bas",
+    etiket: (s) => `Tamamlanma ≥ ${dayjs(s.tamamlanma_bas).format("DD.MM.YYYY")}`,
+  },
+  {
+    anahtar: "tamamlanma_bit",
+    etiket: (s) => `Tamamlanma ≤ ${dayjs(s.tamamlanma_bit).format("DD.MM.YYYY")}`,
+  },
+];
 
 function suzgecYaz(s: AtolyeSuzgeci): URLSearchParams {
   const p = new URLSearchParams();
@@ -105,16 +132,9 @@ function suzgecYaz(s: AtolyeSuzgeci): URLSearchParams {
 
 /** KPI kutusunun açtığı liste: taban süzgeç + kutunun kendi süzgeci (sunucunun `sorgu`'su). */
 function kpiYolu(taban: AtolyeSuzgeci, sorgu: Record<string, unknown>): string {
-  const s: AtolyeSuzgeci = { ...taban, durum: undefined, durum_grubu: undefined, yas: undefined, geciken: undefined };
-  const durum = Array.isArray(sorgu.durum) ? String(sorgu.durum[0]) : undefined;
-  const p = suzgecYaz({
-    ...s,
-    durum,
-    durum_grubu: sorgu.durum_grubu as string | undefined,
-    yas: sorgu.yas as string | undefined,
-    geciken: (sorgu.geciken as boolean | undefined) || undefined,
-  });
-  return `/atolye?${p}`;
+  const s: Record<string, unknown> = { ...taban };
+  for (const k of KPI_SUZGEC_ANAHTARLARI) delete s[k];
+  return atolyeListeYolu({ ...s, ...sorgu });
 }
 
 function DurumEtiketi({ kod, sozluk }: { kod: string; sozluk?: FormVerileri }) {
@@ -1105,6 +1125,10 @@ export default function AtolyePage() {
   const [sayfa, setSayfa] = useState(1);
   const [secili, setSecili] = useState<number[]>([]);
   const [kabulAcik, setKabulAcik] = useState(false);
+  const [raporAcik, setRaporAcik] = useState(false);
+  const raporGorur = yetkili("servis_rapor.gor");
+  // Rapordaki bir KPI kutusu listeyi açınca (adres değişir) pencere kapanır.
+  useEffect(() => setRaporAcik(false), [arama]);
   const [topluAtaAcik, setTopluAtaAcik] = useState(false);
   const [aramaMetni, setAramaMetni] = useState(suzgec.q ?? "");
   const [markaMetni, setMarkaMetni] = useState(suzgec.marka ?? "");
@@ -1163,6 +1187,7 @@ export default function AtolyePage() {
                 Cihaz kabul
               </Button>
             )}
+            {raporGorur && <Button onClick={() => setRaporAcik(true)}>KPI raporu</Button>}
             {aktarabilir && (
               <Button onClick={() => window.open(atolyeApi.excelYolu(suzgec), "_blank")}>Excel</Button>
             )}
@@ -1255,6 +1280,16 @@ export default function AtolyePage() {
                 Kabul grubu {suzgec.kabul_grubu}
               </Tag>
             )}
+            {OZEL_SUZGECLER.filter((o) => suzgec[o.anahtar] !== undefined).map((o) => (
+              <Tag
+                key={o.anahtar}
+                color="purple"
+                closable
+                onClose={() => suzgecDegistir({ ...suzgec, [o.anahtar]: undefined })}
+              >
+                {o.etiket(suzgec)}
+              </Tag>
+            ))}
             {suzgec.kabul_grubu && (
               <Button size="small" onClick={() => window.open(atolyeApi.grupFisiYolu(suzgec.kabul_grubu!), "_blank")}>
                 Grup kabul fişi
@@ -1405,6 +1440,18 @@ export default function AtolyePage() {
           }
         }}
       />
+
+      {raporGorur && (
+        <Drawer
+          title="Atölye KPI raporu"
+          open={raporAcik}
+          size={960}
+          onClose={() => setRaporAcik(false)}
+          destroyOnHidden
+        >
+          {raporAcik && <AtolyeKpiRaporu />}
+        </Drawer>
+      )}
 
       <AtamaPenceresi
         soIdler={secili}

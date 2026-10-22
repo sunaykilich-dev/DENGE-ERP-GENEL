@@ -460,6 +460,134 @@ async def personel_aktiflestir(
     return hedef
 
 
+# --- Yönetici ilişkisi ve "Ekibim" (TS-199, E13-17) ------------------------------
+#
+# **"Ekibim" yalnız SÜZGEÇTİR, yetki genişletmez (K-20):** liste önce
+# `kapsam_personel` ile süzülür, sonra `yonetici_id = ben` uygulanır. Bağlı
+# kişi kapsam dışındaysa (başka birim) görünmez. Yönetici ilişkisi kapsam,
+# atama ya da onay yetkisi VERMEZ; yalnız organizasyon bilgisidir.
+
+
+async def yonetici_dongusu_var_mi(db: AsyncSession, kisi_id: int, yonetici_id: int) -> bool:
+    """`yonetici_id`, kişinin (dolaylı) astı mı? (özyinelemeli CTE).
+
+    A'nın yöneticisi B yapılırken B zaten A'nın astının astıysa zincir döngüye
+    girer (A→B→…→A) ve "Ekibim"/raporlar sonsuz döngüde dolaşırdı. `UNION`
+    (ALL değil) var olan bozuk bir döngüde de sorguyu sonlandırır.
+    """
+    astlar = select(User.id).where(User.yonetici_id == kisi_id).cte("astlar", recursive=True)
+    astlar = astlar.union(select(User.id).join(astlar, User.yonetici_id == astlar.c.id))
+    bulunan = await db.scalar(select(astlar.c.id).where(astlar.c.id == yonetici_id).limit(1))
+    return bulunan is not None
+
+
+async def yonetici_ata(
+    db: AsyncSession,
+    hedef: User,
+    yonetici_id: int | None,
+    *,
+    aktor: User,
+    surum: int,
+    ip: str | None = None,
+) -> User:
+    """Kişinin doğrudan yöneticisini yazar ya da kaldırır (`None`).
+
+    - Sürüm farkı 409 (iyimser kilit).
+    - Üst yetkili hedef (ADMIN olmayan aktör) 403 (`yetki.hedef_kontrol`).
+    - Kendisi 400; döngü (yönetici kişinin astı) 400.
+    - Yönetici aktörün kapsamı dışında ya da yok 404 (gövdedeki kişi
+      referansı kapsam dışı → 404, plan §1.2).
+    - Ayrılmış personel yönetici olamaz 400.
+
+    `flush` yapar, `commit` çağıranın işidir. Denetim `is_personal_data=True`.
+    """
+    if surum != hedef.version:
+        raise PersonelKuralHatasi(
+            "Bu kaydı siz görüntülerken başka biri değiştirdi. Sayfayı yenileyip tekrar deneyin."
+        )
+    yetki.hedef_kontrol(aktor, hedef)
+    if yonetici_id is not None:
+        if yonetici_id == hedef.id:
+            raise PersonelGirdiHatasi("Kişi kendisinin yöneticisi olamaz.")
+        if await kapsam.personel_disinda_mi(db, aktor, yonetici_id):
+            raise PersonelKapsamDisi("Yönetici bulunamadı")
+        yonetici = await db.get(User, yonetici_id)
+        if yonetici is None:
+            raise PersonelKapsamDisi("Yönetici bulunamadı")
+        if _ayrildi_mi(yonetici):
+            raise PersonelGirdiHatasi("Ayrılmış personel yönetici olarak seçilemez.")
+        if await yonetici_dongusu_var_mi(db, hedef.id, yonetici_id):
+            raise PersonelGirdiHatasi(
+                "Seçilen kişi bu personelin astı (doğrudan ya da dolaylı); "
+                "yönetici zinciri döngüye girerdi."
+            )
+    eski = hedef.yonetici_id
+    if eski == yonetici_id:
+        return hedef
+    hedef.yonetici_id = yonetici_id
+    await db.flush()
+    await audit.log(
+        db,
+        "users",
+        "personel.yonetici",
+        entity_id=hedef.id,
+        old_value={"yonetici_id": eski},
+        new_value={"yonetici_id": yonetici_id},
+        user_id=aktor.id,
+        ip=ip,
+        is_personal_data=True,
+    )
+    return hedef
+
+
+async def yonetici_ozetleri(
+    db: AsyncSession, aktor: User, kisiler: Sequence[User]
+) -> dict[int, dict[str, Any]]:
+    """Kişi kimliği → yönetici özeti `{id, ad}`; kapsam dışı yönetici maskelenir.
+
+    Yöneticinin adı başka birimin personel bilgisidir: aktörün personel
+    kapsamı dışındaysa `{"id": None, "ad": "Kapsam dışı kişi"}` döner.
+    """
+    yonetici_idler = {k.yonetici_id for k in kisiler if k.yonetici_id is not None}
+    if not yonetici_idler:
+        return {}
+    stmt = kapsam.kapsam_personel(
+        select(User.id, User.full_name).where(User.id.in_(sorted(yonetici_idler))),
+        aktor,
+        User.id,
+    )
+    gorunen = {i: ad for i, ad in (await db.execute(stmt)).all()}
+    sonuc: dict[int, dict[str, Any]] = {}
+    for k in kisiler:
+        if k.yonetici_id is None:
+            continue
+        ad = gorunen.get(k.yonetici_id)
+        sonuc[k.id] = (
+            {"id": k.yonetici_id, "ad": ad}
+            if ad is not None
+            else {"id": None, "ad": "Kapsam dışı kişi"}
+        )
+    return sonuc
+
+
+async def acik_sayaclilar(db: AsyncSession, kisi_idler: Iterable[int]) -> set[int]:
+    """Açık sayacı olan kişiler ("Ekibim": şu an sahada mı)."""
+    idler = sorted(set(kisi_idler))
+    if not idler:
+        return set()
+    return set(
+        (
+            await db.scalars(
+                select(ServiceTimeEntry.user_id).where(
+                    ServiceTimeEntry.user_id.in_(idler),
+                    ServiceTimeEntry.ended_at.is_(None),
+                    ServiceTimeEntry.is_deleted.is_(False),
+                )
+            )
+        ).all()
+    )
+
+
 # --- Liste ve süzgeçler --------------------------------------------------------
 
 
@@ -476,14 +604,22 @@ def personel_sorgusu(
     saha_rolu: str | None = None,
     durum: str | None = None,
     giris: str | None = None,
+    ekibim: bool = False,
 ) -> Select:
     """Personel listesi sorgusu — KAPSAMLI (liste, KPI ve Excel aynı sorgu).
 
     Sayı = sızıntı: KPI kutusu ve Excel de bu fonksiyondan geçer, böylece
     kutudaki sayı tıklanınca açılan listenin `X-Toplam-Kayit`'ına eşittir.
+
+    `ekibim` (TS-199): yalnız aktörün DOĞRUDAN bağlıları; kapsam süzgecinden
+    SONRA uygulanır (yetki genişletmez). Durum verilmezse yalnız çalışanlar.
     """
     stmt = select(User).order_by(User.full_name)
     stmt = kapsam.kapsam_personel(stmt, user, User.id)
+    if ekibim:
+        stmt = stmt.where(User.yonetici_id == user.id)
+        if not durum:
+            durum = "CALISIYOR"
     if q:
         desen = f"%{q.strip()}%"
         stmt = stmt.where(

@@ -20,6 +20,15 @@ Kurallar (kabul 1-7):
   (`customer_name_raw`, `site_name_raw`, `location_raw`) DEĞİŞMEZ.**
 - İdempotent: aynı dosya ikinci kez uygulanırsa 0 satır yazılır.
 - Sonuç tablo bazında `{tablo: {yazilan, atlanan, karantina}}` döner.
+
+**Faz 2 (TS-208, E14-09 Faz 2):** kapsam diğer birimlere açılır — her
+birimin ekipmanı ve müşterisi ham metinle göç etmiş servis işleri
+(`service_orders.customer_name_raw/location_raw`). Faz 2 aday listesi
+`faz2_adaylari()` ile (Faz 1 ile aynı `HesapEsleyici` kuralları, aynı Excel
+şablonu) üretilir; yükleme yine bu profille ve aynı kurallarla yapılır.
+Ekran uçları Faz 1'dedir; Faz 2 adayları `make goc-ana-veri-faz2` ile alınır.
+Teklif, kiralama ve atölye kaydı ham müşteri metni taşımaz (müşteri FK
+zorunlu açılır), bu yüzden Faz 2'de eşleştirilecek satırları yoktur.
 """
 
 from __future__ import annotations
@@ -30,21 +39,42 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import Clock
-from app.models import Account, AccountAlias, Address, MaintenanceContract, ServiceEquipment
+from app.models import (
+    Account,
+    AccountAlias,
+    Address,
+    MaintenanceContract,
+    ServiceEquipment,
+    ServiceOrder,
+)
 from app.services import audit
 from app.services.imports.cekirdek import Profil, SatirSonucu, Sutun
 from app.services.normalize import clean_cell, tr_normkey
 from app.services.teknik_servis import ana_veri
-from app.services.teknik_servis.veri_kalitesi import ESLESTIRME_KAYNAKLARI, FAZ1_EKIPMAN_BIRIMI
 
 _MODELLER: dict[str, Any] = {
     "maintenance_contracts": MaintenanceContract,
     "service_equipment": ServiceEquipment,
+    # Faz 2 (TS-208): göç edilmiş servis işleri (her birim).
+    "service_orders": ServiceOrder,
 }
 # Kayıttaki ham metin alanları (tablo → (müşteri, lokasyon)).
 _HAM_ALANLAR = {
     "maintenance_contracts": ("customer_name_raw", "site_name_raw"),
     "service_equipment": ("customer_name_raw", "location_raw"),
+    "service_orders": ("customer_name_raw", "location_raw"),
+}
+
+
+def _hesap_alani(tablo: str) -> str:
+    """Kaydın hesap FK kolonu (servis işinde `customer_id`)."""
+    return "customer_id" if tablo == "service_orders" else "account_id"
+
+
+# Faz 2 aday kaynakları (Faz 1 kaynakları `veri_kalitesi.ESLESTIRME_KAYNAKLARI`).
+FAZ2_KAYNAKLARI: dict[str, str] = {
+    "servis_isi": "service_orders",
+    "ekipman_diger": "service_equipment",
 }
 
 SUTUNLAR = (
@@ -108,7 +138,7 @@ class MusteriEslestirmeProfili(Profil):
                 sonuclar.append(r)
                 continue
             r.veri["onay"] = "E"
-            if tablo not in ESLESTIRME_KAYNAKLARI.values():
+            if tablo not in _MODELLER:
                 r.hatalar.append(f"Kaynak tablo tanınmıyor: {tablo}")
                 sonuclar.append(r)
                 continue
@@ -139,8 +169,9 @@ class MusteriEslestirmeProfili(Profil):
                 r.hatalar.append("Kaynak kayıt bulunamadı")
                 sonuclar.append(r)
                 continue
-            if tablo == "service_equipment" and kayit.birim != FAZ1_EKIPMAN_BIRIMI:
-                r.hatalar.append("Faz 1 yalnız Güvenlik ekipmanını kapsar")
+            if tablo == "service_orders" and kayit.source_system is None:
+                # Ekrandan açılan işin müşterisi zaten FK'dir; eşleştirme yalnız göç izidir.
+                r.hatalar.append("Yalnız göçle gelmiş servis işi eşleştirilir")
             if (tablo, kayit_id) in gorulen:
                 r.hatalar.append(
                     f"Aynı kayıt dosyada iki kez (ilk satır: {gorulen[(tablo, kayit_id)]})"
@@ -184,12 +215,13 @@ class MusteriEslestirmeProfili(Profil):
                     )
                 dosyadaki.setdefault(anahtar, (hesap.id, sira))
 
-            if r.gecerli and kayit.account_id is not None and kayit.account_id != hesap.id:
+            mevcut_hesap = getattr(kayit, _hesap_alani(tablo))
+            if r.gecerli and mevcut_hesap is not None and mevcut_hesap != hesap.id:
                 r.cakisma = {
                     "tip": "farkli_hesap",
                     "kayit_id": kayit.id,
                     "aciklama": (
-                        f"Kayıt zaten {kayit.account_id} numaralı hesaba bağlı. Güncellenirse "
+                        f"Kayıt zaten {mevcut_hesap} numaralı hesaba bağlı. Güncellenirse "
                         "hesap değişir; ham metin korunur."
                     ),
                 }
@@ -232,8 +264,9 @@ class MusteriEslestirmeProfili(Profil):
 
             musteri_alani, lokasyon_alani = _HAM_ALANLAR[tablo]
             degisti = False
-            if kayit.account_id != hesap_id:
-                kayit.account_id = hesap_id
+            hesap_alani = _hesap_alani(tablo)
+            if getattr(kayit, hesap_alani) != hesap_id:
+                setattr(kayit, hesap_alani, hesap_id)
                 degisti = True
             if adres_id is not None and kayit.address_id != adres_id:
                 kayit.address_id = adres_id
@@ -336,6 +369,111 @@ async def _takma_ad(
         user_id=user_id,
     )
     return 1
+
+
+async def faz2_adaylari(db: AsyncSession, kaynak: str) -> list[dict[str, Any]]:
+    """Faz 2 aday listesi (TS-208): hesabı/tesisi boş göç servis işleri ya da Güvenlik
+    dışı ekipman. Faz 1 ile aynı öneri sırası (`HesapEsleyici`, belirsizde öneri yok,
+    trigram yalnız öneri). Satır sözlüğü `veri_kalitesi.aday_satiri` biçimindedir.
+    HİÇBİR ŞEY YAZMAZ. Komut satırı aracıdır (sistem göç sorumlusu; kapsam yok).
+    """
+    from app.services.teknik_servis import veri_kalitesi as vk
+
+    if kaynak == "servis_isi":
+        kayitlar = (
+            await db.scalars(
+                select(ServiceOrder)
+                .where(
+                    ServiceOrder.is_deleted.is_(False),
+                    ServiceOrder.source_system.is_not(None),
+                    (ServiceOrder.customer_id.is_(None)) | (ServiceOrder.address_id.is_(None)),
+                )
+                .order_by(ServiceOrder.id)
+            )
+        ).all()
+    elif kaynak == "ekipman_diger":
+        kayitlar = (
+            await db.scalars(
+                select(ServiceEquipment)
+                .where(
+                    ServiceEquipment.is_deleted.is_(False),
+                    ServiceEquipment.merged_into_id.is_(None),
+                    ServiceEquipment.birim != vk.FAZ1_EKIPMAN_BIRIMI,
+                    (ServiceEquipment.account_id.is_(None))
+                    | (ServiceEquipment.address_id.is_(None)),
+                )
+                .order_by(ServiceEquipment.id)
+            )
+        ).all()
+    else:
+        raise ValueError(f"Bilinmeyen Faz 2 kaynağı: {kaynak}")
+    tablo = FAZ2_KAYNAKLARI[kaynak]
+    musteri_alani, lokasyon_alani = _HAM_ALANLAR[tablo]
+    hesap_alani = _hesap_alani(tablo)
+    esleyici = await vk.hesap_esleyici(db)
+    sonuc: list[dict[str, Any]] = []
+    trgm: dict[str, int | None] = {}
+    for k in kayitlar:
+        musteri, lokasyon = getattr(k, musteri_alani), getattr(k, lokasyon_alani)
+        hesap_id, adres_id = getattr(k, hesap_alani), k.address_id
+        satir: dict[str, Any] = {
+            "tablo": tablo,
+            "id": k.id,
+            "musteri": musteri,
+            "lokasyon": lokasyon,
+            "hesap_id": hesap_id,
+            "adres_id": adres_id,
+            "onerilen_hesap_id": hesap_id,
+            "onerilen_adres_id": adres_id,
+            "yontem": "MEVCUT" if hesap_id else vk.YONTEM_YOK,
+            "musterisiz": not (musteri or "").strip() and not (lokasyon or "").strip(),
+        }
+        if not satir["musterisiz"]:
+            es = esleyici.esle(musteri, lokasyon)
+            if es.belirsiz:
+                satir["yontem"] = f"{vk.YONTEM_BELIRSIZ}: " + ", ".join(map(str, es.adaylar))
+            elif es.account_id is not None and hesap_id in (None, es.account_id):
+                satir["onerilen_hesap_id"] = es.account_id
+                satir["onerilen_adres_id"] = adres_id or es.address_id
+                if hesap_id is None:
+                    satir["yontem"] = es.yontem
+            elif hesap_id is None and (musteri or "").strip():
+                anahtar = musteri.strip()
+                if anahtar not in trgm:
+                    adaylar = await ana_veri.benzer_musteriler(db, anahtar)
+                    trgm[anahtar] = adaylar[0]["id"] if adaylar else None
+                if trgm[anahtar] is not None:
+                    satir["onerilen_hesap_id"] = trgm[anahtar]
+                    satir["yontem"] = vk.YONTEM_TRGM
+        sonuc.append(satir)
+    hesaplar = {r["onerilen_hesap_id"] for r in sonuc if r["onerilen_hesap_id"]}
+    adresler = {r["onerilen_adres_id"] for r in sonuc if r["onerilen_adres_id"]}
+    hesap_adlari = (
+        dict(
+            (await db.execute(select(Account.id, Account.title).where(Account.id.in_(hesaplar))))
+            .tuples()
+            .all()
+        )
+        if hesaplar
+        else {}
+    )
+    adres_adlari = (
+        dict(
+            (
+                await db.execute(
+                    select(Address.id, Address.site_name).where(Address.id.in_(adresler))
+                )
+            )
+            .tuples()
+            .all()
+        )
+        if adresler
+        else {}
+    )
+    for r in sonuc:
+        r["onerilen_hesap"] = hesap_adlari.get(r["onerilen_hesap_id"])
+        r["onerilen_adres"] = adres_adlari.get(r["onerilen_adres_id"])
+    return sonuc
 
 
 PROFIL = MusteriEslestirmeProfili()

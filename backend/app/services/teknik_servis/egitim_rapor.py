@@ -1,6 +1,6 @@
 """Eğitim yönetim özeti, KPI tanımları, geçerlilik ve takip sorguları (E08-11/13/14/23).
 
-Maddeler: TS-153, TS-159.
+Maddeler: TS-153, TS-159, TS-198 (eğitim etkinliği raporu ve `etkinlik.xlsx`, E08-12).
 
 **Sayı = liste (E01-14 kalıbı):** her KPI kutusu bir LİSTE SÜZGECİDİR.
 Kutunun sayısı, listenin `?kpi=<kod>` ile çağrıldığında kullandığı AYNI
@@ -745,3 +745,434 @@ async def egitim_uyarilari(db: AsyncSession, user: User, clock: Clock) -> list[U
 
 
 ts_uyarilari_kaydi = ts_uyarilar.kaydet("egitim", "egitim.gor", egitim_uyarilari)
+
+
+# --- Eğitim etkinliği raporu (E08-12, TS-198) -------------------------------------------
+#
+# Kurs × birim satırı (birim = kişinin BİRİNCİL birimi; birimsiz personel
+# "—"). Toplama SQL'de; satırlar Python'da yalnız birleştirilir. Veri yoksa
+# değer None ("veri yok") — 0 yazılmaz. Kritik maddeli gözlem başarı oranında
+# BAŞARISIZ sayılır (sonuç KRITIK ≠ BASARILI). Eğitim saati yalnız bilgi kolonu.
+# Kapsam `kapsam_personel` ile sorgunun içinde (Excel'de kapsam dışı kişi yok).
+
+GOZLEM_ASAMA_LISTESI = (0, 30, 60, 90)
+
+
+def _birincil_birim():
+    return (
+        select(UserUnit.user_id.label("user_id"), UserUnit.birim.label("birim"))
+        .where(UserUnit.is_primary.is_(True))
+        .subquery("birincil")
+    )
+
+
+def _fark_metni(fark: float | None) -> str | None:
+    if fark is None:
+        return None
+    deger = f"{fark:+.1f}".rstrip("0").rstrip(".")
+    return deger.replace(".", ",")
+
+
+def _ort(deger: Any) -> float | None:
+    return round(float(deger), 1) if deger is not None else None
+
+
+async def etkinlik(
+    db: AsyncSession,
+    user: User,
+    clock: Clock,
+    *,
+    yil: int,
+    birim: str | None = None,
+    kurs_id: int | None = None,
+) -> dict[str, Any]:
+    """Eğitim etkinliği raporu: kurs × birim satırları (E08-12).
+
+    Her satırda: 0/30/60/90 gözlem adedi, başarı oranı ve ortalama puan
+    (gözlem yoksa None), 0→90 ortalama farkı (yalnız ikisi de varsa), ön/son
+    sınav ortalaması ve farkı, kritik düzeltici faaliyet (açık/kapalı), takip
+    uyumu (zamanı gelen / yapılan 30/60/90), eğitim kişi-saati (bilgi).
+    """
+    from app.models import TrainingAttendance, TrainingSession
+
+    birim = birim_dogrula(birim) if birim else None
+    bugun = yerel_bugun(clock)
+    bb = _birincil_birim()
+    satirlar: dict[tuple[int, str | None], dict[str, Any]] = {}
+
+    def _satir(kurs: int, b: str | None) -> dict[str, Any]:
+        anahtar = (kurs, b)
+        if anahtar not in satirlar:
+            satirlar[anahtar] = {
+                "course_id": kurs,
+                "birim": b,
+                "asamalar": {
+                    str(a): {"adet": 0, "basarili": 0, "basari_orani": None, "ortalama": None}
+                    for a in GOZLEM_ASAMA_LISTESI
+                },
+                "fark_0_90": None,
+                "fark_metni": None,
+                "sinav_on_ort": None,
+                "sinav_son_ort": None,
+                "sinav_fark": None,
+                "kritik_acik": 0,
+                "kritik_kapali": 0,
+                "takip_zamani_gelen": 0,
+                "takip_yapilan": 0,
+                "takip_uyum_yuzde": None,
+                "egitim_kisi_saat": None,
+            }
+        return satirlar[anahtar]
+
+    # 1) Gözlemler (iptal hariç, yıl içi) — aşama başına.
+    g = gozlem_sorgusu(user, GozlemSuzgeci(yil=yil, birim=birim, kurs_id=kurs_id)).subquery()
+    for kurs, b, asama, adet, basarili, ort in (
+        await db.execute(
+            select(
+                g.c.course_id,
+                bb.c.birim,
+                g.c.asama,
+                func.count(),
+                func.count().filter(g.c.sonuc == "BASARILI"),
+                func.avg(g.c.puan),
+            )
+            .select_from(g)
+            .outerjoin(bb, bb.c.user_id == g.c.user_id)
+            .group_by(g.c.course_id, bb.c.birim, g.c.asama)
+        )
+    ).all():
+        hucre = _satir(kurs, b)["asamalar"].get(str(asama))
+        if hucre is None:
+            continue
+        hucre["adet"] = int(adet)
+        hucre["basarili"] = int(basarili or 0)
+        hucre["basari_orani"] = round(100 * int(basarili or 0) / int(adet), 1) if adet else None
+        hucre["ortalama"] = _ort(ort)
+
+    # 2) Ön/son sınav (yıl içindeki oturumlara katılanlar).
+    sinav = (
+        select(
+            TrainingSession.course_id,
+            bb.c.birim,
+            func.avg(TrainingAttendance.on_puan),
+            func.avg(TrainingAttendance.son_puan),
+            func.sum(TrainingSession.sure_saat),
+        )
+        .join(TrainingSession, TrainingSession.id == TrainingAttendance.session_id)
+        .outerjoin(bb, bb.c.user_id == TrainingAttendance.user_id)
+        .where(
+            TrainingAttendance.katildi.is_(True),
+            TrainingSession.is_deleted.is_(False),
+            TrainingSession.oturum_tarihi >= date(yil, 1, 1),
+            TrainingSession.oturum_tarihi < date(yil + 1, 1, 1),
+        )
+        .group_by(TrainingSession.course_id, bb.c.birim)
+    )
+    sinav = _kapsamli(sinav, user, TrainingAttendance.user_id, birim)
+    if kurs_id is not None:
+        sinav = sinav.where(TrainingSession.course_id == kurs_id)
+    for kurs, b, on_ort, son_ort, saat in (await db.execute(sinav)).all():
+        s = _satir(kurs, b)
+        s["sinav_on_ort"] = _ort(on_ort)
+        s["sinav_son_ort"] = _ort(son_ort)
+        if on_ort is not None and son_ort is not None:
+            s["sinav_fark"] = round(float(son_ort) - float(on_ort), 1)
+        s["egitim_kisi_saat"] = float(saat) if saat is not None else None
+
+    # 3) Kritik düzeltici faaliyetler (gözlemi yıl içinde olanlar).
+    kritik = (
+        select(
+            TrainingCorrectiveAction.course_id,
+            bb.c.birim,
+            func.count().filter(TrainingCorrectiveAction.status == "ACIK"),
+            func.count().filter(TrainingCorrectiveAction.status == "KAPATILDI"),
+        )
+        .join(
+            TrainingObservation, TrainingObservation.id == TrainingCorrectiveAction.observation_id
+        )
+        .outerjoin(bb, bb.c.user_id == TrainingCorrectiveAction.user_id)
+        .where(
+            TrainingObservation.gozlem_tarihi >= date(yil, 1, 1),
+            TrainingObservation.gozlem_tarihi < date(yil + 1, 1, 1),
+        )
+        .group_by(TrainingCorrectiveAction.course_id, bb.c.birim)
+    )
+    kritik = _kapsamli(kritik, user, TrainingCorrectiveAction.user_id, birim)
+    if kurs_id is not None:
+        kritik = kritik.where(TrainingCorrectiveAction.course_id == kurs_id)
+    for kurs, b, acik, kapali in (await db.execute(kritik)).all():
+        s = _satir(kurs, b)
+        s["kritik_acik"], s["kritik_kapali"] = int(acik or 0), int(kapali or 0)
+
+    # 4) Takip uyumu: yıl planlarından tamamlananların vadesi gelmiş 30/60/90'ı.
+    asamalar = values(column("asama", Integer), name="takip_asamalari").data(
+        [(a,) for a in TAKIP_ASAMALARI]
+    )
+    kapatan = exists().where(
+        TrainingObservation.user_id == TrainingPlan.user_id,
+        TrainingObservation.course_id == TrainingPlan.course_id,
+        TrainingObservation.asama == asamalar.c.asama,
+        TrainingObservation.gozlem_tarihi >= TrainingPlan.completed_on,
+        TrainingObservation.cancelled_at.is_(None),
+        TrainingObservation.is_deleted.is_(False),
+    )
+    takip = (
+        select(
+            TrainingPlan.course_id,
+            bb.c.birim,
+            func.count(),
+            func.count().filter(kapatan),
+        )
+        .select_from(TrainingPlan)
+        .join(asamalar, literal(True))
+        .outerjoin(bb, bb.c.user_id == TrainingPlan.user_id)
+        .where(
+            TrainingPlan.plan_yili == yil,
+            TrainingPlan.status == "TAMAMLANDI",
+            TrainingPlan.is_deleted.is_(False),
+            TrainingPlan.completed_on.is_not(None),
+            TrainingPlan.completed_on + asamalar.c.asama <= bugun,
+        )
+        .group_by(TrainingPlan.course_id, bb.c.birim)
+    )
+    takip = _kapsamli(takip, user, TrainingPlan.user_id, birim)
+    if kurs_id is not None:
+        takip = takip.where(TrainingPlan.course_id == kurs_id)
+    for kurs, b, gelen, yapilan in (await db.execute(takip)).all():
+        s = _satir(kurs, b)
+        s["takip_zamani_gelen"], s["takip_yapilan"] = int(gelen or 0), int(yapilan or 0)
+        s["takip_uyum_yuzde"] = round(100 * int(yapilan or 0) / int(gelen), 1) if gelen else None
+
+    # Fark ve kurs adları.
+    kurs_adlari = {}
+    if satirlar:
+        kurs_adlari = {
+            k.id: (k.kod, k.baslik)
+            for k in (
+                await db.scalars(
+                    select(TrainingCourse).where(TrainingCourse.id.in_({k for k, _ in satirlar}))
+                )
+            ).all()
+        }
+    sonuc = []
+    for (kurs, _birim), s in sorted(
+        satirlar.items(), key=lambda x: (kurs_adlari.get(x[0][0], ("", ""))[0], x[0][1] or "")
+    ):
+        bas, son = s["asamalar"]["0"]["ortalama"], s["asamalar"]["90"]["ortalama"]
+        if bas is not None and son is not None:
+            s["fark_0_90"] = round(son - bas, 1)
+            s["fark_metni"] = _fark_metni(s["fark_0_90"])
+        kod, ad = kurs_adlari.get(kurs, (None, None))
+        sonuc.append({**s, "kurs_kod": kod, "kurs": ad})
+    return {"yil": yil, "birim": birim, "kurs_id": kurs_id, "satirlar": sonuc}
+
+
+async def etkinlik_excel_sayfalari(
+    db: AsyncSession,
+    user: User,
+    clock: Clock,
+    *,
+    yil: int,
+    birim: str | None = None,
+    kurs_id: int | None = None,
+    azami_satir: int = 20_000,
+) -> tuple[list[Any], int]:
+    """`etkinlik.xlsx` sayfaları (tek yardımcı `services/export.py`).
+
+    Aşama 1: Etkinlik, Plan, Gözlemler. Aşama 2: Yetkinlik, Düzeltici
+    Faaliyetler, Belgeler. Not/aksiyon planı/kanıt/belge no kolonları YALNIZ
+    `egitim.detay` ile — kolon hiç yok (boş değil). Formül enjeksiyonu
+    `export` içinde metne çevrilir. Satır sınırı aşılırsa `EgitimGirdiHatasi`.
+    """
+    from app.services import export as export_svc
+    from app.services.teknik_servis.egitim import EgitimGirdiHatasi
+    from app.services.teknik_servis.egitim_yetkinlik import matris_sorgusu
+
+    S = export_svc.Sutun
+    detay = user.has("egitim.detay")
+    bugun = yerel_bugun(clock)
+    rapor = await etkinlik(db, user, clock, yil=yil, birim=birim, kurs_id=kurs_id)
+    birim = rapor["birim"]
+
+    etkinlik_sutunlari = [S("Kurs Kodu"), S("Kurs"), S("Birim")]
+    for a in GOZLEM_ASAMA_LISTESI:
+        etkinlik_sutunlari += [
+            S(f"{a}. Gün Gözlem", "tamsayi"),
+            S(f"{a}. Gün Başarı (%)", "ondalik"),
+            S(f"{a}. Gün Ortalama", "ondalik"),
+        ]
+    etkinlik_sutunlari += [
+        S("0→90 Fark"),
+        S("Ön Sınav Ort.", "ondalik"),
+        S("Son Sınav Ort.", "ondalik"),
+        S("Sınav Farkı", "ondalik"),
+        S("Kritik Açık", "tamsayi"),
+        S("Kritik Kapalı", "tamsayi"),
+        S("Takip Zamanı Gelen", "tamsayi"),
+        S("Takip Yapılan", "tamsayi"),
+        S("Takip Uyum (%)", "ondalik"),
+        S("Eğitim Kişi-Saat (bilgi)", "ondalik"),
+    ]
+    etkinlik_satirlari = []
+    for s in rapor["satirlar"]:
+        satir: list[Any] = [s["kurs_kod"], s["kurs"], s["birim"] or "—"]
+        for a in GOZLEM_ASAMA_LISTESI:
+            h = s["asamalar"][str(a)]
+            satir += [h["adet"], h["basari_orani"], h["ortalama"]]
+        satir += [
+            s["fark_metni"] or "veri yok",
+            s["sinav_on_ort"],
+            s["sinav_son_ort"],
+            s["sinav_fark"],
+            s["kritik_acik"],
+            s["kritik_kapali"],
+            s["takip_zamani_gelen"],
+            s["takip_yapilan"],
+            s["takip_uyum_yuzde"],
+            s["egitim_kisi_saat"],
+        ]
+        etkinlik_satirlari.append(satir)
+
+    planlar = plan_sorgusu(user, PlanSuzgeci(yil=yil, birim=birim, kurs_id=kurs_id), bugun=bugun)
+    gozlemler = gozlem_sorgusu(user, GozlemSuzgeci(yil=yil, birim=birim, kurs_id=kurs_id))
+    faaliyetler = faaliyet_sorgusu(user, FaaliyetSuzgeci(birim=birim), bugun=bugun)
+    if kurs_id is not None:
+        faaliyetler = faaliyetler.where(TrainingCorrectiveAction.course_id == kurs_id)
+    matris = matris_sorgusu(user, birim=birim)
+    belgeler = gecerlilik_sorgusu(
+        user, clock, pencere_gun=int(await ayar_svc.get(db, "egitim_belge_uyari_gun")), birim=birim
+    )
+    toplam = sum(
+        [await say(db, q) for q in (planlar, gozlemler, faaliyetler, matris, belgeler)]
+    ) + len(etkinlik_satirlari)
+    if toplam > azami_satir:
+        raise EgitimGirdiHatasi(
+            f"{toplam} satır var; Excel en çok {azami_satir} satır alır. Süzgeci daraltın."
+        )
+
+    plan_satirlari = [
+        [r.ad, r.kurs, r[0].plan_yili, r[0].hedef_tarih, r[0].status, r[0].completed_on]
+        for r in (await db.execute(planlar)).all()
+    ]
+    gozlem_sutunlari = [
+        S("Personel"),
+        S("Kurs"),
+        S("Aşama", "tamsayi"),
+        S("Gözlem Tarihi", "tarih"),
+        S("Puan", "ondalik"),
+        S("Sonuç"),
+        S("Kritik"),
+        S("Gözlemci"),
+    ]
+    if detay:
+        gozlem_sutunlari += [S("Notlar"), S("Aksiyon Planı")]
+    gozlem_satirlari = []
+    for r in (await db.execute(gozlemler)).all():
+        o = r[0]
+        satir = [
+            r.ad,
+            r.kurs,
+            o.asama,
+            o.gozlem_tarihi,
+            o.puan,
+            o.sonuc,
+            "Evet" if o.kritik else "Hayır",
+            o.gozlemci_ad,
+        ]
+        if detay:
+            satir += [o.notlar, o.aksiyon_plani]
+        gozlem_satirlari.append(satir)
+
+    faaliyet_sutunlari = [
+        S("Personel"),
+        S("Kurs"),
+        S("Gözlem Tarihi", "tarih"),
+        S("Termin", "tarih"),
+        S("Durum"),
+        S("Kapanış", "tarih"),
+    ]
+    if detay:
+        faaliyet_sutunlari.append(S("Kapanış Kanıtı"))
+    faaliyet_satirlari = []
+    for r in (await db.execute(faaliyetler)).all():
+        f = r[0]
+        satir = [r.ad, r.kurs, r.gozlem_tarihi, f.termin, f.status, f.closed_at]
+        if detay:
+            satir.append(f.kapanis_kaniti)
+        faaliyet_satirlari.append(satir)
+
+    yetkinlik_satirlari = [
+        [
+            r.ad,
+            r.kod,
+            r.yetkinlik,
+            "Evet" if r.is_critical else "Hayır",
+            r.mevcut_seviye,
+            r.hedef_seviye,
+            r.degerlendirme_tarihi,
+        ]
+        for r in (await db.execute(matris)).all()
+    ]
+
+    belge_sutunlari = [
+        S("Personel"),
+        S("Kaynak"),
+        S("Eğitim/Belge"),
+        S("Başlangıç", "tarih"),
+        S("Bitiş", "tarih"),
+        S("Durum"),
+    ]
+    belge_satirlari_ham = (await db.execute(belgeler)).all()
+    belge_nolari: dict[int, str | None] = {}
+    if detay:
+        belge_idleri = [r.kayit_id for r in belge_satirlari_ham if r.kaynak == "BELGE"]
+        if belge_idleri:
+            belge_nolari = dict(
+                (
+                    await db.execute(
+                        select(PersonnelCertificate.id, PersonnelCertificate.belge_no).where(
+                            PersonnelCertificate.id.in_(belge_idleri)
+                        )
+                    )
+                ).all()
+            )
+        belge_sutunlari.append(S("Belge No"))
+    belge_satirlari = []
+    for r in belge_satirlari_ham:
+        satir = [r.kisi, r.kaynak, r.ad, r.baslangic, r.bitis, r.durum]
+        if detay:
+            satir.append(belge_nolari.get(r.kayit_id) if r.kaynak == "BELGE" else None)
+        belge_satirlari.append(satir)
+
+    sayfalar = [
+        export_svc.Sayfa("Etkinlik", etkinlik_sutunlari, etkinlik_satirlari),
+        export_svc.Sayfa(
+            "Plan",
+            [
+                S("Personel"),
+                S("Eğitim"),
+                S("Yıl", "tamsayi"),
+                S("Hedef Tarih", "tarih"),
+                S("Durum"),
+                S("Tamamlanma", "tarih"),
+            ],
+            plan_satirlari,
+        ),
+        export_svc.Sayfa("Gözlemler", gozlem_sutunlari, gozlem_satirlari),
+        export_svc.Sayfa(
+            "Yetkinlik",
+            [
+                S("Personel"),
+                S("Kod"),
+                S("Yetkinlik"),
+                S("Kritik"),
+                S("Mevcut", "tamsayi"),
+                S("Hedef", "tamsayi"),
+                S("Değerlendirme", "tarih"),
+            ],
+            yetkinlik_satirlari,
+        ),
+        export_svc.Sayfa("Düzeltici Faaliyetler", faaliyet_sutunlari, faaliyet_satirlari),
+        export_svc.Sayfa("Belgeler", belge_sutunlari, belge_satirlari),
+    ]
+    return sayfalar, sum(len(s.satirlar) for s in sayfalar)

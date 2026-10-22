@@ -13,7 +13,7 @@ Servis katmanı tutarı hesaplar; gizleme kararı API katmanında verilir,
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import Clock
@@ -153,7 +153,12 @@ async def teklif_donusumu(
 
     `birim` verilirse servis teklifleri (kullanıcı verilirse `teklif_kapsami`
     ile süzülür); servis teklifinde IPTAL kaybedilen sayılmaz, ayrı verilir.
+    Varsayılan çağrı (`birim=None`) SATIŞ tekliflerinin canlı sonucunu AYNEN
+    verir (E07-24 kontrol kararı); hesaplanan "süresi doldu" (`etkin_durum`),
+    tutar ve yanıt günü yalnız birimli raporda (`servis_teklif_donusumu`).
     """
+    if birim is not None:
+        return await servis_teklif_donusumu(db, gun=gun, clock=clock, birim=birim, user=user)
     baslangic = clock.now().date() - timedelta(days=gun)
     stmt = (
         select(Quote.status, func.count())
@@ -203,6 +208,160 @@ async def teklif_donusumu(
         # gösterirdi.
         "donusum_yuzde": (round(kazanilan / karara_baglanan * 100, 2) if karara_baglanan else None),
         "kayip_nedenleri": [{"neden": n, "adet": a} for n, a in kayip_nedenleri],
+    }
+
+
+# --- Servis (birimli) teklif dönüşümü (E07-24, TS-197) -----------------------------------
+
+
+def _servis_teklif_sorgusu(*, gun: int, clock: Clock, birim: str, user=None):
+    """Birimli tekliflerin güncel sürümle birleşik sorgusu + etkin durum.
+
+    Revizyon aynı teklifin sürümüdür: teklif BİR kez sayılır (güncel sürüm).
+    Kapsam `teklif_kapsami` (KENDI_BIRIMI kullanıcıda başka birim girmez).
+    """
+    from app.models import QuoteVersion
+    from app.services.quotes import etkin_durum_ifadesi, teklif_kapsami
+    from app.services.teknik_servis.yerel_zaman import yerel_bugun
+
+    bugun = yerel_bugun(clock)
+    baslangic = bugun - timedelta(days=gun)
+    durum = etkin_durum_ifadesi(bugun).label("etkin_durum")
+    stmt = (
+        select(
+            Quote.id,
+            Quote.quote_no,
+            Quote.birim,
+            Quote.created_at,
+            Quote.lost_reason,
+            durum,
+            Account.title.label("musteri"),
+            QuoteVersion.sent_at,
+            QuoteVersion.accepted_at,
+            QuoteVersion.rejected_at,
+            QuoteVersion.grand_total,
+            QuoteVersion.vat_total,
+            QuoteVersion.currency,
+            QuoteVersion.fx_rate,
+        )
+        .outerjoin(QuoteVersion, QuoteVersion.id == Quote.current_version_id)
+        .outerjoin(Account, Account.id == Quote.customer_id)
+        .where(
+            Quote.is_deleted.is_(False),
+            Quote.birim == birim,
+            func.date(Quote.created_at) >= baslangic,
+        )
+        .order_by(Quote.created_at, Quote.id)
+    )
+    if user is not None:
+        stmt = teklif_kapsami(stmt, user)
+    return stmt
+
+
+def _net_tl(r) -> Decimal | None:
+    """Güncel sürümün KDV hariç, iskonto sonrası TL tutarı (kur yoksa None)."""
+    if r.grand_total is None:
+        return None
+    net = Decimal(str(r.grand_total)) - Decimal(str(r.vat_total or 0))
+    if r.currency != "TRY":
+        if r.fx_rate is None:
+            return None
+        net *= Decimal(str(r.fx_rate))
+    return yuvarla(net)
+
+
+async def servis_teklif_satirlari(
+    db: AsyncSession, *, gun: int, clock: Clock, birim: str, user=None
+) -> list[dict]:
+    """Excel "Teklifler" sayfası: rapor toplamıyla AYNI sorgunun satırları."""
+    satirlar = []
+    for r in (
+        await db.execute(_servis_teklif_sorgusu(gun=gun, clock=clock, birim=birim, user=user))
+    ).all():
+        karar = r.accepted_at or r.rejected_at
+        satirlar.append(
+            {
+                "quote_no": r.quote_no,
+                "birim": r.birim,
+                "musteri": r.musteri,
+                "olusturma": r.created_at,
+                "durum": r.etkin_durum,
+                "gonderim": r.sent_at,
+                "karar": karar,
+                "yanit_gun": (
+                    round((karar - r.sent_at).total_seconds() / 86400, 1)
+                    if karar is not None and r.sent_at is not None
+                    else None
+                ),
+                "net_tl": _net_tl(r),
+                "kayip_nedeni": r.lost_reason if r.etkin_durum == "RED" else None,
+            }
+        )
+    return satirlar
+
+
+async def servis_teklif_donusumu(
+    db: AsyncSession, *, gun: int = 365, clock: Clock, birim: str, user=None
+) -> dict:
+    """Birimli teklif dönüşüm raporu (E07-24).
+
+    Oran = kazanılan / (kazanılan + kaybedilen); kaybedilen = RED + hesaplanan
+    SURESI_DOLDU; IPTAL kaybedilen sayılmaz, ayrı verilir. Ek alanlar:
+    gönderilen adet, kabul tutarı (KDV hariç net TL), ortalama yanıt günü.
+    """
+    alt = _servis_teklif_sorgusu(gun=gun, clock=clock, birim=birim, user=user).subquery()
+    durumlar = {
+        d: int(a)
+        for d, a in (
+            await db.execute(
+                select(alt.c.etkin_durum, func.count()).select_from(alt).group_by(alt.c.etkin_durum)
+            )
+        ).all()
+    }
+    kabul = alt.c.etkin_durum.in_(("KABUL", "SIPARISE_DONUSTU"))
+    net = (alt.c.grand_total - alt.c.vat_total) * case(
+        (alt.c.currency == "TRY", 1), else_=alt.c.fx_rate
+    )
+    karar_ani = func.coalesce(alt.c.accepted_at, alt.c.rejected_at)
+    gonderilen, kabul_net, kabul_eksik, ort_yanit = (
+        await db.execute(
+            select(
+                func.count().filter(alt.c.sent_at.is_not(None)),
+                func.sum(net).filter(kabul),
+                func.count().filter(and_(kabul, net.is_(None))),
+                func.avg(func.extract("epoch", karar_ani - alt.c.sent_at) / 86400).filter(
+                    and_(karar_ani.is_not(None), alt.c.sent_at.is_not(None))
+                ),
+            ).select_from(alt)
+        )
+    ).one()
+    nedenler = (
+        await db.execute(
+            select(alt.c.lost_reason, func.count())
+            .select_from(alt)
+            .where(alt.c.etkin_durum == "RED", alt.c.lost_reason.is_not(None))
+            .group_by(alt.c.lost_reason)
+            .order_by(func.count().desc(), alt.c.lost_reason)
+            .limit(10)
+        )
+    ).all()
+    kazanilan = durumlar.get("KABUL", 0) + durumlar.get("SIPARISE_DONUSTU", 0)
+    kaybedilen = durumlar.get("RED", 0) + durumlar.get("SURESI_DOLDU", 0)
+    karara_baglanan = kazanilan + kaybedilen
+    return {
+        "gun": gun,
+        "birim": birim,
+        "iptal": durumlar.get("IPTAL", 0),
+        "toplam_teklif": sum(durumlar.values()),
+        "durumlar": durumlar,
+        "gonderilen_adet": int(gonderilen or 0),
+        "kazanilan": kazanilan,
+        "kaybedilen": kaybedilen,
+        "donusum_yuzde": (round(kazanilan / karara_baglanan * 100, 2) if karara_baglanan else None),
+        "kabul_tutari_net": yuvarla(Decimal(str(kabul_net))) if kabul_net is not None else None,
+        "kabul_tutari_eksik": int(kabul_eksik or 0),
+        "ort_yanit_gun": round(float(ort_yanit), 1) if ort_yanit is not None else None,
+        "kayip_nedenleri": [{"neden": n, "adet": a} for n, a in nedenler],
     }
 
 

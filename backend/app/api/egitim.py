@@ -1626,6 +1626,252 @@ async def yetkinlik_gecmisi(personel_id: int, db: DbDep, user: Okuyucu) -> list[
     ]
 
 
+# --- Etkinlik raporu, kurs↔yetkinlik, yetkinlik eşlemesi (TS-198) ------------------------------
+
+
+class KursYetkinlikIn(BaseModel):
+    kurs_id: int
+    yetkinlik_idler: list[int] = Field(default_factory=list, max_length=100)
+
+    model_config = {"json_schema_extra": {"examples": [{"kurs_id": 1, "yetkinlik_idler": [1, 2]}]}}
+
+
+class GereksinimSatiriIn(BaseModel):
+    competency_id: int
+    min_seviye: int = Field(ge=1, le=4)
+    course_id: int | None = None
+
+
+class GereksinimIn(BaseModel):
+    birim: str = Field(max_length=20)
+    tur: str = Field(max_length=20)
+    satirlar: list[GereksinimSatiriIn] = Field(default_factory=list, max_length=50)
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "birim": "GUVENLIK",
+                    "tur": "PB",
+                    "satirlar": [{"competency_id": 1, "min_seviye": 3, "course_id": None}],
+                }
+            ]
+        }
+    }
+
+
+AtamaOnizleyici = Annotated[User, Depends(require_permission("servis.planla"))]
+
+
+@router.get("/rapor/etkinlik", response_model=None)
+async def etkinlik_raporu(
+    db: DbDep,
+    clock: ClockDep,
+    user: Okuyucu,
+    yil: Annotated[int | None, Query(ge=2020, le=2100)] = None,
+    birim: str | None = None,
+    kurs_id: int | None = None,
+) -> dict:
+    """Eğitim etkinliği (E08-12): kurs × birim; 0/30/60/90 başarı ve ortalama,
+    0→90 farkı, sınav farkı, kritik faaliyet, takip uyumu. Veri yoksa `null`
+    ("veri yok"), 0 değil. Kapsam dışı personel sayılmaz."""
+    try:
+        return await rapor.etkinlik(
+            db,
+            user,
+            clock,
+            yil=yil or yerel_bugun(clock).year,
+            birim=birim or None,
+            kurs_id=kurs_id,
+        )
+    except EgitimHatasi as exc:
+        raise _hata(exc) from exc
+
+
+@router.get("/rapor/etkinlik.xlsx")
+async def etkinlik_xlsx(
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Aktarici,
+    yil: Annotated[int | None, Query(ge=2020, le=2100)] = None,
+    birim: str | None = None,
+    kurs_id: int | None = None,
+) -> Response:
+    """Etkinlik kitabı (Etkinlik, Plan, Gözlemler, Yetkinlik, Düzeltici
+    Faaliyetler, Belgeler). Not/aksiyon/kanıt/belge no kolonları yalnız
+    `egitim.detay` ile; indirme denetime kişisel veri olarak yazılır."""
+    yil = yil or yerel_bugun(clock).year
+    try:
+        sayfalar, satir = await rapor.etkinlik_excel_sayfalari(
+            db, user, clock, yil=yil, birim=birim or None, kurs_id=kurs_id
+        )
+    except EgitimHatasi as exc:
+        raise _hata(exc) from exc
+    from app.services.teknik_servis import rapor_excel
+
+    # Tek denetim yardımcısı (D3-A `rapor_excel`): kişi bazlı sayfalar kişisel veri.
+    await rapor_excel.disa_aktarim_denetimi(
+        db,
+        user=user,
+        ip=client_ip(request),
+        rapor="egitim_etkinlik",
+        filtreler={
+            k: v
+            for k, v in {"yil": yil, "birim": birim, "kurs_id": kurs_id}.items()
+            if v not in (None, "")
+        },
+        satir_sayisi=satir,
+        kapsam=user.role.scope if user.role is not None else "",
+        kisisel_sayfalar=[s.ad for s in sayfalar if s.ad != "Etkinlik"],
+    )
+    await db.commit()
+    icerik = await export_svc.sayfalari_xlsx_async(sayfalar)
+    return Response(
+        content=icerik,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="egitim-etkinlik-{yil}.xlsx"'},
+    )
+
+
+def _yetkinlik_ozeti(y: Competency) -> dict:
+    return {
+        "id": y.id,
+        "kod": y.kod,
+        "ad": y.ad,
+        "birim": y.birim,
+        "kritik": y.is_critical,
+        "aktif": y.is_active,
+    }
+
+
+@router.get("/kurs-yetkinlikleri", response_model=None)
+async def kurs_yetkinlikleri(db: DbDep, user: Okuyucu, kurs_id: int) -> list[dict]:
+    """Kursa bağlı yetkinlikler (kurs kartı, E08-16 P3)."""
+    try:
+        await svc.kurs_getir(db, kurs_id)
+    except EgitimHatasi as exc:
+        raise _hata(exc) from exc
+    return [_yetkinlik_ozeti(y) for y in await yetkinlik_svc.kurs_yetkinlikleri(db, kurs_id)]
+
+
+@router.put("/kurs-yetkinlikleri", response_model=None)
+async def kurs_yetkinlik_bagla(
+    payload: KursYetkinlikIn, request: Request, db: DbDep, user: Yazici
+) -> list[dict]:
+    """Kursun yetkinlik bağlarını verilen kümeyle değiştirir. Başka birimin
+    kursu/yetkinliği 403; pasif yetkinlik 400. Seviye otomatik değişmez."""
+    try:
+        bagli = await yetkinlik_svc.kurs_yetkinlik_bagla(
+            db, payload.kurs_id, payload.yetkinlik_idler, user=user, ip=client_ip(request)
+        )
+    except EgitimHatasi as exc:
+        raise _hata(exc) from exc
+    await db.commit()
+    return [_yetkinlik_ozeti(y) for y in bagli]
+
+
+@router.get("/yeniden-degerlendirilecekler", response_model=None)
+async def yeniden_degerlendirilecekler(
+    response: Response,
+    db: DbDep,
+    user: Okuyucu,
+    birim: str | None = None,
+    kisi_id: int | None = None,
+    limit: Limit = 50,
+    offset: Offset = 0,
+) -> list[dict]:
+    """Başarılı 90. gün gözleminden sonra bağlı yetkinliği değerlendirilmemiş
+    kişi × yetkinlik (hesaplanır; değerlendirme girilince düşer)."""
+    try:
+        stmt = yetkinlik_svc.yeniden_degerlendir_sorgusu(user, birim=birim or None, kisi_id=kisi_id)
+        satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    except EgitimHatasi as exc:
+        raise _hata(exc) from exc
+    return [
+        {
+            "user_id": r.user_id,
+            "ad": r.ad,
+            "competency_id": r.competency_id,
+            "kod": r.kod,
+            "yetkinlik": r.yetkinlik,
+            "kritik": r.is_critical,
+            "gozlem_tarihi": r.gozlem_tarihi,
+            "kurslar": r.kurslar,
+        }
+        for r in satirlar
+    ]
+
+
+def _gereksinim_satiri(g, c: Competency) -> dict:
+    return {
+        "id": g.id,
+        "birim": g.birim,
+        "tur": g.tur,
+        "competency_id": c.id,
+        "kod": c.kod,
+        "yetkinlik": c.ad,
+        "min_seviye": g.min_seviye,
+        "course_id": g.course_id,
+        "version": g.version,
+    }
+
+
+@router.get("/yetkinlik-gereksinimleri", response_model=None)
+async def yetkinlik_gereksinimleri(
+    db: DbDep, user: Okuyucu, birim: str | None = None, tur: str | None = None
+) -> list[dict]:
+    """Servis işi türü → asgari yetkinlik eşlemesi (E08-22). Katalogdur, gizli değildir."""
+    try:
+        satirlar = await yetkinlik_svc.gereksinimler(db, birim=birim or None, tur=tur or None)
+    except EgitimHatasi as exc:
+        raise _hata(exc) from exc
+    return [_gereksinim_satiri(g, c) for g, c in satirlar]
+
+
+@router.put("/yetkinlik-gereksinimleri", response_model=None)
+async def yetkinlik_gereksinimi_kaydet(
+    payload: GereksinimIn, request: Request, db: DbDep, user: Yazici
+) -> list[dict]:
+    """`(birim, tür)` eşlemesini değiştirir (boş liste = eşleme yok). Başka
+    birim / başka birimin yetkinliği 403; pasif yetkinlik ve katalog dışı tür 400."""
+    try:
+        satirlar = await yetkinlik_svc.gereksinim_kaydet(
+            db,
+            payload.birim,
+            payload.tur,
+            [yetkinlik_svc.GereksinimSatiri(**s.model_dump()) for s in payload.satirlar],
+            user=user,
+            ip=client_ip(request),
+        )
+    except EgitimHatasi as exc:
+        raise _hata(exc) from exc
+    await db.commit()
+    return [_gereksinim_satiri(g, c) for g, c in satirlar]
+
+
+@router.get("/atama-uyarilari", response_model=None)
+async def atama_uyarilari(
+    db: DbDep,
+    clock: ClockDep,
+    user: AtamaOnizleyici,
+    so_id: int,
+    user_ids: Annotated[list[int], Query(max_length=50)],
+) -> dict:
+    """Atama ÖNİZLEMESİ: seçilen teknisyenler için yetkinlik/belge uyarıları
+    (E08-22). Atamayı engellemez, hiçbir şey yazmaz. Kapsam dışı iş 404."""
+    from app.models import ServiceOrder
+    from app.services.teknik_servis import kapsam
+
+    so = await db.get(ServiceOrder, so_id)
+    if so is None or so.is_deleted or await kapsam.is_erisimi_yok_mu(db, user, so):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis işi bulunamadı")
+    return {
+        "so_id": so.id,
+        "uyarilar": await yetkinlik_svc.atama_uyarilari(db, so, user_ids, clock=clock),
+    }
+
+
 # --- Kişiler ve kişi kartı (TS-150 / TS-154) --------------------------------------------------
 
 

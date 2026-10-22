@@ -89,9 +89,51 @@ async function getSayfa<T>(yol: string): Promise<Sayfa<T>> {
   return { kayitlar, toplam: baslik ? Number(baslik) : kayitlar.length };
 }
 
+/**
+ * Gövdesi liste kalan bir uç ek bilgiyi başlıkta taşıdığında (ör. atamanın
+ * yetkinlik uyarıları `X-Atama-Uyarilari`, yüzde kodlu JSON dizi) kullanılır.
+ */
+async function putBaslikli<T>(
+  yol: string,
+  govde: unknown,
+  baslik: string,
+): Promise<{ veri: T; ek: string[] }> {
+  const res = await fetch(yol, {
+    method: "PUT",
+    body: JSON.stringify(govde),
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+  });
+  if (!res.ok) {
+    let mesaj = `Beklenmeyen hata (${res.status})`;
+    let g: unknown;
+    try {
+      g = await res.json();
+      const d = (g as { detail?: unknown } | null)?.detail;
+      if (typeof d === "string") mesaj = d;
+    } catch {
+      /* gövde JSON değil */
+    }
+    throw new ApiError(res.status, mesaj, g);
+  }
+  const veri = (await res.json()) as T;
+  let ek: string[] = [];
+  const ham = res.headers.get(baslik);
+  if (ham) {
+    try {
+      const cozulen: unknown = JSON.parse(decodeURIComponent(ham));
+      if (Array.isArray(cozulen)) ek = cozulen.map(String);
+    } catch {
+      /* bozuk başlık yok sayılır */
+    }
+  }
+  return { veri, ek };
+}
+
 export const api = {
   get: <T>(yol: string) => istek<T>(yol),
   getSayfa,
+  putBaslikli,
   post: <T>(yol: string, govde?: unknown) =>
     istek<T>(yol, { method: "POST", body: JSON.stringify(govde ?? {}) }),
   patch: <T>(yol: string, govde: unknown) =>

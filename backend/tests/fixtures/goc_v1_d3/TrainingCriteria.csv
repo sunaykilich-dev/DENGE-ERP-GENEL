@@ -1,0 +1,4 @@
+CriterionId,CourseId,CriterionText,IsCritical,SortOrder
+1,1,Kask takar,1,2
+2,1,Eldiven kullanır,0,1
+3,3,Kursu olmayan madde,0,1

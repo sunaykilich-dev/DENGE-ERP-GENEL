@@ -1,0 +1,3 @@
+HoldId,WorkOrderId,Reason,PreviousStatus,CreatedAt,ReleasedAt
+1,202,Malzeme bekleniyor,Sahada,2026-02-04T11:00:00,
+2,201,müşteri yerinde yok,Sahada,2026-02-02T12:00:00,2026-02-02T13:00:00

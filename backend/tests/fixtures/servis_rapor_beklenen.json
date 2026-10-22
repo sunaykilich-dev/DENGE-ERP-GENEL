@@ -1,0 +1,121 @@
+{
+  "_aciklama": "Altın KPI seti (TS-183). Değerler servis_rapor_seed.py senaryosundan ELLE hesaplandı; dönem Mart 2026 (Türkiye günleri). Kod değişince bu tablo değişmez — rapor değişir.",
+  "donem": {"baslangic": "2026-03-01", "bitis": "2026-03-31"},
+  "kombinasyonlar": [
+    {
+      "ad": "A_mudur_tum",
+      "kullanici": "mudur",
+      "params": {},
+      "kpi": {
+        "rapor_gelen": 27, "rapor_cozulen": 20, "rapor_iptal": 2, "rapor_donem_sonu_acik": 6,
+        "rapor_kritik_acik": 1, "rapor_uzaktan_cozulen": 1, "rapor_sure_girilen": 4,
+        "rapor_sure_eksik": 16, "rapor_ilk_cozulen": 5, "rapor_yeniden_acilan": 1,
+        "rapor_yeniden_acilan_pb": 0, "rapor_tekrar_payda": 5, "rapor_tekrar_ariza_onayli": 1,
+        "rapor_tekrar_ariza_aday": 1, "rapor_tekrar_ziyaret": 2, "rapor_ziyaret_kaydi_yok": 1,
+        "rapor_sla_zamaninda": 3, "rapor_sla_asildi": 1, "rapor_sla_olculemedi": 1,
+        "rapor_sla_damgasiz": 0
+      },
+      "onceki": {"rapor_gelen": 2, "rapor_cozulen": 1, "rapor_donem_sonu_acik": 1},
+      "olcum": {
+        "kisi_saat": 9.0, "uzaktan_oran": 5.0, "yeniden_acilma_orani": 20.0,
+        "tekrar_ariza_orani": 20.0, "tekrar_ziyaret_orani": 66.7, "sla_uyum": 75.0,
+        "cozum_suresi_ort": 16.7, "cozum_suresi_medyan": 3.0
+      },
+      "toplamlar": {"toplam": 27, "acik": 5, "cozuldu": 20, "iptal": 2, "tanimsiz": 0},
+      "isler_ekrani": true
+    },
+    {
+      "ad": "B_sef_guvenlik",
+      "kullanici": "sef_g",
+      "params": {},
+      "kpi": {
+        "rapor_gelen": 26, "rapor_cozulen": 19, "rapor_iptal": 2, "rapor_donem_sonu_acik": 6,
+        "rapor_kritik_acik": 1, "rapor_uzaktan_cozulen": 1, "rapor_sure_girilen": 3,
+        "rapor_sure_eksik": 16, "rapor_ilk_cozulen": 4, "rapor_yeniden_acilan": 1,
+        "rapor_yeniden_acilan_pb": 0, "rapor_tekrar_payda": 4, "rapor_tekrar_ariza_onayli": 1,
+        "rapor_tekrar_ariza_aday": 1, "rapor_tekrar_ziyaret": 2, "rapor_ziyaret_kaydi_yok": 1,
+        "rapor_sla_zamaninda": 2, "rapor_sla_asildi": 1, "rapor_sla_olculemedi": 1,
+        "rapor_sla_damgasiz": 0
+      },
+      "olcum": {"kisi_saat": 7.0},
+      "isler_ekrani": true
+    },
+    {
+      "ad": "C_mudur_haberlesme",
+      "kullanici": "mudur",
+      "params": {"birim": ["HABERLESME"]},
+      "kpi": {
+        "rapor_gelen": 1, "rapor_cozulen": 1, "rapor_iptal": 0, "rapor_donem_sonu_acik": 0,
+        "rapor_kritik_acik": 0, "rapor_uzaktan_cozulen": 0, "rapor_sure_girilen": 1,
+        "rapor_sure_eksik": 0, "rapor_ilk_cozulen": 1, "rapor_yeniden_acilan": 0,
+        "rapor_yeniden_acilan_pb": 0, "rapor_tekrar_payda": 1, "rapor_tekrar_ariza_onayli": 0,
+        "rapor_tekrar_ariza_aday": 0, "rapor_tekrar_ziyaret": 0, "rapor_ziyaret_kaydi_yok": 0,
+        "rapor_sla_zamaninda": 1, "rapor_sla_asildi": 0, "rapor_sla_olculemedi": 0,
+        "rapor_sla_damgasiz": 0
+      },
+      "olcum": {"kisi_saat": 2.0},
+      "isler_ekrani": true
+    },
+    {
+      "ad": "D_mudur_planli_bakim",
+      "kullanici": "mudur",
+      "params": {"kategori": ["PLANLI_BAKIM"]},
+      "kpi": {
+        "rapor_gelen": 17, "rapor_cozulen": 15, "rapor_iptal": 0, "rapor_donem_sonu_acik": 2,
+        "rapor_kritik_acik": 0, "rapor_uzaktan_cozulen": 0, "rapor_sure_girilen": 0,
+        "rapor_sure_eksik": 15, "rapor_ilk_cozulen": 0, "rapor_yeniden_acilan": 0,
+        "rapor_yeniden_acilan_pb": 0, "rapor_tekrar_payda": 0, "rapor_tekrar_ariza_onayli": 0,
+        "rapor_tekrar_ariza_aday": 0, "rapor_tekrar_ziyaret": 0, "rapor_ziyaret_kaydi_yok": 0,
+        "rapor_sla_zamaninda": 0, "rapor_sla_asildi": 0, "rapor_sla_olculemedi": 0,
+        "rapor_sla_damgasiz": 0
+      },
+      "olcum": {"kisi_saat": null},
+      "isler_ekrani": false
+    },
+    {
+      "ad": "E_mudur_kritik",
+      "kullanici": "mudur",
+      "params": {"oncelik": ["KRITIK"]},
+      "kpi": {
+        "rapor_gelen": 2, "rapor_cozulen": 1, "rapor_iptal": 0, "rapor_donem_sonu_acik": 1,
+        "rapor_kritik_acik": 1, "rapor_uzaktan_cozulen": 0, "rapor_sure_girilen": 1,
+        "rapor_sure_eksik": 0, "rapor_ilk_cozulen": 1, "rapor_yeniden_acilan": 0,
+        "rapor_yeniden_acilan_pb": 0, "rapor_tekrar_payda": 1, "rapor_tekrar_ariza_onayli": 0,
+        "rapor_tekrar_ariza_aday": 1, "rapor_tekrar_ziyaret": 1, "rapor_ziyaret_kaydi_yok": 0,
+        "rapor_sla_zamaninda": 1, "rapor_sla_asildi": 0, "rapor_sla_olculemedi": 0,
+        "rapor_sla_damgasiz": 0
+      },
+      "olcum": {"kisi_saat": 3.5},
+      "isler_ekrani": true
+    },
+    {
+      "ad": "F_mudur_mugla",
+      "kullanici": "mudur",
+      "params": {"sehir": "mugla"},
+      "kpi": {
+        "rapor_gelen": 20, "rapor_cozulen": 17, "rapor_iptal": 0, "rapor_donem_sonu_acik": 3,
+        "rapor_kritik_acik": 0, "rapor_uzaktan_cozulen": 0, "rapor_sure_girilen": 2,
+        "rapor_sure_eksik": 15, "rapor_ilk_cozulen": 2, "rapor_yeniden_acilan": 1,
+        "rapor_yeniden_acilan_pb": 0, "rapor_tekrar_payda": 2, "rapor_tekrar_ariza_onayli": 0,
+        "rapor_tekrar_ariza_aday": 1, "rapor_tekrar_ziyaret": 2, "rapor_ziyaret_kaydi_yok": 0,
+        "rapor_sla_zamaninda": 1, "rapor_sla_asildi": 0, "rapor_sla_olculemedi": 1,
+        "rapor_sla_damgasiz": 0
+      },
+      "olcum": {"kisi_saat": 6.0},
+      "isler_ekrani": false
+    }
+  ],
+  "kirilim_A": {
+    "birim": {"Güvenlik Sistemleri": 26, "Haberleşme": 1},
+    "sehir": {"Muğla": 20, "İstanbul": 7},
+    "musteri": {"AKYAKA AVM Yönetimi": 20, "Beta Lojistik A.Ş.": 7},
+    "sef": {"Selim Şef": 1, "Şef atanmamış": 26}
+  },
+  "personel_A": {
+    "Ali Veli": {"kisi_saat": 6.0, "farkli_is": 2},
+    "Hasan Yıldız": {"kisi_saat": 2.0, "farkli_is": 1},
+    "Eşleşmemiş: Eski Teknisyen": {"kisi_saat": 1.0, "farkli_is": null},
+    "Aliye Kaya": {"kisi_saat": null, "farkli_is": 0}
+  },
+  "yeniden_acilan_A": {"olay_sayisi": 1, "gun_farki": 0, "gerekce": "Arıza devam ediyor"}
+}

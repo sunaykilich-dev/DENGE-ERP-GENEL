@@ -46,6 +46,7 @@ from app.models import (
     ServiceOrderAssignment,
     ServicePlan,
     ServicePlanMember,
+    ServiceUnavailability,
     ServiceVehicle,
     ServiceVisit,
 )
@@ -1103,6 +1104,269 @@ async def saha_onerisi(db: AsyncSession, so: ServiceOrder, user: User) -> dict[s
     return {"is_id": so.id, "alanlar": alanlar}
 
 
+# --- Müsaitlik blokları (TS-190, E02-20) ----------------------------------------------
+#
+# Bordro/izin modülü DEĞİLDİR: yalnız "bu kişi bu aralıkta sahaya çıkamaz"
+# bilgisini tutar; çakışma motoru `MUSAITLIK` türü üretir (gerekçeyle geçilir).
+# Zaman/kişi-saat raporları bu tabloyu OKUMAZ.
+#
+# **Sağlık bilgisi yazılmaz** (E02 K-11, KVKK m.6 özel nitelikli veri): tür
+# listesinde "sağlık raporu" yoktur (IZIN altında); not ≤200 karakterdir ve
+# sağlık çağrıştıran sözcük içeren not 400 ile reddedilir. Not yalnız
+# planlayıcıya ve kişinin kendisine görünür.
+#
+# **Aynı kilit:** blok yazımı/silimi, plan yazımının aldığı gün kilitlerini
+# (`cakisma.gun_kilitleri`) aynı sırayla alır. Böylece "plan kaydı çakışma
+# yok gördü" ile "aynı ana blok girildi" yarışamaz; ikinci istek birincinin
+# commit'ini bekler ve onu görür.
+
+MUSAITLIK_NOT_AZAMI = 200
+MUSAITLIK_AZAMI_GUN = 62
+# Küçük harf + Türkçe katlama sonrası alt dize araması. Kesin bir sözlük
+# değil, uyarı amaçlı süzgeçtir: amaç kazara yazılan teşhisi kaydetmemektir.
+_SAGLIK_SOZCUKLERI = (
+    "hasta",
+    "hastane",
+    "ameliyat",
+    "doktor",
+    "teşhis",
+    "teshis",
+    "tedavi",
+    "ilaç",
+    "ilac",
+    "sağlık raporu",
+    "saglik raporu",
+    "raporlu",
+    "hamile",
+    "gebelik",
+    "psikiyatri",
+    "psikolog",
+    "kanser",
+    "covid",
+    "grip",
+    "fizik tedavi",
+)
+SAGLIK_UYARISI = (
+    "Müsaitlik notuna sağlık bilgisi (hastalık, teşhis, rapor nedeni) yazılmaz; "
+    "'İzin' türünü seçip notu boş bırakın."
+)
+
+
+def _katla(metin: str) -> str:
+    return metin.replace("I", "ı").replace("İ", "i").lower()
+
+
+def saglik_bilgisi_var_mi(not_: str | None) -> bool:
+    """Not sağlık çağrıştıran bir sözcük içeriyor mu? (KVKK m.6 koruması)"""
+    if not not_:
+        return False
+    metin = _katla(not_)
+    return any(s in metin for s in _SAGLIK_SOZCUKLERI)
+
+
+def musaitlik_notu_dogrula(not_: str | None) -> str | None:
+    """Not ≤200 ve sağlık bilgisi içermez; boşluk → None."""
+    temiz = (not_ or "").strip() or None
+    if temiz is None:
+        return None
+    if len(temiz) > MUSAITLIK_NOT_AZAMI:
+        raise PlanlamaGirdiHatasi(f"Not en çok {MUSAITLIK_NOT_AZAMI} karakter olabilir")
+    if saglik_bilgisi_var_mi(temiz):
+        raise PlanlamaGirdiHatasi(SAGLIK_UYARISI)
+    return temiz
+
+
+def _farkinda(an: datetime) -> None:
+    if an.tzinfo is None or an.tzinfo.utcoffset(an) is None:
+        raise PlanlamaGirdiHatasi("Saat dilimi bilgisi olmayan zaman kabul edilmez")
+
+
+async def _blok_gun_kilitleri(db: AsyncSession, bas: datetime, bit: datetime) -> None:
+    from app.services.teknik_servis.yerel_zaman import yerel_gun
+
+    await cakisma.gun_kilitleri(db, cakisma.dokunulan_gunler(bas, bit, yerel_gun(bas)))
+
+
+def _blok_denetim(blok: ServiceUnavailability) -> dict[str, Any]:
+    return {
+        "user_id": blok.user_id,
+        "baslangic": blok.starts_at.isoformat(),
+        "bitis": blok.ends_at.isoformat(),
+        "tur": blok.tur,
+        "not": blok.note,
+    }
+
+
+async def musaitlik_ekle(
+    db: AsyncSession,
+    *,
+    kisi_id: int,
+    baslangic: datetime,
+    bitis: datetime,
+    tur: str,
+    not_: str | None,
+    user: User,
+    ip: str | None = None,
+) -> tuple[ServiceUnavailability, list[cakisma.Cakisma]]:
+    """Blok açar; kişinin kapsamı (404) API'de çözülmüştür.
+
+    Dönüş: (blok, aynı aralıktaki planlar — bilgi: plan sahibine "bu kişinin
+    planı var" uyarısı; blok yine yazılır, planlar çakışmalı bayrağı alır).
+    """
+    from app.models.servis_planlama import MUSAITLIK_TURLERI
+
+    if tur not in MUSAITLIK_TURLERI:
+        raise PlanlamaGirdiHatasi(f"Geçersiz müsaitlik türü: {tur}")
+    _farkinda(baslangic)
+    _farkinda(bitis)
+    if bitis <= baslangic:
+        raise PlanlamaGirdiHatasi("Bitiş, başlangıçtan sonra olmalı")
+    if bitis - baslangic > timedelta(days=MUSAITLIK_AZAMI_GUN):
+        raise PlanlamaGirdiHatasi(
+            f"Bir blok en çok {MUSAITLIK_AZAMI_GUN} gün olabilir; daha uzununu parçalayın"
+        )
+    temiz_not = musaitlik_notu_dogrula(not_)
+    await _blok_gun_kilitleri(db, baslangic, bitis)
+    cakisan = await db.scalar(
+        select(ServiceUnavailability)
+        .where(
+            ServiceUnavailability.user_id == kisi_id,
+            ServiceUnavailability.is_deleted.is_(False),
+            ServiceUnavailability.starts_at < bitis,
+            ServiceUnavailability.ends_at > baslangic,
+        )
+        .limit(1)
+    )
+    if cakisan is not None:
+        raise PlanlamaHatasi(
+            "Bu kişinin aynı aralıkta başka bir müsaitlik bloğu var "
+            f"({_yerel_metin(cakisan.starts_at)}–{_yerel_metin(cakisan.ends_at)})"
+        )
+    blok = ServiceUnavailability(
+        user_id=kisi_id,
+        starts_at=baslangic,
+        ends_at=bitis,
+        tur=tur,
+        note=temiz_not,
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    db.add(blok)
+    await db.flush()
+    await audit.log(
+        db,
+        "service_unavailability",
+        "olustur",
+        entity_id=blok.id,
+        new_value=_blok_denetim(blok),
+        user_id=user.id,
+        ip=ip,
+        is_personal_data=True,
+    )
+    planlar = [
+        c
+        for c in await cakisma.cakismalari_bul(db, [kisi_id], baslangic, bitis, goren=user)
+        if c.tur != "MUSAITLIK"
+    ]
+    return blok, planlar
+
+
+async def musaitlik_sil(
+    db: AsyncSession,
+    blok: ServiceUnavailability,
+    *,
+    user: User,
+    clock: Clock,
+    ip: str | None = None,
+) -> ServiceUnavailability:
+    """Yumuşak siler (EXCLUDE `WHERE NOT is_deleted`); çakışma uyarısı kalkar."""
+    if blok.is_deleted:
+        raise PlanlamaHatasi("Bu blok zaten silinmiş")
+    await _blok_gun_kilitleri(db, blok.starts_at, blok.ends_at)
+    eski = _blok_denetim(blok)
+    blok.is_deleted = True
+    blok.deleted_at = clock.now()
+    blok.deleted_by = user.id
+    blok.updated_by = user.id
+    await db.flush()
+    await audit.log(
+        db,
+        "service_unavailability",
+        "sil",
+        entity_id=blok.id,
+        old_value=eski,
+        user_id=user.id,
+        ip=ip,
+        is_personal_data=True,
+    )
+    return blok
+
+
+async def musaitlik_listesi(
+    db: AsyncSession,
+    user: User,
+    baslangic: date,
+    bitis: date,
+    *,
+    birim: str | None = None,
+    kisi_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """Aralıkla örtüşen bloklar. Planlayıcı: kapsamındaki personel; diğerleri
+    yalnız KENDİ blokları. Not yalnız planlayıcıya ve kişinin kendisine."""
+    from app.models import User as Kullanici
+    from app.models import UserUnit
+    from app.services.teknik_servis.yerel_zaman import yerel_gun_araligi
+
+    if bitis < baslangic:
+        raise PlanlamaGirdiHatasi("Bitiş tarihi başlangıçtan önce olamaz")
+    if (bitis - baslangic).days + 1 > MUSAITLIK_AZAMI_GUN:
+        raise PlanlamaGirdiHatasi(f"Aralık en çok {MUSAITLIK_AZAMI_GUN} gün olabilir")
+    alt, _ = yerel_gun_araligi(baslangic)
+    _, ust = yerel_gun_araligi(bitis)
+    stmt = (
+        select(ServiceUnavailability, Kullanici.full_name)
+        .join(Kullanici, Kullanici.id == ServiceUnavailability.user_id)
+        .where(
+            ServiceUnavailability.is_deleted.is_(False),
+            ServiceUnavailability.starts_at < ust,
+            ServiceUnavailability.ends_at > alt,
+        )
+        .order_by(ServiceUnavailability.starts_at, ServiceUnavailability.id)
+    )
+    planlayici = user.has("servis.planla")
+    if planlayici:
+        stmt = kapsam.kapsam_personel(stmt, user, ServiceUnavailability.user_id)
+    else:
+        stmt = stmt.where(ServiceUnavailability.user_id == user.id)
+    if birim:
+        stmt = stmt.where(
+            ServiceUnavailability.user_id.in_(
+                select(UserUnit.user_id).where(UserUnit.birim == birim)
+            )
+        )
+    if kisi_id is not None:
+        stmt = stmt.where(ServiceUnavailability.user_id == kisi_id)
+    sonuc = []
+    for blok, ad in (await db.execute(stmt)).all():
+        sonuc.append(
+            {
+                "id": blok.id,
+                "version": blok.version,
+                "user_id": blok.user_id,
+                "ad": ad,
+                "baslangic": blok.starts_at.isoformat(),
+                "bitis": blok.ends_at.isoformat(),
+                "tur": blok.tur,
+                "not": blok.note if (planlayici or blok.user_id == user.id) else None,
+            }
+        )
+    return sonuc
+
+
+def _yerel_metin(an: datetime) -> str:
+    return an.astimezone(YEREL).strftime("%d.%m.%Y %H:%M")
+
+
 # --- KVKK (E02-D05, TS-049) ---------------------------------------------------------
 
 
@@ -1150,12 +1414,17 @@ __all__ = [
     "aktif_plan",
     "ekip_degisti",
     "irtibat_gorur",
+    "musaitlik_ekle",
+    "musaitlik_listesi",
+    "musaitlik_notu_dogrula",
+    "musaitlik_sil",
     "plan_gecmisi",
     "plan_uyeleri",
     "plani_geri_al",
     "planla",
     "saat_araligi",
     "saha_onerisi",
+    "saglik_bilgisi_var_mi",
     "toplu_planla",
     "yeniden_planla",
 ]

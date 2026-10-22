@@ -84,6 +84,8 @@ _EK_PROFIL_MODULLERI = (
     "app.services.imports.bakim_sozlesme",
     "app.services.imports.servis_isleri",
     "app.services.imports.parca_acilis",
+    # Dalga 3 Göç-2 (D3-G, TS-205): kiralık envanter göç profili.
+    "app.services.imports.kiralama_goc",
 )
 
 

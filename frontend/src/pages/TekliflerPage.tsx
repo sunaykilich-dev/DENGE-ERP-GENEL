@@ -30,6 +30,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import Statistic from "../components/Statistic";
+import TeklifDonusumu from "./TeklifDonusumu";
 import TeklifFormu from "./TeklifFormu";
 
 /**
@@ -331,6 +332,7 @@ export default function TekliflerPage() {
   );
   const [birim, setBirim] = useState<string | undefined>();
   const [kpi, setKpi] = useState<string | undefined>();
+  const [donusumAcik, setDonusumAcik] = useState(false);
   const [arama, setArama] = useState("");
   const [sayfa, setSayfa] = useState(1);
   const [sekme, setSekme] = useState(servisIsiParam ? "yeni" : "liste");
@@ -649,9 +651,17 @@ export default function TekliflerPage() {
             {disaAktarabilir && (
               <Button href={`/api/teklifler/disa-aktar.xlsx?${suzgec.toString()}`}>Excel</Button>
             )}
+            {yetkili("teklif.gor", "servis_rapor.gor") && (kullanici?.birimler ?? []).length > 0 && (
+              <Button onClick={() => setDonusumAcik(true)}>Dönüşüm raporu</Button>
+            )}
           </Space>
         }
       >
+        <TeklifDonusumu
+          acik={donusumAcik}
+          onKapat={() => setDonusumAcik(false)}
+          birimler={kullanici?.birimler ?? []}
+        />
         <Table
           rowKey="id"
           size="small"

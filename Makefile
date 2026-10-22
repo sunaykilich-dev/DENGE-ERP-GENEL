@@ -4,7 +4,9 @@ UV := $(HOME)/.local/bin/uv
 .PHONY: help kur db db-durdur api worker web test test-goc migrate makemigration \
         seed lint build paket audit goc-onizleme goc-uygula goc-rapor pdf-ornek \
         openapi yedek-prova goc-servis-onizleme goc-servis-uygula goc-servis-rapor \
-        goc-servis-ad-oner goc-servis-ad-uygula goc-servis-bakim-teyit
+        goc-servis-ad-oner goc-servis-ad-uygula goc-servis-bakim-teyit \
+        goc-atolye-saglik goc-kiralama-uzlastirma goc-egitim-onizleme goc-egitim-uygula \
+        goc-egitim-rapor goc-servis-sla-rapor goc-servis-sla-uygula goc-ana-veri-faz2
 
 help:
 	@echo "make kur            - Bagimliliklari kur (uv sync + npm ci), .env yoksa uret"
@@ -27,6 +29,11 @@ help:
 	@echo "make goc-servis-ad-oner  KAYNAK=dizin - Personel ad esleme onerisi (IK Excel'i)"
 	@echo "make goc-servis-ad-uygula            - Onayli ad eslemesini goc zaman kayitlarina isle"
 	@echo "make goc-servis-bakim-teyit KAYNAK=dizin - Bakim sozlesmesi teyit Excel'i (ucretsiz)"
+	@echo "make goc-atolye-saglik KAYNAK=dizin      - Atolye pilot saglik raporu (7 bolum, YAZMAZ)"
+	@echo "make goc-kiralama-uzlastirma KAYNAK=dizin - Kiralama pilot uzlastirma (4 tur, YAZMAZ)"
+	@echo "make goc-egitim-onizleme|uygula|rapor KAYNAK=dizin - Egitim gocu ve uzlasma"
+	@echo "make goc-servis-sla-rapor|uygula [KAYNAK=dizin] - Goc islerinde SLA geri doldurma"
+	@echo "make goc-ana-veri-faz2 FAZ2=servis_isi|ekipman_diger - Eslestirme Faz 2 aday Excel'i"
 	@echo "make lint           - ruff + oxlint"
 	@echo "make build          - Arayuz build + docker compose build"
 	@echo "make paket          - Canliya cikis paketini uret (~/Downloads/denge-canli)"
@@ -105,6 +112,35 @@ goc-servis-ad-uygula:
 
 goc-servis-bakim-teyit:
 	cd backend && $(UV) run python -m app.migration.bakim_sozlesme --kaynak "$(KAYNAK)" --cikti bakim_teyit.xlsx
+
+# --- Goc-2 (Dalga 3, D3-G, TS-205…208). Goc-1'den SONRA; ONCE YEDEK AL. ---
+# Atolye/kiralama: salt okunur saglik/uzlastirma raporu (pilot veri yoksa goc yok).
+# Egitim: onizleme -> uygula -> rapor. SLA: rapor -> (onay) -> uygula (yururluk ani ayarlandiktan sonra).
+FAZ2 ?= servis_isi
+
+goc-atolye-saglik:
+	cd backend && $(UV) run python -m app.migration.atolye_saglik --kaynak "$(KAYNAK)" --cikti atolye_saglik.xlsx
+
+goc-kiralama-uzlastirma:
+	cd backend && $(UV) run python -m app.migration.kiralama_uzlastirma --kaynak "$(KAYNAK)" --cikti kiralama_uzlastirma.xlsx
+
+goc-egitim-onizleme:
+	cd backend && $(UV) run python -m app.migration.egitim onizleme --kaynak "$(KAYNAK)" --cikti goc_egitim_rapor.xlsx
+
+goc-egitim-uygula:
+	cd backend && $(UV) run python -m app.migration.egitim uygula --kaynak "$(KAYNAK)" --cikti goc_egitim_rapor.xlsx
+
+goc-egitim-rapor:
+	cd backend && $(UV) run python -m app.migration.egitim rapor --kaynak "$(KAYNAK)" --cikti goc_egitim_rapor.xlsx
+
+goc-servis-sla-rapor:
+	cd backend && $(UV) run python -m app.migration.servis_sla_geri_doldur rapor --kaynak "$(KAYNAK)" --cikti sla_geri_doldur.xlsx
+
+goc-servis-sla-uygula:
+	cd backend && $(UV) run python -m app.migration.servis_sla_geri_doldur uygula --kaynak "$(KAYNAK)" --cikti sla_geri_doldur.xlsx
+
+goc-ana-veri-faz2:
+	cd backend && $(UV) run python -m app.migration.ana_veri_faz2 --kaynak $(FAZ2) --cikti eslestirme_faz2_$(FAZ2).xlsx
 
 lint:
 	cd backend && $(UV) run ruff check . && $(UV) run ruff format --check .

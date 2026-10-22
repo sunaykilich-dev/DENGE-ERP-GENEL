@@ -8,6 +8,7 @@
 SET NOCOUNT ON;
 SELECT MaintenanceDeviceItemId, MaintenancePlanId, SecurityDeviceId, DeviceType, DeviceOrdinal,
        CAST(SerialNo AS NVARCHAR(200)) AS SerialNo, Status, WorkOrderId, Zone,
-       CONVERT(NVARCHAR(19), CompletedAt, 126) AS CompletedAt
+       CONVERT(NVARCHAR(19), CompletedAt, 126) AS CompletedAt,
+       SpareParts  -- Göç-2 (TS-208): serbest metin parça kaydı, NOT olayı olarak taşınır
 FROM dbo.MaintenanceDeviceItems
 ORDER BY MaintenanceDeviceItemId;

@@ -22,13 +22,14 @@ alanına doğrudan atama yasaktır.
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -241,6 +242,14 @@ SLA_UYARI_ONEMLERI = ("BILGI", "UYARI", "KRITIK")
 # Tohum (migration `bulk_insert`): (oncelik, cozum_saat). Müdahale hedefi
 # tanımsız, takvim 7/24, birim NULL = tüm birimler (KD-23).
 VARSAYILAN_SLA_POLITIKALARI = (("KRITIK", 12), ("YUKSEK", 24), ("NORMAL", 72))
+
+# --- E-posta bildirimi (Dalga 3, E10-06 / TS-200) ----------------------------
+EPOSTA_TURLERI = ("ANLIK", "GUNLUK_OZET")
+EPOSTA_DURUMLARI = ("BEKLIYOR", "GONDERILDI", "BASARISIZ")
+# Şema tavanı; işletme sınırı ayar `servis_eposta_deneme` (1–10).
+EPOSTA_AZAMI_DENEME = 10
+# Anlık e-posta üreten kalıcı bildirim kodları (E10-06 kuyruga_al).
+EPOSTA_ANLIK_KODLAR = ("SLA_ASILDI", "MUDAHALE_ASILDI")
 
 _SURE_ARALIGI = literal_column("tstzrange(started_at, ended_at, '[)')")
 _ACIK_IS = "status NOT IN ('TAMAMLANDI', 'KAPATILDI', 'IPTAL') AND NOT is_deleted"
@@ -1016,6 +1025,83 @@ class ServiceAlertRead(Base):
     goruldu_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class ServiceNotificationPref(Base, TimestampMixin):
+    """Kullanıcının servis e-posta tercihi (E10-06, TS-200; Dalga 3, D3-S).
+
+    Satır yoksa iki tercih de KAPALI sayılır (varsayılan e-posta yok). Yalnız
+    kendi satırı okunur/yazılır (`/bildirim-tercihlerim`). Alıcı listesi
+    saklanmaz; e-postayı kimin alacağı gönderim anında `servis.gor` + kapsam
+    yardımcılarıyla hesaplanır (E10 K4).
+    """
+
+    __tablename__ = "service_notification_prefs"
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    anlik_eposta: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
+    gunluk_ozet: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
+
+
+class ServiceMailOutbox(Base, PkMixin, TimestampMixin):
+    """Servis e-posta giden kutusu (E10-06, TS-200; Dalga 3, D3-S).
+
+    Tekillik şemada: aynı bildirim aynı kişiye bir kez (`uq_smo_anlik`), kişi
+    başına günde bir özet (`uq_smo_ozet`) — worker kaç tur koşarsa koşsun.
+    `son_hata`'ya SMTP parolası/kullanıcı adı YAZILMAZ (yalnız istisna sınıf
+    adı + sunucu:port). Gövdede fiyat/maliyet ve iletişim telefonu yok.
+    `alici` kişisel veridir: saklama süresi worker temizliğiyle sınırlıdır
+    (KVKK). GERIYE_DONUK damgalı işe e-posta üretilmez (servis kuralı).
+    """
+
+    __tablename__ = "service_mail_outbox"
+    __table_args__ = (
+        CheckConstraint(_in("tur", EPOSTA_TURLERI), name="ck_smo_tur"),
+        CheckConstraint(_in("durum", EPOSTA_DURUMLARI), name="ck_smo_durum"),
+        CheckConstraint(f"deneme >= 0 AND deneme <= {EPOSTA_AZAMI_DENEME}", name="ck_smo_deneme"),
+        CheckConstraint("tur <> 'GUNLUK_OZET' OR ozet_gunu IS NOT NULL", name="ck_smo_ozet_gunu"),
+        CheckConstraint(
+            "(durum = 'GONDERILDI') = (gonderildi_at IS NOT NULL)", name="ck_smo_gonderildi"
+        ),
+        Index(
+            "uq_smo_anlik",
+            "alert_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("tur = 'ANLIK'"),
+        ),
+        Index(
+            "uq_smo_ozet",
+            "user_id",
+            "ozet_gunu",
+            unique=True,
+            postgresql_where=text("tur = 'GUNLUK_OZET'"),
+        ),
+        Index("ix_smo_bekleyen", "created_at", postgresql_where=text("durum = 'BEKLIYOR'")),
+    )
+
+    tur: Mapped[str] = mapped_column(String(12))
+    # Bildirim temizlenince (90 gün) satır kalır, bağ düşer.
+    alert_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("service_alerts.id", ondelete="SET NULL")
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    ozet_gunu: Mapped[date | None] = mapped_column(Date)
+    alici: Mapped[str] = mapped_column(String(160))
+    konu: Mapped[str] = mapped_column(String(200))
+    govde: Mapped[str] = mapped_column(Text)
+    durum: Mapped[str] = mapped_column(
+        String(12), server_default=text("'BEKLIYOR'"), default="BEKLIYOR"
+    )
+    deneme: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"), default=0)
+    son_hata: Mapped[str | None] = mapped_column(String(300))
+    gonderildi_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 # Seri anahtarı tek normalizasyon fonksiyonundan (TS-011 `normalize_seri`).
 @event.listens_for(ServiceOrderSerial, "before_insert")
 @event.listens_for(ServiceOrderSerial, "before_update")
@@ -1029,6 +1115,12 @@ __all__ = [
     "BIRIM_KODLARI",
     "COZUM_KANALLARI",
     "DURUM_GRUPLARI",
+    "EPOSTA_ANLIK_KODLAR",
+    "EPOSTA_AZAMI_DENEME",
+    "EPOSTA_DURUMLARI",
+    "EPOSTA_TURLERI",
+    "ServiceMailOutbox",
+    "ServiceNotificationPref",
     "GECIKME_NEDENLERI",
     "ILISKI_TURLERI",
     "SLA_DURUMLARI",

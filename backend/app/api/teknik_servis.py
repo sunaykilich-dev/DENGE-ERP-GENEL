@@ -22,8 +22,10 @@ yollarından ÖNCE tanımlanır.
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
@@ -1205,14 +1207,15 @@ async def toplu_atama(
     """Çok işe aynı ekip (tek transaction). Üst sınır `servis_toplu_atama_ust_sinir`
     (aşılırsa 422); kapsam dışı iş 404; kapalı/karışık birim 409 — hiçbir iş değişmez."""
     try:
-        isler = await atama.toplu_ata(
-            db,
-            payload.is_idler,
-            [atama.AtamaSatiri(a.user_id, a.rol, a.is_lead) for a in payload.atamalar],
-            mod=payload.mod,
-            user=user,
-            clock=clock,
-        )
+        with atama.uyari_toplayici() as uyarilar:
+            isler = await atama.toplu_ata(
+                db,
+                payload.is_idler,
+                [atama.AtamaSatiri(a.user_id, a.rol, a.is_lead) for a in payload.atamalar],
+                mod=payload.mod,
+                user=user,
+                clock=clock,
+            )
     except _HATALAR as exc:
         await db.rollback()
         raise _hata(exc) from exc
@@ -1229,7 +1232,11 @@ async def toplu_atama(
         ip=client_ip(request),
     )
     await db.commit()
-    return {"guncellenen": len(isler), "isler": [{"id": s.id, "so_no": s.so_no} for s in isler]}
+    return {
+        "guncellenen": len(isler),
+        "isler": [{"id": s.id, "so_no": s.so_no} for s in isler],
+        "uyarilar": uyarilar,
+    }
 
 
 async def _onay_isleri(db, user: User, is_idler: list[int]) -> list[ServiceOrder]:
@@ -1682,20 +1689,31 @@ async def ekip(so_id: int, db: DbDep, user: Okuyucu) -> list[dict[str, Any]]:
 
 @router.put("/isler/{so_id}/atama", response_model=None)
 async def ata(
-    so_id: int, payload: AtamaIn, request: Request, db: DbDep, clock: ClockDep, user: Planlayici
+    so_id: int,
+    payload: AtamaIn,
+    request: Request,
+    response: Response,
+    db: DbDep,
+    clock: ClockDep,
+    user: Planlayici,
 ) -> list[dict[str, Any]]:
     """Ekibi verilen listeye eşitler. Ayrılmış kişi 400; başka birimin kişisi 409;
     ikinci sorumlu 409; kapalı iş 409; açık sayaçlı kişiyi çıkarmak 409."""
     so = await _kapsamli_is(db, so_id, user)
     onceki = [(a.user_id, a.rol, a.is_lead) for a in await atama.aktif_ekip(db, so)]
     try:
-        await atama.ata(
-            db,
-            so,
-            [atama.AtamaSatiri(a.user_id, a.rol, a.is_lead) for a in payload.atamalar],
-            user=user,
-            clock=clock,
-        )
+        with atama.uyari_toplayici() as uyarilar:
+            await atama.ata(
+                db,
+                so,
+                [atama.AtamaSatiri(a.user_id, a.rol, a.is_lead) for a in payload.atamalar],
+                user=user,
+                clock=clock,
+            )
+        # Yanıt gövdesi canlı sözleşmede liste (ekip); yetkinlik uyarıları (TS-198,
+        # atamayı engellemez) başlıkta yüzde kodlu JSON olarak taşınır.
+        if uyarilar:
+            response.headers["X-Atama-Uyarilari"] = quote(json.dumps(uyarilar, ensure_ascii=False))
     except _HATALAR as exc:
         await db.rollback()
         raise _hata(exc) from exc
@@ -1931,3 +1949,40 @@ async def bekleme_nedeni_kaydet(
     await db.commit()
     await db.refresh(satir)
     return _neden_cikti(satir)
+
+
+# --- Seri → mobilite cihaz kütüğü bağı (TS-193, E01-10; D3-C — yalnız okuma) ---------
+#
+# Cihaz kartının "Servis İşleri" sekmesi ve servis işinin cihaz eşleşmesi.
+# `devices`'a ve `service_order_serials.device_id`'ye YAZILMAZ; eşleşme okuma
+# anında kurulur (`is_emirleri.cihaz_servis_isleri_sorgusu`). Cihaz kapsamı
+# canlı cihaz kartı kuralıdır (mevcut davranış); iş listesi `kapsam_isler` ile.
+
+CihazOkuyucu = Annotated[User, Depends(require_permission("servis.gor", "cihaz.gor"))]
+
+
+@router.get("/cihaz-servis-isleri", response_model=None)
+async def cihaz_servis_isleri(
+    db: DbDep,
+    user: CihazOkuyucu,
+    response: Response,
+    cihaz_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Mobilite cihazının (IMEI/seri) MOBILITE/ARAC_TAKIP servis işleri; sayfalı."""
+    from app.models import Device
+
+    cihaz = await db.get(Device, cihaz_id)
+    if cihaz is None or cihaz.is_deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cihaz bulunamadı")
+    stmt = is_emirleri.cihaz_servis_isleri_sorgusu(user, cihaz.imei, cihaz.serial_no)
+    satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    return await _satirlar(db, [s for (s,) in satirlar], user)
+
+
+@router.get("/isler/{so_id}/cihaz-eslesmeleri", response_model=None)
+async def cihaz_eslesmeleri(so_id: int, db: DbDep, user: CihazOkuyucu) -> list[dict[str, Any]]:
+    """İşin serilerinin cihaz kütüğü karşılığı (TEK / BELIRSIZ / KUTUKTE_YOK)."""
+    so = await _kapsamli_is(db, so_id, user)
+    return await is_emirleri.seri_cihaz_eslesmeleri(db, so)

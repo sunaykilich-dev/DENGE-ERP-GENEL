@@ -31,12 +31,23 @@ artık açık olmayan bölümü gösterir). Her yanıt `sunucu_zamani` taşır
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
-from app.api.deps import ClockDep, DbDep, require_permission
+from app.api.deps import (
+    TOPLAM_BASLIGI,
+    ClockDep,
+    DbDep,
+    client_ip,
+    require_permission,
+    sayfala,
+)
 from app.models import ServiceOrder, ServiceTimeEntry, User
+from app.models.rbac import BIRIM_KODLARI
+from app.permissions import BIRIMLER
+from app.services import audit
+from app.services import export as export_svc
 from app.services.teknik_servis import is_emirleri, kapsam, mobil
 from app.services.teknik_servis import zaman as svc
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
@@ -47,6 +58,9 @@ ZamanYazici = Annotated[User, Depends(require_permission("zaman.yaz"))]
 ZamanServis = Annotated[User, Depends(require_permission("zaman.yaz", "servis.gor"))]
 Okuyucu = Annotated[User, Depends(require_permission("servis.gor"))]
 Yonetici = Annotated[User, Depends(require_permission("servis.planla"))]
+# Zaman Takibi yönetim ekranı (TS-189): mobilite `rapor.gor` DEĞİL (KD-06).
+RaporOkuyucu = Annotated[User, Depends(require_permission("servis.gor", "servis_rapor.gor"))]
+RaporAktarici = Annotated[User, Depends(require_permission("servis.gor", "servis_rapor.disaaktar"))]
 
 Faaliyet = Literal["YOL", "SAHA", "UZAKTAN", "ATOLYE", "TEST", "BEKLEME", "MOLA", "DIGER"]
 BaslatEylemi = Literal["YOLA_CIKTIM", "SAHAYA_VARDIM", "DIGER"]
@@ -656,3 +670,340 @@ async def benim_isim(is_id: int, db: DbDep, clock: ClockDep, user: ZamanServis) 
     """Tek sayfa iş kartı (fiyat/maliyet alanı yok; kapsam dışı 404)."""
     so = await _kapsamli_is(db, user, is_id)
     return await mobil.is_karti(db, user, clock, so)
+
+
+# --- Zaman Takibi yönetim ekranı (TS-189, E09-14/15) -------------------------------
+#
+# Kişi alanları (kişi adı, `user_id`, konum notu, gerekçe, personel dağılımı,
+# kişi süzgeci, Excel "Personel" sayfası) yalnız `servis_rapor.personel` ile;
+# izinsizde anahtar olarak YOK (TS-182). Liste/sayı/Excel aynı servis
+# sorgusundan: KPI adedi = `X-Toplam-Kayit`, dakika = `X-Toplam-Dakika`.
+
+KayitKpi = Literal["kisi_saat", "yol", "saha", "bekleme", "mola", "aktif_sayac", "uzun_sayac"]
+IsKpi = Literal["farkli_is", "sure_eksik"]
+
+
+def _personel_mi(user: User) -> bool:
+    return user.has("servis_rapor.personel")
+
+
+async def _suzgec(
+    db,
+    clock,
+    user: User,
+    *,
+    bas: date | None,
+    bit: date | None,
+    birim: str | None,
+    kullanici_id: int | None,
+    faaliyet: str | None,
+) -> svc.ZamanSuzgeci:
+    """Süzgeç doğrulaması: yetkisiz birim 403, kişi süzgeci izinsiz 403 /
+    kapsam dışı kişi 404, tarih hatası 400 (plan TS-181 yanıt kodları)."""
+    if birim in ("", None):
+        birim = None
+    elif birim not in BIRIM_KODLARI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {birim}")
+    elif kapsam.birim_disinda_mi(user, birim, birimsiz_gorunur=False):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Bu birimin verisini göremezsiniz")
+    if kullanici_id is not None:
+        if not _personel_mi(user):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Kişi bazlı süzgeç için yetkiniz yok (servis_rapor.personel)",
+            )
+        if await kapsam.personel_disinda_mi(db, user, kullanici_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Personel bulunamadı")
+    try:
+        return await svc.zaman_suzgeci(
+            db,
+            clock,
+            bas=bas,
+            bit=bit,
+            birim=birim,
+            kullanici_id=kullanici_id,
+            faaliyet=faaliyet,
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+
+
+def _kisisiz(user: User, satirlar: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return satirlar if _personel_mi(user) else svc.kisi_alanlari_cikar(satirlar)
+
+
+@router.get("/zaman/ozet", response_model=None)
+async def zaman_ozeti(
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporOkuyucu,
+    bas: date | None = None,
+    bit: date | None = None,
+    birim: str | None = Query(default=None, max_length=20),
+    kullanici_id: int | None = None,
+    faaliyet: str | None = Query(default=None, max_length=20),
+) -> dict[str, Any]:
+    """KPI kutuları + (yalnız `servis_rapor.personel`) personel dağılımı.
+
+    Parametresiz: son `zaman_rapor_varsayilan_gun` (31) gün. Personel izni
+    yoksa `personel` anahtarı yanıtta YOK.
+    """
+    f = await _suzgec(
+        db, clock, user, bas=bas, bit=bit, birim=birim, kullanici_id=kullanici_id,
+        faaliyet=faaliyet,
+    )  # fmt: skip
+    sonuc: dict[str, Any] = {
+        "sunucu_zamani": clock.now(),
+        "suzgec": f.iso(),
+        "kpi": await svc.zaman_ozeti(db, user, f, clock),
+    }
+    if _personel_mi(user):
+        sonuc["personel"] = await svc.personel_dagilimi(db, user, f)
+    return sonuc
+
+
+@router.get("/zaman/aktif", response_model=None)
+async def aktif_sayaclar(
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporOkuyucu,
+    birim: str | None = Query(default=None, max_length=20),
+    kullanici_id: int | None = None,
+) -> dict[str, Any]:
+    """ "Şu an çalışanlar": açık sayaçlar (kapsamlı; tarih süzgecinden bağımsız).
+    Uzun sayaç satırı `uzun=true`; yönetici kapat/düzelt `servis.planla` ister."""
+    f = await _suzgec(
+        db, clock, user, bas=None, bit=None, birim=birim, kullanici_id=kullanici_id,
+        faaliyet=None,
+    )  # fmt: skip
+    stmt = await svc.kpi_kayit_sorgusu(db, user, f, "aktif_sayac", clock)
+    bolumler = (await db.scalars(stmt.order_by(ServiceTimeEntry.started_at))).all()
+    satirlar = await svc.kayit_satirlari(db, bolumler, clock)
+    return {"sunucu_zamani": clock.now(), "sayaclar": _kisisiz(user, satirlar)}
+
+
+@router.get("/zaman/kayitlar", response_model=None)
+async def zaman_kayitlari(
+    response: Response,
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporOkuyucu,
+    kpi: KayitKpi | None = None,
+    bas: date | None = None,
+    bit: date | None = None,
+    birim: str | None = Query(default=None, max_length=20),
+    kullanici_id: int | None = None,
+    faaliyet: str | None = Query(default=None, max_length=20),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Ayrıntı tablosu (sunucu sayfalaması). `kpi=` ile KPI kutusunun listesi;
+    katalog dışı `kpi` 422. `X-Toplam-Dakika` = kapanmış bölüm dakika toplamı."""
+    f = await _suzgec(
+        db, clock, user, bas=bas, bit=bit, birim=birim, kullanici_id=kullanici_id,
+        faaliyet=faaliyet,
+    )  # fmt: skip
+    stmt = (
+        await svc.kpi_kayit_sorgusu(db, user, f, kpi, clock)
+        if kpi is not None
+        else svc.kayit_sorgusu(user, f)
+    )
+    _, dakika = await svc.adet_ve_dakika(db, stmt)
+    satirlar = await sayfala(
+        db,
+        response,
+        stmt.order_by(ServiceTimeEntry.started_at.desc()),
+        limit=limit,
+        offset=offset,
+    )
+    response.headers[svc.DAKIKA_BASLIGI] = "" if dakika is None else str(dakika)
+    bolumler = [s[0] for s in satirlar]
+    return _kisisiz(user, await svc.kayit_satirlari(db, bolumler, clock))
+
+
+@router.get("/zaman/isler", response_model=None)
+async def zaman_isleri(
+    response: Response,
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporOkuyucu,
+    kpi: IsKpi,
+    bas: date | None = None,
+    bit: date | None = None,
+    birim: str | None = Query(default=None, max_length=20),
+    kullanici_id: int | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """İş KPI'larının listesi (farklı iş, süre kaydı eksik); sayı = `X-Toplam-Kayit`."""
+    f = await _suzgec(
+        db, clock, user, bas=bas, bit=bit, birim=birim, kullanici_id=kullanici_id,
+        faaliyet=None,
+    )  # fmt: skip
+    try:
+        stmt = svc.kpi_is_sorgusu(user, f, kpi)
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    return await svc.is_satirlari(db, [s[0] for s in satirlar])
+
+
+_KAYIT_SUTUNLARI = [
+    export_svc.Sutun("İş No"),
+    export_svc.Sutun("Birim"),
+    export_svc.Sutun("Faaliyet"),
+    export_svc.Sutun("Bekleme Nedeni"),
+    export_svc.Sutun("Başlangıç", "zaman"),
+    export_svc.Sutun("Bitiş", "zaman"),
+    export_svc.Sutun("Süre (dk)", "tamsayi"),
+    export_svc.Sutun("Kaynak"),
+    export_svc.Sutun("Kapanış"),
+    export_svc.Sutun("Girildi", "zaman"),
+    export_svc.Sutun("Gecikmeli Manuel"),
+]
+_KAYIT_KISI_SUTUNLARI = [
+    export_svc.Sutun("Personel"),
+    export_svc.Sutun("Konum Notu"),
+    export_svc.Sutun("Gerekçe"),
+]
+_PERSONEL_SUTUNLARI = [
+    export_svc.Sutun("Personel"),
+    export_svc.Sutun("Kişi-saat (dk)", "tamsayi"),
+    export_svc.Sutun("Yol (dk)", "tamsayi"),
+    export_svc.Sutun("Saha (dk)", "tamsayi"),
+    export_svc.Sutun("Bekleme (dk)", "tamsayi"),
+    export_svc.Sutun("Mola (dk, hariç)", "tamsayi"),
+    export_svc.Sutun("İş Sayısı", "tamsayi"),
+    export_svc.Sutun("Canlı Oranı (%)", "ondalik"),
+    export_svc.Sutun("Manuel", "tamsayi"),
+    export_svc.Sutun("Gecikmeli Manuel", "tamsayi"),
+    export_svc.Sutun("Düzeltilen", "tamsayi"),
+    export_svc.Sutun("İptal", "tamsayi"),
+    export_svc.Sutun("Geri Alınan", "tamsayi"),
+]
+
+
+@router.get("/zaman/kayitlar.xlsx")
+async def zaman_excel(
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporAktarici,
+    kpi: KayitKpi | None = None,
+    bas: date | None = None,
+    bit: date | None = None,
+    birim: str | None = Query(default=None, max_length=20),
+    kullanici_id: int | None = None,
+    faaliyet: str | None = Query(default=None, max_length=20),
+) -> Response:
+    """Ekranla AYNI süzgeç: "Süre Kayıtları" + "Özet" (+ izinliyse "Personel").
+
+    Kayıt yoksa süre hücresi BOŞ (0 değil). Formül enjeksiyonu kapalı
+    (`export.sayfalari_xlsx_async`). Dışa aktarım denetime yazılır; kişi
+    sütunu/sayfası varsa `is_personal_data=True`.
+    """
+    f = await _suzgec(
+        db, clock, user, bas=bas, bit=bit, birim=birim, kullanici_id=kullanici_id,
+        faaliyet=faaliyet,
+    )  # fmt: skip
+    stmt = (
+        await svc.kpi_kayit_sorgusu(db, user, f, kpi, clock)
+        if kpi is not None
+        else svc.kayit_sorgusu(user, f)
+    )
+    adet, _ = await svc.adet_ve_dakika(db, stmt)
+    if adet > svc.ZAMAN_EXCEL_UST_SINIR:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"{adet} kayıt var; Excel en çok {svc.ZAMAN_EXCEL_UST_SINIR} satır alır, "
+            "süzgeci daraltın",
+        )
+    personel = _personel_mi(user)
+    bolumler = (
+        await db.scalars(stmt.order_by(ServiceTimeEntry.started_at, ServiceTimeEntry.id))
+    ).all()
+    satirlar = await svc.kayit_satirlari(db, bolumler, clock)
+    tablo = []
+    for s in satirlar:
+        satir = [
+            s["so_no"],
+            BIRIMLER.get(s["birim"], s["birim"]),
+            svc.FAALIYET_ADLARI.get(s["faaliyet"], s["faaliyet"]),
+            s["bekleme_nedeni"],
+            s["started_at"],
+            s["ended_at"],
+            s["sure_dk"],
+            s["kaynak"],
+            s["kapanis_turu"],
+            s["girildi_at"],
+            "Evet" if s["gecikmeli"] else "",
+        ]
+        if personel:
+            satir += [s["kisi_adi"], s["konum_notu"], s["gerekce"]]
+        tablo.append(satir)
+    ozet = await svc.zaman_ozeti(db, user, f, clock)
+    ozet_satirlari = [[k["baslik"], k["deger"], k["adet"], k["tanim"]] for k in ozet]
+    sayfalar = [
+        export_svc.Sayfa(
+            "Süre Kayıtları",
+            list(_KAYIT_SUTUNLARI) + (list(_KAYIT_KISI_SUTUNLARI) if personel else []),
+            tablo,
+        ),
+        export_svc.Sayfa(
+            "Özet",
+            [
+                export_svc.Sutun("Gösterge"),
+                export_svc.Sutun("Değer", "ondalik"),
+                export_svc.Sutun("Kayıt Sayısı", "tamsayi"),
+                export_svc.Sutun("Tanım"),
+            ],
+            ozet_satirlari,
+        ),
+    ]
+    if personel:
+        kisiler = await svc.personel_dagilimi(db, user, f)
+        sayfalar.append(
+            export_svc.Sayfa(
+                "Personel",
+                list(_PERSONEL_SUTUNLARI),
+                [
+                    [
+                        k["ad"],
+                        k["kisi_saat_dk"],
+                        k["yol_dk"],
+                        k["saha_dk"],
+                        k["bekleme_dk"],
+                        k["mola_dk"],
+                        k["is_sayisi"],
+                        k["canli_orani"],
+                        k["manuel_sayisi"],
+                        k["gecikmeli_manuel_sayisi"],
+                        k["duzeltilen_sayisi"],
+                        k["iptal_sayisi"],
+                        k["geri_alinan_sayisi"],
+                    ]
+                    for k in kisiler
+                ],
+            )
+        )
+    icerik = await export_svc.sayfalari_xlsx_async(sayfalar)
+    await audit.log(
+        db,
+        "service_time_entries",
+        "zaman.disa_aktar",
+        new_value={**f.iso(), "kpi": kpi, "satir": len(tablo), "personel_sayfasi": personel},
+        user_id=user.id,
+        ip=client_ip(request),
+        is_personal_data=personel,
+    )
+    await db.commit()
+    return Response(
+        content=icerik,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="zaman-takibi-{f.bas:%Y%m%d}-{f.bit:%Y%m%d}.xlsx"'
+            ),
+            TOPLAM_BASLIGI: str(len(tablo)),
+        },
+    )

@@ -23,6 +23,47 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, type ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
+/** Cihazın MOBILITE/ARAC_TAKIP servis işleri (TS-193): IMEI/seri ile okuma
+ * anında eşleşir; `devices`'a yazılmaz. Yalnız `servis.gor` sahibine görünür. */
+interface CihazServisIsi {
+  id: number;
+  so_no: string;
+  birim: string;
+  status: string;
+  konu: string;
+  created_at: string;
+}
+
+function CihazServisIsleri({ cihazId }: { cihazId: number }) {
+  const navigate = useNavigate();
+  const isler = useQuery({
+    queryKey: ["cihaz-servis-isleri", cihazId],
+    queryFn: () =>
+      api.getSayfa<CihazServisIsi>(`/api/teknik-servis/cihaz-servis-isleri?cihaz_id=${cihazId}&limit=20`),
+  });
+  return (
+    <Card size="small" title={`Servis işleri${isler.data ? ` (${isler.data.toplam})` : ""}`}>
+      {isler.data && isler.data.kayitlar.length === 0 ? (
+        <Typography.Text type="secondary">Bu cihaz için servis işi yok</Typography.Text>
+      ) : (
+        <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+          {(isler.data?.kayitlar ?? []).map((s) => (
+            <Space key={s.id} size={6} wrap>
+              <Typography.Link className="mono" onClick={() => navigate(`/servis-isleri/${s.id}`)}>
+                {s.so_no}
+              </Typography.Link>
+              <Tag>{s.status.replaceAll("_", " ")}</Tag>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {dayjs(s.created_at).format("DD.MM.YYYY")} · {s.konu}
+              </Typography.Text>
+            </Space>
+          ))}
+        </Space>
+      )}
+    </Card>
+  );
+}
+
 interface Cihaz {
   id: number;
   imei: string | null;
@@ -465,6 +506,8 @@ export default function CihazlarPage() {
                 />
               )}
             </Card>
+
+            {yetkili("servis.gor") && <CihazServisIsleri cihazId={k.id} />}
           </Space>
         )}
       </Drawer>

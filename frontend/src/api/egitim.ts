@@ -431,4 +431,94 @@ export const egitimApi = {
   kendim: () => api.get<KisiKarti>(`${E}/kendim`),
   gordum: (gozlemId: number, yorum?: string) =>
     api.post<{ id: number; gordu_at: string }>(`${E}/kendim/gordum`, { gozlem_id: gozlemId, yorum: yorum || null }),
+
+  // --- TS-198: etkinlik raporu, kurs↔yetkinlik, yetkinlik eşlemesi --------------
+  etkinlik: (p: Parametre) => api.get<EtkinlikRaporu>(`${E}/rapor/etkinlik${sorgu(p)}`),
+  etkinlikExcelYolu: (p: Parametre) => `${E}/rapor/etkinlik.xlsx${sorgu(p)}`,
+  kursYetkinlikleri: (kursId: number) =>
+    api.get<YetkinlikOzeti[]>(`${E}/kurs-yetkinlikleri${sorgu({ kurs_id: kursId })}`),
+  kursYetkinlikBagla: (kursId: number, yetkinlikIdler: number[]) =>
+    api.put<YetkinlikOzeti[]>(`${E}/kurs-yetkinlikleri`, {
+      kurs_id: kursId,
+      yetkinlik_idler: yetkinlikIdler,
+    }),
+  yenidenDegerlendir: (p: Parametre, limit: number, offset: number) =>
+    api.getSayfa<YenidenDegerlendirSatiri>(
+      `${E}/yeniden-degerlendirilecekler${sorgu({ ...p, limit, offset })}`,
+    ),
+  gereksinimler: (p: Parametre) =>
+    api.get<Gereksinim[]>(`${E}/yetkinlik-gereksinimleri${sorgu(p)}`),
+  gereksinimKaydet: (g: {
+    birim: string;
+    tur: string;
+    satirlar: { competency_id: number; min_seviye: number; course_id?: number | null }[];
+  }) => api.put<Gereksinim[]>(`${E}/yetkinlik-gereksinimleri`, g),
 };
+
+// --- TS-198 tipleri -------------------------------------------------------------
+
+export interface AsamaHucresi {
+  adet: number;
+  basarili: number;
+  /** Veri yoksa null ("veri yok"); 0 yazılmaz. */
+  basari_orani: number | null;
+  ortalama: number | null;
+}
+
+export interface EtkinlikSatiri {
+  course_id: number;
+  kurs_kod: string | null;
+  kurs: string | null;
+  birim: string | null;
+  asamalar: Record<string, AsamaHucresi>;
+  fark_0_90: number | null;
+  fark_metni: string | null;
+  sinav_on_ort: number | null;
+  sinav_son_ort: number | null;
+  sinav_fark: number | null;
+  kritik_acik: number;
+  kritik_kapali: number;
+  takip_zamani_gelen: number;
+  takip_yapilan: number;
+  takip_uyum_yuzde: number | null;
+  egitim_kisi_saat: number | null;
+}
+
+export interface EtkinlikRaporu {
+  yil: number;
+  birim: string | null;
+  kurs_id: number | null;
+  satirlar: EtkinlikSatiri[];
+}
+
+export interface YetkinlikOzeti {
+  id: number;
+  kod: string;
+  ad: string;
+  birim: string | null;
+  kritik: boolean;
+  aktif: boolean;
+}
+
+export interface YenidenDegerlendirSatiri {
+  user_id: number;
+  ad: string;
+  competency_id: number;
+  kod: string;
+  yetkinlik: string;
+  kritik: boolean;
+  gozlem_tarihi: string;
+  kurslar: string | null;
+}
+
+export interface Gereksinim {
+  id: number;
+  birim: string;
+  tur: string;
+  competency_id: number;
+  kod: string;
+  yetkinlik: string;
+  min_seviye: number;
+  course_id: number | null;
+  version: number;
+}

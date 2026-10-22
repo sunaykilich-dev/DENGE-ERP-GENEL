@@ -80,4 +80,22 @@ from app.services.teknik_servis import egitim_rapor  # noqa: F401
 from app.services.teknik_servis import ad_esleme  # noqa: F401
 from app.services.teknik_servis import veri_kalitesi  # noqa: F401
 
-# --- Dalga 3+ (D3-S buraya ekler) ---------------------------------------------------
+# --- Dalga 3 (D3-S sıraladı) ------------------------------------------------------------
+# Rapor/KPI kayıt defteri önce (D3-A); diğer paketlerin KPI kayıtları
+# (bakım, eğitim — D3-E) kendi modüllerinden bu defterin arayüzüyle yapılır.
+from app.services.teknik_servis import rapor_tanimlari  # noqa: F401
+from app.services.teknik_servis import rapor_motoru  # noqa: F401
+from app.services.teknik_servis import rapor_hesap  # noqa: F401
+from app.services.teknik_servis import rapor_excel  # noqa: F401
+from app.services.teknik_servis import rapor_kalite  # noqa: F401
+
+# E-posta bildirimi (D3-F)
+from app.services.teknik_servis import eposta  # noqa: F401
+
+# Bakım/fatura devri raporları ve kiralık sayım (D3-E / D3-D; bütünleştirme):
+# bakım KPI'ları rapor motoruna API yüklenmeden de (worker, servis bağlamı) kaydolsun.
+from app.services.teknik_servis import bakim_raporlari  # noqa: F401
+from app.services.teknik_servis import fatura_devri  # noqa: F401
+from app.services.teknik_servis import kiralik_sayim  # noqa: F401
+
+# --- Dalga 4+ (D4-S buraya ekler) ---------------------------------------------------

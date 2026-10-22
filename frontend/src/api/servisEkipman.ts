@@ -173,8 +173,59 @@ export interface EkipmanSuzgeci {
   serviste?: boolean;
   pasifler_dahil?: boolean;
   kpi?: string;
+  /** Veri kalitesi listesi (TS-188): seri_eksik, lokasyonsuz, hesapsiz, … */
+  kalite?: string;
   hesap_id?: number;
   sozlesme_id?: number;
+}
+
+/** Ekipman veri kalitesi kutusu; `liste` kutunun açtığı listeyi söyler. */
+export interface KaliteKutusu {
+  kod: string;
+  baslik: string;
+  tanim: string;
+  liste: "liste" | "mukerrer" | "saha";
+  deger: number;
+}
+
+export interface MukerrerGrup {
+  tip: string;
+  seri_anahtari: string;
+  adet: number;
+  kayitlar: {
+    id: number;
+    birim: string;
+    brand: string | null;
+    model: string | null;
+    serial_no: string | null;
+    hesap_unvan: string | null;
+    lokasyon_adi: string | null;
+    il: string | null;
+    lifecycle_status: string;
+    created_at: string;
+  }[];
+}
+
+export interface SahaFarki {
+  sonuc_id: number;
+  so_id: number;
+  so_no: string;
+  birim: string;
+  tur: string;
+  ekipman_id: number | null;
+  kutuk_seri: string | null;
+  kutuk_bolge: string | null;
+  saha_seri: string | null;
+  saha_bolge: string | null;
+  teknisyen_id: number | null;
+  teknisyen: string | null;
+  tarih: string;
+}
+
+export interface BirlestirmeEngelleri {
+  sozlesme_kalemleri: { id: number; sozlesme_no: string }[];
+  servis_isleri: { id: number; so_no: string }[];
+  atolye_kayitlari: { id: number; atolye_no: string }[];
 }
 
 /** 409/400 gövdesindeki nesneyi (mükerrer listesi, geçersiz geçiş) taşıyan hata. */
@@ -263,4 +314,20 @@ export const ekipmanApi = {
     detayli<EkipmanSatiri[]>(`${URL_}/toplu-durum`, "POST", govde),
   topluGaranti: (govde: { idler?: number[] | null }, uygula: boolean) =>
     detayli<GarantiSonucu>(`${URL_}/garanti/toplu-hesapla?uygula=${uygula}`, "POST", govde),
+
+  // --- Veri kalitesi, birleştirme, saha farkı (TS-188 / TS-191) ---
+  veriKalitesi: () => api.get<KaliteKutusu[]>(`${URL_}/veri-kalitesi`),
+  mukerrerGruplar: (limit: number, offset: number) =>
+    api.getSayfa<MukerrerGrup>(`${URL_}/mukerrer-gruplar?limit=${limit}&offset=${offset}`),
+  sahaFarklari: (limit: number, offset: number) =>
+    api.getSayfa<SahaFarki>(`${URL_}/saha-farklari?limit=${limit}&offset=${offset}`),
+  sahaUygula: (soId: number) =>
+    detayli<EkipmanKarti>(`${URL_}/saha-farklari/${soId}/uygula`, "POST", {}),
+  sahaYoksay: async (soId: number, gerekce: string) => {
+    await api.post<void>(`${URL_}/saha-farklari/${soId}/yoksay`, { gerekce });
+  },
+  birlestirmeEngelleri: (id: number) =>
+    api.get<BirlestirmeEngelleri>(`${URL_}/${id}/birlestirme-engelleri`),
+  birlestir: (ikincilId: number, anaId: number, gerekce: string) =>
+    detayli<EkipmanKarti>(`${URL_}/${ikincilId}/birlestir`, "POST", { ana_id: anaId, gerekce }),
 };

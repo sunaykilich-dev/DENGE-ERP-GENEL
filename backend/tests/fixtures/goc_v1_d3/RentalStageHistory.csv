@@ -1,0 +1,4 @@
+RentalStageHistoryId,RentalOrderId,StageName,EventAt
+31,11,Sevk Edildi,2026-01-01T09:00:00
+32,12,Sevk Edildi,2026-02-01T09:00:00
+33,12,Devreye Alındı,2026-02-01T15:00:00

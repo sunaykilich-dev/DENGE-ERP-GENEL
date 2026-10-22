@@ -10,6 +10,10 @@ Doldurdu: D2-G. `main.py` kaydı D2-S'tedir.
 - `/operasyon/isler/{so_id}/kapanis-bilgisi`: `servis.kapat` VEYA `servis.tamamla`
   (gecikme nedeni / tekrar arıza teyidi; kapalı işte yalnız `servis.kapat`).
 - `/sla-tanimlari/...`: okuma `servis.gor`, politika yazma `operasyon.yonet`.
+- `/bildirim-tercihlerim` (GET/PUT): `servis.gor`; YALNIZ oturumdaki kişinin
+  satırı (yolda kimlik yok → başkasının tercihine erişim yolu yok). TS-200.
+- `/bildirimler/eposta-kutusu`, `/bildirimler/eposta-ayarlari`: `operasyon.yonet`
+  (giden kutusu kişisel veri — alıcı adresi — içerir; SMTP sırları DÖNMEZ).
 
 Kapsam: liste/sayaç SQL'de (`kapsam.kapsam_isler`); `{so_id}` uçlarında kapsam
 dışı iş 404 ve HİÇBİR yazma yapılmaz (kapsam yazmadan önce çözülür). Bu
@@ -40,6 +44,8 @@ from app.api.deps import (
 from app.models import (
     ServiceAlert,
     ServiceAlertRead,
+    ServiceMailOutbox,
+    ServiceNotificationPref,
     ServiceOrder,
     ServiceSlaPolicy,
     User,
@@ -52,7 +58,7 @@ from app.models.teknik_servis import (
     TEKRAR_ARIZA_TEYITLERI,
 )
 from app.permissions import BIRIMLER
-from app.services import audit
+from app.services import audit, mail
 from app.services import settings as ayarlar
 from app.services.teknik_servis import (
     gecmis,
@@ -483,6 +489,179 @@ async def kapanis_bilgisi(
     cikti = await _sla_detayi(db, so, user, clock)
     await db.commit()
     return cikti
+
+
+# --- E-posta bildirimi (TS-200, E10-06) ---------------------------------------------------
+
+
+class TercihIn(BaseModel):
+    """Kişinin kendi servis e-posta tercihi (yalnız kendi satırı)."""
+
+    anlik_eposta: bool
+    gunluk_ozet: bool
+
+    model_config = {
+        "json_schema_extra": {"examples": [{"anlik_eposta": True, "gunluk_ozet": False}]}
+    }
+
+
+class EpostaAyarIn(BaseModel):
+    """Servis e-postası genel ayarları (`operasyon.yonet`). Gönderilmeyen alan değişmez."""
+
+    servis_eposta_acik: bool | None = None
+    servis_gunluk_ozet_saati: str | None = Field(default=None, max_length=5)
+    servis_eposta_deneme: int | None = Field(default=None, ge=1, le=10)
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{"servis_eposta_acik": True, "servis_gunluk_ozet_saati": "07:30"}]
+        }
+    }
+
+
+_EPOSTA_AYARLARI = ("servis_eposta_acik", "servis_gunluk_ozet_saati", "servis_eposta_deneme")
+_KUTU_DURUMLARI = ("BEKLIYOR", "GONDERILDI", "BASARISIZ")
+
+
+async def _tercih_cikti(db, user: User) -> dict[str, Any]:
+    tercih = await db.get(ServiceNotificationPref, user.id)
+    return {
+        "anlik_eposta": bool(tercih.anlik_eposta) if tercih else False,
+        "gunluk_ozet": bool(tercih.gunluk_ozet) if tercih else False,
+        # Kişinin kendi adresinin VAR OLUP OLMADIĞI (adresin kendisi değil).
+        "eposta_tanimli": bool((user.email or "").strip()),
+        "servis_eposta_acik": bool(await ayarlar.get(db, "servis_eposta_acik")),
+        "gunluk_ozet_saati": await ayarlar.get(db, "servis_gunluk_ozet_saati"),
+    }
+
+
+@router.get("/bildirim-tercihlerim", response_model=None)
+async def tercihlerim(db: DbDep, user: Okuyucu) -> dict[str, Any]:
+    """Kendi e-posta tercihim. Satır yoksa ikisi de kapalı (varsayılan e-posta yok)."""
+    return await _tercih_cikti(db, user)
+
+
+@router.put("/bildirim-tercihlerim", response_model=None)
+async def tercihlerim_yaz(
+    payload: TercihIn, request: Request, db: DbDep, user: Okuyucu
+) -> dict[str, Any]:
+    """Kendi tercihimi yazar (başkasının satırına yol yok: kimlik oturumdan)."""
+    tercih = await db.get(ServiceNotificationPref, user.id)
+    eski = (
+        {"anlik_eposta": tercih.anlik_eposta, "gunluk_ozet": tercih.gunluk_ozet}
+        if tercih
+        else {"anlik_eposta": False, "gunluk_ozet": False}
+    )
+    yeni = {"anlik_eposta": payload.anlik_eposta, "gunluk_ozet": payload.gunluk_ozet}
+    if eski != yeni:
+        if tercih is None:
+            db.add(ServiceNotificationPref(user_id=user.id, **yeni))
+        else:
+            tercih.anlik_eposta = payload.anlik_eposta
+            tercih.gunluk_ozet = payload.gunluk_ozet
+        await audit.log(
+            db,
+            "service_notification_prefs",
+            "servis.bildirim_tercihi",
+            entity_id=user.id,
+            old_value=eski,
+            new_value=yeni,
+            user_id=user.id,
+            ip=client_ip(request),
+        )
+        await db.commit()
+    return await _tercih_cikti(db, user)
+
+
+@router.get("/bildirimler/eposta-kutusu", response_model=None)
+async def eposta_kutusu(
+    response: Response,
+    db: DbDep,
+    user: Yonetici,
+    durum: str | None = None,
+    tur: str | None = None,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Servis e-posta kutusu (yönetici görünümü; en yeni önce). Gövde dönmez.
+
+    `alici` kişisel veridir; bu görünüm yalnız `operasyon.yonet` içindir.
+    """
+    if durum is not None and durum not in _KUTU_DURUMLARI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen durum: {durum}")
+    if tur is not None and tur not in ("ANLIK", "GUNLUK_OZET"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen tür: {tur}")
+    stmt = select(ServiceMailOutbox, User.full_name).join(
+        User, User.id == ServiceMailOutbox.user_id
+    )
+    if durum:
+        stmt = stmt.where(ServiceMailOutbox.durum == durum)
+    if tur:
+        stmt = stmt.where(ServiceMailOutbox.tur == tur)
+    stmt = stmt.order_by(ServiceMailOutbox.created_at.desc(), ServiceMailOutbox.id.desc())
+    satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    return [
+        {
+            "id": k.id,
+            "tur": k.tur,
+            "alert_id": k.alert_id,
+            "ozet_gunu": k.ozet_gunu,
+            "kullanici": {"id": k.user_id, "ad": ad},
+            "alici": k.alici,
+            "konu": k.konu,
+            "durum": k.durum,
+            "deneme": k.deneme,
+            "son_hata": k.son_hata,
+            "created_at": k.created_at,
+            "gonderildi_at": k.gonderildi_at,
+        }
+        for k, ad in satirlar
+    ]
+
+
+async def _eposta_ayar_cikti(db) -> dict[str, Any]:
+    tum = await ayarlar.get_all(db)
+    return {
+        **{a: tum.get(a) for a in _EPOSTA_AYARLARI},
+        # SMTP'nin TANIMLI olup olmadığı; sunucu/kullanıcı/parola dönmez.
+        "smtp_tanimli": mail.yapilandirildi_mi(tum),
+    }
+
+
+@router.get("/bildirimler/eposta-ayarlari", response_model=None)
+async def eposta_ayarlari(db: DbDep, user: Yonetici) -> dict[str, Any]:
+    return await _eposta_ayar_cikti(db)
+
+
+@router.put("/bildirimler/eposta-ayarlari", response_model=None)
+async def eposta_ayarlari_yaz(
+    payload: EpostaAyarIn, request: Request, db: DbDep, user: Yonetici
+) -> dict[str, Any]:
+    """Servis e-postasını açar/kapatır, özet saatini ve deneme sınırını yazar.
+
+    SMTP ayarları burada YOK (Parametreler → Bildirim, `sistem.ayar`).
+    """
+    istenen = {a: v for a, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    if not istenen:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Değiştirilecek ayar yok")
+    onceki = {a: await ayarlar.get(db, a) for a in istenen}
+    degisen = {a: v for a, v in istenen.items() if onceki[a] != v}
+    if degisen:
+        try:
+            await ayarlar.set_many(db, degisen, user.id)
+        except KeyError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        await audit.log(
+            db,
+            "settings",
+            "servis.eposta_ayari",
+            old_value={a: onceki[a] for a in degisen},
+            new_value=degisen,
+            user_id=user.id,
+            ip=client_ip(request),
+        )
+        await db.commit()
+    return await _eposta_ayar_cikti(db)
 
 
 # --- SLA tanımları ------------------------------------------------------------------------

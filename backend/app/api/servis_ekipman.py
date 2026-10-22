@@ -398,6 +398,7 @@ def _suzgec(
     serviste: bool | None = None,
     pasifler_dahil: bool = False,
     kpi: str | None = None,
+    kalite: str | None = Query(default=None, description="Veri kalitesi listesi (TS-188)"),
     ids: str | None = Query(default=None, description="Virgülle ayrılmış ekipman kimlikleri"),
 ) -> EkipmanSuzgeci:
     idler: list[int] | None = None
@@ -424,10 +425,21 @@ def _suzgec(
         pasifler_dahil=pasifler_dahil,
         kpi=kpi,
         idler=idler,
+        kalite=kalite,
     )
 
 
-Suzgec = Annotated[EkipmanSuzgeci, Depends(_suzgec)]
+async def _esikli_suzgec(db: DbDep, s: Annotated[EkipmanSuzgeci, Depends(_suzgec)]):
+    """Analitik KPI eşikleri ayardan yüklenir (liste, özet ve Excel aynı eşik)."""
+    if s.kalite is not None and s.kalite not in svc.KALITE_KODLARI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen kalite kodu: {s.kalite}")
+    if s.kpi is not None and s.kpi not in svc.KPI_KODLARI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen KPI kodu: {s.kpi}")
+    s.esikler = await svc.kpi_esikleri(db)
+    return s
+
+
+Suzgec = Annotated[EkipmanSuzgeci, Depends(_esikli_suzgec)]
 
 
 def _sorgu(user: User, s: EkipmanSuzgeci, clock):
@@ -624,6 +636,91 @@ async def toplu_garanti(
     return sonuc
 
 
+# --- Veri kalitesi, mükerrer gruplar, saha farkları (TS-188, TS-191) ---------------
+
+
+class KaliteOut(BaseModel):
+    kod: str
+    baslik: str
+    tanim: str
+    liste: str
+    deger: int
+
+
+@router.get("/veri-kalitesi", response_model=list[KaliteOut])
+async def veri_kalitesi(db: DbDep, clock: ClockDep, user: Okuyucu) -> list[dict[str, Any]]:
+    """Ekipman veri kalitesi sayıları (salt okuma). `liste='liste'` olan kod
+    `GET /ekipman?kalite=<kod>`'a, `mukerrer` `/mukerrer-gruplar`'a, `saha`
+    `/saha-farklari`'na gider; her sayı o listenin `X-Toplam-Kayit`'ıdır."""
+    return await svc.kalite_ozeti(db, user, clock)
+
+
+@router.get("/mukerrer-gruplar")
+async def mukerrer_gruplar(
+    db: DbDep,
+    user: Okuyucu,
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Mükerrer seri grupları (sayfalı); `X-Toplam-Kayit` = grup sayısı."""
+    toplam, gruplar = await svc.mukerrer_gruplari(db, user, limit=limit, offset=offset)
+    response.headers["X-Toplam-Kayit"] = str(toplam)
+    return gruplar
+
+
+@router.get("/saha-farklari")
+async def saha_farklari(
+    db: DbDep,
+    user: Okuyucu,
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """Sahadan gelen, karar bekleyen kütük farkları (işin kapsamıyla süzülür)."""
+    satirlar = await sayfala(
+        db, response, svc.saha_farklari_sorgusu(user), limit=limit, offset=offset
+    )
+    return await svc.saha_farki_satirlari(db, list(satirlar))
+
+
+async def _is(db: AsyncSession, so_id: int):
+    from app.models import ServiceOrder
+
+    so = await db.get(ServiceOrder, so_id)
+    if so is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis işi bulunamadı")
+    return so
+
+
+@router.post("/saha-farklari/{so_id}/uygula", response_model=EkipmanKarti)
+async def saha_farki_uygula(
+    so_id: int, request: Request, db: DbDep, clock: ClockDep, user: Yazici
+) -> EkipmanKarti:
+    """Sahadaki seri/bölgeyi kütüğe yazar. Hedef seri başka aktif kayıttaysa 409."""
+    so = await _is(db, so_id)
+    try:
+        e = await svc.saha_farki_uygula(db, so, user=user, ip=client_ip(request))
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await db.commit()
+    await db.refresh(e)
+    return await _kart(db, e, user, clock)
+
+
+@router.post("/saha-farklari/{so_id}/yoksay", status_code=status.HTTP_204_NO_CONTENT)
+async def saha_farki_yoksay(
+    so_id: int, payload: GerekceIn, request: Request, db: DbDep, user: Yazici
+) -> None:
+    """Farkı gerekçeyle kapatır; kütük değişmez, gerekçe geçmişe yazılır."""
+    so = await _is(db, so_id)
+    try:
+        await svc.saha_farki_yoksay(db, so, payload.gerekce, user=user, ip=client_ip(request))
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await db.commit()
+
+
 # --- Yazma -----------------------------------------------------------------------
 
 
@@ -762,6 +859,50 @@ async def durum(
     await db.commit()
     await db.refresh(e)
     return await _kart(db, e, user, clock, uyarilar=await svc.acik_is_uyarilari(db, e))
+
+
+class BirlestirIn(BaseModel):
+    ana_id: int
+    gerekce: str = Field(max_length=500)
+
+    model_config = {
+        "json_schema_extra": {"examples": [{"ana_id": 1, "gerekce": "Aynı cihaz iki kez açılmış"}]}
+    }
+
+
+@router.get("/{ekipman_id}/birlestirme-engelleri")
+async def birlestirme_engelleri(
+    ekipman_id: int, db: DbDep, clock: ClockDep, user: Okuyucu
+) -> dict[str, list]:
+    """Birleştirme penceresinin ön kontrolü: ikincile bağlı açık bağlar (salt okuma)."""
+    e = await _ekipman(db, user, ekipman_id)
+    return await svc.birlestirme_engelleri(db, e, clock.now())
+
+
+@router.post("/{ekipman_id}/birlestir", response_model=EkipmanKarti)
+async def birlestir(
+    ekipman_id: int,
+    payload: BirlestirIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yazici,
+) -> EkipmanKarti:
+    """`ekipman_id` (ikincil) kaydı `ana_id`'ye birleştirir (TS-191, E03-13).
+
+    İkincile bağlı açık sözleşme kalemi / servis işi / atölye kaydı varsa 409 +
+    liste ve hiçbir şey değişmez. Yanıt ANA kaydın kartıdır.
+    """
+    e = await _ekipman(db, user, ekipman_id)
+    try:
+        ana = await svc.birlestir(
+            db, e, payload.ana_id, payload.gerekce, user=user, clock=clock, ip=client_ip(request)
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await db.commit()
+    await db.refresh(ana)
+    return await _kart(db, ana, user, clock)
 
 
 @router.get(

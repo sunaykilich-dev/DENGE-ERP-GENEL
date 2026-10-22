@@ -139,7 +139,9 @@ async def test_her_kutu_sayisi_liste_toplamina_esit(client, veri):
         r = await client.get("/api/teknik-servis/panel")
         assert r.status_code == 200, r.text
         kutular = _kutular(r.json())
-        assert set(kutular) == {k for k, t in panel.KPI_TANIMLARI.items() if t.grup != "UYARI"}
+        assert set(kutular) == {
+            k for k, t in panel.KPI_TANIMLARI.items() if t.grup not in panel.PANEL_DISI_GRUPLAR
+        }
         for kod, kutu in kutular.items():
             assert kutu["yol"].startswith(f"/servis-isleri?kpi={kod}")
             assert kutu["deger"] == await _liste_toplami(client, kod), (kullanici, kod)

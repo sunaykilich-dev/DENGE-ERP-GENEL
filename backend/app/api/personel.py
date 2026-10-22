@@ -75,6 +75,8 @@ class PersonelOut(BaseModel):
     birincil_birim: str | None = None
     rol: RolOzet
     version: int
+    # TS-199: doğrudan yönetici; kapsam dışıysa `{"id": null, "ad": "Kapsam dışı kişi"}`.
+    yonetici: dict[str, Any] | None = None
     # personel.yaz:
     email: str | None = None
     username: str | None = None
@@ -112,6 +114,15 @@ class PersonelPatch(BaseModel):
     ise_giris_tarihi: date | None = None
     personel_notu: str | None = Field(default=None, max_length=2000)
     # İyimser kilit ZORUNLU: iki İK uzmanı aynı kartı ezmesin.
+    version: int
+
+
+class YoneticiIn(BaseModel):
+    """Doğrudan yönetici (TS-199); `null` ilişkiyi kaldırır. Sürüm zorunlu."""
+
+    model_config = {"json_schema_extra": {"examples": [{"yonetici_id": 12, "version": 3}]}}
+
+    yonetici_id: int | None = None
     version: int
 
 
@@ -227,7 +238,7 @@ async def _kapsamli_personel(db, personel_id: int, user: User) -> User:
     return kisi
 
 
-def _cikti(kisi: User, *, tam: bool) -> dict[str, Any]:
+def _cikti(kisi: User, *, tam: bool, yonetici: dict[str, Any] | None = None) -> dict[str, Any]:
     out = PersonelOut(
         id=kisi.id,
         full_name=kisi.full_name,
@@ -243,6 +254,7 @@ def _cikti(kisi: User, *, tam: bool) -> dict[str, Any]:
         birincil_birim=kisi.birincil_birim,
         rol=RolOzet(code=kisi.role.code, name=kisi.role.name),
         version=kisi.version,
+        yonetici=yonetici,
         email=kisi.email,
         username=kisi.username,
         personel_notu=kisi.personel_notu,
@@ -269,10 +281,15 @@ async def listele(
     saha_rolu: str | None = None,
     durum: str | None = Query(default=None, description="CALISIYOR | AYRILDI"),
     giris: str | None = Query(default=None, description="ACIK | KAPALI"),
+    ekibim: bool = Query(default=False, description="Yalnız doğrudan bağlılarım (TS-199)"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict[str, Any]]:
-    """Personel listesi (kapsamlı, sayfalı; toplam `X-Toplam-Kayit`)."""
+    """Personel listesi (kapsamlı, sayfalı; toplam `X-Toplam-Kayit`).
+
+    `ekibim=true`: doğrudan bağlı çalışan personel; kapsam süzgecinden sonra
+    uygulanır (yetki genişletmez). Satırlarda ek olarak `acik_sayac_var`.
+    """
     try:
         stmt = svc.personel_sorgusu(
             user,
@@ -282,12 +299,19 @@ async def listele(
             saha_rolu=saha_rolu,
             durum=durum,
             giris=giris,
+            ekibim=ekibim,
         )
     except _SERVIS_HATALARI as exc:
         raise _hata(exc) from exc
     tam = user.has("personel.yaz")
-    satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
-    return [_cikti(k, tam=tam) for (k,) in satirlar]
+    kisiler = [k for (k,) in await sayfala(db, response, stmt, limit=limit, offset=offset)]
+    yoneticiler = await svc.yonetici_ozetleri(db, user, kisiler)
+    cikti = [_cikti(k, tam=tam, yonetici=yoneticiler.get(k.id)) for k in kisiler]
+    if ekibim:
+        sahada = await svc.acik_sayaclilar(db, [k.id for k in kisiler])
+        for satir in cikti:
+            satir["acik_sayac_var"] = satir["id"] in sahada
+    return cikti
 
 
 @router.get("/ozet", response_model=list[KpiOut])
@@ -307,6 +331,7 @@ async def disa_aktar(
     saha_rolu: str | None = None,
     durum: str | None = None,
     giris: str | None = None,
+    ekibim: bool = False,
 ) -> Response:
     """Personel listesi Excel'i — ekrandaki süzgeçle, kapsamlı.
 
@@ -322,6 +347,7 @@ async def disa_aktar(
             saha_rolu=saha_rolu,
             durum=durum,
             giris=giris,
+            ekibim=ekibim,
         )
     except _SERVIS_HATALARI as exc:
         raise _hata(exc) from exc
@@ -371,6 +397,7 @@ async def disa_aktar(
                 "saha_rolu": saha_rolu,
                 "durum": durum,
                 "giris": giris,
+                "ekibim": ekibim,
             },
         },
         user_id=user.id,
@@ -442,7 +469,8 @@ async def olustur(payload: PersonelIn, request: Request, db: DbDep, user: Yazici
 async def getir(personel_id: int, request: Request, db: DbDep, user: Okuyucu) -> dict:
     """Personel kartı. Kişisel veri okuması KVKK erişim loguna yazılır."""
     kisi = await _kapsamli_personel(db, personel_id, user)
-    cikti = _cikti(kisi, tam=user.has("personel.yaz"))
+    yonetici = (await svc.yonetici_ozetleri(db, user, [kisi])).get(kisi.id)
+    cikti = _cikti(kisi, tam=user.has("personel.yaz"), yonetici=yonetici)
     await kvkk.erisim_kaydet(
         db,
         entity="users",
@@ -490,6 +518,35 @@ async def birimleri_yaz(
         raise _hata(exc) from exc
     await db.commit()
     return [BirimOut(**s) for s in yeni]
+
+
+@router.put("/{personel_id}/yonetici", response_model=None)
+async def yonetici_yaz(
+    personel_id: int, payload: YoneticiIn, request: Request, db: DbDep, user: Yazici
+) -> dict:
+    """Doğrudan yöneticiyi yazar/kaldırır (TS-199, E13-17).
+
+    Kapsam dışı kişi ya da yönetici 404 (hiçbir yazma yok); kendisi / döngü /
+    ayrılmış yönetici 400; sürüm 409; üst yetkili hedef (ADMIN olmayan) 403.
+    Yönetici ilişkisi YETKİ VERMEZ: "Ekibim" yalnız süzgeçtir.
+    """
+    kisi = await _kapsamli_personel(db, personel_id, user)
+    try:
+        await svc.yonetici_ata(
+            db,
+            kisi,
+            payload.yonetici_id,
+            aktor=user,
+            surum=payload.version,
+            ip=client_ip(request),
+        )
+    except _SERVIS_HATALARI as exc:
+        await db.rollback()
+        raise _hata(exc) from exc
+    await db.commit()
+    kisi = await _kapsamli_personel(db, personel_id, user)
+    yonetici = (await svc.yonetici_ozetleri(db, user, [kisi])).get(kisi.id)
+    return _cikti(kisi, tam=True, yonetici=yonetici)
 
 
 @router.post("/{personel_id}/aktiflestir", response_model=None)

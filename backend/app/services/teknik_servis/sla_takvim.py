@@ -11,6 +11,12 @@ diğeri unutulurdu. Fonksiyonlar DB okumaz; takvim/tatil verisi gerekirse
 **MESAI bu dalgada YOK** (KD-23): politika `takvim_turu='MESAI'` olamaz
 (tanım ucu 400 verir); yine de veri yoluyla gelirse burada `ServisHatasi`
 (409) atılır — sessizce 7/24 saymak hedefi yanlış damgalardı.
+
+**Dalga 3 (TS-200, D3-F):** MESAI kararı verilmedi (plan §6 KD-23 "koşullu");
+`d3a000000003` atlandı, `service_work_calendar`/`service_holidays` tabloları
+YOK. Karar gelirse tablolar zincirin sonuna ek revizyonla gelir ve
+`is_saati_ekle`/`takvim_dakika` buradan genişler (imza değişmez: takvim ve
+tatil verisi çağıran tarafından değer olarak geçirilir).
 """
 
 from __future__ import annotations

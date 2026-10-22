@@ -1,0 +1,2 @@
+ObservationId,PersonnelId,CourseId,WorkOrderId,ObservedOn,PhaseDays,CriticalFailure
+1,1,1,,2026-02-10,30,0

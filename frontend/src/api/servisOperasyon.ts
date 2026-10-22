@@ -10,7 +10,8 @@
  */
 import { api } from "./client";
 
-export const OPERASYON_ONEK = "/api/teknik-servis/operasyon";
+const TS_ONEK = "/api/teknik-servis";
+export const OPERASYON_ONEK = `${TS_ONEK}/operasyon`;
 const SLA_TANIM = "/api/teknik-servis/sla-tanimlari";
 
 export interface KodAd {
@@ -178,6 +179,38 @@ export interface PolitikaGirdisi {
   is_active: boolean;
 }
 
+/** Kendi servis e-posta tercihim (TS-200). Adresin kendisi dönmez, yalnız var/yok. */
+export interface BildirimTercihi {
+  anlik_eposta: boolean;
+  gunluk_ozet: boolean;
+  eposta_tanimli: boolean;
+  servis_eposta_acik: boolean;
+  gunluk_ozet_saati: string;
+}
+
+export interface EpostaKutusuSatiri {
+  id: number;
+  tur: "ANLIK" | "GUNLUK_OZET";
+  alert_id: number | null;
+  ozet_gunu: string | null;
+  kullanici: { id: number; ad: string };
+  alici: string;
+  konu: string;
+  durum: "BEKLIYOR" | "GONDERILDI" | "BASARISIZ";
+  deneme: number;
+  son_hata: string | null;
+  created_at: string;
+  gonderildi_at: string | null;
+}
+
+/** Servis e-postası genel ayarları; SMTP sırları dönmez, yalnız tanımlı mı. */
+export interface EpostaAyarlari {
+  servis_eposta_acik: boolean;
+  servis_gunluk_ozet_saati: string;
+  servis_eposta_deneme: number;
+  smtp_tanimli: boolean;
+}
+
 export interface OperasyonSuzgeci {
   kpi?: string;
   birim?: string;
@@ -221,6 +254,17 @@ export const operasyonApi = {
   sozluk: () => api.get<SlaSozlugu>(`${SLA_TANIM}/sozluk`),
   politikalar: () => api.get<SlaPolitikasi[]>(`${SLA_TANIM}/politikalar`),
   politikaKaydet: (g: PolitikaGirdisi) => api.put<SlaPolitikasi>(`${SLA_TANIM}/politikalar`, g),
+  tercihim: () => api.get<BildirimTercihi>(`${TS_ONEK}/bildirim-tercihlerim`),
+  tercihimYaz: (g: { anlik_eposta: boolean; gunluk_ozet: boolean }) =>
+    api.put<BildirimTercihi>(`${TS_ONEK}/bildirim-tercihlerim`, g),
+  epostaKutusu: (limit: number, offset: number, durum?: string) => {
+    const p = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (durum) p.set("durum", durum);
+    return api.getSayfa<EpostaKutusuSatiri>(`${TS_ONEK}/bildirimler/eposta-kutusu?${p}`);
+  },
+  epostaAyarlari: () => api.get<EpostaAyarlari>(`${TS_ONEK}/bildirimler/eposta-ayarlari`),
+  epostaAyarlariYaz: (g: Partial<Omit<EpostaAyarlari, "smtp_tanimli">>) =>
+    api.put<EpostaAyarlari>(`${TS_ONEK}/bildirimler/eposta-ayarlari`, g),
 };
 
 /** SLA durumu → AntD Tag rengi (yalnız görünüm). */

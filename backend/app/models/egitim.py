@@ -33,6 +33,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    PrimaryKeyConstraint,
     SmallInteger,
     String,
     Text,
@@ -51,6 +52,7 @@ from app.models.mixins import (
     VersionedMixin,
 )
 from app.models.rbac import birim_check
+from app.models.teknik_servis import SERVIS_TURLERI
 
 EGITIM_KATEGORILERI = ("TEKNIK", "ISG", "KISISEL_GELISIM", "IS_SURECI")
 PLAN_DURUMLARI = ("PLANLANDI", "ERTELENDI", "BASARISIZ_TEKRAR", "TAMAMLANDI", "IPTAL")
@@ -471,6 +473,55 @@ class PersonnelCertificate(Base, PkMixin, TimestampMixin, ActorMixin, VersionedM
     cancel_reason: Mapped[str | None] = mapped_column(String(300))
 
 
+class CourseCompetency(Base, TimestampMixin):
+    """Kurs ↔ yetkinlik bağı (E08-16 P3, TS-198; Dalga 3, D3-S).
+
+    Bağ yalnız "yeniden değerlendir" listesini besler (K18): başarılı 90. gün
+    gözlemi bağlı yetkinliği listeye düşürür; seviye KENDİLİĞİNDEN DEĞİŞMEZ.
+    Kurs/yetkinlik silinirse bağ da düşer (CASCADE).
+    """
+
+    __tablename__ = "course_competencies"
+    __table_args__ = (
+        PrimaryKeyConstraint("course_id", "competency_id", name="pk_course_competencies"),
+        Index("ix_ccmp_yetkinlik", "competency_id"),
+    )
+
+    course_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("training_courses.id", ondelete="CASCADE")
+    )
+    competency_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("competencies.id", ondelete="CASCADE")
+    )
+
+
+class ServiceCompetencyRequirement(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin):
+    """Servis işi türü → asgari yetkinlik eşlemesi (E08-22 P3, TS-198; D3-S).
+
+    Atamada YALNIZ UYARI üretir (K11): eşik altındaki teknisyen yine atanır,
+    yanıtta uyarı ve olay geçmişinde not olur. Eşleme boşsa uyarı yok.
+    `course_id` önerilen eğitimdir (uyarı metninde gösterilir).
+    """
+
+    __tablename__ = "service_competency_requirements"
+    __table_args__ = (
+        UniqueConstraint("birim", "tur", "competency_id", name="uq_scr_birim_tur_yetkinlik"),
+        CheckConstraint("min_seviye >= 1 AND min_seviye <= 4", name="ck_scr_seviye"),
+        CheckConstraint(birim_check("birim"), name="ck_scr_birim"),
+        CheckConstraint(_in("tur", SERVIS_TURLERI), name="ck_scr_tur"),
+    )
+
+    birim: Mapped[str] = mapped_column(String(20))
+    tur: Mapped[str] = mapped_column(String(20))
+    competency_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("competencies.id", ondelete="CASCADE")
+    )
+    min_seviye: Mapped[int] = mapped_column(SmallInteger)
+    course_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("training_courses.id", ondelete="SET NULL")
+    )
+
+
 __all__ = [
     "DUZELTICI_DURUMLARI",
     "DUZELTICI_KAPANIS_TURLERI",
@@ -482,7 +533,9 @@ __all__ = [
     "YETKINLIK_KAYNAKLARI",
     "Competency",
     "CompetencyAssessment",
+    "CourseCompetency",
     "PersonnelCertificate",
+    "ServiceCompetencyRequirement",
     "TrainingAttendance",
     "TrainingCorrectiveAction",
     "TrainingCourse",

@@ -159,6 +159,19 @@ async def servis_uyari_temizligi(db: AsyncSession, clock: Clock) -> str:
     return await uyari_uretimi.temizlik_gorevi(db, clock)
 
 
+async def servis_eposta(db: AsyncSession, clock: Clock) -> str:
+    """Servis SLA e-postaları: kuyruğa al → gönder → saklama (TS-200, E10-06).
+
+    `servis_eposta_acik=false` iken hiçbir satır üretmez. SMTP tanımsızken
+    kutuya DOKUNMAZ ve hata değil bilgi satırı yazar. SMTP G/Ç'si
+    `asyncio.to_thread` içinde (olay döngüsü bloklanmaz). Tekillik şemada
+    (`uq_smo_anlik`, `uq_smo_ozet`): tekrar koşan tur ikinci e-posta üretmez.
+    """
+    from app.services.teknik_servis import eposta
+
+    return await eposta.gorev(db, clock)
+
+
 GOREVLER: tuple[Gorev, ...] = (
     Gorev("cihaz-uzlastirma", timedelta(hours=24), cihaz_uzlastirma),
     Gorev("oturum-temizligi", timedelta(hours=6), oturum_temizligi),
@@ -168,6 +181,7 @@ GOREVLER: tuple[Gorev, ...] = (
     Gorev("bakim-donem-uzlastirma", timedelta(hours=24), bakim_donem_uzlastirma),
     Gorev("servis-sla-uyarilari", timedelta(minutes=5), servis_sla_uyarilari),
     Gorev("servis-uyari-temizligi", timedelta(hours=24), servis_uyari_temizligi),
+    Gorev("servis-eposta", timedelta(minutes=5), servis_eposta),
 )
 
 

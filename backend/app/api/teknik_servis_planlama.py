@@ -18,8 +18,8 @@ Kurallar (plan §1.2, §4.5):
   (talep raporda); kapsam kontrolü yine yazmadan önce yapılır.
 """
 
-from datetime import date, time
-from typing import Annotated, Any
+from datetime import date, datetime, time
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -32,7 +32,7 @@ from app.models.rbac import BIRIM_KODLARI
 from app.models.vehicle import plaka_anahtari
 from app.services import audit
 from app.services import export as export_svc
-from app.services.teknik_servis import cakisma, kapsam, planlama, takvim
+from app.services.teknik_servis import atama, cakisma, kapsam, planlama, takvim
 from app.services.teknik_servis.atama import AtamaKapsamDisi, AtamaSatiri
 from app.services.teknik_servis.is_emirleri import IsEmriYetkiHatasi
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
@@ -484,12 +484,17 @@ async def plan_yaz(
     so = await _kapsamli_is(db, user, is_id)
     try:
         girdi = payload.girdi()
-        plan = await planlama.planla(db, so, girdi, user=user, clock=clock)
+        with atama.uyari_toplayici() as uyarilar:  # TS-198: yetkinlik uyarısı, engellemez
+            plan = await planlama.planla(db, so, girdi, user=user, clock=clock)
     except _HATALAR as exc:
         return _hata_yaniti(exc)
     await db.commit()
     so = await db.get(ServiceOrder, is_id)
-    return {"plan": await _plan_cikti(db, plan), "durum": so.status if so else None}
+    return {
+        "plan": await _plan_cikti(db, plan),
+        "durum": so.status if so else None,
+        "uyarilar": uyarilar,
+    }
 
 
 @router.delete("/isler/{is_id}/plan", response_model=None)
@@ -545,9 +550,10 @@ async def saha_onerisi(is_id: int, db: DbDep, user: Planlayici) -> Any:
 async def toplu_plan(payload: TopluPlanIn, db: DbDep, clock: ClockDep, user: Planlayici) -> Any:
     """Aynı birim + müşteri + lokasyondaki plansız işler → tek ziyaret, iş başına plan."""
     try:
-        ziyaret = await planlama.toplu_planla(
-            db, payload.is_idler, payload.girdi(), user=user, clock=clock
-        )
+        with atama.uyari_toplayici() as uyarilar:
+            ziyaret = await planlama.toplu_planla(
+                db, payload.is_idler, payload.girdi(), user=user, clock=clock
+            )
     except _HATALAR as exc:
         return _hata_yaniti(exc)
     await db.commit()
@@ -555,6 +561,7 @@ async def toplu_plan(payload: TopluPlanIn, db: DbDep, clock: ClockDep, user: Pla
         "ziyaret_id": ziyaret.id,
         "ziyaret_no": ziyaret.visit_no,
         "is_sayisi": len(set(payload.is_idler)),
+        "uyarilar": uyarilar,
     }
 
 
@@ -562,13 +569,18 @@ async def toplu_plan(payload: TopluPlanIn, db: DbDep, clock: ClockDep, user: Pla
 async def yeniden_plan(payload: TopluPlanIn, db: DbDep, clock: ClockDep, user: Planlayici) -> Any:
     """Ziyaret kartındaki seçili işleri tek işlemde taşır (yalnız gönderilenler)."""
     try:
-        planlar = await planlama.yeniden_planla(
-            db, payload.is_idler, payload.girdi(), user=user, clock=clock
-        )
+        with atama.uyari_toplayici() as uyarilar:
+            planlar = await planlama.yeniden_planla(
+                db, payload.is_idler, payload.girdi(), user=user, clock=clock
+            )
     except _HATALAR as exc:
         return _hata_yaniti(exc)
     await db.commit()
-    return {"plan_idler": [p.id for p in planlar], "ziyaret_id": planlar[0].visit_id}
+    return {
+        "plan_idler": [p.id for p in planlar],
+        "ziyaret_id": planlar[0].visit_id,
+        "uyarilar": uyarilar,
+    }
 
 
 # --- Servis araç havuzu (TS-048) ------------------------------------------------------
@@ -692,3 +704,356 @@ async def arac_guncelle(
     await db.commit()
     await db.refresh(arac)
     return await _arac_cikti(db, arac)
+
+
+# --- Planlama P3 (TS-190): müsaitlik, kaynak görünümü, plan uyumu, bölge önerisi ---
+#
+# - Müsaitlik yazımı `servis.planla` (E02 kontrol: ayrı `servis.musaitlik`
+#   izni AÇILMAZ); kişi kapsam dışıysa 404 ve yazma yok. Silme yolu
+#   `personel_id` taşır ki kapsam taraması onu hedefleyebilsin.
+# - Plan uyumu bir rapordur: ekran `servis_rapor.gor`, Excel
+#   `servis_rapor.disaaktar` (KD-06; mobilite `rapor.*` değil); yetkisiz birim
+#   parametresi 403; kişi kırılımı yalnız `servis_rapor.personel`.
+
+RaporOkuyucu = Annotated[User, Depends(require_permission("servis.gor", "servis_rapor.gor"))]
+
+
+class MusaitlikIn(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "kisi_id": 1,
+                    "baslangic": "2026-01-15T09:00:00+03:00",
+                    "bitis": "2026-01-15T18:00:00+03:00",
+                    "tur": "IZIN",
+                }
+            ]
+        },
+    )
+
+    kisi_id: int
+    baslangic: datetime
+    bitis: datetime
+    tur: Literal["IZIN", "EGITIM", "OFIS", "DIGER"]
+    # ≤200 (plan TS-190 kabulü; kolon 300 ama sağlık/kişisel ayrıntıya yer yok).
+    not_: str | None = Field(default=None, alias="not", max_length=200)
+
+
+def _rapor_birimi(user: User, birim: str | None) -> str | None:
+    birim = _birim(birim)
+    if birim and kapsam.birim_disinda_mi(user, birim, birimsiz_gorunur=False):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Bu birimin verisini göremezsiniz")
+    return birim
+
+
+@router.get("/musaitlik", response_model=None)
+async def musaitlik_listesi(
+    db: DbDep,
+    clock: ClockDep,
+    user: Okuyucu,
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    birim: str | None = None,
+    kisi_id: int | None = None,
+) -> Any:
+    """Aralıkla örtüşen bloklar (planlayıcı: kapsamındaki personel; diğerleri
+    kendi blokları). Not yalnız planlayıcıya ve kişinin kendisine."""
+    bas = baslangic or yerel_bugun(clock)
+    bit = bitis or bas.fromordinal(bas.toordinal() + 6)
+    try:
+        return await planlama.musaitlik_listesi(
+            db, user, bas, bit, birim=_birim(birim), kisi_id=kisi_id
+        )
+    except _HATALAR as exc:
+        return _hata_yaniti(exc)
+
+
+@router.post("/musaitlik", response_model=None, status_code=status.HTTP_201_CREATED)
+async def musaitlik_ekle(
+    payload: MusaitlikIn, request: Request, db: DbDep, user: Planlayici
+) -> Any:
+    """Blok açar (aynı gün kilidiyle). Örtüşen blok 409; not sağlık bilgisi
+    içeriyorsa 400. Yanıt aynı aralıktaki planları `plan_uyarilari`nda verir
+    (planlar çakışmalı bayrağı alır, blok yine yazılır)."""
+    if await kapsam.personel_disinda_mi(db, user, payload.kisi_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Personel bulunamadı")
+    try:
+        blok, planlar = await planlama.musaitlik_ekle(
+            db,
+            kisi_id=payload.kisi_id,
+            baslangic=payload.baslangic,
+            bitis=payload.bitis,
+            tur=payload.tur,
+            not_=payload.not_,
+            user=user,
+            ip=client_ip(request),
+        )
+    except _HATALAR as exc:
+        return _hata_yaniti(exc)
+    await db.commit()
+    return {
+        "id": blok.id,
+        "version": blok.version,
+        "user_id": blok.user_id,
+        "baslangic": blok.starts_at.isoformat(),
+        "bitis": blok.ends_at.isoformat(),
+        "tur": blok.tur,
+        "not": blok.note,
+        "plan_uyarilari": [c.sozluk() for c in planlar],
+    }
+
+
+@router.delete("/musaitlik/personel/{personel_id}/bloklar/{blok_id}", response_model=None)
+async def musaitlik_sil(
+    personel_id: int,
+    blok_id: int,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Planlayici,
+) -> Any:
+    """Bloğu yumuşak siler; kişi kapsam dışı ya da blok o kişinin değilse 404."""
+    from app.models import ServiceUnavailability
+
+    if await kapsam.personel_disinda_mi(db, user, personel_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Personel bulunamadı")
+    blok = await db.scalar(
+        select(ServiceUnavailability)
+        .where(
+            ServiceUnavailability.id == blok_id,
+            ServiceUnavailability.user_id == personel_id,
+        )
+        .with_for_update()
+    )
+    if blok is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Müsaitlik bloğu bulunamadı")
+    try:
+        await planlama.musaitlik_sil(db, blok, user=user, clock=clock, ip=client_ip(request))
+    except _HATALAR as exc:
+        return _hata_yaniti(exc)
+    await db.commit()
+    return {"id": blok.id, "silindi": True}
+
+
+@router.get("/kaynak-gorunumu", response_model=None)
+async def kaynak_gorunumu(
+    db: DbDep,
+    clock: ClockDep,
+    user: Okuyucu,
+    hafta: date | None = None,
+    birim: str | None = None,
+) -> Any:
+    """Personel × gün: "plan" dakikası (gerçek süre değil), ziyaret sayısı,
+    çakışma, müsaitlik ve eğitim oturumu blokları (salt okunur). Planlayıcı
+    olmayan yalnız kendi satırını alır."""
+    try:
+        return await takvim.kaynak_gorunumu(
+            db, user, clock, hafta or yerel_bugun(clock), birim=_birim(birim)
+        )
+    except _HATALAR as exc:
+        return _hata_yaniti(exc)
+
+
+@router.get("/plan-uyumu", response_model=None)
+async def plan_uyumu(
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporOkuyucu,
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    birim: str | None = None,
+    tur: str | None = None,
+) -> Any:
+    """Plan uyumu (E02-22). Varsayılan: son 30 gün. Eksik paydaya girmez."""
+    bit = bitis or yerel_bugun(clock)
+    bas = baslangic or bit.fromordinal(bit.toordinal() - 29)
+    try:
+        return await takvim.plan_uyumu(
+            db,
+            user,
+            clock,
+            bas,
+            bit,
+            birim=_rapor_birimi(user, birim),
+            tur=tur,
+            personel=user.has("servis_rapor.personel"),
+        )
+    except _HATALAR as exc:
+        return _hata_yaniti(exc)
+
+
+@router.get("/plan-uyumu/ayrinti", response_model=None)
+async def plan_uyumu_ayrinti(
+    response: Response,
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporOkuyucu,
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    birim: str | None = None,
+    tur: str | None = None,
+    sinif: Literal["UYUMLU", "KAYDI", "EKSIK"] | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> Any:
+    """Ziyaret satırları; `sinif=` ile özet kutusunun listesi (sayı = `X-Toplam-Kayit`)."""
+    bit = bitis or yerel_bugun(clock)
+    bas = baslangic or bit.fromordinal(bit.toordinal() - 29)
+    try:
+        satirlar = await takvim.plan_uyumu_ayrinti(
+            db,
+            user,
+            clock,
+            bas,
+            bit,
+            birim=_rapor_birimi(user, birim),
+            tur=tur,
+            sinif=sinif,
+            personel=user.has("servis_rapor.personel"),
+        )
+    except _HATALAR as exc:
+        return _hata_yaniti(exc)
+    response.headers[TOPLAM_BASLIGI] = str(len(satirlar))
+    return satirlar[offset : offset + limit]
+
+
+@router.get("/plan-uyumu.xlsx", response_model=None)
+async def plan_uyumu_excel(
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Aktarici,
+    baslangic: str | None = None,
+    bitis: str | None = None,
+    birim: str | None = None,
+    tur: str | None = None,
+) -> Any:
+    """Plan uyumu Excel'i — ekranla AYNI fonksiyon. Tarih boşsa son 30 gün."""
+    bit = _tarih(bitis, "Bitiş") or yerel_bugun(clock)
+    bas = _tarih(baslangic, "Başlangıç") or bit.fromordinal(bit.toordinal() - 29)
+    personel = user.has("servis_rapor.personel")
+    birim_ = _rapor_birimi(user, birim)
+    try:
+        rapor = await takvim.plan_uyumu(
+            db, user, clock, bas, bit, birim=birim_, tur=tur, personel=personel
+        )
+        ayrinti = await takvim.plan_uyumu_ayrinti(
+            db, user, clock, bas, bit, birim=birim_, tur=tur, personel=personel
+        )
+    except _HATALAR as exc:
+        return _hata_yaniti(exc)
+    o = rapor["ozet"]
+    sayi = export_svc.Sutun
+    sayfalar = [
+        export_svc.Sayfa(
+            "Özet",
+            [sayi("Gösterge"), sayi("Değer", "ondalik")],
+            [
+                ["Plana uyumlu ziyaret", o["uyumlu"]],
+                ["Kaydı (başka gün) ziyaret", o["kaydi"]],
+                ["Süre kaydı eksik ziyaret (paydaya girmez)", o["eksik"]],
+                ["Uyum oranı (%)", o["oran"]],
+                ["Ziyaret sayısı", o["ziyaret_sayisi"]],
+                ["İş sayısı", o["is_sayisi"]],
+                ["Ziyaret başına iş", o["ziyaret_basina_is"]],
+                [f"{takvim.TEKRAR_ZIYARET_GUN} günde tekrar ziyaret", o["tekrar_ziyaret_30"]],
+                ["Erteleme sayısı", rapor["erteleme"]["toplam"]],
+            ],
+        ),
+        export_svc.Sayfa(
+            "Kırılımlar",
+            [
+                sayi("Kırılım"),
+                sayi("Değer"),
+                sayi("Uyumlu", "tamsayi"),
+                sayi("Kaydı", "tamsayi"),
+                sayi("Eksik", "tamsayi"),
+                sayi("Oran (%)", "ondalik"),
+            ],
+            [
+                [ad, r["etiket"], r["uyumlu"], r["kaydi"], r["eksik"], r["oran"]]
+                for ad, satirlar in rapor["kirilimlar"].items()
+                for r in satirlar
+            ],
+        ),
+        export_svc.Sayfa(
+            "Ayrıntı",
+            [
+                sayi("Ziyaret / İş"),
+                sayi("İş Noları"),
+                sayi("Plan Tarihi", "tarih"),
+                sayi("İlk Kayıt Günü", "tarih"),
+                sayi("Sınıf"),
+                sayi("Birim"),
+                sayi("Tür"),
+                sayi("İl"),
+            ]
+            + ([sayi("Şef"), sayi("Teknisyenler")] if personel else []),
+            [
+                [
+                    r["ziyaret"],
+                    ", ".join(r["is_nolari"]),
+                    date.fromisoformat(r["plan_tarihi"]),
+                    date.fromisoformat(r["ilk_kayit_gunu"]) if r["ilk_kayit_gunu"] else None,
+                    takvim.UYUM_ADLARI[r["sinif"]],
+                    r["birim"],
+                    "Bakım" if r["tur"] == "BAKIM" else "Servis",
+                    r["il"],
+                ]
+                + ([", ".join(r["sefler"]), ", ".join(r["teknisyenler"])] if personel else [])
+                for r in ayrinti
+            ],
+        ),
+        export_svc.Sayfa(
+            "Erteleme",
+            [sayi("Neden"), sayi("Adet", "tamsayi")],
+            [[n["ad"], n["adet"]] for n in rapor["erteleme"]["nedenler"]],
+        ),
+        export_svc.Sayfa(
+            "Bekleyen Yaşı",
+            [sayi("Aralık"), sayi("Adet", "tamsayi")],
+            [[b["aralik"], b["adet"]] for b in rapor["bekleyen_yasi"]],
+        ),
+    ]
+    icerik = await export_svc.sayfalari_xlsx_async(sayfalar)
+    await audit.log(
+        db,
+        "service_plans",
+        "plan_uyumu.disa_aktar",
+        new_value={
+            "baslangic": bas.isoformat(),
+            "bitis": bit.isoformat(),
+            "birim": birim_,
+            "tur": tur,
+            "satir": len(ayrinti),
+            "kisi_kirilimi": personel,
+        },
+        user_id=user.id,
+        ip=client_ip(request),
+        is_personal_data=personel,
+    )
+    await db.commit()
+    return Response(
+        content=icerik,
+        media_type=_XLSX,
+        headers={
+            "Content-Disposition": f'attachment; filename="plan-uyumu-{bas:%Y%m%d}.xlsx"',
+            TOPLAM_BASLIGI: str(len(ayrinti)),
+        },
+    )
+
+
+@router.get("/bolge-onerisi", response_model=None)
+async def bolge_onerisi(
+    db: DbDep,
+    clock: ClockDep,
+    user: Planlayici,
+    is_id: int,
+    tarih: date | None = None,
+) -> Any:
+    """Aynı ilçedeki plansız işler ve ±N gün aynı ilçe ziyaretleri (E02-16).
+    Seçilen iş ayrı tekli plan olarak (`PUT /isler/{id}/plan`) kaydedilir."""
+    so = await _kapsamli_is(db, user, is_id)
+    return await takvim.bolge_onerisi(db, user, clock, so, tarih or yerel_bugun(clock))

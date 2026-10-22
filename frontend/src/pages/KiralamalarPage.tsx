@@ -57,6 +57,7 @@ import {
 } from "../api/kiralama";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
+import KiralamaDegisimPenceresi from "../components/KiralamaDegisimPenceresi";
 import KpiKutusu from "../components/KpiKutusu";
 import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "../components/MusteriLokasyonSecici";
 
@@ -64,6 +65,8 @@ const SAYFA_BOYU = 50;
 const KIRALAMA_BIRIMLERI = BIRIM_KODLARI.filter((b) => !KIRALAMA_DISI_BIRIMLER.includes(b));
 const KAPALI = ["KAPANDI", "IPTAL"];
 const SEVK_SONRASI = ["SEVK_EDILDI", "KURULUM_YAPILDI", "DEVREYE_ALINDI", "TOPLANDI"];
+/** Sahada değişim bu durumlarda (sunucu `DEGISIM_DURUMLARI`). */
+const DEGISIM_DURUMLARI = ["SEVK_EDILDI", "KURULUM_YAPILDI", "DEVREYE_ALINDI"];
 
 const tarih = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY") : "—");
 const zaman = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY HH:mm") : "—");
@@ -652,7 +655,9 @@ function KiralamaCekmecesi({
     queryFn: () => kiralamaApi.gecmis(kiralamaId),
     enabled: kart.isSuccess,
   });
-  const [islem, setIslem] = useState<null | "tahsis" | "sevk" | "iade" | "asama" | "geri" | "iptal">(null);
+  const [islem, setIslem] = useState<null | "tahsis" | "sevk" | "iade" | "asama" | "geri" | "iptal" | "degisim">(
+    null,
+  );
 
   const yaz = yetkili("kiralama.yaz");
   const envanter = yetkili("kiralama.envanter");
@@ -699,6 +704,11 @@ function KiralamaCekmecesi({
       {asamaci && SEVK_SONRASI.includes(k.status) && musteride > 0 && (
         <Button onClick={() => setIslem("iade")}>İade al</Button>
       )}
+      {asamaci &&
+        DEGISIM_DURUMLARI.includes(k.status) &&
+        aktifTahsisler.some((t) => t.kiralik_id && t.musteride > 0) && (
+          <Button onClick={() => setIslem("degisim")}>Sahada değişim</Button>
+        )}
       {yaz && k.status === "DEPOYA_ALINDI" && (
         <Button
           type="primary"
@@ -878,6 +888,9 @@ function KiralamaCekmecesi({
       {k && islem === "sevk" && <SevkPenceresi k={k} onKapat={() => setIslem(null)} onBitti={onDegisti} />}
       {k && islem === "iade" && <IadePenceresi k={k} onKapat={() => setIslem(null)} onBitti={onDegisti} />}
       {k && islem === "asama" && <AsamaPenceresi k={k} onKapat={() => setIslem(null)} onBitti={onDegisti} />}
+      {k && islem === "degisim" && (
+        <KiralamaDegisimPenceresi k={k} onKapat={() => setIslem(null)} onBitti={onDegisti} />
+      )}
       {k && (islem === "geri" || islem === "iptal") && (
         <GerekcePenceresi
           baslik={islem === "geri" ? "Son aşamayı geri al" : "Kiralamayı iptal et"}

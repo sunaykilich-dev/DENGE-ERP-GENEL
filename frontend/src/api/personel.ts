@@ -47,6 +47,10 @@ export interface Personel {
   birincil_birim: string | null;
   rol: { code: string; name: string };
   version: number;
+  /** TS-199: doğrudan yönetici; kapsamınız dışındaysa `id: null`, ad "Kapsam dışı kişi". */
+  yonetici?: { id: number | null; ad: string } | null;
+  /** Yalnız "Ekibim" listesinde: kişinin şu an açık sayacı var mı. */
+  acik_sayac_var?: boolean;
   // Yalnız personel.yaz:
   email?: string | null;
   username?: string;
@@ -61,6 +65,8 @@ export interface PersonelSuzgeci {
   saha_rolu?: string;
   durum?: string;
   giris?: string;
+  /** Yalnız doğrudan bağlılarım — süzgeçtir, yetki genişletmez (TS-199). */
+  ekibim?: boolean;
 }
 
 export interface PersonelKpi {
@@ -97,6 +103,7 @@ export function suzgecParametreleri(s: PersonelSuzgeci): URLSearchParams {
   if (s.saha_rolu) p.set("saha_rolu", s.saha_rolu);
   if (s.durum) p.set("durum", s.durum);
   if (s.giris) p.set("giris", s.giris);
+  if (s.ekibim) p.set("ekibim", "true");
   return p;
 }
 
@@ -112,6 +119,8 @@ export const personelApi = {
   olustur: (g: PersonelGirdisi) => api.post<Personel>("/api/personel", g),
   guncelle: (id: number, g: Partial<PersonelGirdisi> & { version: number }) =>
     api.patch<Personel>(`/api/personel/${id}`, g),
+  yoneticiYaz: (id: number, yonetici_id: number | null, version: number) =>
+    api.put<Personel>(`/api/personel/${id}/yonetici`, { yonetici_id, version }),
   birimleriYaz: (id: number, birimler: PersonelBirimi[]) =>
     api.put<PersonelBirimi[]>(`/api/personel/${id}/birimler`, { birimler }),
   aktiflestir: (id: number) =>

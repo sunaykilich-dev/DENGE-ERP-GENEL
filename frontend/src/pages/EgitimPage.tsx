@@ -59,6 +59,7 @@ import GozlemFormu, { SonucRozeti } from "../components/GozlemFormu";
 import KatilimTablosu from "../components/KatilimTablosu";
 import KpiKutusu from "../components/KpiKutusu";
 import { KisiKartiGorunumu } from "./EgitimKisiKarti";
+import { EslemeSekmesi, EtkinlikSekmesi, YenidenDegerlendirSekmesi } from "./EgitimRaporlari";
 
 const SAYFA = 25;
 const tarih = (t: string | null | undefined) => (t ? dayjs(t).format("DD.MM.YYYY") : "—");
@@ -1159,6 +1160,10 @@ const SEKMELER = [
   { key: "yetkinlik", label: "Yetkinlik Matrisi", el: <YetkinlikSekmesi /> },
   { key: "belge", label: "Belgeler", el: <BelgeSekmesi /> },
   { key: "kisiler", label: "Bireysel Gelişim", el: <KisilerSekmesi /> },
+  // TS-198: etkinlik raporu, yeniden değerlendir listesi, yetkinlik eşlemeleri.
+  { key: "etkinlik", label: "Etkinlik Raporu", el: <EtkinlikSekmesi /> },
+  { key: "yeniden", label: "Yeniden Değerlendir", el: <YenidenDegerlendirSekmesi /> },
+  { key: "esleme", label: "Yetkinlik Eşlemeleri", el: <EslemeSekmesi /> },
 ];
 
 export default function EgitimPage() {

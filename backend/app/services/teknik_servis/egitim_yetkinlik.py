@@ -1,6 +1,9 @@
 """Yetkinlik kataloğu ve değerlendirme geçmişi (E08-03/16/17/19).
 
-Maddeler: TS-150 (değerlendirme geçmişi), TS-160 (katalog yönetimi).
+Maddeler: TS-150 (değerlendirme geçmişi), TS-160 (katalog yönetimi), TS-198
+(kurs↔yetkinlik bağı + "yeniden değerlendir" listesi E08-16 P3; servis işi
+türü → asgari yetkinlik eşlemesi ve atamada YALNIZ UYARI E08-22 — kanca
+`atama_uyarilari`, atama engellenmez, K11).
 
 **Yalnız ekleme (K15):** `competency_assessments` satırı düzeltilmez; yeni
 değerlendirme yeni satırdır, geçmiş kaybolmaz. "Güncel seviye" tablosu
@@ -21,11 +24,18 @@ from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, delete, exists, func, or_, select
 
-from app.models import Competency, CompetencyAssessment, TrainingObservation, User
+from app.models import (
+    Competency,
+    CompetencyAssessment,
+    CourseCompetency,
+    ServiceCompetencyRequirement,
+    TrainingObservation,
+    User,
+)
 from app.services import audit
-from app.services.teknik_servis import kapsam
+from app.services.teknik_servis import kancalar, kapsam
 from app.services.teknik_servis.egitim import (
     EgitimBulunamadi,
     EgitimGirdiHatasi,
@@ -304,3 +314,378 @@ async def gecmis(db: AsyncSession, kisi_id: int) -> list[tuple[CompetencyAssessm
             )
         ).all()
     ]
+
+
+# =============================================================================
+# Kurs ↔ yetkinlik bağı ve "yeniden değerlendir" listesi (E08-16 P3, TS-198)
+# =============================================================================
+
+
+async def kurs_yetkinlikleri(db: AsyncSession, kurs_id: int) -> list[Competency]:
+    """Kursa bağlı yetkinlikler (kurs kartında gösterilir)."""
+    return list(
+        (
+            await db.scalars(
+                select(Competency)
+                .join(CourseCompetency, CourseCompetency.competency_id == Competency.id)
+                .where(CourseCompetency.course_id == kurs_id, Competency.is_deleted.is_(False))
+                .order_by(Competency.kod)
+            )
+        ).all()
+    )
+
+
+async def kurs_yetkinlik_bagla(
+    db: AsyncSession,
+    kurs_id: int,
+    yetkinlik_idler: list[int],
+    *,
+    user: User,
+    ip: str | None = None,
+) -> list[Competency]:
+    """Kursun yetkinlik bağlarını verilen kümeyle DEĞİŞTİRİR.
+
+    Başka birimin kursu/yetkinliği 403 (K4); pasif yetkinlik bağlanamaz (400).
+    Bağ yalnız "yeniden değerlendir" listesini besler — seviye otomatik
+    değişmez (K18). Değişiklik denetime yazılır.
+    """
+    from app.services.teknik_servis.egitim import kurs_getir
+
+    kurs = await kurs_getir(db, kurs_id)
+    kurs_birimi_dogrula(user, kurs.birim)
+    hedef = sorted(set(yetkinlik_idler))
+    for yid in hedef:
+        y = await yetkinlik_getir(db, yid)
+        kurs_birimi_dogrula(user, y.birim)
+        if not y.is_active:
+            raise EgitimGirdiHatasi(f"'{y.ad}' pasif bir yetkinlik; kursa bağlanamaz.")
+    mevcut = set(
+        (
+            await db.scalars(
+                select(CourseCompetency.competency_id).where(CourseCompetency.course_id == kurs.id)
+            )
+        ).all()
+    )
+    for yid in mevcut - set(hedef):
+        await db.execute(
+            delete(CourseCompetency).where(
+                CourseCompetency.course_id == kurs.id, CourseCompetency.competency_id == yid
+            )
+        )
+    for yid in set(hedef) - mevcut:
+        db.add(CourseCompetency(course_id=kurs.id, competency_id=yid))
+    if mevcut != set(hedef):
+        await audit.log(
+            db,
+            "course_competencies",
+            "guncelle",
+            entity_id=kurs.id,
+            old_value={"yetkinlikler": sorted(mevcut)},
+            new_value={"yetkinlikler": hedef},
+            user_id=user.id,
+            ip=ip,
+        )
+    await db.flush()
+    return await kurs_yetkinlikleri(db, kurs.id)
+
+
+def yeniden_degerlendir_sorgusu(
+    user: User, *, birim: str | None = None, kisi_id: int | None = None
+) -> Select:
+    """Aşama 90 BAŞARILI gözlemi olup, gözlem tarihinden SONRA o kursa bağlı
+    yetkinlikte değerlendirmesi olmayan kişi × yetkinlik (hesaplanır, K18).
+
+    Kişi × yetkinlik başına EN SON başarılı 90. gün gözlemi esas alınır;
+    değerlendirme girilince satır listeden düşer. Kapsam `kapsam_personel`;
+    ayrılan personel, iptal gözlem, pasif yetkinlik dışarıda.
+    """
+    from app.models import TrainingCourse, UserUnit
+
+    son = (
+        select(
+            TrainingObservation.user_id.label("user_id"),
+            CourseCompetency.competency_id.label("competency_id"),
+            func.max(TrainingObservation.gozlem_tarihi).label("gozlem_tarihi"),
+        )
+        .join(CourseCompetency, CourseCompetency.course_id == TrainingObservation.course_id)
+        .where(
+            TrainingObservation.asama == 90,
+            TrainingObservation.sonuc == "BASARILI",
+            TrainingObservation.cancelled_at.is_(None),
+            TrainingObservation.is_deleted.is_(False),
+        )
+        .group_by(TrainingObservation.user_id, CourseCompetency.competency_id)
+        .subquery("son_basarili_90")
+    )
+    sonraki_degerlendirme = exists().where(
+        CompetencyAssessment.user_id == son.c.user_id,
+        CompetencyAssessment.competency_id == son.c.competency_id,
+        CompetencyAssessment.degerlendirme_tarihi >= son.c.gozlem_tarihi,
+    )
+    kurslar = (
+        select(func.string_agg(TrainingCourse.baslik, ", "))
+        .join(CourseCompetency, CourseCompetency.course_id == TrainingCourse.id)
+        .where(CourseCompetency.competency_id == son.c.competency_id)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(
+            son.c.user_id,
+            User.full_name.label("ad"),
+            son.c.competency_id,
+            Competency.kod,
+            Competency.ad.label("yetkinlik"),
+            Competency.is_critical,
+            son.c.gozlem_tarihi,
+            kurslar.label("kurslar"),
+        )
+        .join(User, User.id == son.c.user_id)
+        .join(Competency, Competency.id == son.c.competency_id)
+        .where(
+            calisan_kosulu(),
+            Competency.is_active.is_(True),
+            Competency.is_deleted.is_(False),
+            ~sonraki_degerlendirme,
+        )
+        .order_by(son.c.gozlem_tarihi, User.full_name, son.c.user_id, son.c.competency_id)
+    )
+    stmt = kapsam.kapsam_personel(stmt, user, son.c.user_id)
+    if birim:
+        stmt = stmt.where(
+            exists().where(
+                UserUnit.user_id == son.c.user_id, UserUnit.birim == birim_dogrula(birim)
+            )
+        )
+    if kisi_id is not None:
+        stmt = stmt.where(son.c.user_id == kisi_id)
+    return stmt
+
+
+# =============================================================================
+# Servis işi türü → asgari yetkinlik ve atama uyarısı (E08-22, TS-198)
+# =============================================================================
+
+
+async def gereksinimler(
+    db: AsyncSession, *, birim: str | None = None, tur: str | None = None
+) -> list[tuple[ServiceCompetencyRequirement, Competency]]:
+    stmt = (
+        select(ServiceCompetencyRequirement, Competency)
+        .join(Competency, Competency.id == ServiceCompetencyRequirement.competency_id)
+        .order_by(
+            ServiceCompetencyRequirement.birim,
+            ServiceCompetencyRequirement.tur,
+            Competency.kod,
+        )
+    )
+    if birim:
+        stmt = stmt.where(ServiceCompetencyRequirement.birim == birim_dogrula(birim))
+    if tur:
+        stmt = stmt.where(ServiceCompetencyRequirement.tur == tur)
+    return [(g, c) for g, c in (await db.execute(stmt)).all()]
+
+
+@dataclass
+class GereksinimSatiri:
+    competency_id: int
+    min_seviye: int
+    course_id: int | None = None
+
+
+async def gereksinim_kaydet(
+    db: AsyncSession,
+    birim: str,
+    tur: str,
+    satirlar: list[GereksinimSatiri],
+    *,
+    user: User,
+    ip: str | None = None,
+) -> list[tuple[ServiceCompetencyRequirement, Competency]]:
+    """`(birim, tür)` eşlemesini verilen satırlarla DEĞİŞTİRİR (boş liste = eşleme yok).
+
+    Birim yetkisi: başka birimin eşlemesi 403. Yetkinlik/kurs başka birimin
+    kataloğundaysa 403, pasif yetkinlik 400, tür katalog dışıysa 400.
+    """
+    from app.models import TrainingCourse
+    from app.models.teknik_servis import SERVIS_TURLERI
+    from app.services.teknik_servis.egitim import kurs_getir
+
+    birim_kodu = birim_dogrula(birim)
+    if birim_kodu is None:
+        raise EgitimGirdiHatasi("Birim zorunlu.")
+    if tur not in SERVIS_TURLERI:
+        raise EgitimGirdiHatasi(f"Bilinmeyen servis işi türü: {tur}")
+    kurs_birimi_dogrula(user, birim_kodu)
+    goruldu: set[int] = set()
+    for s in satirlar:
+        if s.competency_id in goruldu:
+            raise EgitimGirdiHatasi("Aynı yetkinlik iki kez yazılamaz.")
+        goruldu.add(s.competency_id)
+        if not 1 <= s.min_seviye <= 4:
+            raise EgitimGirdiHatasi("Asgari seviye 1–4 arasında olmalı.")
+        y = await yetkinlik_getir(db, s.competency_id)
+        kurs_birimi_dogrula(user, y.birim)
+        if not y.is_active:
+            raise EgitimGirdiHatasi(f"'{y.ad}' pasif bir yetkinlik.")
+        if s.course_id is not None:
+            kurs: TrainingCourse = await kurs_getir(db, s.course_id)
+            kurs_birimi_dogrula(user, kurs.birim)
+    eski = [
+        {"competency_id": g.competency_id, "min_seviye": g.min_seviye, "course_id": g.course_id}
+        for g, _ in await gereksinimler(db, birim=birim_kodu, tur=tur)
+    ]
+    await db.execute(
+        delete(ServiceCompetencyRequirement).where(
+            ServiceCompetencyRequirement.birim == birim_kodu,
+            ServiceCompetencyRequirement.tur == tur,
+        )
+    )
+    await db.flush()
+    for s in satirlar:
+        db.add(
+            ServiceCompetencyRequirement(
+                birim=birim_kodu,
+                tur=tur,
+                competency_id=s.competency_id,
+                min_seviye=s.min_seviye,
+                course_id=s.course_id,
+                created_by=user.id,
+                updated_by=user.id,
+            )
+        )
+    await db.flush()
+    await audit.log(
+        db,
+        "service_competency_requirements",
+        "guncelle",
+        entity_id=f"{birim_kodu}:{tur}",
+        old_value={"satirlar": eski},
+        new_value={
+            "satirlar": [
+                {
+                    "competency_id": s.competency_id,
+                    "min_seviye": s.min_seviye,
+                    "course_id": s.course_id,
+                }
+                for s in satirlar
+            ]
+        },
+        user_id=user.id,
+        ip=ip,
+    )
+    return await gereksinimler(db, birim=birim_kodu, tur=tur)
+
+
+async def _kurs_gecerli_mi(db: AsyncSession, user_id: int, kurs: Any, bugun: date) -> bool:
+    """Kişinin bu kursu geçerli olarak tamamlamış mı: en son tamamlanan plan
+    (yenileme süresi varsa süresi dolmamış) ya da iptal edilmemiş, süresi
+    dolmamış belge. Tek tanım `egitim_rapor` geçerlilik kuralıyla aynıdır."""
+    from app.models import PersonnelCertificate, TrainingPlan
+    from app.services.teknik_servis.bakim import ay_ekle
+
+    son = await db.scalar(
+        select(func.max(TrainingPlan.completed_on)).where(
+            TrainingPlan.user_id == user_id,
+            TrainingPlan.course_id == kurs.id,
+            TrainingPlan.status == "TAMAMLANDI",
+            TrainingPlan.is_deleted.is_(False),
+        )
+    )
+    if son is not None and (kurs.yenileme_ay is None or ay_ekle(son, kurs.yenileme_ay) >= bugun):
+        return True
+    belge = await db.scalar(
+        select(PersonnelCertificate.id)
+        .where(
+            PersonnelCertificate.user_id == user_id,
+            PersonnelCertificate.course_id == kurs.id,
+            PersonnelCertificate.cancelled_at.is_(None),
+            or_(
+                PersonnelCertificate.gecerlilik_bitis.is_(None),
+                PersonnelCertificate.gecerlilik_bitis >= bugun,
+            ),
+        )
+        .limit(1)
+    )
+    return belge is not None
+
+
+async def atama_uyarilari(
+    db: AsyncSession,
+    so: Any,
+    user_ids: tuple[int, ...] | list[int],
+    *,
+    clock: Clock | None = None,
+) -> list[str]:
+    """Atanan teknisyenler için yetkinlik/belge uyarıları (E08-22, K11).
+
+    YALNIZ OKUR; atamayı ENGELLEMEZ. İşin `(birim, tür)` eşlemesi boşsa boş
+    liste. Her kişi için: güncel seviye < asgari (ya da hiç değerlendirme
+    yok), eşlemedeki zorunlu kursun geçerli tamamlanması/belgesi yok, kişide
+    açık kritik düzeltici faaliyet var. PB işlerinde de iş başına değerlendirilir
+    (toplu atamada çağıran her iş için ayrı çağırır); PB üretimine dokunulmaz.
+
+    `kancalar.atama_uyarilari` imzasında saat yok (plan §1.8); çağıran saat
+    vermezse gerçek saat (`RealClock`) kullanılır — yalnız belge geçerliliği
+    için.
+    """
+    from app.clock import RealClock
+    from app.models import TrainingCorrectiveAction, TrainingCourse
+    from app.services.teknik_servis.yerel_zaman import yerel_bugun
+
+    kimlikler = sorted({int(i) for i in user_ids})
+    if not kimlikler or so is None:
+        return []
+    esleme = await gereksinimler(db, birim=so.birim, tur=so.tur)
+    acik_kritik = set(
+        (
+            await db.scalars(
+                select(TrainingCorrectiveAction.user_id).where(
+                    TrainingCorrectiveAction.user_id.in_(kimlikler),
+                    TrainingCorrectiveAction.status == "ACIK",
+                )
+            )
+        ).all()
+    )
+    if not esleme and not acik_kritik:
+        return []
+    bugun = yerel_bugun(clock or RealClock())
+    adlar = dict(
+        (await db.execute(select(User.id, User.full_name).where(User.id.in_(kimlikler)))).all()
+    )
+    seviyeler = {
+        (a.user_id, a.competency_id): a.mevcut_seviye for a in await guncel_seviyeler(db, kimlikler)
+    }
+    kurslar: dict[int, Any] = {}
+    uyarilar: list[str] = []
+    for uid in kimlikler:
+        ad = adlar.get(uid) or f"#{uid}"
+        for g, c in esleme:
+            seviye = seviyeler.get((uid, c.id))
+            if seviye is None:
+                uyarilar.append(
+                    f"{ad}: {c.ad} ({c.kod}) yetkinliği değerlendirilmemiş; "
+                    f"bu iş için asgari seviye {g.min_seviye}."
+                )
+            elif seviye < g.min_seviye:
+                uyarilar.append(
+                    f"{ad}: {c.ad} ({c.kod}) seviyesi {seviye}, bu iş için asgari {g.min_seviye}."
+                )
+            if g.course_id is not None:
+                if g.course_id not in kurslar:
+                    kurslar[g.course_id] = await db.get(TrainingCourse, g.course_id)
+                kurs = kurslar[g.course_id]
+                if kurs is not None and not await _kurs_gecerli_mi(db, uid, kurs, bugun):
+                    uyarilar.append(
+                        f"{ad}: '{kurs.baslik}' eğitimi tamamlanmamış ya da geçerliliği dolmuş."
+                    )
+        if uid in acik_kritik:
+            uyarilar.append(f"{ad}: açık kritik düzeltici faaliyeti var.")
+    return uyarilar
+
+
+async def _atama_uyarisi_kancasi(db: AsyncSession, so: Any, user_ids: tuple[int, ...]) -> list[str]:
+    """`kancalar.atama_uyarilari` kaydı (imza plan §1.8)."""
+    return await atama_uyarilari(db, so, user_ids)
+
+
+kancalar.kaydet("atama_uyarilari", _atama_uyarisi_kancasi)

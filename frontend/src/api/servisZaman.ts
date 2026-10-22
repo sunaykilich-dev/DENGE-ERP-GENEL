@@ -11,7 +11,7 @@
  * Bölüm uçları iş altındadır (`/isler/{is_id}/zaman/bolumler/{bolum_id}/…`)
  * ve her eylem `version` ister: çift basışta ikinci istek 409 alır.
  */
-import { api } from "./client";
+import { api, type Sayfa } from "./client";
 import type { SlaBlogu } from "./servisOperasyon";
 
 const TS = "/api/teknik-servis";
@@ -366,3 +366,112 @@ export const servisZaman = {
 
 /** Sayaç değişince yenilenecek sorgu anahtarları (bant, liste, kart, Bugünüm). */
 export const ZAMAN_SORGULARI = [["zaman-benim"], ["benim-islerim"], ["mobil-kart"], ["bugunum"]];
+
+// --- Zaman Takibi yönetim ekranı (TS-189, E09-14/15) -------------------------
+//
+// Sayı = liste: KPI kutusu `adet`i açılan listenin `X-Toplam-Kayit`'ıdır;
+// istemci sayı HESAPLAMAZ. Kişi alanları (`user_id`, `kisi_adi`, `konum_notu`,
+// `gerekce`, `personel`) `servis_rapor.personel` yoksa yanıtta hiç yoktur.
+
+export interface ZamanKpi {
+  kod: string;
+  baslik: string;
+  tanim: string;
+  birim: "dk" | "adet" | "oran";
+  /** null = ölçülemedi / kayıt yok (0 DEĞİL). */
+  deger: number | null;
+  adet: number | null;
+  /** Kutu tıklanınca açılan liste: bölümler ya da işler; oranın listesi yok. */
+  liste: "kayitlar" | "isler" | null;
+}
+
+export interface PersonelSatiri {
+  user_id: number | null;
+  ad: string;
+  kisi_saat_dk: number | null;
+  yol_dk: number | null;
+  saha_dk: number | null;
+  bekleme_dk: number | null;
+  mola_dk: number | null;
+  is_sayisi: number;
+  canli_orani: number | null;
+  manuel_sayisi: number;
+  gecikmeli_manuel_sayisi: number;
+  duzeltilen_sayisi: number;
+  iptal_sayisi: number;
+  geri_alinan_sayisi: number;
+}
+
+export interface ZamanOzeti {
+  sunucu_zamani: string;
+  suzgec: { bas: string; bit: string; birim: string | null; kullanici_id: number | null; faaliyet: string | null };
+  kpi: ZamanKpi[];
+  /** Yalnız `servis_rapor.personel`. */
+  personel?: PersonelSatiri[];
+}
+
+export interface ZamanKaydi {
+  id: number;
+  version: number;
+  service_order_id: number;
+  so_no: string;
+  birim: string | null;
+  faaliyet: Faaliyet;
+  bekleme_nedeni: string | null;
+  started_at: string;
+  ended_at: string | null;
+  sure_dk: number | null;
+  gecen_dk: number | null;
+  uzun: boolean;
+  kaynak: string;
+  kapanis_turu: string | null;
+  girildi_at: string;
+  gecikmeli: boolean;
+  iptal_turu: string | null;
+  user_id?: number | null;
+  kisi_adi?: string | null;
+  konum_notu?: string | null;
+  gerekce?: string | null;
+  aciklama?: string | null;
+}
+
+export interface ZamanIsi {
+  id: number;
+  so_no: string;
+  birim: string;
+  tur: string;
+  durum: string;
+  konu: string;
+  completed_at: string | null;
+  kisi_saat_dk: number | null;
+  sure_durumu: string | null;
+}
+
+export interface ZamanSuzgeci {
+  bas?: string;
+  bit?: string;
+  birim?: string;
+  kullanici_id?: number;
+  faaliyet?: string;
+}
+
+function sorgu(s: Record<string, string | number | null | undefined>): string {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(s)) {
+    if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+  }
+  return p.toString();
+}
+
+export const zamanTakibi = {
+  ozet: (s: ZamanSuzgeci) => zamanli(api.get<ZamanOzeti>(`${TS}/zaman/ozet?${sorgu({ ...s })}`)),
+  aktif: (s: Pick<ZamanSuzgeci, "birim" | "kullanici_id">) =>
+    zamanli(
+      api.get<{ sunucu_zamani: string; sayaclar: ZamanKaydi[] }>(`${TS}/zaman/aktif?${sorgu({ ...s })}`),
+    ),
+  kayitlar: (s: ZamanSuzgeci & { kpi?: string }, limit: number, offset: number): Promise<Sayfa<ZamanKaydi>> =>
+    api.getSayfa<ZamanKaydi>(`${TS}/zaman/kayitlar?${sorgu({ ...s, limit, offset })}`),
+  isler: (s: ZamanSuzgeci & { kpi: string }, limit: number, offset: number): Promise<Sayfa<ZamanIsi>> =>
+    api.getSayfa<ZamanIsi>(`${TS}/zaman/isler?${sorgu({ ...s, faaliyet: undefined, limit, offset })}`),
+  excelYolu: (s: ZamanSuzgeci & { kpi?: string }) => `${TS}/zaman/kayitlar.xlsx?${sorgu({ ...s })}`,
+};

@@ -1,0 +1,4 @@
+TrainingAttendanceId,TrainingSessionId,PersonnelId,Attended,ScoreBefore,ScoreAfter,Notes
+1,1,1,1,40,90,
+2,1,2,1,50,80,
+3,1,3,0,,,

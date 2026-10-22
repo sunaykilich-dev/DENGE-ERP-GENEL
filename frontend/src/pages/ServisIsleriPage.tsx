@@ -55,6 +55,7 @@ import { operasyonApi } from "../api/servisOperasyon";
 import {
   DONEMLER,
   DURUM_RENKLERI,
+  donemAraligiMetni,
   imzaYukle,
   KPI_ADLARI,
   ONAY_TURLERI,
@@ -94,6 +95,8 @@ function suzgecOku(p: URLSearchParams): IsSuzgeci {
     donem: p.get("donem") ?? undefined,
     teknisyen_id: p.get("teknisyen_id") ? Number(p.get("teknisyen_id")) : undefined,
     musteri_id: p.get("musteri_id") ? Number(p.get("musteri_id")) : undefined,
+    // Müşteri servis kartından tesis bazlı açık iş (TS-192) bağlantısı.
+    adres_id: p.get("adres_id") ? Number(p.get("adres_id")) : undefined,
     siralama: p.get("siralama") ?? undefined,
   };
 }
@@ -392,11 +395,24 @@ function AtamaPenceresi({
         is_lead: id === sorumlu,
       }));
       return toplu
-        ? teknikServisApi.topluAta(isIdler, satirlar, mod).then(() => undefined)
-        : teknikServisApi.ata(isIdler[0], satirlar).then(() => undefined);
+        ? teknikServisApi.topluAta(isIdler, satirlar, mod).then((r) => r.uyarilar ?? [])
+        : teknikServisApi.ataUyarili(isIdler[0], satirlar).then((r) => r.uyarilar);
     },
-    onSuccess: () => {
+    onSuccess: (uyarilar: string[]) => {
       message.success(toplu ? `${isIdler.length} işin ekibi güncellendi` : "Ekip güncellendi");
+      if (uyarilar.length) {
+        // TS-198 / E08-22: yetkinlik eksikliği atamayı engellemez, yalnız uyarır.
+        Modal.warning({
+          title: "Yetkinlik uyarısıyla atandı",
+          content: (
+            <ul style={{ paddingLeft: 18, margin: 0 }}>
+              {uyarilar.map((u) => (
+                <li key={u}>{u}</li>
+              ))}
+            </ul>
+          ),
+        });
+      }
       bitti();
     },
     onError: (e: Error) => message.error(e.message),
@@ -1359,7 +1375,13 @@ export default function ServisIsleriPage() {
                 }}
               >
                 Panel: {KPI_ADLARI[suzgec.kpi] ?? suzgec.kpi}
-                {suzgec.donem ? ` · ${DONEMLER.find((d) => d.kod === suzgec.donem)?.ad ?? suzgec.donem}` : ""}
+                {suzgec.donem
+                  ? ` · ${
+                      DONEMLER.find((d) => d.kod === suzgec.donem)?.ad ??
+                      donemAraligiMetni(suzgec.donem) ??
+                      suzgec.donem
+                    }`
+                  : ""}
               </Tag>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 Liste panel kutusunun süzgeciyle açıldı (sayı = liste).

@@ -26,7 +26,10 @@ import ServisIsKartiMobil from "./pages/ServisIsKartiMobil";
 import ServisIsleriPage from "./pages/ServisIsleriPage";
 import ServisPaneli from "./pages/ServisPaneli";
 import ServisPlanlamaPage from "./pages/ServisPlanlamaPage";
+import ServisRaporlariPage from "./pages/ServisRaporlariPage";
 import ServisTanimlarPage from "./pages/ServisTanimlarPage";
+import ZamanTakibiPage from "./pages/ZamanTakibiPage";
+import FaturaDevriPage from "./pages/FaturaDevriPage";
 import AboneliklerPage from "./pages/AboneliklerPage";
 import AraclarPage from "./pages/AraclarPage";
 import AuditPage from "./pages/AuditPage";
@@ -152,6 +155,10 @@ function KorumaliUygulama() {
         <Route path="/egitim" element={<EgitimPage />} />
         <Route path="/egitim/:id" element={<EgitimPage />} />
         <Route path="/gelisim-kartim" element={<GelisimKartimPage />} />
+        {/* --- Teknik servis (Dalga 3, D3-S) --- */}
+        <Route path="/servis-raporlari" element={<ServisRaporlariPage />} />
+        <Route path="/zaman-takibi" element={<ZamanTakibiPage />} />
+        <Route path="/fatura-devri" element={<FaturaDevriPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

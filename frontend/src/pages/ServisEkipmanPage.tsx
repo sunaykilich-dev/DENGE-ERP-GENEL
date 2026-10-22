@@ -47,6 +47,7 @@ import { useAuth } from "../auth/AuthContext";
 import EkipmanFormu from "../components/EkipmanFormu";
 import EkipmanKarti, { GarantiEtiketi } from "../components/EkipmanKarti";
 import EkipmanTopluIslemleri from "../components/EkipmanTopluIslemleri";
+import EkipmanVeriKalitesi from "../components/EkipmanVeriKalitesi";
 import KpiKutusu from "../components/KpiKutusu";
 
 const SAYFA_BOYU = 50;
@@ -69,6 +70,7 @@ function suzgecOku(p: URLSearchParams): EkipmanSuzgeci {
     serviste: bool("serviste"),
     pasifler_dahil: bool("pasifler_dahil"),
     kpi: p.get("kpi") ?? undefined,
+    kalite: p.get("kalite") ?? undefined,
     hesap_id: p.get("hesap_id") ? Number(p.get("hesap_id")) : undefined,
     sozlesme_id: p.get("sozlesme_id") ? Number(p.get("sozlesme_id")) : undefined,
   };
@@ -108,8 +110,17 @@ export default function ServisEkipmanPage() {
   const kartId = id ? Number(id) : null;
   const yolEki = arama.toString() ? `?${arama.toString()}` : "";
 
-  const suzgecDegistir = (yeni: EkipmanSuzgeci) => {
-    setArama(suzgecYaz(yeni));
+  // Veri Kalitesi paneli (TS-188): `?sekme=kalite[&liste=mukerrer|saha]`.
+  const kalitePaneli = arama.get("sekme") === "kalite";
+  const kaliteListesi = arama.get("liste");
+
+  const suzgecDegistir = (yeni: EkipmanSuzgeci, panel?: { sekme?: string; liste?: string | null }) => {
+    const p = suzgecYaz(yeni);
+    const sekme = panel ? panel.sekme : arama.get("sekme");
+    const liste = panel ? panel.liste : arama.get("liste");
+    if (sekme) p.set("sekme", sekme);
+    if (sekme && liste) p.set("liste", liste);
+    setArama(p);
     setSayfa(1);
     setSecili([]);
   };
@@ -173,10 +184,27 @@ export default function ServisEkipmanPage() {
         ))}
       </Row>
 
+      {kalitePaneli && (
+        <EkipmanVeriKalitesi
+          liste={kaliteListesi}
+          onListe={(l) => suzgecDegistir(suzgec, { sekme: "kalite", liste: l })}
+          onKalite={(kod) => suzgecDegistir({ kalite: kod }, { sekme: "kalite", liste: null })}
+        />
+      )}
+
       <Card
         title="Ekipman Kütüğü"
         extra={
           <Space wrap>
+            <Button
+              type={kalitePaneli ? "primary" : "default"}
+              ghost={kalitePaneli}
+              onClick={() =>
+                suzgecDegistir(suzgec, kalitePaneli ? { sekme: undefined } : { sekme: "kalite" })
+              }
+            >
+              Veri Kalitesi
+            </Button>
             {yazabilir && (
               <Button
                 type="primary"
@@ -267,6 +295,11 @@ export default function ServisEkipmanPage() {
             >
               Pasifler dahil
             </Checkbox>
+            {suzgec.kalite && (
+              <Tag closable onClose={() => suzgecDegistir({ ...suzgec, kalite: undefined })} color="gold">
+                Kalite: {suzgec.kalite}
+              </Tag>
+            )}
             {suzgec.kpi && (
               <Tag closable onClose={() => suzgecDegistir({ ...suzgec, kpi: undefined })} color="orange">
                 KPI: {ozet.data?.find((k) => k.kod === suzgec.kpi)?.baslik ?? suzgec.kpi}

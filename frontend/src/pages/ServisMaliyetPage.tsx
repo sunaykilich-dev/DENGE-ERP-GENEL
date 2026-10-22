@@ -81,6 +81,7 @@ interface Hesap {
 }
 
 function AnalizSekmesi() {
+  const { yetkili } = useAuth();
   const [donem, setDonem] = useState<Dayjs | null>(dayjs().startOf("month"));
   const [aralik, setAralik] = useState<[Dayjs, Dayjs] | null>(null);
   const [birim, setBirim] = useState<string>();
@@ -184,6 +185,24 @@ function AnalizSekmesi() {
             onChange={setMusteriId}
             options={(musteriler.data ?? []).map((h) => ({ value: h.id, label: h.title }))}
           />
+          {yetkili("servis_rapor.disaaktar") && (
+            <>
+              <Button
+                onClick={() =>
+                  window.open(servisMaliyetApi.analizExcelAdresi(suzgec, "is"), "_blank")
+                }
+              >
+                Excel (iş)
+              </Button>
+              <Button
+                onClick={() =>
+                  window.open(servisMaliyetApi.analizExcelAdresi(suzgec, "musteri"), "_blank")
+                }
+              >
+                Excel (müşteri)
+              </Button>
+            </>
+          )}
         </Space>
         <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }}>
           Dönemde tamamlanan/kapatılan işler. Dönem en çok 12 ay. Toplamlar yalnız verisi tam

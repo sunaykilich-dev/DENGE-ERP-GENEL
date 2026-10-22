@@ -11,6 +11,8 @@
  *   Otomatik PB üretimi %100 olmadan açılamaz.
  * - Dönem: cihaz PB tablosu, seçilenleri toplu planla (E02 `PlanPenceresi`),
  *   eksik PB tamamlama, gerekçeli hedef tarih.
+ * - Raporlar sekmesi (TS-185): dönem tamamlama, KPI listeleri, uygunsuzluk
+ *   analizi ve Excel (`BakimRaporlari`).
  * - Liste sorguları sunucu sayfalamasıyla; düğmeler `yetkili()` ile; 409'da
  *   yenileme mesajı. 375 px'te tablolar yatay kaydırılır, sayfa kaymaz.
  */
@@ -68,6 +70,7 @@ import KpiKutusu from "../components/KpiKutusu";
 import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "../components/MusteriLokasyonSecici";
 import PlanPenceresi from "../components/PlanPenceresi";
 import BakimFormu from "./BakimFormu";
+import BakimRaporlari from "./BakimRaporlari";
 
 const SAYFA = 25;
 const tarih = (v: string | null | undefined) => (v ? dayjs(v).format("DD.MM.YYYY") : "—");
@@ -103,7 +106,18 @@ export default function BakimPage() {
       <Row gutter={[12, 12]}>
         {(ozet.data?.kutular ?? []).map((k) => (
           <Col key={k.kod} xs={12} sm={8} lg={4}>
-            <KpiKutusu {...k} yukleniyor={ozet.isLoading} />
+            <KpiKutusu
+              kod={k.kod}
+              baslik={k.baslik}
+              tanim={
+                k.birim === "yuzde" && k.payda !== undefined
+                  ? `${k.tanim} — ${k.pay ?? 0}/${k.payda}`
+                  : k.tanim
+              }
+              deger={k.deger}
+              yol={k.yol}
+              yukleniyor={ozet.isLoading}
+            />
           </Col>
         ))}
       </Row>
@@ -131,6 +145,11 @@ export default function BakimPage() {
             ...(yetkili("bakim.yaz") || yetkili("bakim.gor")
               ? [{ key: "uretim", label: "PB Üretimi", children: <UretimSekmesi /> }]
               : []),
+            {
+              key: "raporlar",
+              label: "Raporlar",
+              children: <BakimRaporlari onFormAc={setFormSo} />,
+            },
           ]}
         />
       </Card>

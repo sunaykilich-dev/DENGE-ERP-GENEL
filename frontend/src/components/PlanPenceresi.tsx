@@ -61,6 +61,11 @@ export interface PlanPenceresiProps {
   mevcut?: Plan | null;
   /** Yeni planın önerilen günü (takvimde tıklanan gün). */
   varsayilanGun?: string;
+  /**
+   * Yeni plan için ön dolum (TS-190 bölge önerisi: önceki ziyaret bittikten
+   * sonraki saat ve aynı ekip). Mevcut plan varsa yok sayılır.
+   */
+  varsayilan?: { baslangic_saati?: string | null; teknisyen_idler?: number[]; arac_id?: number | null };
   onKapat: () => void;
   onKaydedildi: () => void;
 }
@@ -106,6 +111,7 @@ export default function PlanPenceresi({
   baslik,
   mevcut,
   varsayilanGun,
+  varsayilan,
   onKapat,
   onKaydedildi,
 }: PlanPenceresiProps) {
@@ -144,17 +150,19 @@ export default function PlanPenceresi({
         ? mevcut.baslangic_saati
           ? dayjs(mevcut.baslangic_saati, "HH:mm")
           : null
-        : dayjs("09:00", "HH:mm"),
+        : dayjs(varsayilan?.baslangic_saati ?? "09:00", "HH:mm"),
       sure_dk: mevcut?.sure_dk ?? 60,
       sef_idler: sefler.map((u) => u.user_id),
       sef_sahada: sefler.some((u) => u.sahaya_gidiyor),
-      teknisyen_idler: mevcut?.ekip.filter((u) => u.rol === "TEKNISYEN").map((u) => u.user_id),
-      arac_id: mevcut?.arac_id ?? null,
+      teknisyen_idler: mevcut
+        ? mevcut.ekip.filter((u) => u.rol === "TEKNISYEN").map((u) => u.user_id)
+        : varsayilan?.teknisyen_idler,
+      arac_id: mevcut ? mevcut.arac_id : (varsayilan?.arac_id ?? null),
       saha_bolgesi: mevcut?.saha_bolgesi ?? undefined,
       saha_notu: mevcut?.saha_notu ?? undefined,
       plan_notu: mevcut?.plan_notu ?? undefined,
     });
-  }, [acik, mevcut, varsayilanGun, form]);
+  }, [acik, mevcut, varsayilanGun, varsayilan, form]);
 
   // Saha önerisi yalnız boş alanları doldurur (kullanıcının yazdığı ezilmez).
   useEffect(() => {
@@ -173,10 +181,24 @@ export default function PlanPenceresi({
       if (mod === "toplu") return planlamaApi.topluPlan(isIdler, g);
       return planlamaApi.yenidenPlan(isIdler, g);
     },
-    onSuccess: () => {
+    onSuccess: (sonuc) => {
       message.success(
         mod === "toplu" ? `${isIdler.length} iş tek ziyarette planlandı` : "Plan kaydedildi",
       );
+      const uyarilar = sonuc?.uyarilar ?? [];
+      if (uyarilar.length) {
+        // TS-198: yetkinlik eksikliği planı engellemez, yalnız uyarır.
+        Modal.warning({
+          title: "Yetkinlik uyarısıyla atandı",
+          content: (
+            <ul style={{ paddingLeft: 18, margin: 0 }}>
+              {uyarilar.map((u) => (
+                <li key={u}>{u}</li>
+              ))}
+            </ul>
+          ),
+        });
+      }
       setCakismalar(null);
       onKaydedildi();
     },

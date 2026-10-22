@@ -161,7 +161,80 @@ export const servisMaliyetApi = {
   ) => api.put<IsFinansi>(`${MALIYET_ONEK}/isler/${soId}/diger-maliyet`, g),
   gecmis: (soId: number) => api.get<GecmisSatiri[]>(`${MALIYET_ONEK}/isler/${soId}/gecmis`),
   analiz: (s: AnalizSuzgeci) => api.get<Analiz>(`${MALIYET_ONEK}/analiz?${parametreler(s)}`),
+  /** Maliyet analizi Excel'i (TS-197, E07-22): `servis_rapor.disaaktar` ister. */
+  analizExcelAdresi: (s: AnalizSuzgeci, kirilim: "is" | "musteri") =>
+    `${MALIYET_ONEK}/analiz.xlsx?${parametreler({ ...s, durum: undefined })}&kirilim=${kirilim}`,
+
+  // --- Fatura devri (TS-197, E07-26) -----------------------------------------
+  faturaDevri: (s: DevirSuzgeci) =>
+    api.getSayfa<DevirSatiri>(`${MALIYET_ONEK}/fatura-devri?${devirParametreleri(s)}`),
+  faturaDevriExcelAdresi: (s: DevirSuzgeci) =>
+    `${MALIYET_ONEK}/fatura-devri.xlsx?${devirParametreleri({ ...s, limit: undefined, offset: undefined })}`,
+  faturaIsaretle: (is_idler: number[], not?: string | null) =>
+    api.post<{ isaretlenen: number[] }>(`${MALIYET_ONEK}/fatura-devri/isaretle`, {
+      is_idler,
+      not: not || null,
+    }),
+  faturaGeriAl: (soId: number, gerekce: string) =>
+    api.post<{ so_id: number }>(`${MALIYET_ONEK}/fatura-devri/${soId}/geri-al`, { gerekce }),
+
+  // --- Teklif dönüşümü (TS-197, E07-24) --------------------------------------
+  teklifDonusumu: (birim: string, gun = 365) =>
+    api.get<TeklifDonusumu>(`${MALIYET_ONEK}/teklif-donusumu?birim=${birim}&gun=${gun}`),
+  teklifDonusumuExcelAdresi: (birim: string, gun = 365) =>
+    `${MALIYET_ONEK}/teklif-donusumu.xlsx?birim=${birim}&gun=${gun}`,
 };
+
+// --- Fatura devri ve dönüşüm tipleri (TS-197) ---------------------------------
+
+export interface DevirSuzgeci {
+  durum: "bekleyen" | "iletildi";
+  donem?: string | null;
+  birim?: string | null;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DevirSatiri {
+  so_id: number;
+  so_no: string;
+  birim: string;
+  tur: string;
+  status: string;
+  musteri: string | null;
+  kapanis_tarihi: string | null;
+  gelir_kaynagi: string | null;
+  teklifler: string[];
+  fatura_iletildi_at: string | null;
+  iletti: string | null;
+  fatura_notu: string | null;
+  /** Yalnız `teklif.gor`/`maliyet.gor` sahibine; yoksa anahtar YOK. */
+  tutar?: Tutar;
+}
+
+export interface TeklifDonusumu {
+  gun: number;
+  birim: string;
+  toplam_teklif: number;
+  durumlar: Record<string, number>;
+  gonderilen_adet: number;
+  kazanilan: number;
+  kaybedilen: number;
+  iptal: number;
+  donusum_yuzde: number | null;
+  kabul_tutari_net: Tutar;
+  kabul_tutari_eksik: number;
+  ort_yanit_gun: number | null;
+  kayip_nedenleri: { neden: string; adet: number }[];
+}
+
+function devirParametreleri(s: DevirSuzgeci): string {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(s)) {
+    if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+  }
+  return p.toString();
+}
 
 /** Tutar biçimi: `null` → "—" (eksik veri sıfır gibi gösterilmez). */
 export function tl(v: Tutar | undefined): string {

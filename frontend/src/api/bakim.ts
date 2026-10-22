@@ -227,6 +227,11 @@ export interface KpiKutusuVerisi {
   tanim: string;
   deger: number | null;
   yol: string;
+  /** adet | yuzde | gun (TS-185). */
+  birim?: string;
+  /** Yüzde KPI'da pay/payda; payda = açılan listenin toplamı. */
+  pay?: number;
+  payda?: number;
 }
 
 export interface Ozet {
@@ -499,4 +504,90 @@ export const bakimApi = {
   /** E01 yeniden açma ucu (`servis.kapat`); bakım tarafı kancayla tepki verir. */
   yenidenAc: (soId: number, gerekce: string) =>
     istek<unknown>(`/api/teknik-servis/isler/${soId}/yeniden-ac`, "POST", { gerekce }),
+
+  // --- Raporlar (TS-185) ------------------------------------------------------
+  donemTamamlama: (p: RaporSuzgeci) =>
+    api.getSayfa<DonemTamamlamaSatiri>(`${ONEK}/raporlar/donem-tamamlama?${sorgu({ ...p })}`),
+  pbIsleri: (p: RaporSuzgeci) =>
+    api.getSayfa<PbRaporSatiri>(`${ONEK}/raporlar/pb-isleri?${sorgu({ ...p })}`),
+  uygunsuzlukAnalizi: (p: RaporSuzgeci) =>
+    api.get<UygunsuzlukAnalizi>(`${ONEK}/raporlar/uygunsuzluk?${sorgu({ ...p })}`),
+  /** Excel indirme adresi (tarayıcı `window.open`; denetime sunucu yazar). */
+  raporExcelAdresi: (p: RaporSuzgeci) =>
+    `${ONEK}/raporlar/bakim.xlsx?${sorgu({ ...p, kpi: undefined, limit: undefined, offset: undefined })}`,
 };
+
+// --- Rapor tipleri (TS-185) ----------------------------------------------------
+
+/** PB listesine düşen KPI kodları (kutu → rapor sekmesi). */
+export const PB_KPILERI = [
+  "ACIK_PB",
+  "TAMAMLANAN_PB",
+  "SURE_EKSIK_PB",
+  "BAKIM_YAPILDI_AKSIYON_ACIK",
+  "UYGUNSUZLUK_ORANI",
+  "ONAYSIZ_KAPANIS",
+] as const;
+
+export interface RaporSuzgeci {
+  baslangic?: string | null;
+  bitis?: string | null;
+  birim?: string | null;
+  kpi?: string | null;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DonemTamamlamaSatiri {
+  donem_id: number;
+  contract_id: number;
+  contract_no: string;
+  musteri: string | null;
+  birim: string;
+  sozlesme_durumu: string;
+  dongu_baslangici: string;
+  sequence_no: number;
+  target_date: string;
+  pb_toplam: number;
+  pb_tamamlanan: number;
+  pb_acik: number;
+  pb_iptal: number;
+  oran: number | null;
+  oran_metni: string;
+  durum: string;
+  closing_kind: string | null;
+  tamamlanma_tarihi: string | null;
+  gecikmis: boolean;
+  uyumlu: boolean;
+}
+
+export interface PbRaporSatiri {
+  so_id: number;
+  so_no: string;
+  status: string;
+  birim: string;
+  musteri: string | null;
+  contract_id: number;
+  contract_no: string;
+  donem_id: number;
+  target_date: string;
+  completed_at: string | null;
+  /** Süre kaydı yoksa null ("eksik"); tahmini süre yerine konmaz. */
+  kisi_saat_dk: number | null;
+  sure_durumu: string | null;
+  uygunsuzluk_var: boolean;
+  onay_var: boolean;
+}
+
+export interface UygunsuzlukAnalizi {
+  generated_at: string;
+  uygunsuzluk_orani: { deger: number | null; pay: number; payda: number };
+  en_sik: { check_code: string; madde: string; adet: number; acik: number }[];
+  aksiyon_yasi: {
+    adet: number;
+    ortalama_gun: number | null;
+    en_eski_gun: number | null;
+    kovalar: { kova: string; adet: number }[];
+  };
+  onaysiz_kapanis: number;
+}

@@ -1,0 +1,3 @@
+RentalProductId,UnitCode,Category,ProductCode,ProductName,RequiresSerial,IsActive
+1,Güvenlik Sistemleri,X-Ray,KR-XRAY,X-Ray Kiralık,1,1
+2,Güvenlik Sistemleri,Bariyer,KR-BARIYER,Bariyer,0,1

@@ -569,4 +569,164 @@ export const kiralamaApi = {
   topluOnizleme: (dosya: File) => dosyaGonder<TopluOnizleme>(`${URL_}/envanter/toplu/onizleme`, dosya),
   topluOnayla: (dosya: File, sha256: string) =>
     dosyaGonder<TopluSonuc>(`${URL_}/envanter/toplu/onayla`, dosya, { sha256 }),
+
+  // Sahada cihaz değişimi (TS-195, E06-20) — `kiralama.asama`
+  degisim: (id: number, g: { eski_tahsis_id: number; yeni_kiralik_id: number; iade_depo_id: number; not?: string }) =>
+    api.post<KiralamaKarti>(`${URL_}/${id}/degisim`, g),
+
+  // Raporlar (TS-195, E06-21) — `kiralama.gor + servis_rapor.gor`; Excel + `servis_rapor.disaaktar`
+  raporDepoDurumu: () => api.get<DepoDurumu>(`${URL_}/raporlar/depo-durumu`),
+  raporGecikenIade: () => api.get<GecikenIadeSatiri[]>(`${URL_}/raporlar/geciken-iade`),
+  raporKontroldeBekleme: () => api.get<KontroldeBekleme>(`${URL_}/raporlar/kontrolde-bekleme`),
+  raporExcelYolu: (rapor: "depo-durumu" | "geciken-iade" | "kontrolde-bekleme") =>
+    `${URL_}/raporlar/${rapor}.xlsx`,
+
+  // Depo sayımı (TS-195, E06-22 b) — okuma `kiralama.gor`, yazma `kiralama.envanter`
+  sayimlar: (durum?: string, limit = 50, offset = 0) =>
+    api.getSayfa<SayimOzeti>(`${URL_}/sayimlar${sorgu({}, { durum, limit, offset })}`),
+  sayimAc: (depoId: number, notes?: string) =>
+    api.post<SayimDetayi>(`${URL_}/sayimlar`, { depo_id: depoId, notes }),
+  sayim: (id: number) => api.get<SayimDetayi>(`${URL_}/sayim?sayim_id=${id}`),
+  sayimSatirlari: (id: number, satirlar: SayimSatirGirdisi[]) =>
+    api.put<SayimDetayi>(`${URL_}/sayim/satirlar`, { sayim_id: id, satirlar }),
+  sayimFarki: (id: number) => api.get<SayimFarki>(`${URL_}/sayim/fark?sayim_id=${id}`),
+  sayimOnayla: (id: number, g: { kararlar: string[]; gerekce?: string; degisimi_kabul?: boolean }) =>
+    api.post<SayimDetayi & { hareketler: number[] }>(`${URL_}/sayim/onayla`, { sayim_id: id, ...g }),
+  sayimIptal: (id: number, gerekce: string) =>
+    api.post<SayimOzeti>(`${URL_}/sayim/iptal`, { sayim_id: id, gerekce }),
 };
+
+// --- Rapor ve sayım tipleri (TS-195) ---------------------------------------------------
+
+export interface DepoDurumHucreleri {
+  hazir: number;
+  rezerve: number;
+  serbest: number;
+  kirada: number;
+  kontrolde: number;
+  hazir_degil: number;
+  kayip: number;
+  atolyede: number;
+}
+
+export interface DepoDurumu {
+  satirlar: (DepoDurumHucreleri & {
+    depo_id: number | null;
+    depo_adi: string;
+    product_id: number;
+    urun_kodu: string | null;
+    urun_adi: string | null;
+    seri_takipli: boolean;
+  })[];
+  depolar: (DepoDurumHucreleri & { depo_id: number | null; depo_adi: string })[];
+}
+
+export interface AsamaSuresi {
+  so_no: string | null;
+  dk: number | null;
+  durum: string;
+}
+
+export interface GecikenIadeSatiri {
+  id: number;
+  rental_no: string;
+  birim: string;
+  musteri: string | null;
+  proje_adi: string | null;
+  bitis: string;
+  gecikme_gun: number;
+  status: string;
+  musteride_adet: number;
+  seriler: string[];
+  asama_sureleri: Record<string, AsamaSuresi>;
+}
+
+export interface KontroldeBekleme {
+  esik_gun: number;
+  seri: {
+    kiralik_id: number;
+    urun_kodu: string | null;
+    urun_adi: string | null;
+    serial_no: string;
+    depo_adi: string | null;
+    giris_at: string | null;
+    bekleme_gun: number | null;
+    uzun: boolean;
+  }[];
+  toplu: {
+    product_id: number;
+    urun_kodu: string | null;
+    urun_adi: string | null;
+    depo_id: number;
+    depo_adi: string | null;
+    adet: number;
+    son_giris_at: string | null;
+    bekleme_gun: number | null;
+    uzun: boolean;
+  }[];
+}
+
+export const SAYIM_DURUM_ADLARI: Record<string, string> = {
+  ACIK: "Açık",
+  ONAYLANDI: "Onaylandı",
+  IPTAL: "İptal",
+};
+
+export interface SayimOzeti {
+  id: number;
+  depo_id: number;
+  depo_adi: string | null;
+  durum: string;
+  baslangic_at: string;
+  onay_at: string | null;
+  onaylayan_id: number | null;
+  iptal_gerekcesi: string | null;
+  notes: string | null;
+  version: number;
+}
+
+export interface SayimSatiri {
+  id: number;
+  product_id: number;
+  urun_kodu: string | null;
+  kiralik_id: number | null;
+  seri: string | null;
+  sistemde: boolean;
+  sayilan_adet: number;
+  notes: string | null;
+}
+
+export interface SayimDetayi extends SayimOzeti {
+  satirlar: SayimSatiri[];
+}
+
+export interface SayimSatirGirdisi {
+  product_id: number;
+  seri?: string | null;
+  adet?: number | null;
+  notes?: string | null;
+}
+
+export interface FarkSatiri {
+  anahtar: string;
+  tur: "SAYILMADI" | "SISTEMDE_YOK" | "BASKA_YERDE" | "EKSIK" | "FAZLA";
+  tur_adi: string;
+  product_id: number;
+  urun_kodu: string | null;
+  urun_adi: string | null;
+  kiralik_id: number | null;
+  seri: string | null;
+  sistem_durum: string | null;
+  sistem_adet: number;
+  sayilan_adet: number;
+  fark: number;
+  uygulanabilir: boolean;
+}
+
+export interface SayimFarki {
+  sayim_id: number;
+  depo_id: number;
+  satirlar: FarkSatiri[];
+  sayim_sonrasi_hareket: number;
+  ozet: Record<string, number>;
+}

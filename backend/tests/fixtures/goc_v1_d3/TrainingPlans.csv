@@ -1,0 +1,4 @@
+TrainingPlanId,PersonnelId,CourseId,PlanYear,DueDate,Status,PersonalGoal,CompletedAt
+1,1,2,2026,2026-06-30,Planlandı,,
+2,3,1,2026,2026-03-31,Tamamlandı,,2026-02-01T12:00:00
+3,1,1,2026,2026-03-31,Tamamlandı,,

@@ -45,7 +45,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
@@ -1384,6 +1384,276 @@ async def parca_geldi_uyarisi(db: AsyncSession, user: User, clock: Clock) -> lis
             onem="bilgi",
         )
     ]
+
+
+# --- Parça tüketim raporu (TS-196, E11-18) -------------------------------------------------
+#
+# Net çıkış = −Σqty WHERE service_order_id IS NOT NULL (çıkış eksi, iade artı;
+# ters kayıtlar `service_order_id`'yi kopyaladığı için kendiliğinden girer).
+# Tutar = −Σ(qty × unit_cost) — `unit_cost` hareket anında dondurulmuştur
+# (KD-25); maliyeti NULL satır varsa grubun tutarı None ve "maliyet eksik"
+# (E07 `MALIYET_EKSIK` anlamı; 0 yazılmaz). E07 iş malzeme maliyeti ile bu
+# raporun tutarı AYNI fonksiyondan (`malzeme_maliyeti_toplu`) gelir.
+# Tutar yalnız `maliyet_gorur` iken yanıtta ANAHTAR olarak bulunur.
+
+TUKETIM_KIRILIMLARI = ("parca_ay", "birim", "musteri", "is_turu", "is", "ekipman")
+IS_GRUPLARI = ("PLANLI_BAKIM", "SERVIS")
+IS_GRUBU_ADLARI = {"PLANLI_BAKIM": "Planlı bakım (PB)", "SERVIS": "Diğer servis işleri"}
+TUKETIM_VARSAYILAN_GUN = 30
+TUKETIM_AZAMI_GUN = 731
+
+
+@dataclass(frozen=True)
+class TuketimSuzgeci:
+    bas: date | None = None
+    bit: date | None = None
+    birim: str | None = None
+    musteri_id: int | None = None
+    is_grubu: str | None = None
+    product_id: int | None = None
+    depo_id: int | None = None
+    ekipman_id: int | None = None
+    so_id: int | None = None
+
+
+def tuketim_donemi(s: TuketimSuzgeci, clock: Clock) -> tuple[date, date]:
+    """Varsayılan son 31 gün; bitiş < başlangıç ya da 24 aydan uzun dönem 400."""
+    bit = s.bit or yerel_bugun(clock)
+    bas = s.bas or bit - timedelta(days=TUKETIM_VARSAYILAN_GUN)
+    if bit < bas:
+        raise ServisGirdiHatasi("Bitiş tarihi başlangıçtan önce olamaz")
+    if (bit - bas).days > TUKETIM_AZAMI_GUN:
+        raise ServisGirdiHatasi("Rapor dönemi en çok 24 ay olabilir")
+    return bas, bit
+
+
+def is_grubu_ifadesi() -> ColumnElement[str]:
+    return case((ServiceOrder.tur == "PB", "PLANLI_BAKIM"), else_="SERVIS")
+
+
+def tuketim_sorgusu(user: User, s: TuketimSuzgeci, clock: Clock) -> Select:
+    """Servis işine yazılmış defter satırları (kapsamlı): rapor ve "aynı filtreli
+    hareket defteri" karşılaştırmasının TEK sorgusu. `StockMovement` + iş
+    alanları seçer."""
+    from app.models.rbac import BIRIM_KODLARI
+
+    bas, bit = tuketim_donemi(s, clock)
+    stmt = (
+        select(StockMovement)
+        .join(ServiceOrder, ServiceOrder.id == StockMovement.service_order_id)
+        .where(
+            StockMovement.service_order_id.is_not(None),
+            hareket_kapsami(user),
+            StockMovement.created_at >= yerel_gun_araligi(bas)[0],
+            StockMovement.created_at < yerel_gun_araligi(bit)[1],
+        )
+    )
+    if s.birim:
+        if s.birim not in BIRIM_KODLARI:
+            raise ServisGirdiHatasi(f"Bilinmeyen birim: {s.birim}")
+        stmt = stmt.where(ServiceOrder.birim == s.birim)
+    if s.musteri_id is not None:
+        stmt = stmt.where(ServiceOrder.customer_id == s.musteri_id)
+    if s.is_grubu:
+        if s.is_grubu not in IS_GRUPLARI:
+            raise ServisGirdiHatasi(f"İş grubu {', '.join(IS_GRUPLARI)} içinden olmalı")
+        stmt = stmt.where(is_grubu_ifadesi() == s.is_grubu)
+    if s.product_id is not None:
+        stmt = stmt.where(StockMovement.product_id == s.product_id)
+    if s.depo_id is not None:
+        stmt = stmt.where(StockMovement.warehouse_id == s.depo_id)
+    if s.ekipman_id is not None:
+        # Parça yalnız TEK ekipmanlı işte (işin `equipment_id`'si) ekipmana
+        # atfedilir; çok ekipmanlı iş hiçbir ekipmana otomatik bağlanmaz.
+        stmt = stmt.where(ServiceOrder.equipment_id == s.ekipman_id)
+    if s.so_id is not None:
+        stmt = stmt.where(ServiceOrder.id == s.so_id)
+    return stmt
+
+
+def _tutar_ifadeleri():
+    tutar = func.sum(-StockMovement.qty * StockMovement.unit_cost)
+    eksik = func.count().filter(StockMovement.unit_cost.is_(None))
+    return tutar, eksik
+
+
+async def malzeme_maliyeti_toplu(
+    db: AsyncSession, so_idler: Sequence[int]
+) -> dict[int, tuple[Decimal | None, str]]:
+    """İş → (malzeme tutarı, durum) — E07 iş finansı ve E11-18 raporunun TEK
+    hesabı. Durum: `TAM` | `YOK` (hareket yok, tutar 0) | `MALIYET_EKSIK`
+    (maliyeti bilinmeyen satır var, tutar None)."""
+    idler = sorted({int(i) for i in so_idler})
+    if not idler:
+        return {}
+    tutar, eksik = _tutar_ifadeleri()
+    satirlar = (
+        await db.execute(
+            select(StockMovement.service_order_id, tutar, eksik)
+            .where(StockMovement.service_order_id.in_(idler))
+            .group_by(StockMovement.service_order_id)
+        )
+    ).all()
+    sonuc: dict[int, tuple[Decimal | None, str]] = {i: (Decimal("0.00"), "YOK") for i in idler}
+    for so_id, t, e in satirlar:
+        if e:
+            sonuc[so_id] = (None, "MALIYET_EKSIK")
+        else:
+            sonuc[so_id] = (
+                Decimal(str(t or 0)).quantize(Decimal("0.01"), ROUND_HALF_UP),
+                "TAM",
+            )
+    return sonuc
+
+
+def _kirilim_sutunlari(kirilim: str) -> list[Any]:
+    ay = func.to_char(func.timezone("Europe/Istanbul", StockMovement.created_at), "YYYY-MM")
+    grup = is_grubu_ifadesi().label("is_grubu")
+    if kirilim == "parca_ay":
+        return [StockMovement.product_id.label("product_id"), ay.label("ay"), grup]
+    if kirilim == "birim":
+        return [ServiceOrder.birim.label("birim"), grup]
+    if kirilim == "musteri":
+        return [ServiceOrder.customer_id.label("musteri_id"), grup]
+    if kirilim == "is_turu":
+        return [ServiceOrder.tur.label("is_turu"), grup]
+    if kirilim == "is":
+        return [
+            ServiceOrder.id.label("so_id"),
+            StockMovement.product_id.label("product_id"),
+            grup,
+        ]
+    if kirilim == "ekipman":
+        return [
+            ServiceOrder.equipment_id.label("ekipman_id"),
+            StockMovement.product_id.label("product_id"),
+            grup,
+        ]
+    raise ServisGirdiHatasi(f"Kırılım {', '.join(TUKETIM_KIRILIMLARI)} içinden olmalı")
+
+
+async def parca_tuketimi(
+    db: AsyncSession,
+    user: User,
+    s: TuketimSuzgeci,
+    clock: Clock,
+    *,
+    kirilim: str = "parca_ay",
+    maliyet_gorur: bool = False,
+) -> dict[str, Any]:
+    """Parça tüketim raporu (SQL'de toplanır). PB ve diğer servis işleri her
+    kırılımda ayrı satırdır (`is_grubu`)."""
+    from app.models import Account, ServiceEquipment
+
+    bas, bit = tuketim_donemi(s, clock)
+    sutunlar = _kirilim_sutunlari(kirilim)
+    # Kırılım aynı JOIN'li sorgunun kendisinde gruplanır (kapsam ve süzgeç tek
+    # kaynakta: `tuketim_sorgusu`). GROUP BY sıra numarasıyla: ifadeler bağlı
+    # parametre taşıdığı için (`'PB'`, `'YYYY-MM'`) metin olarak tekrarlanamaz.
+    tutar, eksik = _tutar_ifadeleri()
+    stmt = (
+        tuketim_sorgusu(user, s, clock)
+        .with_only_columns(
+            *sutunlar,
+            (-func.sum(StockMovement.qty)).label("net_cikis"),
+            func.count().label("hareket"),
+            tutar.label("tutar"),
+            eksik.label("maliyet_eksik"),
+        )
+        .group_by(*[text(str(i + 1)) for i in range(len(sutunlar))])
+    )
+    if kirilim == "ekipman":
+        stmt = stmt.where(ServiceOrder.equipment_id.is_not(None))
+    satirlar = (await db.execute(stmt)).mappings().all()
+    urun_idler = {r["product_id"] for r in satirlar if r.get("product_id")}
+    urunler = {
+        u.id: u
+        for u in (
+            await db.scalars(select(Product).where(Product.id.in_(list(urun_idler) or [0])))
+        ).all()
+    }
+    musteri_idler = {r["musteri_id"] for r in satirlar if r.get("musteri_id")}
+    musteriler = dict(
+        (
+            await db.execute(
+                select(Account.id, Account.title).where(Account.id.in_(list(musteri_idler) or [0]))
+            )
+        ).all()
+    )
+    so_idler = {r["so_id"] for r in satirlar if r.get("so_id")}
+    isler = dict(
+        (
+            await db.execute(
+                select(ServiceOrder.id, ServiceOrder.so_no).where(
+                    ServiceOrder.id.in_(list(so_idler) or [0])
+                )
+            )
+        ).all()
+    )
+    ekipman_idler = {r["ekipman_id"] for r in satirlar if r.get("ekipman_id")}
+    ekipmanlar = {
+        e.id: e
+        for e in (
+            await db.scalars(
+                select(ServiceEquipment).where(ServiceEquipment.id.in_(list(ekipman_idler) or [0]))
+            )
+        ).all()
+    }
+    sonuc = []
+    toplam_net = 0
+    toplam_tutar = Decimal("0.00")
+    toplam_eksik = 0
+    for r in satirlar:
+        satir: dict[str, Any] = {k: r[k] for k in r.keys() if k not in ("tutar", "maliyet_eksik")}
+        satir["is_grubu_adi"] = IS_GRUBU_ADLARI.get(r["is_grubu"], r["is_grubu"])
+        if r.get("product_id"):
+            u = urunler.get(r["product_id"])
+            satir["urun_kodu"] = u.code if u else None
+            satir["urun_adi"] = u.name if u else None
+        if "musteri_id" in r:
+            satir["musteri"] = musteriler.get(r["musteri_id"])
+        if r.get("so_id"):
+            satir["so_no"] = isler.get(r["so_id"])
+        if r.get("ekipman_id"):
+            e = ekipmanlar.get(r["ekipman_id"])
+            satir["ekipman"] = (
+                {"id": e.id, "tip": e.equipment_type, "seri": e.serial_no} if e else None
+            )
+        satir["net_cikis"] = int(r["net_cikis"] or 0)
+        toplam_net += satir["net_cikis"]
+        eksik_mi = bool(r["maliyet_eksik"])
+        toplam_eksik += int(r["maliyet_eksik"] or 0)
+        if maliyet_gorur:
+            satir["maliyet_eksik"] = eksik_mi
+            satir["tutar"] = (
+                None
+                if eksik_mi
+                else Decimal(str(r["tutar"] or 0)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+            )
+            if satir["tutar"] is not None:
+                toplam_tutar += satir["tutar"]
+        sonuc.append(satir)
+    sonuc.sort(
+        key=lambda x: (
+            str(x.get("ay") or ""),
+            str(x.get("birim") or ""),
+            str(x.get("musteri") or ""),
+            str(x.get("is_turu") or ""),
+            str(x.get("so_no") or ""),
+            str(x.get("urun_kodu") or ""),
+            x["is_grubu"],
+        )
+    )
+    toplam: dict[str, Any] = {"net_cikis": toplam_net}
+    if maliyet_gorur:
+        toplam["tutar"] = toplam_tutar
+        toplam["maliyet_eksik_hareket"] = toplam_eksik
+    return {
+        "donem": {"bas": bas, "bit": bit},
+        "kirilim": kirilim,
+        "satirlar": sonuc,
+        "toplam": toplam,
+    }
 
 
 # --- Kayıtlar (dosyanın EN ALTINDA; plan §1.8, §1.11) ------------------------------------

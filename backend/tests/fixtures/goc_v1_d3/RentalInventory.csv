@@ -1,0 +1,6 @@
+RentalInventoryId,RentalProductId,RentalWarehouseId,SerialNo,Quantity,ConditionStatus,RentalOrderItemId,Notes
+1001,1,1,SN-1,1,Kirada,111,
+1002,1,1,SN-2,1,Kirada,121,
+1003,1,1,SN-3,1,Kirada,,
+1004,1,1,SN-4,1,Hazır,,
+1005,2,1,,5,Hazır,,

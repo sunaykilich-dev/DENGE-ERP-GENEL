@@ -231,6 +231,8 @@ async def mevcut_refler(
     Tablo adı modül sabitlerinden gelir (kullanıcı girdisi değil); yine de
     beyaz liste ile sınanır.
     """
+    if hedef_tablo == OLAY_HEDEFI:
+        return await mevcut_olay_refleri(db, kaynak_tablo)
     if hedef_tablo not in HEDEF_TABLOLAR:
         raise ValueError(f"Bilinmeyen hedef tablo: {hedef_tablo}")
     sonuc = await db.execute(
@@ -252,5 +254,29 @@ HEDEF_TABLOLAR = frozenset(
         "service_visits",
         "service_plans",
         "service_time_entries",
+        # Göç-2 (D3-G): eğitim göçü (TS-206).
+        "training_courses",
+        "training_criteria",
+        "competencies",
+        "competency_assessments",
+        "training_sessions",
+        "training_attendance",
+        "training_plans",
+        "training_observations",
     }
 )
+# Kaynak kimliği `source_ref` kolonunda değil, olay `veri->>'kaynak'` alanında
+# tutulan hedef (eski serbest metin parça kayıtları → NOT olayı, TS-208).
+OLAY_HEDEFI = "service_order_events"
+
+
+async def mevcut_olay_refleri(db: AsyncSession | AsyncConnection, kaynak_tablo: str) -> set[str]:
+    """Göçün NOT olayı olarak taşıdığı kaynak satırları (`veri->>'kaynak'`)."""
+    sonuc = await db.execute(
+        text(
+            "SELECT DISTINCT veri->>'kaynak' FROM service_order_events "
+            "WHERE olay_turu = 'NOT' AND veri->>'goc' = :s AND veri->>'kaynak' LIKE :onek"
+        ),
+        {"s": GOC_SISTEMI, "onek": f"{kaynak_tablo}:%"},
+    )
+    return {r[0] for r in sonuc.all()}

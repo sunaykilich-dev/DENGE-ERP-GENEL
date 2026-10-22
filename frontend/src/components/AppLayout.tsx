@@ -3,16 +3,20 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   BarChartOutlined,
+  BellOutlined,
   BuildOutlined,
   CalendarOutlined,
   CarOutlined,
+  ClockCircleOutlined,
   ContainerOutlined,
   CheckSquareOutlined,
   ClusterOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   DollarOutlined,
+  FileDoneOutlined,
   FileTextOutlined,
+  FundOutlined,
   FieldTimeOutlined,
   HddOutlined,
   IdcardOutlined,
@@ -37,11 +41,12 @@ import {
 } from "@ant-design/icons";
 import { Dropdown, Layout, Menu, Tag, Typography } from "antd";
 import type { MenuProps } from "antd";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import AktifSayacBandi from "./AktifSayacBandi";
+import BildirimTercihleriPenceresi, { BILDIRIM_TERCIHLERI_ETKIN } from "./BildirimTercihleri";
 import GlobalSearch from "./GlobalSearch";
 import UyariZili from "./UyariZili";
 import { marka } from "../theme";
@@ -203,7 +208,8 @@ export const MENU: MenuKalemi[] = [
     key: "/servis-ana-veri",
     label: "Ana Veri Kalitesi",
     icon: <AuditOutlined />,
-    izin: "hesap.birlestir",
+    // Dalga 3 (TS-188): Veri Kalitesi sayfası `servis_rapor.gor` ile de açılır.
+    izin: ["hesap.birlestir", "servis_rapor.gor"],
     grup: "Teknik Servis",
   },
   {
@@ -211,6 +217,28 @@ export const MENU: MenuKalemi[] = [
     label: "Servis Tanımları",
     icon: <ProfileOutlined />,
     izin: ["servis.tanim", "operasyon.yonet"],
+    grup: "Teknik Servis",
+  },
+  // --- Dalga 3 (D3-S) ---
+  {
+    key: "/servis-raporlari",
+    label: "Servis Raporları",
+    icon: <FundOutlined />,
+    izin: "servis_rapor.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/zaman-takibi",
+    label: "Zaman Takibi",
+    icon: <ClockCircleOutlined />,
+    izin: "servis_rapor.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/fatura-devri",
+    label: "Fatura Devri",
+    icon: <FileDoneOutlined />,
+    izin: "tahsilat.gor",
     grup: "Teknik Servis",
   },
   // --- İnsan Kaynakları ----------------------------------------------------
@@ -310,6 +338,9 @@ const KAPSAM_ETIKETI: Record<string, string> = {
 export default function AppLayout() {
   const { kullanici, cikisYap, yetkili } = useAuth();
   const konum = useLocation();
+  const [bildirimAcik, setBildirimAcik] = useState(false);
+  // TS-200: pencere D3-F'de hazır olunca bayrakla açılır; yalnız servis kullanıcısı.
+  const bildirimTercihi = BILDIRIM_TERCIHLERI_ETKIN && yetkili("servis.gor");
 
   const kalemler = useMemo(() => {
     const sonuc: NonNullable<MenuProps["items"]> = [];
@@ -397,6 +428,16 @@ export default function AppLayout() {
                 ),
               },
               { type: "divider" },
+              ...(bildirimTercihi
+                ? [
+                    {
+                      key: "bildirim",
+                      icon: <BellOutlined />,
+                      label: "Bildirim tercihleri",
+                      onClick: () => setBildirimAcik(true),
+                    },
+                  ]
+                : []),
               {
                 key: "cikis",
                 icon: <LogoutOutlined />,
@@ -419,6 +460,9 @@ export default function AppLayout() {
             <UserOutlined /> <span className="baslik-kullanici">{kullanici?.full_name}</span>
           </span>
         </Dropdown>
+        {bildirimTercihi && (
+          <BildirimTercihleriPenceresi acik={bildirimAcik} kapat={() => setBildirimAcik(false)} />
+        )}
         </div>
       </Header>
       <Layout>

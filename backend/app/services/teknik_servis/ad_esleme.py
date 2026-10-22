@@ -49,8 +49,11 @@ GOC_SISTEMI = "DENGEERP_V1"
 ALAN_ATAMA = "WorkOrderAssignments.AssignedName"
 ALAN_ZAMAN = "WorkOrderTimeLogs.TechnicianName"
 ALAN_CANLI_OTURUM = "WorkOrderLiveSessions.TechnicianName"
+# Dalga 3 (D3-G, TS-206): eğitim göçü eşleşmeyen personel adlarını bu alanla
+# öneri olarak yazar; İK `ad_esleme` profiliyle onaylayabilsin diye listede.
+ALAN_PERSONEL = "Personnel.FullName"
 ZAMAN_ALANLARI = (ALAN_ZAMAN, ALAN_CANLI_OTURUM)
-KAYNAK_ALANLARI = (ALAN_ATAMA, ALAN_ZAMAN, ALAN_CANLI_OTURUM)
+KAYNAK_ALANLARI = (ALAN_ATAMA, ALAN_ZAMAN, ALAN_CANLI_OTURUM, ALAN_PERSONEL)
 
 # Trigram önerisi eşiği. Altında öneri boş kalır (insan seçer).
 ONERI_ESIGI = 0.5

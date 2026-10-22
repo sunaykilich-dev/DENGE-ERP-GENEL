@@ -1,0 +1,6 @@
+MaintenanceDeviceItemId,MaintenancePlanId,SecurityDeviceId,DeviceType,DeviceOrdinal,SerialNo,Status,WorkOrderId,Zone,CompletedAt,SpareParts
+501,1,,X-Ray,1,S-201,Tamamlandı,201,,2026-02-03T12:00:00,"2 adet sigorta, 1 röle; ""kablo"" 3m  "
+502,1,,X-Ray,2,,Bekliyor,204,,,Fan
+503,1,,X-Ray,3,,Bekliyor,201,,,
+504,1,,X-Ray,4,,Bekliyor,202,,,"Uzun parça kaydı: X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta, X-123 sigorta,"
+505,1,,X-Ray,5,,Bekliyor,,,,Bağsız parça

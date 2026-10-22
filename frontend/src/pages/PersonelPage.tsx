@@ -13,6 +13,10 @@
  * işler, açık sayaç, oturumlar, eğitim kayıtları), onayla tek işlemde uygulanır.
  * Açık sayaç kapatılmaz; uyarı ve görev kartıyla yöneticiye düşer. Ayrılmış
  * personelin KVKK anonimleştirmesi yalnız `kvkk.yonet` ile ve elle yapılır.
+ *
+ * "Ekibim" (TS-199, E13-17): doğrudan bağlı çalışan personel; kapsam
+ * süzgecinden SONRA uygulanır, yetki genişletmez. Yönetici `personel.yaz` ile
+ * kartta seçilir; kapsamınız dışındaki yönetici "Kapsam dışı kişi" görünür.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,6 +38,7 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
@@ -145,6 +150,52 @@ const cikisApi = {
       { gerekce, onay: true },
     ),
 };
+
+/**
+ * Doğrudan yönetici (TS-199). Yazma `personel.yaz`; aday listesi kapsamınızdaki
+ * çalışan personeldir. Döngü (kişinin astını yönetici seçmek) sunucuda 400 verir.
+ * Yönetici ilişkisi yetki VERMEZ; "Ekibim" yalnız süzgeçtir.
+ */
+function YoneticiAlani({ p, yazabilir, bitti }: { p: Personel; yazabilir: boolean; bitti: () => void }) {
+  const { message } = App.useApp();
+  const [arama, setArama] = useState("");
+  const adaylar = useQuery({
+    queryKey: ["personel-yonetici-aday", arama],
+    queryFn: () => personelApi.liste({ q: arama || undefined, durum: "CALISIYOR" }, 20, 0),
+    enabled: yazabilir,
+  });
+  const yaz = useMutation({
+    mutationFn: (id: number | null) => personelApi.yoneticiYaz(p.id, id, p.version),
+    onSuccess: () => {
+      message.success("Yönetici kaydedildi");
+      bitti();
+    },
+    onError: (e: ApiError) => message.error(hataMesaji(e)),
+  });
+  if (!yazabilir) return <>{p.yonetici?.ad ?? "—"}</>;
+  const secenekler = (adaylar.data?.kayitlar ?? [])
+    .filter((k) => k.id !== p.id)
+    .map((k) => ({ value: k.id, label: k.full_name }));
+  if (p.yonetici?.id != null && !secenekler.some((s) => s.value === p.yonetici!.id)) {
+    secenekler.unshift({ value: p.yonetici.id, label: p.yonetici.ad });
+  }
+  return (
+    <Select
+      allowClear
+      showSearch
+      filterOption={false}
+      style={{ width: "100%", maxWidth: 320 }}
+      placeholder={p.yonetici?.id === null ? p.yonetici.ad : "Yönetici seçin"}
+      value={p.yonetici?.id ?? undefined}
+      loading={adaylar.isFetching || yaz.isPending}
+      disabled={yaz.isPending}
+      onSearch={setArama}
+      onChange={(v?: number) => yaz.mutate(v ?? null)}
+      options={secenekler}
+      notFoundContent={adaylar.isFetching ? "Aranıyor…" : "Kişi bulunamadı"}
+    />
+  );
+}
 
 export default function PersonelPage() {
   const { yetkili } = useAuth();
@@ -471,6 +522,14 @@ export default function PersonelPage() {
           ]}
           onChange={(v?: string) => suzgecDegistir({ ...suzgec, giris: v })}
         />
+        <Tooltip title="Yalnız size doğrudan bağlı çalışan personel. Süzgeçtir; kapsamınız dışındaki kişiyi göstermez.">
+          <Checkbox
+            checked={!!suzgec.ekibim}
+            onChange={(e) => suzgecDegistir({ ...suzgec, ekibim: e.target.checked || undefined })}
+          >
+            Ekibim
+          </Checkbox>
+        </Tooltip>
       </Space>
 
       <Table
@@ -523,8 +582,15 @@ export default function PersonelPage() {
               <Space size={4} wrap>
                 {r.calisiyor ? <Tag color="green">çalışıyor</Tag> : <Tag>ayrıldı</Tag>}
                 {!r.giris_acik && <Tag>giriş yok</Tag>}
+                {r.acik_sayac_var && <Tag color="blue">sayaç açık</Tag>}
               </Space>
             ),
+          },
+          {
+            title: "Yönetici",
+            width: 160,
+            ellipsis: true,
+            render: (_, r: Personel) => r.yonetici?.ad ?? "—",
           },
         ]}
       />
@@ -548,6 +614,9 @@ export default function PersonelPage() {
                 {p.giris_acik ? <Tag color="blue">giriş açık</Tag> : <Tag>giriş yok</Tag>}
               </Descriptions.Item>
               <Descriptions.Item label="Rol">{p.rol.name}</Descriptions.Item>
+              <Descriptions.Item label="Yönetici">
+                <YoneticiAlani p={p} yazabilir={yazabilir} bitti={tazele} />
+              </Descriptions.Item>
               {p.username !== undefined && (
                 <Descriptions.Item label="Kullanıcı adı">
                   <span className="mono">{p.username}</span>

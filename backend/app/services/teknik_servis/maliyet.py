@@ -55,7 +55,6 @@ from app.models import (
     ServiceOrder,
     ServiceOrderEvent,
     ServiceTimeEntry,
-    StockMovement,
     User,
 )
 from app.models.rbac import BIRIM_KODLARI
@@ -378,25 +377,11 @@ async def is_finansi_toplu(db: AsyncSession, so_idler: list[int]) -> dict[int, I
         iscilik_tl[so_id] += Decimal(str(saniye)) / Decimal("3600") * tarife.hourly_cost
 
     # Malzeme: servis defterinin işe yazılan hareketleri (ters kayıt dahil).
-    malzeme_tl: dict[int, Decimal] = defaultdict(Decimal)
-    malzeme_eksik: set[int] = set()
-    malzeme_var: set[int] = set()
-    for so_id, adet, birim_maliyet in (
-        await db.execute(
-            select(
-                StockMovement.service_order_id, StockMovement.qty, StockMovement.unit_cost
-            ).where(
-                StockMovement.service_order_id.in_(idler),
-                StockMovement.hareket_turu.in_(("CIKIS_SERVIS", "IADE_SERVIS", "TERS_KAYIT")),
-            )
-        )
-    ).all():
-        malzeme_var.add(so_id)
-        if birim_maliyet is None:
-            malzeme_eksik.add(so_id)
-            continue
-        # Çıkış eksi adetlidir: maliyet = −adet × birim maliyet (iade düşer).
-        malzeme_tl[so_id] += -Decimal(int(adet)) * Decimal(str(birim_maliyet))
+    # TEK hesap (Dalga 3 bütünleştirme, E11-18/E07): parça tüketim raporuyla aynı
+    # fonksiyon — `parca.malzeme_maliyeti_toplu` (−Σ qty × unit_cost; NULL → eksik).
+    from app.services.teknik_servis import parca
+
+    malzeme_haritasi = await parca.malzeme_maliyeti_toplu(db, idler)
 
     finanslar = {
         f.service_order_id: f
@@ -428,12 +413,7 @@ async def is_finansi_toplu(db: AsyncSession, so_idler: list[int]) -> dict[int, I
             iscilik, iscilik_durumu = None, "TARIFE_EKSIK"
         else:
             iscilik, iscilik_durumu = yuvarla(iscilik_tl[so_id]), "TAM"
-        if so_id in malzeme_eksik:
-            malzeme, malzeme_durumu = None, "MALIYET_EKSIK"
-        elif so_id in malzeme_var:
-            malzeme, malzeme_durumu = yuvarla(malzeme_tl[so_id]), "TAM"
-        else:
-            malzeme, malzeme_durumu = Decimal("0.00"), "YOK"
+        malzeme, malzeme_durumu = malzeme_haritasi.get(so_id, (Decimal("0.00"), "YOK"))
         fin = finanslar.get(so_id)
         diger_ham = fin.diger_maliyet if fin is not None else None
         diger = Decimal(str(diger_ham)) if diger_ham is not None else Decimal("0.00")

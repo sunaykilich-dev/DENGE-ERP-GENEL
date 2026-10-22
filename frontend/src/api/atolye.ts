@@ -260,6 +260,67 @@ export interface AtolyeSuzgeci {
   geciken?: boolean;
   kabul_grubu?: number;
   musteri_id?: number;
+  /** TS-194: uyarı ve KPI raporu listeleri. */
+  teslim_alinmayan?: boolean;
+  dis_servis?: boolean;
+  tedarikci_id?: number;
+  sure_eksik?: boolean;
+  tamamlanma_bas?: string;
+  tamamlanma_bit?: string;
+}
+
+/** KPI kutusunun/uyarının kendi süzgeci; taban süzgeçle birleşmeden önce silinir. */
+export const KPI_SUZGEC_ANAHTARLARI = [
+  "durum",
+  "durum_grubu",
+  "yas",
+  "geciken",
+  "teslim_alinmayan",
+  "sure_eksik",
+  "dis_servis",
+  "tamamlanma_bas",
+  "tamamlanma_bit",
+] as const;
+
+/** Sunucunun `sorgu`'sunu (liste süzgeci) ekran adresine çevirir. */
+export function atolyeListeYolu(sorgu: Record<string, unknown>): string {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(sorgu)) {
+    if (v === undefined || v === null || v === "" || v === false) continue;
+    p.set(k, Array.isArray(v) ? String(v[0]) : String(v));
+  }
+  return `/atolye?${p}`;
+}
+
+/** KPI raporu göstergesi (TS-194). `sorgu` null ise sayılabilir değildir (ortalama). */
+export interface AtolyeRaporKutusu {
+  kod: string;
+  baslik: string;
+  tanim: string;
+  deger: number | string | null;
+  birim: string;
+  sorgu: Record<string, unknown> | null;
+}
+
+export interface AtolyeTurKirilimi {
+  servis_turu: string;
+  ad: string;
+  adet: number;
+  cevrim_ort_gun: string | null;
+  cevrim_medyan_gun: string | null;
+  cevrim_dis_haric_ort_gun: string | null;
+  dis_servis_adet: number;
+  dis_servis_ort_gun: string | null;
+  dis_serviste_donmeyen: number;
+  sure_eksik: number;
+  iscilik_ort_dk: string | null;
+  sorgu: Record<string, unknown>;
+}
+
+export interface AtolyeKpiRaporu {
+  donem: { bas: string; bit: string };
+  kutular: AtolyeRaporKutusu[];
+  servis_turu_kirilimi: AtolyeTurKirilimi[];
 }
 
 export interface EkipmanGirdisi {
@@ -372,8 +433,20 @@ export const atolyeApi = {
   },
   ozet: (s: AtolyeSuzgeci) => {
     const p = suzgecParametreleri(s);
-    for (const k of ["durum", "durum_grubu", "yas", "geciken"]) p.delete(k);
+    for (const k of KPI_SUZGEC_ANAHTARLARI) p.delete(k);
+    for (const k of ["tedarikci_id"]) p.delete(k);
     return api.get<AtolyeKpi[]>(`${URL_}/ozet?${p}`);
+  },
+  /** KPI raporu: `servis_rapor.gor`; dönem Türkiye günü, en çok 24 ay (400). */
+  kpiRaporu: (q: { bas?: string; bit?: string; birim?: string; servis_turu?: string }) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v) p.set(k, v);
+    return api.get<AtolyeKpiRaporu>(`${URL_}/raporlar/kpi?${p}`);
+  },
+  kpiExcelYolu: (q: { bas?: string; bit?: string; birim?: string; servis_turu?: string }) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v) p.set(k, v);
+    return `${URL_}/raporlar/kpi.xlsx?${p}`;
   },
   excelYolu: (s: AtolyeSuzgeci) => `${URL_}/disaaktar?${suzgecParametreleri(s)}`,
   seriGecmisi: (q: { ekipman_id?: number; tip?: string; marka?: string; seri?: string }) => {

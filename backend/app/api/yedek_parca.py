@@ -871,6 +871,144 @@ async def hareketler_excel(db: DbDep, user: Aktarici, s: HareketSuzgec) -> Respo
     )
 
 
+# --- Parça tüketim raporu (TS-196, E11-18) ------------------------------------------------------
+
+Raporcu = Annotated[User, Depends(require_permission("parca.gor", "servis_rapor.gor"))]
+RaporAktarici = Annotated[
+    User, Depends(require_permission("parca.gor", "servis_rapor.gor", "servis_rapor.disaaktar"))
+]
+
+
+def _tuketim_suzgeci(
+    bas: date | None = None,
+    bit: date | None = None,
+    birim: Annotated[str | None, Query(max_length=20)] = None,
+    musteri_id: int | None = None,
+    is_grubu: Annotated[str | None, Query(max_length=20)] = None,
+    product_id: int | None = None,
+    depo_id: int | None = None,
+    ekipman_id: int | None = None,
+    so_id: int | None = None,
+) -> svc.TuketimSuzgeci:
+    return svc.TuketimSuzgeci(
+        bas=bas,
+        bit=bit,
+        birim=birim,
+        musteri_id=musteri_id,
+        is_grubu=is_grubu,
+        product_id=product_id,
+        depo_id=depo_id,
+        ekipman_id=ekipman_id,
+        so_id=so_id,
+    )
+
+
+TuketimSuzgec = Annotated[svc.TuketimSuzgeci, Depends(_tuketim_suzgeci)]
+
+
+@router.get("/raporlar/tuketim")
+async def tuketim_raporu(
+    db: DbDep,
+    clock: ClockDep,
+    user: Raporcu,
+    s: TuketimSuzgec,
+    kirilim: Annotated[str, Query(max_length=20)] = "parca_ay",
+) -> dict[str, Any]:
+    """Net çıkış = −Σqty (servis işine yazılmış satırlar, ters kayıt dahil); PB ve
+    diğer servis ayrı satır. `tutar` yalnız `maliyet.gor` (yoksa anahtar yok)."""
+    try:
+        return await svc.parca_tuketimi(
+            db, user, s, clock, kirilim=kirilim, maliyet_gorur=sees_cost(user)
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+
+
+_TUKETIM_ETIKETLERI = {
+    "ay": "Ay",
+    "urun_kodu": "Parça Kodu",
+    "urun_adi": "Parça",
+    "birim": "Birim",
+    "musteri": "Müşteri",
+    "is_turu": "İş Türü",
+    "so_no": "Servis İşi",
+    "ekipman": "Ekipman",
+}
+_TUKETIM_SUTUNLARI = {
+    "parca_ay": ("ay", "urun_kodu", "urun_adi"),
+    "birim": ("birim",),
+    "musteri": ("musteri",),
+    "is_turu": ("is_turu",),
+    "is": ("so_no", "urun_kodu", "urun_adi"),
+    "ekipman": ("ekipman", "urun_kodu", "urun_adi"),
+}
+
+
+@router.get("/raporlar/tuketim.xlsx")
+async def tuketim_raporu_xlsx(
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: RaporAktarici,
+    s: TuketimSuzgec,
+    kirilim: Annotated[str, Query(max_length=20)] = "parca_ay",
+) -> Response:
+    """Ekrandaki raporun aynısı; tutar sütunu yalnız `maliyet.gor`, formül korumalı."""
+    maliyetli = sees_cost(user)
+    try:
+        rapor = await svc.parca_tuketimi(
+            db, user, s, clock, kirilim=kirilim, maliyet_gorur=maliyetli
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    anahtarlar = _TUKETIM_SUTUNLARI[rapor["kirilim"]]
+    basliklar = [
+        *(_TUKETIM_ETIKETLERI[a] for a in anahtarlar),
+        "İş Grubu",
+        "Net Çıkış",
+        "Hareket",
+    ] + (["Tutar (TL)", "Maliyet Eksik"] if maliyetli else [])
+    tablo = []
+    for r in rapor["satirlar"]:
+        satir: list[Any] = []
+        for a in anahtarlar:
+            deger = r.get(a)
+            if a == "birim":
+                deger = BIRIMLER.get(deger, deger)
+            if a == "ekipman":
+                deger = (deger or {}).get("seri") or (deger or {}).get("id")
+            satir.append(deger if deger is not None else "")
+        satir += [r["is_grubu_adi"], r["net_cikis"], r["hareket"]]
+        if maliyetli:
+            satir += [
+                float(r["tutar"]) if r.get("tutar") is not None else "",
+                "Evet" if r.get("maliyet_eksik") else "",
+            ]
+        tablo.append(satir)
+    await audit.log(
+        db,
+        "stock_movements",
+        "parca.tuketim_disa_aktar",
+        new_value={
+            "bas": rapor["donem"]["bas"].isoformat(),
+            "bit": rapor["donem"]["bit"].isoformat(),
+            "kirilim": rapor["kirilim"],
+            "filtre": {
+                k: v for k, v in vars(s).items() if v is not None and k not in ("bas", "bit")
+            },
+            "satir": len(tablo),
+        },
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return Response(
+        content=await export_svc.satirlari_xlsx_async(basliklar, tablo, "Parça Tüketimi"),
+        media_type=_XLSX,
+        headers={"Content-Disposition": 'attachment; filename="parca-tuketimi.xlsx"'},
+    )
+
+
 # --- Yazma uçları (TS-130…134, 137) ----------------------------------------------------------
 
 

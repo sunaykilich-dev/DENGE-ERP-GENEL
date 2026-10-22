@@ -11,6 +11,8 @@
  * - Toplu giriş: önizleme hiçbir şey yazmaz; onay aynı dosyanın sha256'sıyla
  *   gönderilir, dosya değiştiyse sunucu 409 döner.
  * - `?uzun=1` uzun süredir kontrolde bekleyenleri açar (uyarı bağlantısı).
+ * - TS-195: "Depo sayımı" (onaysız fark hiçbir şeyi değiştirmez) ve
+ *   "Raporlar" (`servis_rapor.gor`) sekmeleri.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -61,6 +63,8 @@ import {
 } from "../api/kiralama";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
+import KiralamaRaporlari from "../components/KiralamaRaporlari";
+import KiralikSayim from "../components/KiralikSayim";
 import Statistic from "../components/Statistic";
 
 const SAYFA_BOYU = 50;
@@ -147,6 +151,14 @@ export default function KiralikEnvanterPage() {
             { key: "bakiye", label: "Depo bakiyeleri", children: <BakiyeSekmesi /> },
             { key: "hareket", label: "Toplu ürün hareketleri", children: <TopluHareketSekmesi /> },
             { key: "katalog", label: "Kiralama kataloğu", children: <KatalogSekmesi onDegisti={tazele} /> },
+            {
+              key: "sayim",
+              label: "Depo sayımı",
+              children: <KiralikSayim onDegisti={tazele} />,
+            },
+            ...(yetkili("servis_rapor.gor")
+              ? [{ key: "rapor", label: "Raporlar", children: <KiralamaRaporlari /> }]
+              : []),
           ]}
         />
       </Card>

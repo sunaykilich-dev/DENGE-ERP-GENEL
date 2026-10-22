@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
 
 BASLIK_DOLGU = PatternFill("solid", fgColor="E8E4DB")
 BASLIK_YAZI = Font(bold=True, color="3C4657")
@@ -120,6 +121,13 @@ class Sayfa:
     ad: str
     sutunlar: list[Sutun | str]
     satirlar: list[list[Any]] = field(default_factory=list)
+    # Servis raporları (TS-182/TS-201): başlıkta otomatik filtre; ya da adlı
+    # Excel Tablosu (pivot şablonu yokken "tipli tablo yedeği"). Varsayılanlar
+    # mevcut çıktıları değiştirmez.
+    otomatik_filtre: bool = False
+    tablo_adi: str | None = None
+    # Başlık satırından ÖNCE yazılan açıklama satırları (dönem, kapsam, not).
+    ust_bilgi: list[list[Any]] = field(default_factory=list)
 
 
 _TR = ZoneInfo("Europe/Istanbul")
@@ -157,12 +165,21 @@ def sayfalari_xlsx(sayfalar: list[Sayfa]) -> bytes:
         ws = wb.create_sheet(title=(sayfa.ad or "Sayfa")[:31])
         sema = [s if isinstance(s, Sutun) else None for s in sayfa.sutunlar]
         basliklar = [s.baslik if isinstance(s, Sutun) else str(s) for s in sayfa.sutunlar]
+        for bilgi in sayfa.ust_bilgi:
+            ws.append([_hucre(x) for x in bilgi])
+            for h in ws[ws.max_row]:
+                _formulu_metne_cevir(h)
         ws.append(basliklar)
-        for h in ws[1]:
+        baslik_satiri = ws.max_row
+        for h in ws[baslik_satiri]:
             h.fill, h.font = BASLIK_DOLGU, BASLIK_YAZI
             h.alignment = Alignment(vertical="center")
         genislik = [len(b) for b in basliklar]
-        for satir in sayfa.satirlar:
+        satirlar = sayfa.satirlar
+        if sayfa.tablo_adi and not satirlar:
+            # Excel Tablosu en az bir veri satırı ister; boş sonuç açıkça yazılır.
+            satirlar = [["Kayıt yok"]]
+        for satir in satirlar:
             ws.append([None] * len(basliklar))
             r = ws.max_row
             for i, deger in enumerate(satir[: len(basliklar)]):
@@ -178,7 +195,14 @@ def sayfalari_xlsx(sayfalar: list[Sayfa]) -> bytes:
                 genislik[i] = max(genislik[i], len(str(deger)) if deger is not None else 0)
         for i, en in enumerate(genislik, start=1):
             ws.column_dimensions[get_column_letter(i)].width = min(max(en + 2, 10), 48)
-        ws.freeze_panes = "A2"
+        ws.freeze_panes = f"A{baslik_satiri + 1}"
+        alan = f"A{baslik_satiri}:{get_column_letter(len(basliklar))}{ws.max_row}"
+        if sayfa.tablo_adi:
+            tablo = Table(displayName=sayfa.tablo_adi, ref=alan)
+            tablo.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
+            ws.add_table(tablo)
+        elif sayfa.otomatik_filtre:
+            ws.auto_filter.ref = alan
     tampon = BytesIO()
     wb.save(tampon)
     return tampon.getvalue()

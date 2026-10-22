@@ -402,6 +402,14 @@ PARCA_TALEBI = StateMachine(
     gecisler=_m(ACIK=("KARSILANDI", "IPTAL"), KARSILANDI=(), IPTAL=()),
 )
 
+# --- Kiralık depo sayımı (E06-22 b, Dalga 3) --------------------------------------------
+# Onaysız sayım hiçbir durumu değiştirmez; onaylı satırlar `kind=SAYIM` yazar.
+KIRALIK_SAYIM = StateMachine(
+    ad="Kiralık Depo Sayımı",
+    baslangiclar=frozenset({"ACIK"}),
+    gecisler=_m(ACIK=("ONAYLANDI", "IPTAL"), ONAYLANDI=(), IPTAL=()),
+)
+
 MAKINELER = {
     "cihaz": CIHAZ,
     "hat": HAT,
@@ -420,4 +428,6 @@ MAKINELER = {
     "duzeltici_faaliyet": DUZELTICI_FAALIYET,
     "stok_sayim": STOK_SAYIM,
     "parca_talebi": PARCA_TALEBI,
+    # --- Dalga 3 ---
+    "kiralik_sayim": KIRALIK_SAYIM,
 }

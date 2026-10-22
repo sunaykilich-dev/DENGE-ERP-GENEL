@@ -29,6 +29,8 @@ interface Kalem {
   id: number;
   product_id: number;
   urun_kodu: string | null;
+  /** IMEI | SERI_NO | YOK — YOK ise mal kabul adetle (TS-196). */
+  kimlik_turu?: string | null;
   description: string | null;
   qty: number;
   unit_price: number;
@@ -180,6 +182,30 @@ export default function SatinAlmaPage() {
     queryFn: () => api.get<Urun[]>("/api/urunler?limit=500"),
   });
 
+  // Serisiz mal kabulün hedef deposu (TS-196): mobilite depoları + (yetkiliyse) servis depoları.
+  const mobiliteDepolari = useQuery({
+    queryKey: ["stok-depolar"],
+    queryFn: () => api.get<{ id: number; code: string; name: string }[]>("/api/stok/depolar"),
+  });
+  const servisDepolari = useQuery({
+    queryKey: ["parca", "depolar", false],
+    queryFn: () =>
+      api.get<{ id: number; code: string; name: string; is_active: boolean }[]>(
+        "/api/teknik-servis/parca/depolar?pasifler=false",
+      ),
+    enabled: yetkili("parca.gor"),
+  });
+  const depoSecenekleri = [
+    ...(mobiliteDepolari.data ?? []).map((d) => ({
+      value: d.id,
+      label: `${d.code} · ${d.name}`,
+    })),
+    ...(servisDepolari.data ?? []).map((d) => ({
+      value: d.id,
+      label: `Servis · ${d.code} · ${d.name}`,
+    })),
+  ];
+
   const yenile = () => {
     for (const k of ["sa-siparisler", "sa-siparis", "sa-ithalat", "sa-ithalat-cihaz", "sa-btk"]) {
       void qc.invalidateQueries({ queryKey: [k] });
@@ -214,7 +240,7 @@ export default function SatinAlmaPage() {
     mutationFn: ({ id, ...v }: { id: number } & Record<string, unknown>) =>
       api.post<{ fis_no: string; adet: number }>(`/api/satinalma/siparisler/${id}/mal-kabul`, v),
     onSuccess: (r) => {
-      message.success(`${r.fis_no} · ${r.adet} cihaz stoğa alındı`);
+      message.success(`${r.fis_no} · ${r.adet} adet stoğa alındı`);
       yenile();
     },
     onError: hata,
@@ -258,7 +284,58 @@ export default function SatinAlmaPage() {
   const s = detay.data;
   const dosya = (dosyalar.data ?? []).find((d) => d.id === dosyaSecili) ?? null;
 
+  function serisizKabulSor(siparis: Siparis, kalem: Kalem) {
+    const kalan = Number(kalem.qty) - Number(kalem.qty_received);
+    let adet: number | null = kalan > 0 ? kalan : null;
+    let depoId: number | undefined;
+    modal.confirm({
+      title: `Mal kabul (serisiz) · ${kalem.urun_kodu ?? ""}`,
+      width: 520,
+      content: (
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          <Typography.Text type="secondary">
+            Kalan adet: {kalan}. Servis deposu seçilirse birim maliyet TL'ye çevrilip dondurulur.
+          </Typography.Text>
+          <InputNumber
+            min={1}
+            max={kalan > 0 ? kalan : undefined}
+            precision={0}
+            defaultValue={adet ?? undefined}
+            placeholder="Adet"
+            style={{ width: "100%" }}
+            onChange={(v) => (adet = typeof v === "number" ? v : null)}
+          />
+          <Select
+            allowClear
+            placeholder="Depo"
+            style={{ width: "100%" }}
+            options={depoSecenekleri}
+            onChange={(v) => (depoId = v)}
+          />
+        </Space>
+      ),
+      okText: "Stoğa al",
+      cancelText: "Vazgeç",
+      onOk: () => {
+        if (!adet || adet <= 0) {
+          message.error("Adet girilmeli");
+          return Promise.reject();
+        }
+        return malKabul.mutateAsync({
+          id: siparis.id,
+          kalem_id: kalem.id,
+          adet,
+          warehouse_id: depoId,
+        });
+      },
+    });
+  }
+
   function malKabulSor(siparis: Siparis, kalem: Kalem) {
+    if (kalem.kimlik_turu === "YOK") {
+      serisizKabulSor(siparis, kalem);
+      return;
+    }
     let kimlikler = "";
     let dosyaId: number | undefined;
     modal.confirm({

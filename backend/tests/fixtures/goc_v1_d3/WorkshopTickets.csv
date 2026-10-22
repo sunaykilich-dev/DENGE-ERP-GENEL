@@ -1,0 +1,6 @@
+WorkshopTicketId,WorkshopNo,WorkOrderId,Status,AssignedTo,SerialNo,Brand,Model,ServiceType,WarrantyStatus,EntryDate,CompletionDate,UpdatedAt,RepairInfo
+701,AT-0001,203,Onarımda,Ali Veli,T-1,HYTERA,PD785,Arıza Onarımı,Garanti Değil,2026-02-05T09:00:00,,2026-02-05T10:00:00,Anten değişti
+703,AT-0003,202,Teslim Edildi,Bilinmeyen Usta,X-9,HYTERA,PD785,Arıza Onarımı,,2026-02-04T09:00:00,,2026-02-04T12:00:00,
+704,AT-0004,205,Onarımda,,T-1,HYTERA,PD785,Arıza Onarımı,,2026-02-06T09:00:00,,,
+705,AT-0005,202,İptal,,S-202,HYTERA,PD785,Arıza Onarımı,,2026-02-06T09:00:00,,,
+706,AT-0006,,Garip Durum,,Z-1,HYTERA,PD785,Arıza Onarımı,,2026-02-06T09:00:00,,,

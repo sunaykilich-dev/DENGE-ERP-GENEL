@@ -12,6 +12,9 @@
  * - KPI kutusu sayısı = açılan liste (`/kpi-liste`), kutu tıklanınca liste
  *   çekmecede açılır (`?kpi=` adresi paylaşılabilir).
  * - Kapalı işin planı soluk ve salt okunur; düğmeler `yetkili()` ile.
+ * - P3 (TS-190): Kaynak sekmesi (personel × gün "plan" dakikası, müsaitlik
+ *   ve eğitim blokları), Plan Uyumu sekmesi (aynı İstanbul günü; eksik
+ *   paydada yok) ve havuzdaki işe aynı ilçe önerisi (seçilen iş AYRI tekli plan).
  */
 import {
   CalendarOutlined,
@@ -55,6 +58,7 @@ import type { ApiError } from "../api/client";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import {
   type Arac,
+  type BolgeZiyareti,
   DEGISIM_ETIKETLERI,
   DURUM_ETIKETLERI,
   type HavuzSatiri,
@@ -62,10 +66,12 @@ import {
   type Plan,
   type TakvimSatiri,
   planlamaApi,
+  planlamaP3Api,
 } from "../api/servisPlanlama";
 import { useAuth } from "../auth/AuthContext";
 import KpiKutusu from "../components/KpiKutusu";
-import PlanPenceresi, { type PlanModu } from "../components/PlanPenceresi";
+import PlanPenceresi, { type PlanModu, type PlanPenceresiProps } from "../components/PlanPenceresi";
+import { KaynakSekmesi, PlanUyumuSekmesi } from "./ServisPlanlamaP3";
 
 type Gorunum = "gun" | "hafta" | "ay";
 const GUN_ADLARI = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
@@ -171,6 +177,7 @@ interface PencereDurumu {
   birim: string;
   mevcut?: Plan | null;
   gun?: string;
+  varsayilan?: PlanPenceresiProps["varsayilan"];
 }
 
 export default function ServisPlanlamaPage() {
@@ -199,6 +206,7 @@ export default function ServisPlanlamaPage() {
   const [pencere, setPencere] = useState<PencereDurumu | null>(null);
   const [geriAl, setGeriAl] = useState<TakvimSatiri | null>(null);
   const [gecmisIs, setGecmisIs] = useState<TakvimSatiri | null>(null);
+  const [bolgeIs, setBolgeIs] = useState<HavuzSatiri | null>(null);
   const [geriAlForm] = Form.useForm<{ neden: string; not?: string }>();
 
   const suzgec = { birim, tur: tur === "TUMU" ? undefined : tur };
@@ -223,6 +231,11 @@ export default function ServisPlanlamaPage() {
     queryKey: ["servis-plan-kpi-liste", kpiKodu, gun.format(ISO), birim, tur],
     queryFn: () => planlamaApi.kpiListe(kpiKodu!, gun.format(ISO), suzgec),
     enabled: !!kpiKodu,
+  });
+  const bolge = useQuery({
+    queryKey: ["servis-bolge-onerisi", bolgeIs?.is_id, gun.format(ISO)],
+    queryFn: () => planlamaP3Api.bolgeOnerisi(bolgeIs!.is_id, gun.format(ISO)),
+    enabled: bolgeIs != null,
   });
   const gecmis = useQuery({
     queryKey: ["servis-plan-gecmisi", gecmisIs?.is_id],
@@ -468,14 +481,21 @@ export default function ServisPlanlamaPage() {
                     </Typography.Text>
                   </div>
                   {planlayabilir && (
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        setPencere({ mod: "tekli", isIdler: [s.is_id], birim: s.birim, gun: gun.format(ISO) })
-                      }
-                    >
-                      Planla
-                    </Button>
+                    <Space.Compact size="small">
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          setPencere({ mod: "tekli", isIdler: [s.is_id], birim: s.birim, gun: gun.format(ISO) })
+                        }
+                      >
+                        Planla
+                      </Button>
+                      <Tooltip title="Aynı ilçedeki plansız işler ve yakın ziyaretler">
+                        <Button size="small" onClick={() => setBolgeIs(s)}>
+                          Bölge
+                        </Button>
+                      </Tooltip>
+                    </Space.Compact>
                   )}
                 </div>
               ))}
@@ -736,11 +756,110 @@ export default function ServisPlanlamaPage() {
       <Tabs
         items={[
           { key: "takvim", label: "Takvim", children: takvimSekmesi },
+          { key: "kaynak", label: "Kaynak", children: <KaynakSekmesi birim={birim} /> },
+          ...(yetkili("servis_rapor.gor")
+            ? [{ key: "uyum", label: "Plan Uyumu", children: <PlanUyumuSekmesi birim={birim} /> }]
+            : []),
           { key: "araclar", label: "Servis Araçları", children: <AracSekmesi /> },
         ]}
       />
       {kartCekmecesi}
       {kpiCekmecesi}
+      <Drawer
+        open={bolgeIs !== null}
+        onClose={() => setBolgeIs(null)}
+        width={ekran.md ? 560 : "100%"}
+        title={`Bölge önerisi — ${bolgeIs?.so_no ?? ""}`}
+      >
+        {bolge.isLoading ? (
+          <Card loading size="small" />
+        ) : bolge.isError ? (
+          <Empty description={(bolge.error as ApiError).message} />
+        ) : bolge.data?.mesaj ? (
+          <Empty description={bolge.data.mesaj} />
+        ) : (
+          bolge.data && (
+            <>
+              <Typography.Paragraph type="secondary">
+                {bolge.data.il}
+                {bolge.data.ilce ? ` / ${bolge.data.ilce}` : " (ilçe girilmemiş; il düzeyinde)"} · ±
+                {bolge.data.gun_araligi} gün. Seçilen iş ziyarete eklenmez, ayrı plan olarak kaydedilir.
+              </Typography.Paragraph>
+              <Typography.Title level={5}>Yakın ziyaretler</Typography.Title>
+              {bolge.data.ziyaretler.length === 0 ? (
+                <Empty description="Bu bölgede yakın ziyaret yok" />
+              ) : (
+                bolge.data.ziyaretler.map((z: BolgeZiyareti) => (
+                  <Card key={z.kart_anahtari} size="small" style={{ marginBottom: 6 }}>
+                    <Space wrap style={{ fontSize: 12 }}>
+                      <Typography.Text strong>{dayjs(z.plan_tarihi).format("DD.MM.YYYY")}</Typography.Text>
+                      <span>
+                        {z.baslangic_saati ?? "saat belirsiz"}
+                        {z.bitis_saati ? `–${z.bitis_saati}` : ""}
+                      </span>
+                      <span>{z.ziyaret_no ?? z.is_nolari.join(", ")}</span>
+                    </Space>
+                    <div style={{ fontSize: 12 }}>
+                      {z.musteri}
+                      {z.lokasyon ? ` · ${z.lokasyon}` : ""}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#888" }}>
+                      {z.ekip.map((u) => u.ad).join(", ") || "Ekip yok"}
+                      {z.arac_plaka ? ` · ${z.arac_plaka}` : ""}
+                    </div>
+                    <Button
+                      size="small"
+                      style={{ marginTop: 4 }}
+                      onClick={() => {
+                        const hedef = bolgeIs!;
+                        setBolgeIs(null);
+                        setPencere({
+                          mod: "tekli",
+                          isIdler: [hedef.is_id],
+                          birim: hedef.birim,
+                          gun: z.plan_tarihi,
+                          varsayilan: {
+                            baslangic_saati: z.onerilen_baslangic,
+                            teknisyen_idler: z.ekip.filter((u) => u.rol === "TEKNISYEN").map((u) => u.user_id),
+                            arac_id: z.arac_id,
+                          },
+                        });
+                      }}
+                    >
+                      Bu ziyaretten sonra ayrı planla{z.onerilen_baslangic ? ` (${z.onerilen_baslangic})` : ""}
+                    </Button>
+                  </Card>
+                ))
+              )}
+              <Typography.Title level={5} style={{ marginTop: 12 }}>
+                Aynı bölgedeki plansız işler
+              </Typography.Title>
+              {bolge.data.plansiz_isler.length === 0 ? (
+                <Empty description="Plansız iş yok" />
+              ) : (
+                bolge.data.plansiz_isler.map((s) => (
+                  <div key={s.is_id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "2px 0" }}>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
+                      <Typography.Text strong>{s.so_no}</Typography.Text> {s.musteri}
+                      {s.lokasyon ? ` · ${s.lokasyon}` : ""}
+                      <div style={{ color: "#888" }}>{s.yas_gun ?? "?"} gün bekliyor</div>
+                    </div>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setBolgeIs(null);
+                        setPencere({ mod: "tekli", isIdler: [s.is_id], birim: s.birim, gun: gun.format(ISO) });
+                      }}
+                    >
+                      Planla
+                    </Button>
+                  </div>
+                ))
+              )}
+            </>
+          )
+        )}
+      </Drawer>
       {pencere && (
         <PlanPenceresi
           acik
@@ -749,6 +868,7 @@ export default function ServisPlanlamaPage() {
           birim={pencere.birim}
           mevcut={pencere.mevcut}
           varsayilanGun={pencere.gun ?? acikKart?.gun}
+          varsayilan={pencere.varsayilan}
           onKapat={() => setPencere(null)}
           onKaydedildi={() => {
             setPencere(null);

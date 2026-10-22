@@ -886,6 +886,157 @@ async def iade_al(
     )
 
 
+# --- Sahada cihaz değişimi (TS-195, E06-20) ----------------------------------------------
+
+
+DEGISIM_DURUMLARI = EK_SEVK_DURUMLARI
+
+
+async def degisim(
+    db: AsyncSession,
+    kiralama: Rental,
+    *,
+    eski_tahsis_id: int,
+    yeni_kiralik_id: int,
+    iade_depo_id: int,
+    user: User,
+    clock: Clock,
+    note: str | None = None,
+) -> RentalEvent:
+    """Sahadaki seri cihazı başka bir cihazla TEK transaction'da değiştirir.
+
+    Sıra: (1) yeni cihaza tahsis (`replaced_allocation_id` = eski tahsis),
+    (2) yeni cihazın sevki HAZIR → KIRADA, (3) eski cihazın iadesi KIRADA →
+    (iade deposu, KONTROLDE). Her iki cihaz hareketi `kind=DEGISIM`; eski
+    tahsis KAPANDI olur. Ayrı veri modeli yoktur (E06-20).
+
+    Kiralama durumu DEĞİŞMEZ (müşterideki adet aynı kalır). Yeni cihaz HAZIR
+    değilse, başka birimdeyse ya da tarihler çakışan başka bir AKTİF tahsisi
+    varsa 409 — yarışta `ex_rtahsis_cihaz_cakisma` aynı kuralı korur. Yalnız
+    seri takipli cihaz değiştirilir; toplu üründe iade + ek tahsis kullanılır
+    (400).
+    """
+    if kiralama.status not in DEGISIM_DURUMLARI:
+        raise KiralamaHatasi(
+            f"'{DURUM_ADLARI[kiralama.status]}' kiralamada sahada değişim yapılamaz; "
+            "yalnız sevk edilmiş, sahadaki kiralamada"
+        )
+    tahsis_listesi = await tahsisler(db, kiralama.id, kilit=True)
+    eski = next((t for t in tahsis_listesi if t.id == eski_tahsis_id), None)
+    if eski is None or eski.durum != "AKTIF":
+        raise girdi("Değiştirilecek tahsis bu kiralamada aktif değil")
+    if eski.asset_id is None:
+        raise girdi("Toplu üründe sahada değişim yapılmaz; iade alıp ek tahsis ve sevk kullanın")
+    if disarida(eski) != 1:
+        raise KiralamaHatasi(
+            "Değiştirilecek cihaz müşteride görünmüyor (sevk edilmemiş ya da iade)"
+        )
+    if yeni_kiralik_id == eski.asset_id:
+        raise girdi("Yeni cihaz eskisiyle aynı olamaz")
+    await katalog_kilitle(db, [eski.product_id])
+    cihazlar = await cihazlari_kilitle(db, [eski.asset_id, yeni_kiralik_id])
+    eski_cihaz = cihazlar.get(eski.asset_id)
+    yeni_cihaz = cihazlar.get(yeni_kiralik_id)
+    if yeni_cihaz is None:
+        raise girdi("Yeni kiralık cihaz bulunamadı")
+    if yeni_cihaz.product_id != eski.product_id:
+        raise girdi(f"'{yeni_cihaz.serial_no}' değiştirilen cihazla aynı ürün değil")
+    if yeni_cihaz.birim != kiralama.birim:
+        raise girdi(f"'{yeni_cihaz.serial_no}' başka birimin envanterinde")
+    if yeni_cihaz.durum != "HAZIR":
+        raise KiralamaHatasi(
+            f"'{yeni_cihaz.serial_no}' {DURUM_ETIKETLERI[yeni_cihaz.durum]}; yalnız hazır cihaz "
+            "sahaya gönderilir"
+        )
+    iade_deposu = await kiralama_deposu(db, iade_depo_id, kiralama.birim, alan="İade deposu")
+    kaynak_depo = await kiralama_deposu(db, yeni_cihaz.warehouse_id, kiralama.birim)
+    bugun_ = yerel_bugun(clock)
+    # Yeni tahsis bugünden başlar (geçmiş tarihlere sahte rezerv yazılmaz);
+    # gecikmiş kiralamada en az bir günlük aralık korunur (`bitis > baslangic`).
+    baslangic = max(kiralama.baslangic, min(bugun_, kiralama.bitis - timedelta(days=1)))
+    bitis = max(kiralama.bitis, baslangic + timedelta(days=1))
+    cakisan = await _seri_cakisma(db, yeni_cihaz.id, baslangic, bitis)
+    if cakisan is not None:
+        baska = await db.get(Rental, cakisan.rental_id)
+        raise KiralamaHatasi(
+            f"'{yeni_cihaz.serial_no}' bu tarihlerde "
+            f"{baska.rental_no if baska else 'başka bir kiralama'} için tahsisli"
+        )
+    metin = (note or "").strip()
+    an = clock.now()
+    yeni = RentalAllocation(
+        rental_id=kiralama.id,
+        rental_item_id=eski.rental_item_id,
+        product_id=eski.product_id,
+        asset_id=yeni_cihaz.id,
+        from_warehouse_id=kaynak_depo.id,
+        qty=1,
+        sevk_adet=1,
+        baslangic=baslangic,
+        bitis=bitis,
+        durum="AKTIF",
+        shipped_at=an,
+        replaced_allocation_id=eski.id,
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    db.add(yeni)
+    await db.flush()
+    etiket = f"{kiralama.rental_no} değişim: {eski_cihaz.serial_no} → {yeni_cihaz.serial_no}"
+    if metin:
+        etiket = f"{etiket} — {metin}"
+    giden = await hareket_yaz(
+        db,
+        tur="DEGISIM",
+        product_id=yeni_cihaz.product_id,
+        qty=1,
+        clock=clock,
+        user=user,
+        asset=yeni_cihaz,
+        from_warehouse_id=kaynak_depo.id,
+        from_durum="HAZIR",
+        to_durum="KIRADA",
+        rental_id=kiralama.id,
+        allocation_id=yeni.id,
+        note=etiket,
+    )
+    donen = await hareket_yaz(
+        db,
+        tur="DEGISIM",
+        product_id=eski_cihaz.product_id,
+        qty=1,
+        clock=clock,
+        user=user,
+        asset=eski_cihaz,
+        from_durum="KIRADA",
+        to_warehouse_id=iade_deposu.id,
+        to_durum="KONTROLDE",
+        rental_id=kiralama.id,
+        allocation_id=eski.id,
+        note=etiket,
+    )
+    eski.iade_adet += 1
+    eski.durum = "KAPANDI"
+    eski.closed_at = an
+    eski.updated_by = user.id
+    await db.flush()
+    return await olay_yaz(
+        db,
+        kiralama,
+        "TAHSIS",
+        user=user,
+        clock=clock,
+        alan="degisim",
+        eski={"tahsis_id": eski.id, "seri": eski_cihaz.serial_no},
+        yeni={
+            "tahsis_id": yeni.id,
+            "seri": yeni_cihaz.serial_no,
+            "hareketler": [giden.id, donen.id],
+        },
+        gerekce=metin or None,
+    )
+
+
 async def ozet_seriler(db: AsyncSession, tahsis_listesi: list[RentalAllocation]) -> dict[int, str]:
     """Tahsis → seri metni (yalnız seri cihazlı tahsisler)."""
     idler = [t.asset_id for t in tahsis_listesi if t.asset_id]

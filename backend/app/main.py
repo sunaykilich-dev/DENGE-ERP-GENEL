@@ -35,6 +35,7 @@ from app.api import search as search_api
 from app.api import servis_ekipman as servis_ekipman_api
 from app.api import servis_maliyet as servis_maliyet_api
 from app.api import servis_operasyon as servis_operasyon_api
+from app.api import servis_raporlari as servis_raporlari_api
 from app.api import servis_zaman as servis_zaman_api
 from app.api import settlements as settlements_api
 from app.api import sims as sims_api
@@ -239,6 +240,8 @@ def create_app() -> FastAPI:
     app.include_router(servis_maliyet_api.router)
     app.include_router(kiralamalar_api.router)
     app.include_router(egitim_api.router)
+    # --- Teknik servis (Dalga 3, D3-S) --------------------------------------
+    app.include_router(servis_raporlari_api.router)
     # Genel `/api/teknik-servis/{...}` yolları alt önekli routerlardan SONRA:
     # `/isler/{id}` gibi bir kalıp `/planlama/...` yolunu yutmasın.
     app.include_router(teknik_servis_api.router)

@@ -668,6 +668,363 @@ def takma_ad_satiri(takma: AccountAlias) -> dict[str, Any]:
     }
 
 
+# --- Kapsam bilgisi ve anlık görüntü (TS-192, E14-17) ---------------------------
+
+
+def donem_metni(bas: Any, bit: Any) -> str:
+    """Sözleşme dönemi `01.01.2026–31.12.2026`; tarih eksikse "Dönem bilgisi yok"."""
+    if bas is None or bit is None:
+        return "Dönem bilgisi yok"
+    from datetime import datetime
+
+    from app.services.teknik_servis.yerel_zaman import yerel_gun
+
+    def _t(deger: Any) -> str:
+        gun = yerel_gun(deger) if isinstance(deger, datetime) else deger
+        return gun.strftime("%d.%m.%Y")
+
+    return f"{_t(bas)}–{_t(bit)}"
+
+
+async def kapsam_bilgisi(
+    db: AsyncSession,
+    *,
+    customer_id: int | None,
+    address_id: int | None,
+    equipment_id: int | None,
+    clock: Clock,
+    user: User | None = None,
+) -> dict[str, Any]:
+    """Servis işi açılışında sözleşme/garanti kapsam bilgisi (E14-17).
+
+    **Tutar alanı YOK** (sözleşme ücreti dahil; `maliyet.gor` olsa bile).
+    Durum kuralı: yalnız TARİHİ BİLİNEN ve şu anı kapsayan AKTİF sözleşme
+    SOZLESMELI, yalnız kütükte bitişi bugünden ileri garanti GARANTILI
+    yapar; teyit bekleyen ya da tarihsiz sözleşme BILINMIYOR'dur ("Sözleşmeli"
+    denmez), hiçbiri yoksa KAPSAM_DISI. `user` verilirse sözleşmeler ve son
+    işler kapsamından süzülür (uç); verilmezse (açılış damgası) süzülmez.
+    """
+    from app.models import (
+        MaintenanceContract,
+        MaintenanceContractItem,
+        ServiceEquipment,
+        ServiceOrder,
+    )
+    from app.services import settings as ayar_svc
+    from app.services.teknik_servis import kapsam
+    from app.services.teknik_servis.yerel_zaman import yerel_bugun
+
+    an = clock.now()
+    bugun = yerel_bugun(clock)
+    ekipman = await db.get(ServiceEquipment, equipment_id) if equipment_id else None
+
+    kosullar = []
+    if address_id is not None:
+        kosullar.append(MaintenanceContract.address_id == address_id)
+    if ekipman is not None:
+        kosullar.append(
+            MaintenanceContract.id.in_(
+                select(MaintenanceContractItem.contract_id).where(
+                    MaintenanceContractItem.equipment_id == ekipman.id,
+                    MaintenanceContractItem.is_deleted.is_(False),
+                )
+            )
+        )
+    if not kosullar and customer_id is not None:
+        kosullar.append(MaintenanceContract.account_id == customer_id)
+    sozlesmeler: list = []
+    if kosullar:
+        stmt = select(MaintenanceContract).where(
+            MaintenanceContract.is_deleted.is_(False),
+            MaintenanceContract.status.in_(("AKTIF", "TEYIT_BEKLIYOR")),
+            or_(*kosullar),
+        )
+        if user is not None:
+            from app.services.teknik_servis import bakim
+
+            stmt = bakim.sozlesme_kapsami(stmt, user)
+        sozlesmeler = list((await db.scalars(stmt.order_by(MaintenanceContract.id))).all())
+
+    adresler: dict[int, str | None] = {}
+    adres_idleri = {s.address_id for s in sozlesmeler if s.address_id}
+    if adres_idleri:
+        adresler = dict(
+            (
+                await db.execute(
+                    select(Address.id, Address.site_name).where(Address.id.in_(adres_idleri))
+                )
+            )
+            .tuples()
+            .all()
+        )
+
+    def tarihli_gecerli(s) -> bool:
+        return (
+            s.status == "AKTIF"
+            and s.valid_from is not None
+            and s.valid_to is not None
+            and s.valid_from <= an < s.valid_to
+        )
+
+    aktif = [
+        {
+            "id": s.id,
+            "no": s.contract_no,
+            "tesis": adresler.get(s.address_id) or s.site_name_raw,
+            "donem": donem_metni(s.valid_from, s.valid_to),
+            "durum": s.status,
+            "yururlukte": tarihli_gecerli(s),
+        }
+        for s in sozlesmeler
+    ]
+    garanti = None
+    if ekipman is not None and ekipman.warranty_end is not None and ekipman.warranty_end >= bugun:
+        garanti = {
+            "bitis": ekipman.warranty_end.isoformat(),
+            "kaynak": ekipman.warranty_source,
+        }
+
+    if any(s["yururlukte"] for s in aktif):
+        durum = "SOZLESMELI"
+    elif garanti is not None:
+        durum = "GARANTILI"
+    elif aktif:
+        durum = "BILINMIYOR"  # teyit bekleyen / tarihsiz / dönem dışı aktif
+    elif customer_id is None and address_id is None and ekipman is None:
+        durum = "BILINMIYOR"
+    else:
+        durum = "KAPSAM_DISI"
+
+    son_isler: list[dict[str, Any]] = []
+    if user is not None and (address_id is not None or ekipman is not None):
+        gun = int(await ayar_svc.get(db, "servis_kapsam_son_is_gun"))
+        is_kosulu = []
+        if address_id is not None:
+            is_kosulu.append(ServiceOrder.address_id == address_id)
+        if ekipman is not None:
+            is_kosulu.append(ServiceOrder.equipment_id == ekipman.id)
+        stmt = select(ServiceOrder).where(
+            ServiceOrder.is_deleted.is_(False),
+            ServiceOrder.created_at >= an - timedelta(days=gun),
+            or_(*is_kosulu),
+        )
+        stmt = kapsam.kapsam_isler(stmt, user, ServiceOrder.id)
+        son_isler = [
+            {"id": s.id, "so_no": s.so_no, "durum": s.status, "konu": s.konu, "tarih": s.created_at}
+            for s in (
+                await db.scalars(stmt.order_by(ServiceOrder.created_at.desc()).limit(20))
+            ).all()
+        ]
+    return {
+        "kapsam_durumu": durum,
+        "aktif_sozlesmeler": aktif,
+        "garanti": garanti,
+        "son_isler": son_isler,
+    }
+
+
+async def _kapsam_damgasi(db: AsyncSession, so: Any, clock: Clock) -> None:
+    """`is_olusturuldu` kancası: kapsam anlık görüntüsü açılışta BİR KEZ yazılır.
+
+    Sonradan sözleşme pasiflense de değişmez (güncelleme uçları bu alanları
+    kabul etmez). Göç işi (`source_system` dolu) ve kapsamı zaten verilmiş iş
+    (PB üretimi SOZLESMELI yazar) atlanır: göç anı açılış anı değildir.
+    """
+    if so.coverage_status is not None or getattr(so, "source_system", None):
+        return
+    bilgi = await kapsam_bilgisi(
+        db,
+        customer_id=so.customer_id,
+        address_id=so.address_id,
+        equipment_id=so.equipment_id,
+        clock=clock,
+    )
+    so.coverage_status = bilgi["kapsam_durumu"]
+    so.coverage_snapshot = {
+        "zaman": clock.now().isoformat(),
+        "kapsam_durumu": bilgi["kapsam_durumu"],
+        "sozlesmeler": [
+            {k: s[k] for k in ("id", "no", "tesis", "donem", "durum")}
+            for s in bilgi["aktif_sozlesmeler"]
+        ],
+        "garanti": bilgi["garanti"],
+    }
+    await db.flush()
+
+
+# --- Müşteri kartının servis sekmesi (TS-192, E14-07) -------------------------------
+
+
+async def servis_karti(
+    db: AsyncSession, user: User, hesap: Account, clock: Clock
+) -> dict[str, Any]:
+    """Canlı `/kart` DEĞİŞMEZ; servis sekmesi bu ayrı özetten beslenir.
+
+    - Açık iş sayısı servis işi LİSTE sorgusundan sayılır (`/isler?musteri_id=
+      &durum_grubu=ACIK` `X-Toplam-Kayit`'ı ile aynı); kartta ayrı sayım yok.
+    - Her blok kendi modül izniyle ve birim kapsamıyla gelir; izni olmayan
+      blok yanıtta HİÇ yoktur.
+    - Tutar (sözleşme ücreti) yalnız `maliyet.gor` sahibinde anahtar olarak var.
+    """
+    from app.models import MaintenanceContract, Quote, Rental
+    from app.services.teknik_servis import is_emirleri, kapsam
+    from app.services.teknik_servis.yerel_zaman import yerel_bugun
+
+    sonuc: dict[str, Any] = {"hesap_id": hesap.id, "unvan": hesap.title}
+
+    acik_f = is_emirleri.ListeFiltresi(musteri_id=hesap.id, durum_grubu="ACIK")
+    acik_stmt = is_emirleri.liste_sorgusu(user, acik_f, clock).order_by(None)
+    alt = acik_stmt.subquery()
+    sonuc["acik_is_sayisi"] = int(await db.scalar(select(func.count()).select_from(alt)) or 0)
+    lokasyon_acik = dict(
+        (await db.execute(select(alt.c.address_id, func.count()).group_by(alt.c.address_id)))
+        .tuples()
+        .all()
+    )
+
+    tesisler = (
+        await db.scalars(
+            select(Address)
+            .where(Address.account_id == hesap.id, Address.kind == "TESIS")
+            .order_by(Address.is_active.desc(), Address.site_name, Address.id)
+        )
+    ).all()
+    sonuc["lokasyonlar"] = [
+        {
+            "id": a.id,
+            "tesis_adi": a.site_name or a.label,
+            "il": a.city,
+            "aktif": a.is_active,
+            "acik_is": int(lokasyon_acik.get(a.id, 0)),
+        }
+        for a in tesisler
+    ]
+    sonuc["lokasyonsuz_acik_is"] = int(lokasyon_acik.get(None, 0))
+
+    son_f = is_emirleri.ListeFiltresi(musteri_id=hesap.id, kapali_dahil=True)
+    son = (await db.scalars(is_emirleri.liste_sorgusu(user, son_f, clock).limit(20))).all()
+    sonuc["servis_isleri"] = [
+        {
+            "id": s.id,
+            "so_no": s.so_no,
+            "birim": s.birim,
+            "tur": s.tur,
+            "durum": s.status,
+            "konu": s.konu,
+            "lokasyon_id": s.address_id,
+            "tarih": s.created_at,
+        }
+        for s in son
+    ]
+
+    maliyet = user.has("maliyet.gor")
+    if user.has("bakim.gor"):
+        from app.services.teknik_servis import bakim
+
+        stmt = bakim.sozlesme_kapsami(
+            select(MaintenanceContract).where(
+                MaintenanceContract.account_id == hesap.id,
+                MaintenanceContract.is_deleted.is_(False),
+            ),
+            user,
+        )
+        satirlar = []
+        for s in (await db.scalars(stmt.order_by(MaintenanceContract.id.desc()).limit(50))).all():
+            satir = {
+                "id": s.id,
+                "no": s.contract_no,
+                "birim": s.birim,
+                "tesis_id": s.address_id,
+                "tesis": s.site_name_raw,
+                "donem": donem_metni(s.valid_from, s.valid_to),
+                "durum": s.status,
+            }
+            if maliyet:
+                satir["ucret"] = float(s.fee_per_visit) if s.fee_per_visit is not None else None
+            satirlar.append(satir)
+        sonuc["sozlesmeler"] = satirlar
+
+    if user.has("ekipman.gor"):
+        from app.services.teknik_servis import ekipman as ekipman_svc
+
+        e_stmt = ekipman_svc.liste_sorgusu(
+            user,
+            ekipman_svc.EkipmanSuzgeci(hesap_id=hesap.id),
+            bugun=yerel_bugun(clock),
+            an=clock.now(),
+        ).order_by(None)
+        e_alt = e_stmt.with_only_columns(ekipman_svc.ServiceEquipment.equipment_type).subquery()
+        kirilim = dict(
+            (
+                await db.execute(
+                    select(e_alt.c.equipment_type, func.count()).group_by(e_alt.c.equipment_type)
+                )
+            )
+            .tuples()
+            .all()
+        )
+        sonuc["ekipman_sayisi"] = int(sum(kirilim.values()))
+        sonuc["ekipman_turleri"] = [{"tip": t, "adet": int(n)} for t, n in sorted(kirilim.items())]
+
+    if user.has("kiralama.gor"):
+        stmt = kapsam.kapsam_birim(
+            select(Rental).where(
+                Rental.customer_id == hesap.id,
+                Rental.is_deleted.is_(False),
+                Rental.status.not_in(("KAPANDI", "IPTAL")),
+            ),
+            user,
+            Rental.birim,
+            birimsiz_gorunur=False,
+        )
+        sonuc["kiralamalar"] = [
+            {
+                "id": r.id,
+                "no": r.rental_no,
+                "birim": r.birim,
+                "durum": r.status,
+                "baslangic": r.baslangic,
+                "bitis": r.bitis,
+            }
+            for r in (await db.scalars(stmt.order_by(Rental.id.desc()).limit(50))).all()
+        ]
+
+    if user.has("teklif.gor"):
+        # Yalnız birimli (servis) teklifler; satış teklifi canlı Hesaplar kartında.
+        stmt = kapsam.kapsam_birim(
+            select(Quote).where(
+                Quote.customer_id == hesap.id,
+                Quote.birim.is_not(None),
+                Quote.is_deleted.is_(False),
+            ),
+            user,
+            Quote.birim,
+            birimsiz_gorunur=False,
+        )
+        sonuc["teklifler"] = [
+            {
+                "id": q.id,
+                "no": q.quote_no,
+                "birim": q.birim,
+                "durum": q.status,
+                "tarih": q.created_at,
+            }
+            for q in (await db.scalars(stmt.order_by(Quote.id.desc()).limit(20))).all()
+        ]
+
+    bos = (
+        not sonuc["servis_isleri"]
+        and not sonuc.get("sozlesmeler")
+        and not sonuc.get("ekipman_sayisi")
+    )
+    sonuc["aciklama"] = (
+        "Bu müşteriye bağlanmamış eski kayıtlar olabilir — Servis Ana Verisi > Eşleştirme"
+        if bos
+        else None
+    )
+    return sonuc
+
+
 # --- Uyarı ---------------------------------------------------------------------
 
 
@@ -742,3 +1099,8 @@ async def dogrulanmamis_uyarilari(db: AsyncSession, user: User, clock: Clock) ->
 from app.services.teknik_servis import uyarilar as _ts_uyarilar  # noqa: E402
 
 _ts_uyarilar.kaydet("ana_veri", "hesap.birlestir", dogrulanmamis_uyarilari)
+
+# Kapsam anlık görüntüsü açılışta bir kez (TS-192, E14-17; plan KD-15 kanca kalıbı).
+from app.services.teknik_servis import kancalar as _kancalar  # noqa: E402
+
+_kancalar.kaydet("is_olusturuldu", _kapsam_damgasi)

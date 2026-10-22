@@ -1,0 +1,6 @@
+WorkOrderId,WorkOrderNo,UnitCode,WorkType,CustomerName,ProjectName,Location,Subject,Description,Priority,Status,SystemName,SerialNo,CreatedAt,UpdatedAt,ClosedAt
+201,SRV-202602-0001,Güvenlik Sistemleri,Saha Arızası,Akyaka Park AVM,,Akyaka Park AVM,X-Ray arıza,,Kritik,Kapatıldı,,S-201,2026-02-02T09:00:00,2026-02-03T17:00:00,2026-02-03T17:00:00
+202,SRV-202602-0002,Güvenlik Sistemleri,Saha Arızası,Bilinmeyen Firma,,Kuzey Kapı,Kapı dedektörü,,Acil,Sahada,,S-202,2026-02-04T08:00:00,2026-02-04T10:00:00,
+203,SRV-202602-0003,Haberleşme,Atölye Tamir,Örnek Lojistik,,,Telsiz tamiri,,Normal,Atölyede,,T-1,2026-02-05T08:00:00,,
+204,SRV-202602-0004,Güvenlik Sistemleri,Planlı Bakım,Akyaka Park AVM,,,PB,,Garip,Müşteri Talebi,,,2026-02-06T08:00:00,,
+206,SRV-202602-0006,Haberleşme,Atölye Teknik Servis,Örnek Lojistik,,,Atölye kaydı olmayan iş,,Normal,Müşteri Talebi,,,2026-02-07T08:00:00,,

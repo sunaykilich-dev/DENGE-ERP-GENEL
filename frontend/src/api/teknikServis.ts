@@ -356,6 +356,39 @@ export const KPI_ADLARI: Record<string, string> = {
   bakim_bu_ay_planli: "Bu ay planlı bakım",
   bakim_geciken: "Geciken bakım",
   bakim_tamamlanan: "Tamamlanan bakım",
+  // Dalga 3 rapor KPI'ları (Servis Raporları → "Servis İşleri'nde aç").
+  rapor_gelen: "Gelen iş",
+  rapor_cozulen: "Çözülen iş",
+  rapor_iptal: "İptal edilen",
+  rapor_donem_sonu_acik: "Dönem sonu açık",
+  rapor_kritik_acik: "Kritik açık",
+  rapor_uzaktan_cozulen: "Telefon/uzaktan çözülen",
+  rapor_sure_girilen: "Süre girilen iş",
+  rapor_sure_eksik: "Süre kaydı eksik",
+  rapor_ilk_cozulen: "İlk kez çözülen",
+  rapor_yeniden_acilan: "Yeniden açılan",
+  rapor_yeniden_acilan_pb: "Yeniden açılan (PB)",
+  rapor_tekrar_payda: "Tekrar arıza paydası",
+  rapor_tekrar_ariza_onayli: "Tekrar arıza (onaylı)",
+  rapor_tekrar_ariza_aday: "Tekrar arıza adayı (onaysız)",
+  rapor_tekrar_ziyaret: "Tekrar ziyaret",
+  rapor_ziyaret_kaydi_yok: "Ziyaret kaydı eksik",
+  rapor_sla_zamaninda: "SLA zamanında",
+  rapor_sla_asildi: "SLA aşıldı",
+  rapor_sla_olculemedi: "SLA ölçülemedi",
+  rapor_sla_damgasiz: "SLA damgası yok",
+  rapor_bakim_acik_pb: "Açık PB",
+  rapor_bakim_tamamlanan_pb: "Tamamlanan PB cihazı",
+  rapor_bakim_sure_eksik_pb: "Süre kaydı eksik PB",
+  rapor_bakim_aksiyon_acik: "Bakım yapıldı, aksiyon açık",
+  rapor_bakim_bakimi_yapilan: "Bakımı yapılan PB",
+  rapor_bakim_onaysiz_kapanis: "Onaysız PB kapanışı",
+};
+
+/** Serbest dönem aralığı (`YYYYAAGG-YYYYAAGG`) → "GG.AA.YYYY – GG.AA.YYYY"; değilse null. */
+export const donemAraligiMetni = (donem: string): string | null => {
+  const m = /^(\d{4})(\d{2})(\d{2})-(\d{4})(\d{2})(\d{2})$/.exec(donem);
+  return m ? `${m[3]}.${m[2]}.${m[1]} – ${m[6]}.${m[5]}.${m[4]}` : null;
 };
 
 // --- Çağrılar ---------------------------------------------------------------
@@ -421,8 +454,17 @@ export const teknikServisApi = {
   ekip: (id: number) => api.get<EkipUyesi[]>(`${isYolu(id)}/ekip`),
   ata: (id: number, atamalar: AtamaSatiri[]) =>
     api.put<EkipUyesi[]>(`${isYolu(id)}/atama`, { atamalar }),
+  /** Tekli atama + yetkinlik uyarıları (TS-198; uyarı atamayı engellemez). */
+  ataUyarili: (id: number, atamalar: AtamaSatiri[]) =>
+    api
+      .putBaslikli<EkipUyesi[]>(`${isYolu(id)}/atama`, { atamalar }, "X-Atama-Uyarilari")
+      .then(({ veri, ek }) => ({ ekip: veri, uyarilar: ek })),
   topluAta: (is_idler: number[], atamalar: AtamaSatiri[], mod: "EKLE" | "DEGISTIR") =>
-    api.put<{ guncellenen: number }>(`${TS}/isler/toplu-atama`, { is_idler, atamalar, mod }),
+    api.put<{ guncellenen: number; uyarilar?: string[] }>(`${TS}/isler/toplu-atama`, {
+      is_idler,
+      atamalar,
+      mod,
+    }),
   onaylar: (id: number) => api.get<Onay[]>(`${isYolu(id)}/onaylar`),
   onayAl: (id: number, g: OnayGirdisi) => api.post<Onay>(`${isYolu(id)}/onay`, g),
   ziyaretOnayi: (is_idler: number[], g: OnayGirdisi) =>

@@ -689,3 +689,61 @@ Menü: **Personel** kartında **İşten çıkış** (`personel.cikis`).
 - Ayrılmış personel `kvkk.yonet` ile **KVKK anonimleştir** penceresinden
   (açık onay + gerekçe) anonimleştirilir: not, e-posta ve iki adımlı giriş
   sırrı temizlenir; ad iş geçmişi için kalır.
+
+## 12. Teknik servis — Dalga 3: e-posta bildirimi, Ekibim, terimler
+
+### 12.1 SLA e-posta bildirimi
+
+Menü: sağ üstteki kullanıcı menüsü → **Bildirim tercihleri** (`servis.gor`).
+
+- İki seçenek vardır: **anlık e-posta** (bir işin SLA çözüm hedefi aşıldığında
+  ya da müdahale hedefi geçtiğinde) ve **günlük özet** (her gün ayarlanan
+  saatte; varsayılan 07:30). İkisi de başlangıçta kapalıdır.
+- Yalnız görme yetkiniz olan işlerin e-postası gelir; biriminiz değişirse
+  sonraki e-postalar yeni kapsamınızla hesaplanır. Aynı bildirim size bir kez
+  gönderilir.
+- E-postada iş no, birim, müşteri unvanı, öncelik, hedef, durum ve ERP
+  bağlantısı vardır. **Fiyat, tutar ve iletişim telefonu yer almaz.**
+- Hesabınızda e-posta adresi yoksa e-posta gönderilmez (adres Kullanıcılar
+  ekranından sistem yöneticisi tarafından girilir).
+- Eski sistemden aktarılmış (geriye dönük SLA damgalı) işler için e-posta
+  gönderilmez.
+
+Yönetici ayarları: **Operasyon Merkezi → E-posta kutusu** sekmesi
+(`operasyon.yonet`).
+
+- Servis e-postası sistem genelinde buradan açılır/kapatılır (ilk kurulumda
+  kapalıdır), günlük özet saati ve deneme sınırı (varsayılan 3) seçilir.
+- SMTP sunucusu **Parametreler → Bildirim (e-posta)** bölümünde tanımlıdır.
+  SMTP tanımlı değilken e-postalar kutuda *Bekliyor* olarak kalır ve deneme
+  sayılmaz; tanımlanınca kendiliğinden gönderilir.
+- Gönderilemeyen e-posta deneme sınırına ulaşınca *Başarısız* olur; *Son
+  hata* sütununda yalnız hata türü ve sunucu:port görünür (parola ya da
+  kullanıcı adı asla yazılmaz).
+- Kutudaki alıcı adresi kişisel veridir: gönderilmiş/başarısız satırlar 90
+  gün (SLA bildirim saklama süresi) sonra, ayrılan personelin satırları hemen
+  silinir. Kapanmış bir bildirimin henüz gönderilmemiş e-postası gönderilmez.
+- Mesai takvimli SLA bu sürümde yoktur; SLA süreleri 7/24 işler.
+
+### 12.2 Ekibim ve yönetici
+
+Menü: **Personel**.
+
+- Personel kartında **Yönetici** alanı `personel.yaz` ile seçilir. Kişi
+  kendisinin ya da kendi astının (dolaylı da olsa) astı yapılamaz; ayrılmış
+  personel yönetici seçilemez.
+- Listede **Ekibim** işaretlenince yalnız size doğrudan bağlı, çalışan
+  personel görünür; *sayaç açık* etiketi kişinin şu an sayacının açık
+  olduğunu gösterir.
+- **Ekibim yalnız bir süzgeçtir, yetki vermez:** size bağlı olsa da
+  biriminiz dışındaki kişi listede görünmez. Yöneticisi kapsamınız dışında
+  olan kişide yönetici "Kapsam dışı kişi" olarak görünür.
+
+### 12.3 "Planlı Bakım" ile mobilite "Bakım" iş emri
+
+- **Planlı Bakım** (menü: *Teknik Servis → Planlı Bakım*, iş türü *PB*):
+  bakım sözleşmesine bağlı periyodik teknik servis işidir; Servis Paneli ve
+  servis raporlarında bu adla geçer.
+- Mobilite **İş Emirleri** ekranındaki *BAKIM* işlem tipi araç takip
+  cihazlarının saha bakımıdır; hak ediş ve mobilite raporlarında eskisi gibi
+  sayılır. İkisi ayrı kayıtlardır ve birbirinin sayılarına karışmaz.

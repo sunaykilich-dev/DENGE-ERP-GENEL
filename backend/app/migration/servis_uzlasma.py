@@ -7,9 +7,10 @@
     uv run python -m app.migration.servis_uzlasma onizleme|uygula|rapor \\
         --kaynak <döküm> [--adim kutuk,servis,plan,zaman] [--birim GUVENLIK] [--cikti x.xlsx]
 
-Adım sırası zorunludur: kütük → servis işleri → plan → zaman (plan ve zaman
-göç edilmiş işe bağlanır). Bakım sözleşmesi ve müşteri/ad eşleştirmesi insan
-kararı ister ve İçe Aktarma profilleriyle yapılır (`deploy/KURULUM.md`).
+Adım sırası zorunludur: kütük → servis işleri → plan → zaman → parça metni
+(plan, zaman ve parça metni göç edilmiş işe bağlanır; parça adımı TS-208).
+Bakım sözleşmesi ve müşteri/ad eşleştirmesi insan kararı ister ve İçe
+Aktarma profilleriyle yapılır (`deploy/KURULUM.md`).
 
 **Uzlaşma sözleşmesi (tablo bazında):**
 `kaynak = aktarılan + karantina + reddedilen (+ ertelenen)`.
@@ -38,7 +39,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.migration import servis_goc, servis_plan, servis_zaman, yukle_kutuk
+from app.migration import servis_goc, servis_goc_parca, servis_plan, servis_zaman, yukle_kutuk
 from app.migration.ana_veri_olcum import Sayfa, cok_sayfali_xlsx
 from app.migration.servis_kaynak import (
     GOC_SISTEMI,
@@ -49,7 +50,7 @@ from app.migration.servis_kaynak import (
 )
 from app.models import ServiceOrder
 
-ADIMLAR = ("kutuk", "servis", "plan", "zaman")
+ADIMLAR = ("kutuk", "servis", "plan", "zaman", "parca")
 
 
 @dataclass
@@ -107,6 +108,12 @@ async def kos(
         if uygula:
             await servis_zaman.yukle(db, ss, user_id=user_id)
         kosu.sonuclar.extend(ss)
+    if "parca" in adimlar:
+        # Göç-2 eki (TS-208): eski serbest metin parça kayıtları → NOT olayı; stok yok.
+        ps = await servis_goc_parca.hazirla_db(db, dizin)
+        if uygula:
+            await servis_goc_parca.yukle(db, ps, user_id=user_id)
+        kosu.sonuclar.extend(ps)
     return kosu
 
 
@@ -310,7 +317,7 @@ def komut_satiri(argv: list[str] | None = None) -> int:
     ayr = argparse.ArgumentParser(description="Servis göçü (Göç-1) ve uzlaşma")
     ayr.add_argument("mod", choices=("onizleme", "uygula", "rapor"), nargs="?", default="onizleme")
     ayr.add_argument("--kaynak", type=Path, required=True, help="CSV döküm dizini")
-    ayr.add_argument("--adim", default=",".join(ADIMLAR), help="kutuk,servis,plan,zaman")
+    ayr.add_argument("--adim", default=",".join(ADIMLAR), help="kutuk,servis,plan,zaman,parca")
     ayr.add_argument("--birim", help="Yalnız bu birim(ler)in servis işleri (virgülle)")
     ayr.add_argument("--cikti", type=Path, help="Uzlaşma raporu xlsx")
     ayr.add_argument("--uygula", action="store_true", help="'uygula' moduyla aynı")
