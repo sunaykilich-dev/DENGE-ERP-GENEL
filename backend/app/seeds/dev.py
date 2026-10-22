@@ -137,6 +137,7 @@ async def ensure_admin(db: AsyncSession, full_name: str) -> str | None:
 DEMO_PAROLA = "deneme1234"
 # Canlıya geçişte pilot birim GUVENLIK (plan §5.1 adım 8); deneme de aynısı.
 DEMO_BIRIM = "GUVENLIK"
+DEMO_SAHA_ROLU = {"SERVIS_SEF": "SEF", "SERVIS_TEKNISYEN": "TEKNISYEN", "ATOLYE": "TEKNISYEN"}
 
 
 async def ensure_demo_users(db: AsyncSession) -> int:
@@ -167,6 +168,9 @@ async def ensure_demo_users(db: AsyncSession) -> int:
         # deneme hesabı boş ekranla açılmasın diye pilot birim verilir.
         if ROLES[code][2] in BIRIM_KAPSAMLARI:
             kisi.birimler = [UserUnit(birim=DEMO_BIRIM, is_primary=True)]
+        # Saha rolü olmayan kişi plana/işe atanamaz; deneme şef ve teknisyeni
+        # boş atama listesiyle açılmasın.
+        kisi.saha_rolu = DEMO_SAHA_ROLU.get(code)
         db.add(kisi)
         acilan += 1
     await db.flush()
