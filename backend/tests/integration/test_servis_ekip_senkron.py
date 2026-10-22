@@ -76,7 +76,8 @@ async def test_ekip_degisti_yeni_ekiple_cagrilir(
     so = await servis_isi_ac(atananlar=[t1])
     cagrilar = []
 
-    async def _plan_senkron(db_, so_, yeni_ekip):
+    async def _plan_senkron(db_, so_, yeni_ekip, clock):
+        assert clock is not None  # Dalga 2: imza Clock taşır
         cagrilar.append((so_.id, sorted(a.user_id for a in yeni_ekip)))
 
     async def _cikanlar(db_, so_, cikan):

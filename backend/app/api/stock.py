@@ -136,6 +136,15 @@ async def transfer_olustur(
         payload.dogrula()
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    for depo_id in (payload.from_warehouse_id, payload.to_warehouse_id):
+        depo = await db.get(Warehouse, depo_id) if depo_id is not None else None
+        if depo is not None and (depo.servis_deposu or depo.kiralama_deposu):
+            # Cihaz transferi mobilite akışıdır; servis/kiralama depoları ayrı
+            # defter tutar (E06-D01, E11-D01).
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Servis ve kiralama depoları mobilite transferinde kullanılamaz.",
+            )
 
     kimlikler = [k.strip() for k in payload.kimlikler if k.strip()]
     cihazlar = (
@@ -319,9 +328,14 @@ async def stok_hareketleri(
 ) -> list[dict]:
     from app.models import Product, StockMovement
 
+    # Servis defteri satırları (`hareket_turu` dolu) burada LİSTELENMEZ: bu uç
+    # `cihaz.gor` ile ve kapsamsız açık; servis işine bağlı parça hareketi,
+    # notu ve belge no birim/müşteri kapsamı olmadan sızardı (E11-D01).
+    # Servis hareketleri yalnız `/api/teknik-servis/parca/hareketler`'den.
     stmt = (
         select(StockMovement, Product.code, Product.name)
         .join(Product, Product.id == StockMovement.product_id)
+        .where(StockMovement.hareket_turu.is_(None))
         .order_by(StockMovement.id.desc())
         .limit(min(limit, 500))
     )
@@ -360,9 +374,17 @@ async def yaslanan(db: DbDep, clock: ClockDep, _: Okuyucu) -> list[dict]:
 
 @router.get("/depolar")
 async def depolar(db: DbDep, _: Okuyucu) -> list[dict]:
+    # Yalnız mobilite depoları: servis ve kiralama depoları kendi ekranlarında
+    # (E11-D01, E06-D01); burada listelenseydi mobilite hareketi oraya girilirdi.
     kayitlar = (
         await db.scalars(
-            select(Warehouse).where(Warehouse.is_active.is_(True)).order_by(Warehouse.name)
+            select(Warehouse)
+            .where(
+                Warehouse.is_active.is_(True),
+                Warehouse.servis_deposu.is_(False),
+                Warehouse.kiralama_deposu.is_(False),
+            )
+            .order_by(Warehouse.name)
         )
     ).all()
     return [

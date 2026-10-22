@@ -9,14 +9,17 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.api import accounts as accounts_api
+from app.api import atolye as atolye_api
 from app.api import attachments as attachments_api
 from app.api import audit_api, settings_api
 from app.api import auth as auth_api
 from app.api import bakim as bakim_api
 from app.api import catalog as catalog_api
 from app.api import devices as devices_api
+from app.api import egitim as egitim_api
 from app.api import gorevler as gorevler_api
 from app.api import imports as imports_api
+from app.api import kiralamalar as kiralamalar_api
 from app.api import kvkk as kvkk_api
 from app.api import lokasyonlar as lokasyonlar_api
 from app.api import orders as orders_api
@@ -30,6 +33,8 @@ from app.api import reports as reports_api
 from app.api import rma as rma_api
 from app.api import search as search_api
 from app.api import servis_ekipman as servis_ekipman_api
+from app.api import servis_maliyet as servis_maliyet_api
+from app.api import servis_operasyon as servis_operasyon_api
 from app.api import servis_zaman as servis_zaman_api
 from app.api import settlements as settlements_api
 from app.api import sims as sims_api
@@ -42,6 +47,7 @@ from app.api import teknik_servis_planlama as teknik_servis_planlama_api
 from app.api import users as users_api
 from app.api import vehicles as vehicles_api
 from app.api import workorders as workorders_api
+from app.api import yedek_parca as yedek_parca_api
 from app.config import YapilandirmaHatasi, get_config, uretim_kontrolu
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -217,8 +223,8 @@ def create_app() -> FastAPI:
     app.include_router(gorevler_api.router)
     # --- Teknik servis (Dalga 0 + 1) --------------------------------------
     # Kayıt noktaları şema paketinde (D0-S) sabitlenir; uçları modül paketleri
-    # kendi dosyalarına yazar, bu bloğa dokunmaz. Dalga 2+ routerları
-    # (operasyon, atölye, kiralama, parça, maliyet, eğitim) D2-S ekler.
+    # kendi dosyalarına yazar, bu bloğa dokunmaz. Dalga 2 routerları
+    # (operasyon, atölye, kiralama, parça, maliyet, eğitim) D2-S ekledi.
     app.include_router(personel_api.router)
     app.include_router(lokasyonlar_api.router)
     app.include_router(teknik_servis_ana_veri_api.router)
@@ -226,6 +232,13 @@ def create_app() -> FastAPI:
     app.include_router(servis_ekipman_api.router)
     app.include_router(bakim_api.router)
     app.include_router(servis_zaman_api.router)
+    # --- Teknik servis (Dalga 2, D2-S) --------------------------------------
+    app.include_router(servis_operasyon_api.router)
+    app.include_router(atolye_api.router)
+    app.include_router(yedek_parca_api.router)
+    app.include_router(servis_maliyet_api.router)
+    app.include_router(kiralamalar_api.router)
+    app.include_router(egitim_api.router)
     # Genel `/api/teknik-servis/{...}` yolları alt önekli routerlardan SONRA:
     # `/isler/{id}` gibi bir kalıp `/planlama/...` yolunu yutmasın.
     app.include_router(teknik_servis_api.router)

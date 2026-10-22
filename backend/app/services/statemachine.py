@@ -278,6 +278,130 @@ BAKIM_SOZLESMESI = StateMachine(
     ),
 )
 
+# ===================== Teknik servis Dalga 2 (plan §1.7) =====================
+# Her makinenin durum kümesi modeldeki CHECK tuple'ıyla aynıdır
+# (`tests/unit/test_ts_sema_d2.py` kilitler). Makine "hangi geçiş var"ı
+# söyler; iş kuralları (zorunlu alan, izin, kanca) modül servisindedir.
+
+# --- Atölye (E05 §3.1) ----------------------------------------------------------
+# Geri alma geçişleri (TESLIME_HAZIR→ONARIMDA, ONARILMADAN_IADE→TESHISTE,
+# KARGOYA_VERILDI→TESLIME_HAZIR) gerekçe + `servis.kapat` ister ve servis
+# işini ETKİLEMEZ. Servis işi eşlemesi `services/teknik_servis/atolye.py`'dedir:
+# açık durumlar → ATOLYEDE, bekleme durumları → E01 `beklet()` ile BEKLEMEDE,
+# TESLIM_EDILDI → TAMAMLANDI (kaynak='atolye'), IPTAL → IPTAL.
+ATOLYE = StateMachine(
+    ad="Atölye",
+    baslangiclar=frozenset({"KABUL_EDILDI"}),
+    gecisler=_m(
+        KABUL_EDILDI=("TESHISTE", "IPTAL"),
+        TESHISTE=(
+            "ONAY_BEKLIYOR",
+            "ONARIMDA",
+            "PARCA_BEKLIYOR",
+            "DIS_SERVISTE",
+            "ONARILMADAN_IADE",
+            "IPTAL",
+        ),
+        ONAY_BEKLIYOR=("ONARIMDA", "ONARILMADAN_IADE", "IPTAL"),
+        ONARIMDA=("PARCA_BEKLIYOR", "DIS_SERVISTE", "TEST_KONTROL", "ONARILMADAN_IADE", "IPTAL"),
+        PARCA_BEKLIYOR=("ONARIMDA", "ONARILMADAN_IADE", "IPTAL"),
+        DIS_SERVISTE=("ONARIMDA", "TEST_KONTROL", "ONARILMADAN_IADE", "IPTAL"),
+        TEST_KONTROL=("ONARIMDA", "TESLIME_HAZIR"),
+        TESLIME_HAZIR=("KARGOYA_VERILDI", "TESLIM_EDILDI", "ONARIMDA"),
+        ONARILMADAN_IADE=("KARGOYA_VERILDI", "TESLIM_EDILDI", "TESHISTE"),
+        KARGOYA_VERILDI=("TESLIM_EDILDI", "TESLIME_HAZIR"),
+        TESLIM_EDILDI=(),
+        IPTAL=(),
+    ),
+)
+
+# --- Kiralama (E06 §2.5) ----------------------------------------------------------
+# Kurulum adımları isteğe bağlı (telsiz kiralaması SEVK_EDILDI→DEPOYA_ALINDI).
+# Kurulum yapılmış kiralamada son iade önce TOPLANDI ister (kenar yok).
+# "Kısmi iade" durum değildir, tahsislerden türetilir. Aşama geri alma ters
+# kenar EKLEMEZ: `kiralama.asama_geri_al` yalnız son olayı geri çevirir ve
+# önce bu ileri geçişin makinede var olduğunu doğrular (bilinçli, belgeli
+# tek doğrudan atama — E06 kontrol §2.2/16).
+KIRALAMA = StateMachine(
+    ad="Kiralama",
+    baslangiclar=frozenset({"TALEP"}),
+    gecisler=_m(
+        TALEP=("PLANLANDI", "IPTAL"),
+        PLANLANDI=("HAZIRLANIYOR", "IPTAL"),
+        HAZIRLANIYOR=("SEVK_EDILDI", "IPTAL"),
+        SEVK_EDILDI=("KURULUM_YAPILDI", "DEVREYE_ALINDI", "TOPLANDI", "DEPOYA_ALINDI"),
+        KURULUM_YAPILDI=("DEVREYE_ALINDI", "TOPLANDI"),
+        DEVREYE_ALINDI=("TOPLANDI",),
+        TOPLANDI=("DEPOYA_ALINDI",),
+        DEPOYA_ALINDI=("KAPANDI",),
+        KAPANDI=(),
+        IPTAL=(),
+    ),
+)
+
+# --- Teklif (E07 §1.4, kontrol düzeltmesiyle) ---------------------------------------
+# YALNIZ birimli (servis) teklifte zorlanır; satış teklifi (birim NULL) canlı
+# uçlarda bugünkü gibi yürür ve bu makineye girmez (canlı `karar` ucu
+# TASLAK→KABUL'e izin veriyor; satış akışı değişmez). Satış durumları
+# (REVIZE_EDILDI, SURESI_DOLDU, SIPARISE_DONUSTU) bu makinede YOK: birimli
+# teklif siparişe dönüşmez (409), "süresi doldu" hesaplanır, revizyon
+# TASLAK'a döner. KABUL→IPTAL yalnız `teklif.onayla` + gerekçe, fatura devri
+# yoksa (E07-D04).
+TEKLIF = StateMachine(
+    ad="Teklif",
+    baslangiclar=frozenset({"TASLAK"}),
+    gecisler=_m(
+        TASLAK=("ONAY_BEKLIYOR", "IPTAL"),
+        ONAY_BEKLIYOR=("TASLAK", "ONAYLANDI", "IPTAL"),
+        ONAYLANDI=("GONDERILDI", "TASLAK", "IPTAL"),
+        GONDERILDI=("GORUNTULENDI", "KABUL", "RED", "TASLAK", "IPTAL"),
+        GORUNTULENDI=("KABUL", "RED", "TASLAK", "IPTAL"),
+        RED=("TASLAK",),
+        KABUL=("IPTAL",),
+        IPTAL=(),
+    ),
+)
+
+# --- Eğitim planı (E08 §2.3, kontrol düzeltmesiyle) -----------------------------------
+# ERTELENDI→ERTELENDI YOK: ikinci erteleme durum değil yalnız tarih değişikliği
+# (makine aynı duruma geçişi reddeder). TAMAMLANDI→PLANLANDI yalnız katılım
+# "katılmadı" düzeltmesinde; `completed_on/completed_session_id` temizlenir.
+EGITIM_PLANI = StateMachine(
+    ad="Eğitim Planı",
+    baslangiclar=frozenset({"PLANLANDI"}),
+    gecisler=_m(
+        PLANLANDI=("TAMAMLANDI", "BASARISIZ_TEKRAR", "ERTELENDI", "IPTAL"),
+        ERTELENDI=("TAMAMLANDI", "BASARISIZ_TEKRAR", "IPTAL"),
+        BASARISIZ_TEKRAR=("TAMAMLANDI", "ERTELENDI", "IPTAL"),
+        TAMAMLANDI=("PLANLANDI",),
+        IPTAL=(),
+    ),
+)
+
+# --- Düzeltici faaliyet (E08-07) -------------------------------------------------------
+DUZELTICI_FAALIYET = StateMachine(
+    ad="Düzeltici Faaliyet",
+    baslangiclar=frozenset({"ACIK"}),
+    gecisler=_m(ACIK=("KAPATILDI",), KAPATILDI=()),
+)
+
+# --- Stok sayımı (E11-17) ---------------------------------------------------------------
+# Onaysız sayım hiçbir bakiyeyi değiştirmez; fark onay anında yazılır.
+STOK_SAYIM = StateMachine(
+    ad="Stok Sayımı",
+    baslangiclar=frozenset({"ACIK"}),
+    gecisler=_m(ACIK=("ONAYLANDI", "IPTAL"), ONAYLANDI=(), IPTAL=()),
+)
+
+# --- Parça talebi (E11-19) ---------------------------------------------------------------
+# İş kapanınca açık talep IPTAL olur (kanca); KARSILANDI yalnız talepten
+# sonraki çıkışlarla.
+PARCA_TALEBI = StateMachine(
+    ad="Parça Talebi",
+    baslangiclar=frozenset({"ACIK"}),
+    gecisler=_m(ACIK=("KARSILANDI", "IPTAL"), KARSILANDI=(), IPTAL=()),
+)
+
 MAKINELER = {
     "cihaz": CIHAZ,
     "hat": HAT,
@@ -288,4 +412,12 @@ MAKINELER = {
     "servis_is_emri": SERVIS_IS_EMRI,
     "servis_ekipmani": SERVIS_EKIPMANI,
     "bakim_sozlesmesi": BAKIM_SOZLESMESI,
+    # --- Dalga 2 ---
+    "atolye": ATOLYE,
+    "kiralama": KIRALAMA,
+    "teklif": TEKLIF,
+    "egitim_plani": EGITIM_PLANI,
+    "duzeltici_faaliyet": DUZELTICI_FAALIYET,
+    "stok_sayim": STOK_SAYIM,
+    "parca_talebi": PARCA_TALEBI,
 }

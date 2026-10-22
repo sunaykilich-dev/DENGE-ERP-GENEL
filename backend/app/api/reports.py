@@ -56,9 +56,19 @@ async def dashboard(db: DbDep, clock: ClockDep, user: Okuyucu) -> dict:
 
 @router.get("/teklif-donusumu")
 async def teklif_donusumu(
-    db: DbDep, clock: ClockDep, user: Okuyucu, gun: int = Query(default=365, ge=7, le=3650)
+    db: DbDep,
+    clock: ClockDep,
+    user: Okuyucu,
+    gun: int = Query(default=365, ge=7, le=3650),
+    birim: str | None = None,
 ) -> dict:
-    return await svc.teklif_donusumu(db, gun=gun, clock=clock)
+    """Varsayılan SATIŞ teklifleri (sayılar canlıdaki gibi, E07-D02).
+    `birim` verilirse o birimin servis teklifleri, kullanıcının teklif kapsamıyla."""
+    from app.models.rbac import BIRIM_KODLARI
+
+    if birim is not None and birim not in BIRIM_KODLARI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {birim}")
+    return await svc.teklif_donusumu(db, gun=gun, clock=clock, birim=birim, user=user)
 
 
 # Montaj noktası raporundaki para alanları: montaj noktasına ödenen hak ediş.

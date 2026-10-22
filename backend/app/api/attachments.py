@@ -56,6 +56,26 @@ SAHIP_IZNI: dict[str, tuple[str, str]] = {
     "maintenance_contracts": ("bakim.gor", "bakim.yaz"),
     # Tesis eki carinin parçası: okuma hesap.gor, yükleme lokasyon.yaz.
     "addresses": ("hesap.gor", "lokasyon.yaz"),
+    # --- Dalga 2 kiralama dalları (D2-S iskelet; kapsam fonksiyonunu D2-C
+    # kendi dosyasında `ek_kapsam.kaydet` ile bağlar — o zamana dek
+    # fail-closed). İmzalı teslim tutanağını sevkte depo yükler (E06 §2.2/4).
+    "rentals": ("kiralama.gor", "kiralama.asama"),
+    "rental_assets": ("kiralama.gor", "kiralama.envanter"),
+    # --- Dalga 2 eğitim dalları (D2-F). Kişisel performans eki: okuma
+    # `egitim.detay` (YONETIM özet izniyle göremez, E08-20); kapsam
+    # `egitim_gozlem` içindeki kayıtlı fonksiyonda (personel kapsamı).
+    "training_observations": ("egitim.detay", "egitim.gozlem"),
+    "training_corrective_actions": ("egitim.detay", "egitim.yaz"),
+    "personnel_certificates": ("egitim.detay", "egitim.yaz"),
+}
+
+# Okuma izni yoksa KENDİ kaydının ekini görmeye yeten izin (E08 K12, kontrol
+# §2/10): teknisyen kendi gözlem fotoğrafını/belgesini `egitim.kendim` ile
+# görür. "Kendi kaydı mı" kararını kapsam fonksiyonu verir; başkasınınki 404.
+KENDI_OKUMA_IZNI: dict[str, str] = {
+    "training_observations": "egitim.kendim",
+    "training_corrective_actions": "egitim.kendim",
+    "personnel_certificates": "egitim.kendim",
 }
 
 
@@ -119,6 +139,15 @@ def _izin(user: User, kod: str) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, f"Bu işlem için yetkiniz yok ({kod})")
 
 
+def _okuma_izni(user: User, entity: str, okuma: str) -> None:
+    """Okuma izni; yoksa `KENDI_OKUMA_IZNI` (yalnız kendi kaydı — kapsam
+    fonksiyonu başkasınınkine 404 verir)."""
+    kendi = KENDI_OKUMA_IZNI.get(entity)
+    if user.has(okuma) or (kendi is not None and user.has(kendi)):
+        return
+    _izin(user, okuma)
+
+
 def _dosya_adi_basligi(ad: str) -> str:
     """`Content-Disposition` için dosya adı — RFC 5987.
 
@@ -141,7 +170,7 @@ async def indir(ek_id: int, db: DbDep, user: Kullanici) -> Response:
     if ek is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ek bulunamadı")
     okuma, _ = _sahip_dogrula(ek.entity)
-    _izin(user, okuma)
+    _okuma_izni(user, ek.entity, okuma)
     await _kapsam(db, ek.entity, ek.entity_id, user)
     try:
         yol = depo.yol(ek.storage_path)
@@ -173,7 +202,7 @@ async def indir(ek_id: int, db: DbDep, user: Kullanici) -> Response:
 @router.get("/{entity}/{entity_id}", response_model=list[EkOut])
 async def listele(entity: str, entity_id: int, db: DbDep, user: Kullanici) -> list[EkOut]:
     okuma, _ = _sahip_dogrula(entity)
-    _izin(user, okuma)
+    _okuma_izni(user, entity, okuma)
     await _kapsam(db, entity, entity_id, user)
     kayitlar = (
         await db.scalars(
@@ -202,6 +231,11 @@ _SAHIP_TABLOSU = {
     "service_equipment": "service_equipment",
     "maintenance_contracts": "maintenance_contracts",
     "addresses": "addresses",
+    "rentals": "rentals",
+    "rental_assets": "rental_assets",
+    "training_observations": "training_observations",
+    "training_corrective_actions": "training_corrective_actions",
+    "personnel_certificates": "personnel_certificates",
 }
 
 

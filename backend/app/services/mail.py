@@ -3,8 +3,16 @@
 SMTP ayarları boşsa gönderim SESSİZCE ATLANMAZ — `MailKapali` yükseltilir ve
 çağıran kullanıcıya "e-posta ayarları tanımlı değil" der. Sessiz atlama, hak
 ediş dökümünün gittiğini sanıp gitmemesi demek olurdu.
+
+**Hata ayrıntısı yalnız sunucu logunda (E07-06, G4):** eski mesaj SMTP sunucu
+adını, portu ve istisna metnini KULLANICIYA döndürüyordu (hak ediş gönderimi
+dahil). Kullanıcı artık genel bir mesaj ve sınıflandırılmış bir kod
+(`MailKapali.sinif`: SMTP_KAPALI, SMTP_BAGLANTI, SMTP_KIMLIK, SMTP_RED) görür;
+ayrıntı `logger.warning` ile loga yazılır. İmza geriye uyumludur: `alici` tek
+adres ya da liste olabilir, `cc` isteğe bağlıdır; hak ediş çağrıları değişmez.
 """
 
+import logging
 import smtplib
 from email.message import EmailMessage
 
@@ -12,36 +20,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import settings as ayar_svc
 
+logger = logging.getLogger(__name__)
+
+GENEL_HATA_MESAJI = (
+    "E-posta gönderilemedi. Parametreler → Bildirim ayarlarını kontrol edin "
+    "veya 'Elle gönderildi' kullanın."
+)
+
 
 class MailKapali(RuntimeError):
-    pass
+    """SMTP tanımsız ya da gönderim başarısız. `sinif` kullanıcıya gösterilebilir
+    sınıflandırmadır; mesaj sunucu adı/port/istisna metni TAŞIMAZ."""
+
+    def __init__(self, mesaj: str, sinif: str = "SMTP_KAPALI") -> None:
+        super().__init__(mesaj)
+        self.sinif = sinif
 
 
-async def gonder(
-    db: AsyncSession,
-    *,
-    alici: str,
-    konu: str,
-    govde: str,
-    ekler: list[tuple[str, bytes, str]] | None = None,
-) -> None:
-    ayarlar = await ayar_svc.get_all(db)
+def _hata_sinifi(exc: BaseException) -> str:
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return "SMTP_KIMLIK"
+    if isinstance(exc, smtplib.SMTPRecipientsRefused | smtplib.SMTPSenderRefused):
+        return "SMTP_RED"
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return "SMTP_RED"
+    return "SMTP_BAGLANTI"
+
+
+def _smtp_gonder(ayarlar: dict, mesaj: EmailMessage) -> None:
+    """Asıl SMTP oturumu. Hata ayrıntısı YALNIZ loga; dışarıya genel mesaj."""
     sunucu = ayarlar.get("smtp_host")
-    gonderen = ayarlar.get("smtp_from") or ayarlar.get("smtp_user")
-    if not sunucu or not gonderen:
-        raise MailKapali(
-            "E-posta ayarları tanımlı değil (Parametreler → Bildirim). Döküm gönderilmedi."
-        )
-
-    mesaj = EmailMessage()
-    mesaj["From"] = gonderen
-    mesaj["To"] = alici
-    mesaj["Subject"] = konu
-    mesaj.set_content(govde)
-    for ad, veri, mime in ekler or []:
-        ana, _, alt = mime.partition("/")
-        mesaj.add_attachment(veri, maintype=ana, subtype=alt, filename=ad)
-
     port = int(ayarlar.get("smtp_port") or 587)
     try:
         with smtplib.SMTP(sunucu, port, timeout=20) as s:
@@ -53,7 +61,39 @@ async def gonder(
         # YANLIŞ YAPILANDIRILMIŞ SMTP bir kullanıcı hatasıdır, çökme değil.
         # Ulaşılamayan sunucu/yanlış parola `MailKapali` yakalanmadığı için
         # 500 veriyordu; kullanıcı ayarı düzeltmesi gerektiğini göremiyordu.
+        sinif = _hata_sinifi(exc)
+        logger.warning("SMTP gönderimi başarısız (%s:%s, %s): %s", sunucu, port, sinif, exc)
+        raise MailKapali(GENEL_HATA_MESAJI, sinif) from exc
+
+
+async def gonder(
+    db: AsyncSession,
+    *,
+    alici: str | list[str],
+    konu: str,
+    govde: str,
+    ekler: list[tuple[str, bytes, str]] | None = None,
+    cc: list[str] | None = None,
+) -> None:
+    ayarlar = await ayar_svc.get_all(db)
+    sunucu = ayarlar.get("smtp_host")
+    gonderen = ayarlar.get("smtp_from") or ayarlar.get("smtp_user")
+    if not sunucu or not gonderen:
         raise MailKapali(
-            f"E-posta gönderilemedi ({sunucu}:{port}): {exc}. "
-            "Parametreler ekranındaki SMTP ayarlarını kontrol edin."
-        ) from exc
+            "E-posta ayarları tanımlı değil (Parametreler → Bildirim). Döküm gönderilmedi.",
+            "SMTP_KAPALI",
+        )
+
+    alicilar = [alici] if isinstance(alici, str) else list(alici)
+    mesaj = EmailMessage()
+    mesaj["From"] = gonderen
+    mesaj["To"] = ", ".join(alicilar)
+    if cc:
+        mesaj["Cc"] = ", ".join(cc)
+    mesaj["Subject"] = konu
+    mesaj.set_content(govde)
+    for ad, veri, mime in ekler or []:
+        ana, _, alt = mime.partition("/")
+        mesaj.add_attachment(veri, maintype=ana, subtype=alt, filename=ad)
+
+    _smtp_gonder(ayarlar, mesaj)

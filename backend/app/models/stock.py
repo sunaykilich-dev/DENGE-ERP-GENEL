@@ -11,7 +11,9 @@ Geçmiş tarihlidir: "bu cihaz geçmişte hangi tarihte neredeydi" sorusu
 (brief §4.3) ancak böyle cevaplanır.
 """
 
+import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -22,13 +24,14 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
     literal_column,
     text,
 )
-from sqlalchemy.dialects.postgresql import ExcludeConstraint
+from sqlalchemy.dialects.postgresql import UUID, ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -39,6 +42,7 @@ from app.models.mixins import (
     TimestampMixin,
     VersionedMixin,
 )
+from app.models.rbac import birim_check
 
 KONUM_TIPLERI = (
     "MERKEZ_DEPO",
@@ -62,10 +66,24 @@ _ARALIK = literal_column("tstzrange(valid_from, valid_to, '[)')")
 
 
 class Warehouse(Base, PkMixin, TimestampMixin):
-    """Depo/lokasyon tanımı — merkez, bölge ve teknisyen araç stoğu."""
+    """Depo/lokasyon tanımı — merkez, bölge ve teknisyen araç stoğu.
+
+    **Teknik servis genişlemesi (Dalga 2, d2a000000003, plan §1.12):** aynı
+    tablo kiralama depolarını (`kiralama_deposu`) ve servis/yedek parça
+    depolarını (`servis_deposu`) da taşır; bir depo ikisi birden olamaz
+    (`ck_warehouse_tur_tekil`). Mevcut satırlar iki bayrakta da false kalır
+    ve mobilite uçları (`/api/stok/depolar`, hareket/transfer) YALNIZ iki
+    bayrağı da false olan depoları görür/kabul eder — aksi hâlde mobilite
+    cihazı kiralama deposuna yazılabilirdi (E06-D01, E11-D01). `birim` NULL =
+    ortak depo.
+    """
 
     __tablename__ = "warehouses"
-    __table_args__ = (UniqueConstraint("code", name="uq_warehouse_code"),)
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_warehouse_code"),
+        CheckConstraint(birim_check("birim", bos_olabilir=True), name="ck_warehouse_birim"),
+        CheckConstraint("NOT (servis_deposu AND kiralama_deposu)", name="ck_warehouse_tur_tekil"),
+    )
 
     code: Mapped[str] = mapped_column(String(20))
     name: Mapped[str] = mapped_column(String(100))
@@ -75,6 +93,14 @@ class Warehouse(Base, PkMixin, TimestampMixin):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    # --- Teknik servis (Dalga 2) -------------------------------------------
+    birim: Mapped[str | None] = mapped_column(String(20))
+    kiralama_deposu: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
+    servis_deposu: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
 
 
 class DeviceCustodyHistory(Base, PkMixin, TimestampMixin):
@@ -210,8 +236,58 @@ STOK_HAREKET_NEDENLERI = (
 )
 
 
+# Servis (yedek parça) defteri hareket türleri (E11-01, Dalga 2). NULL = canlı
+# mobilite hareketi; canlı `reason` CHECK'i DEĞİŞMEZ, tür ayrı kolondadır ve
+# tür → (neden, işaret) eşlemesi şemada kilitlidir (`ck_stok_hareket_tur_yon`).
+SERVIS_HAREKET_TURLERI = (
+    "GIRIS",
+    "ACILIS",
+    "CIKIS_SERVIS",
+    "IADE_SERVIS",
+    "ZAYI",
+    "TERS_KAYIT",
+    "TRANSFER_CIKIS",
+    "TRANSFER_GIRIS",
+    "SAYIM_FAZLASI",
+    "SAYIM_EKSIGI",
+)
+# (tür → canlı neden, işaret) — servis yazıcısı ve CHECK aynı tablodan.
+SERVIS_HAREKET_YONU: dict[str, tuple[str, int]] = {
+    "GIRIS": ("GIRIS", 1),
+    "ACILIS": ("GIRIS", 1),
+    "IADE_SERVIS": ("GIRIS", 1),
+    "CIKIS_SERVIS": ("CIKIS", -1),
+    "ZAYI": ("CIKIS", -1),
+    "TRANSFER_CIKIS": ("TRANSFER", -1),
+    "TRANSFER_GIRIS": ("TRANSFER", 1),
+    "SAYIM_FAZLASI": ("SAYIM", 1),
+    "SAYIM_EKSIGI": ("SAYIM", -1),
+}
+
+
+def _tur_yon_ifadesi() -> str:
+    parcalar = ["hareket_turu IS NULL"]
+    for tur, (neden, isaret) in SERVIS_HAREKET_YONU.items():
+        kosul = "qty > 0" if isaret > 0 else "qty < 0"
+        parcalar.append(f"(hareket_turu = '{tur}' AND reason = '{neden}' AND {kosul})")
+    # Ters kayıt orijinalin nedenini ve işaretin tersini taşır.
+    parcalar.append("(hareket_turu = 'TERS_KAYIT' AND reversal_of_id IS NOT NULL)")
+    return " OR ".join(parcalar)
+
+
 class StockMovement(Base, PkMixin, TimestampMixin, ActorMixin):
-    """Serisiz ürün stok hareketi. Eldeki adet = hareketlerin toplamı."""
+    """Serisiz ürün stok hareketi. Eldeki adet = hareketlerin toplamı.
+
+    **Teknik servis genişlemesi (Dalga 2, d2a000000004, plan §1.12):** yedek
+    parça defteri aynı tabloya yazılır (tek stok yazıcısı
+    `services/teknik_servis/parca.hareket_yaz`). Yeni kolonların hepsi
+    nullable; yeni CHECK'ler yalnız yeni kolonları sınar (mevcut satırlarda
+    `hareket_turu IS NULL`). Servis satırları (`hareket_turu IS NOT NULL`)
+    `trg_stok_hareket_degismez` ile UPDATE/DELETE'e kapalıdır; mobilite
+    satırlarının davranışı değişmez. `unit_cost` hareket anında dondurulan
+    birim maliyettir (TL, hareketli ağırlıklı ortalama; yoksa NULL — 0
+    yazılmaz) ve yalnız `sees_cost` sahibine döner (KD-25).
+    """
 
     __tablename__ = "stock_movements"
     __table_args__ = (
@@ -220,6 +296,52 @@ class StockMovement(Base, PkMixin, TimestampMixin, ActorMixin):
         ),
         CheckConstraint("qty <> 0", name="ck_stok_hareket_adet"),
         Index("ix_stok_hareket_urun", "product_id", "warehouse_id"),
+        # --- Dalga 2: servis defteri --------------------------------------
+        CheckConstraint(
+            "hareket_turu IS NULL OR hareket_turu IN ("
+            + ", ".join(f"'{t}'" for t in SERVIS_HAREKET_TURLERI)
+            + ")",
+            name="ck_stok_hareket_tur",
+        ),
+        CheckConstraint(_tur_yon_ifadesi(), name="ck_stok_hareket_tur_yon"),
+        CheckConstraint(
+            "hareket_turu IS NULL OR hareket_turu NOT IN ('CIKIS_SERVIS', 'IADE_SERVIS') "
+            "OR service_order_id IS NOT NULL",
+            name="ck_stok_hareket_servis_isi",
+        ),
+        CheckConstraint(
+            "hareket_turu IS NULL OR warehouse_id IS NOT NULL", name="ck_stok_hareket_depo"
+        ),
+        CheckConstraint(
+            "hareket_turu IS DISTINCT FROM 'TERS_KAYIT' OR length(trim(coalesce(notes, ''))) > 0",
+            name="ck_stok_hareket_ters_gerekce",
+        ),
+        CheckConstraint(
+            "hareket_turu IS NULL OR hareket_turu NOT IN ('TRANSFER_CIKIS', 'TRANSFER_GIRIS') "
+            "OR transfer_grup IS NOT NULL",
+            name="ck_stok_hareket_transfer",
+        ),
+        CheckConstraint("unit_cost IS NULL OR unit_cost >= 0", name="ck_stok_hareket_maliyet"),
+        # Ters kayıt tek seferlik.
+        Index(
+            "uq_stok_hareket_ters",
+            "reversal_of_id",
+            unique=True,
+            postgresql_where=text("reversal_of_id IS NOT NULL"),
+        ),
+        # (parça, depo) başına tek açılış (TS-134).
+        Index(
+            "uq_stok_hareket_acilis",
+            "product_id",
+            "warehouse_id",
+            unique=True,
+            postgresql_where=text("hareket_turu = 'ACILIS'"),
+        ),
+        Index(
+            "ix_stok_hareket_servis",
+            "service_order_id",
+            postgresql_where=text("service_order_id IS NOT NULL"),
+        ),
     )
 
     product_id: Mapped[int] = mapped_column(
@@ -234,3 +356,27 @@ class StockMovement(Base, PkMixin, TimestampMixin, ActorMixin):
     reason: Mapped[str] = mapped_column(String(20), server_default=text("'GIRIS'"))
     document_no: Mapped[str | None] = mapped_column(String(60))
     notes: Mapped[str | None] = mapped_column(String(300))
+
+    # --- Teknik servis defteri (Dalga 2; hepsi nullable) ----------------------
+    hareket_turu: Mapped[str | None] = mapped_column(String(20))
+    service_order_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("service_orders.id", ondelete="RESTRICT", name="fk_stok_hareket_servis_isi"),
+    )
+    reversal_of_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("stock_movements.id", ondelete="RESTRICT", name="fk_stok_hareket_ters"),
+    )
+    # Transferin iki bacağı (ve ters kayıtları) aynı grubu taşır.
+    transfer_grup: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    stock_count_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("stock_counts.id", ondelete="RESTRICT", name="fk_stok_hareket_sayim"),
+    )
+    part_request_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "service_part_requests.id", ondelete="SET NULL", name="fk_stok_hareket_parca_talebi"
+        ),
+    )
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))

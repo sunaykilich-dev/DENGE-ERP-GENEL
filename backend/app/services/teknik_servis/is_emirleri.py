@@ -722,8 +722,10 @@ async def guncelle(
         )
     except gecmis.KisiselVeriHatasi as exc:
         raise ServisGirdiHatasi("Gerekçeye irtibat adı veya telefonu yazılamaz") from exc
-    if "oncelik" in yeni:
-        await kancalar.oncelik_birim_degisti(db, so)
+    # Öncelik ya da tür/kategori (SLA'nın ölçülüp ölçülmediği) değişince SLA
+    # yeniden damgalanır (TS-081; birim bu uçta değiştirilemez). Dalga 2: Clock.
+    if {"oncelik", "tur", "kategori"} & set(yeni):
+        await kancalar.oncelik_birim_degisti(db, so, clock)
     return so
 
 

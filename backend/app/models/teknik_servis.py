@@ -23,6 +23,7 @@ alanına doğrudan atama yasaktır.
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -32,6 +33,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
+    PrimaryKeyConstraint,
     SmallInteger,
     String,
     Text,
@@ -194,7 +197,100 @@ VARSAYILAN_ARIZA_NEDENLERI = (
     "Diğer",
 )
 
+# --- SLA / operasyon sözlükleri (Dalga 2, E10; plan §1.7) -------------------
+# SLA yalnız GUNLUK_SERVIS kategorisinde ölçülür (`ck_so_pb_sla`); PB'nin vadesi
+# bakım döneminden, atölyenin çevrim süresi atölye kaydından gelir.
+SLA_TAKVIM_TURLERI = ("7_24", "MESAI")
+# İşte DONDURULAN sonuç (ilk TAMAMLANDI'da yazılır, yeniden açılışta silinmez).
+SLA_SONUCLARI = ("ZAMANINDA", "ASILDI", "OLCULEMEDI")
+# CANLI = açılışta damgalandı; GECIS = yürürlük anından önce açılmış işe yürürlük
+# anından damga; GERIYE_DONUK = göç geri doldurması (rapor modu, E10-15).
+SLA_KAYNAKLARI = ("CANLI", "GECIS", "GERIYE_DONUK")
+GECIKME_NEDENLERI = (
+    "MALZEME_TEDARIK",
+    "MUSTERI_KAYNAKLI",
+    "ULASIM",
+    "PERSONEL_YETERSIZ",
+    "YOGUNLUK",
+    "TEKNIK_ZORLUK",
+    "DIGER",
+)
+TEKRAR_ARIZA_TEYITLERI = ("AYNI_ARIZA", "FARKLI_ARIZA", "KULLANICI_HATASI")
+# Ekranda gösterilen (HESAPLANAN, saklanmayan) SLA durumu — tek üretici
+# `services/teknik_servis/sla.py`; istemcide SLA hesabı yoktur (E10-18).
+SLA_DURUMLARI = (
+    "ZAMANINDA",
+    "RISKTE",
+    "ASILDI",
+    "DURDURULDU",
+    "KARSILANDI",
+    "KARSILANMADI",
+    "OLCULEMEDI",
+    "SLA_DISI_PB",
+)
+# Kalıcı bildirim kodları. KRITIK_ATANMAMIS YOK (E01-18'in hesaplanan uyarısı,
+# plan §6.3); PB_VADE_GECTI E04 fonksiyonundan okunur.
+SLA_UYARI_KODLARI = (
+    "SLA_RISK",
+    "SLA_ASILDI",
+    "MUDAHALE_ASILDI",
+    "BEKLEME_BITIS_GECTI",
+    "PB_VADE_GECTI",
+)
+SLA_UYARI_ONEMLERI = ("BILGI", "UYARI", "KRITIK")
+# Tohum (migration `bulk_insert`): (oncelik, cozum_saat). Müdahale hedefi
+# tanımsız, takvim 7/24, birim NULL = tüm birimler (KD-23).
+VARSAYILAN_SLA_POLITIKALARI = (("KRITIK", 12), ("YUKSEK", 24), ("NORMAL", 72))
+
 _SURE_ARALIGI = literal_column("tstzrange(started_at, ended_at, '[)')")
+_ACIK_IS = "status NOT IN ('TAMAMLANDI', 'KAPATILDI', 'IPTAL') AND NOT is_deleted"
+
+
+class ServiceSlaPolicy(Base, PkMixin, TimestampMixin, VersionedMixin):
+    """SLA politikası (E10-01) — öncelik (+ isteğe bağlı birim) başına hedef.
+
+    İşe açılışta DONDURULUR (`service_orders.sla_policy_id`, hedef dakikaları
+    ve hedef anı): politika sonradan değişse de açık işin hedefi değişmez,
+    yalnız öncelik/birim düzeltmesi yeniden damgalar (TS-081).
+
+    **ActorMixin / SoftDeleteMixin YOK — bilinçli:** ikisi de `users`'a FK
+    taşır; testlerin `TRUNCATE users ... CASCADE` temizliği tabloyu boşaltır
+    ve migration tohumu kaybolurdu (`ServiceHoldReason` emsali). Kimin
+    değiştirdiği denetim izindedir; kayıt silinmez, `is_active=false` olur.
+    Kategori kırılımı ilk sürümde YOK (E10 kontrol B14).
+    """
+
+    __tablename__ = "service_sla_policies"
+    __table_args__ = (
+        CheckConstraint(_in("oncelik", ONCELIKLER), name="ck_slap_oncelik"),
+        CheckConstraint(birim_check("birim", bos_olabilir=True), name="ck_slap_birim"),
+        CheckConstraint("cozum_saat > 0", name="ck_slap_cozum_pozitif"),
+        CheckConstraint(
+            "mudahale_saat IS NULL OR mudahale_saat > 0", name="ck_slap_mudahale_pozitif"
+        ),
+        CheckConstraint(_in("takvim_turu", SLA_TAKVIM_TURLERI), name="ck_slap_takvim"),
+        # İfade indeksi (COALESCE): UniqueConstraint ile yazılamaz.
+        Index(
+            "uq_slap_aktif",
+            "oncelik",
+            text("COALESCE(birim, '*')"),
+            unique=True,
+            postgresql_where=text("is_active"),
+        ),
+    )
+
+    oncelik: Mapped[str] = mapped_column(String(10))
+    # NULL = tüm birimler; birim satırı varsa önce o seçilir (`sla.politika_bul`).
+    birim: Mapped[str | None] = mapped_column(String(20))
+    cozum_saat: Mapped[Decimal] = mapped_column(Numeric(6, 2))
+    # NULL = müdahale SLA'sı tanımsız (hedef damgalanmaz, "ölçülmedi" değil).
+    mudahale_saat: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    takvim_turu: Mapped[str] = mapped_column(
+        String(10), server_default=text("'7_24'"), default="7_24"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), default=True, nullable=False
+    )
 
 
 class ServiceOrder(
@@ -257,6 +353,47 @@ class ServiceOrder(
             name="ck_so_pb_bag",
         ),
         CheckConstraint("reopen_count >= 0", name="ck_so_yeniden_acilma"),
+        # --- Dalga 2: SLA (d2a000000001) -----------------------------------
+        # PB ve atölye işine politika/hedef damgalanamaz (TS-081, E10-10). Bu iki
+        # türe ya da bu türlerden geçiş yasak olduğundan kısıt güvenle şemada;
+        # proje türleri (KURULUM…) servis katmanında damgalanmaz (tür
+        # düzeltmesinde kanca hedefi temizler — CHECK flush'ı kırmasın diye).
+        CheckConstraint(
+            "tur NOT IN ('PB', 'ATOLYE') OR (sla_policy_id IS NULL AND cozum_hedef_at IS NULL)",
+            name="ck_so_pb_sla",
+        ),
+        CheckConstraint(
+            _in("sla_takvim_turu", SLA_TAKVIM_TURLERI, bos=True), name="ck_so_sla_takvim"
+        ),
+        CheckConstraint(_in("sla_sonuc", SLA_SONUCLARI, bos=True), name="ck_so_sla_sonuc"),
+        CheckConstraint(_in("sla_kaynak", SLA_KAYNAKLARI, bos=True), name="ck_so_sla_kaynak"),
+        CheckConstraint(
+            _in("gecikme_nedeni", GECIKME_NEDENLERI, bos=True), name="ck_so_gecikme_neden"
+        ),
+        CheckConstraint(
+            "gecikme_nedeni IS DISTINCT FROM 'DIGER' OR gecikme_aciklama IS NOT NULL",
+            name="ck_so_gecikme_diger",
+        ),
+        CheckConstraint(
+            _in("tekrar_ariza_teyit", TEKRAR_ARIZA_TEYITLERI, bos=True),
+            name="ck_so_tekrar_teyit",
+        ),
+        # Atölye kaydının bileşik FK hedefi (`fk_atolye_servis_ekipman`, d2a000000002):
+        # atölye kaydının ekipmanı işin ekipmanıyla aynı kalmaya ZORLANIR.
+        UniqueConstraint("id", "equipment_id", name="uq_so_id_ekipman"),
+        # Kiralama kurulum/toplama işi: kiralama + tür başına tek açık iş
+        # (d2a000000007). TAMAMLANDI açık sayılır: yeniden açılabilir.
+        Index(
+            "uq_so_kiralama_tur_acik",
+            "rental_id",
+            "tur",
+            unique=True,
+            postgresql_where=text(
+                "rental_id IS NOT NULL AND status NOT IN ('KAPATILDI', 'IPTAL') AND NOT is_deleted"
+            ),
+        ),
+        Index("ix_so_sla_hedef", "cozum_hedef_at", postgresql_where=text(_ACIK_IS)),
+        Index("ix_so_tekrar_aday", "tekrar_ariza_aday", postgresql_where=text("tekrar_ariza_aday")),
         Index(
             "uq_so_pb_cihaz_donem",
             "contract_item_id",
@@ -356,6 +493,46 @@ class ServiceOrder(
     # --- Kapsam anlık görüntüsü (E14-17) ------------------------------------
     coverage_status: Mapped[str | None] = mapped_column(String(12))
     coverage_snapshot: Mapped[dict | None] = mapped_column(JSONB)
+
+    # --- SLA (Dalga 2, E10-01; yalnız `services/teknik_servis/sla.py` yazar) ----
+    # Hepsi NULL olabilir: SLA yürürlük anından önce açılan iş ve GUNLUK_SERVIS
+    # dışı iş damgalanmaz (`servis_sla_yururluk_at`, KD-22).
+    sla_policy_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("service_sla_policies.id", ondelete="RESTRICT", name="fk_so_sla_politikasi"),
+    )
+    # = açılış anı, Clock'tan (K1: elle girilen `reported_at` değil).
+    sla_baslangic_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cozum_hedef_dk: Mapped[int | None] = mapped_column(Integer)
+    mudahale_hedef_dk: Mapped[int | None] = mapped_column(Integer)
+    sla_takvim_turu: Mapped[str | None] = mapped_column(String(10))
+    # İlk damgalanan hedef bir daha değişmez; güncel hedef yalnız SLA durduran
+    # bekleme bitince ve öncelik/birim düzeltmesinde ileri alınır (olayla).
+    cozum_hedef_ilk_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cozum_hedef_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    mudahale_hedef_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # İlk fiili müdahale (SAHA/UZAKTAN/ATOLYE/TEST faaliyeti ya da saha durumu).
+    ilk_mudahale_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # İlk TAMAMLANDI'da dondurulur; yeniden açılış SİLMEZ (E10 kontrol B3).
+    sla_sonuc: Mapped[str | None] = mapped_column(String(12))
+    sla_durdurulan_dk: Mapped[int | None] = mapped_column(Integer)
+    sla_kaynak: Mapped[str | None] = mapped_column(String(14))
+    gecikme_nedeni: Mapped[str | None] = mapped_column(String(30))
+    gecikme_aciklama: Mapped[str | None] = mapped_column(String(300))
+    # Tekrar arıza adayı (otomatik işaret) ve KAPATILDI'da kök neden teyidi (E10-04).
+    tekrar_ariza_aday: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
+    tekrar_ariza_teyit: Mapped[str | None] = mapped_column(String(20))
+
+    # --- Kiralama bağı (Dalga 2, E06-19; d2a000000007) --------------------------
+    # Kurulum/toplama işi; `work_orders`'a hiçbir şey yazılmaz.
+    # `use_alter`: quotes → service_orders → rentals → quotes döngüsü (metadata
+    # sıralaması uyarı vermesin; migration'da FK zaten ayrı eklenir).
+    rental_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("rentals.id", ondelete="SET NULL", name="fk_so_kiralama", use_alter=True),
+    )
 
     seriler: Mapped[list["ServiceOrderSerial"]] = relationship(
         lazy="selectin",
@@ -529,6 +706,11 @@ class ServiceHold(Base, PkMixin, TimestampMixin, VersionedMixin):
     kapanis_notu: Mapped[str | None] = mapped_column(String(200))
     otomatik_kapandi: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), default=False, nullable=False
+    )
+    # Dalga 2 (E07-14, d2a000000005): aktif TEKLIF beklemesine bağlı teklif.
+    # Kabulde yalnız eşleşen bekleme kapanır; ikinci bir neden açılmaz.
+    quote_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("quotes.id", ondelete="SET NULL", name="fk_hold_teklif")
     )
 
 
@@ -779,6 +961,61 @@ class ServiceTimeEntry(
     iptal_gerekcesi: Mapped[str | None] = mapped_column(String(300))
 
 
+class ServiceAlert(Base, PkMixin, TimestampMixin):
+    """Kalıcı SLA bildirimi (E10-05) — DAR olay günlüğü.
+
+    **Rozet sayısı bu tablodan sayılmaz:** `uyarilar.topla` anlık hesaplar
+    (canlı ilke "uyarılar hesaplanır"). Tablo yalnız "görüldü" işareti ve
+    e-posta tekilliği içindir. Birim/müşteri denormalize EDİLMEZ (plan §6.3):
+    kapsam okuma anında `service_orders` JOIN'iyle uygulanır, böylece iş
+    birimi değişince bildirim yeni kapsamda görünür. Alıcı listesi
+    saklanmaz. Yumuşak silme yok; eski satırları worker temizler.
+    """
+
+    __tablename__ = "service_alerts"
+    __table_args__ = (
+        CheckConstraint(_in("kod", SLA_UYARI_KODLARI), name="ck_salert_kod"),
+        CheckConstraint(_in("onem", SLA_UYARI_ONEMLERI), name="ck_salert_onem"),
+        CheckConstraint("kapanis_at IS NULL OR kapanis_at >= acilis_at", name="ck_salert_aralik"),
+        # Aynı iş için aynı koddan tek AÇIK bildirim: 5 dakikalık üretim
+        # tekrar koşsa da çoğalmaz (ON CONFLICT DO NOTHING).
+        Index(
+            "uq_salert_acik",
+            "kod",
+            "service_order_id",
+            unique=True,
+            postgresql_where=text("kapanis_at IS NULL"),
+        ),
+        Index("ix_salert_is", "service_order_id"),
+        Index("ix_salert_acilis", "acilis_at"),
+    )
+
+    kod: Mapped[str] = mapped_column(String(30))
+    service_order_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("service_orders.id", ondelete="CASCADE")
+    )
+    onem: Mapped[str] = mapped_column(String(10))
+    # Kişisel veri içermez (iş no + kod); irtibat adı yazılmaz.
+    baslik: Mapped[str] = mapped_column(String(200))
+    acilis_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    kapanis_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    kapanis_nedeni: Mapped[str | None] = mapped_column(String(30))
+
+
+class ServiceAlertRead(Base):
+    """Bildirimin kullanıcı tarafından görülmesi — tek INSERT … ON CONFLICT
+    DO NOTHING; satır değişmez (E10-05)."""
+
+    __tablename__ = "service_alert_reads"
+    __table_args__ = (PrimaryKeyConstraint("alert_id", "user_id", name="pk_salert_okundu"),)
+
+    alert_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("service_alerts.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    goruldu_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 # Seri anahtarı tek normalizasyon fonksiyonundan (TS-011 `normalize_seri`).
 @event.listens_for(ServiceOrderSerial, "before_insert")
 @event.listens_for(ServiceOrderSerial, "before_update")
@@ -792,7 +1029,19 @@ __all__ = [
     "BIRIM_KODLARI",
     "COZUM_KANALLARI",
     "DURUM_GRUPLARI",
+    "GECIKME_NEDENLERI",
     "ILISKI_TURLERI",
+    "SLA_DURUMLARI",
+    "SLA_KAYNAKLARI",
+    "SLA_SONUCLARI",
+    "SLA_TAKVIM_TURLERI",
+    "SLA_UYARI_KODLARI",
+    "SLA_UYARI_ONEMLERI",
+    "TEKRAR_ARIZA_TEYITLERI",
+    "VARSAYILAN_SLA_POLITIKALARI",
+    "ServiceAlert",
+    "ServiceAlertRead",
+    "ServiceSlaPolicy",
     "KAPSAM_DURUMLARI",
     "KISI_SAATE_DAHIL",
     "KUTUK_FARK_DURUMLARI",

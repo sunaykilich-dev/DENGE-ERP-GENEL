@@ -6,7 +6,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import Clock
-from app.models import Account, Device, DeviceCustodyHistory, Transfer, TransferItem
+from app.models import (
+    Account,
+    Device,
+    DeviceCustodyHistory,
+    Transfer,
+    TransferItem,
+    Warehouse,
+)
 from app.services import settings as ayar_svc
 
 
@@ -261,6 +268,18 @@ async def denge_stogu(db: AsyncSession, *, urun_tipi: str | None = None) -> list
             )
         ).all()
     )
+    # "Elde" TEK toplamdır (servis deposu dahil, E11-D01 K1); servis
+    # depolarındaki kısım ayrıca gösterilir ki mobilite ekranı farkı görsün.
+    servis_deposunda: dict[int, int] = dict(
+        (
+            await db.execute(
+                select(StockMovement.product_id, func.coalesce(func.sum(StockMovement.qty), 0))
+                .join(Warehouse, Warehouse.id == StockMovement.warehouse_id)
+                .where(Warehouse.servis_deposu.is_(True))
+                .group_by(StockMovement.product_id)
+            )
+        ).all()
+    )
 
     sonuc = []
     for u in urunler:
@@ -292,6 +311,7 @@ async def denge_stogu(db: AsyncSession, *, urun_tipi: str | None = None) -> list
                 "konumlar": {
                     konum: adet for (pid, konum), adet in konumlar.items() if pid == u.id and adet
                 },
+                "servis_deposunda": 0 if serili else servis_deposunda.get(u.id, 0),
             }
         )
     return sonuc
@@ -325,6 +345,17 @@ async def stok_hareketi(
         )
     if qty == 0:
         raise TransferHatasi("Adet sıfır olamaz")
+    if warehouse_id is not None:
+        # Tek yazıcı ilkesi (E11-01/D01, E06-D01): servis deposu yalnız Yedek
+        # Parça uçlarından (`teknik_servis/parca.py`), kiralama deposu kendi
+        # defterinden yazılır. Mobilite depoları ve depo seçilmeyen hareket
+        # bugünkü gibi çalışır.
+        depo = await db.get(Warehouse, warehouse_id)
+        if depo is not None and (depo.servis_deposu or depo.kiralama_deposu):
+            raise TransferHatasi(
+                "Servis ve kiralama depolarına hareket bu ekrandan girilmez; Yedek Parça "
+                "ya da Kiralık Envanter ekranını kullanın."
+            )
 
     hareket = StockMovement(
         product_id=product_id,

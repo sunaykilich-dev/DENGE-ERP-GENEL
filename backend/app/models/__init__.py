@@ -12,6 +12,19 @@ from app.models.attachment import Attachment
 from app.models.audit import AuditLog
 from app.models.catalog import Product, ProductBundleItem
 from app.models.device import Device, DeviceStatusHistory
+from app.models.egitim import (
+    Competency,
+    CompetencyAssessment,
+    PersonnelCertificate,
+    TrainingAttendance,
+    TrainingCorrectiveAction,
+    TrainingCourse,
+    TrainingCriterion,
+    TrainingObservation,
+    TrainingObservationRating,
+    TrainingPlan,
+    TrainingSession,
+)
 from app.models.gorev import (
     Board,
     BoardColumn,
@@ -32,9 +45,10 @@ from app.models.purchase import (
     PurchaseOrder,
     PurchaseOrderLine,
 )
-from app.models.quote import Quote, QuoteLine, QuoteVersion
+from app.models.quote import Quote, QuoteLine, QuoteSend, QuoteVersion
 from app.models.rbac import Permission, Role, RolePermission, UserPermission, UserUnit
 from app.models.service import RmaCase
+from app.models.servis_atolye import WorkshopAccessory, WorkshopRecord
 from app.models.servis_bakim import (
     MaintenanceContract,
     MaintenanceContractItem,
@@ -47,6 +61,19 @@ from app.models.servis_bakim import (
     MaintenanceVisit,
 )
 from app.models.servis_ekipman import ServiceEquipment
+from app.models.servis_kiralama import (
+    Rental,
+    RentalAllocation,
+    RentalAsset,
+    RentalCatalogItem,
+    RentalCheck,
+    RentalContact,
+    RentalEvent,
+    RentalInventoryMovement,
+    RentalItem,
+)
+from app.models.servis_maliyet import ServiceLaborRate, ServiceOrderFinancial
+from app.models.servis_parca import ServicePartRequest, StockCount, StockCountLine
 from app.models.servis_planlama import (
     ServicePlan,
     ServicePlanMember,
@@ -76,6 +103,8 @@ from app.models.subscription import (
     SubscriptionPrice,
 )
 from app.models.teknik_servis import (
+    ServiceAlert,
+    ServiceAlertRead,
     ServiceApproval,
     ServiceFaultReason,
     ServiceHold,
@@ -85,6 +114,7 @@ from app.models.teknik_servis import (
     ServiceOrderEvent,
     ServiceOrderSerial,
     ServiceResult,
+    ServiceSlaPolicy,
     ServiceTimeEntry,
 )
 from app.models.user import Session, User
@@ -184,4 +214,36 @@ __all__ = [
     "ServiceVehicle",
     "ServiceVisit",
     "UserUnit",
+    # --- Teknik servis (Dalga 2, D2-S) ---
+    "Competency",
+    "CompetencyAssessment",
+    "PersonnelCertificate",
+    "QuoteSend",
+    "Rental",
+    "RentalAllocation",
+    "RentalAsset",
+    "RentalCatalogItem",
+    "RentalCheck",
+    "RentalContact",
+    "RentalEvent",
+    "RentalInventoryMovement",
+    "RentalItem",
+    "ServiceAlert",
+    "ServiceAlertRead",
+    "ServiceLaborRate",
+    "ServiceOrderFinancial",
+    "ServicePartRequest",
+    "ServiceSlaPolicy",
+    "StockCount",
+    "StockCountLine",
+    "TrainingAttendance",
+    "TrainingCorrectiveAction",
+    "TrainingCourse",
+    "TrainingCriterion",
+    "TrainingObservation",
+    "TrainingObservationRating",
+    "TrainingPlan",
+    "TrainingSession",
+    "WorkshopAccessory",
+    "WorkshopRecord",
 ]

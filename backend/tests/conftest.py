@@ -47,7 +47,9 @@ TRUNCATE TABLE audit_logs, attachments, sim_device_history, sim_plan_history,
                board_labels, board_columns, boards,
                user_permissions, users, role_permissions, roles, permissions,
                service_visits, service_vehicles, service_unavailability,
-               maintenance_generation_runs, account_merges
+               maintenance_generation_runs, account_merges,
+               rental_catalog_items, rental_inventory_movements, stock_count_lines,
+               service_alert_reads, training_observation_ratings
 RESTART IDENTITY CASCADE
 """
 

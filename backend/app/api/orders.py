@@ -329,10 +329,22 @@ async def tekliften(
     user: Yazici,
     istenen_tarih: date | None = None,
 ) -> SiparisOut:
-    """Kabul edilmiş teklif versiyonundan sipariş açar (kabul kriteri 8)."""
+    """Kabul edilmiş teklif versiyonundan sipariş açar (kabul kriteri 8).
+
+    Teklif kapsam dışıysa 404 (teklif uçlarıyla aynı kural). Birimli (teknik
+    servis) teklif siparişe DÖNÜŞMEZ (K17): kabul edilen servis teklifi iş
+    gelirine akar, satış siparişi ve sevkiyat zincirine girmez → 409.
+    """
+    from app.services import quotes as teklif_svc
+
     teklif = await db.get(Quote, teklif_id)
-    if teklif is None or teklif.is_deleted:
+    if teklif is None or teklif.is_deleted or teklif_svc.teklif_kapsam_disinda_mi(user, teklif):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Teklif bulunamadı")
+    if teklif_svc.birimli_mi(teklif):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Teknik servis teklifi siparişe dönüştürülemez; kabul geliri servis işine yazılır",
+        )
     versiyon = (
         await db.get(QuoteVersion, teklif.current_version_id) if teklif.current_version_id else None
     )

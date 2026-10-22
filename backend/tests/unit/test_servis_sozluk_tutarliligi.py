@@ -166,7 +166,16 @@ def test_ek_sahibi_yapilari_esit() -> None:
     sahipler = set(ek_model.EK_SAHIPLERI)
     assert sahipler == set(ek_api.SAHIP_IZNI)
     ts = sahipler & ek_kapsam.KAPSAM_ZORUNLU
-    assert ts == {"service_orders", "service_equipment", "maintenance_contracts", "addresses"}
+    # Dalga 0/1 sahipleri + Dalga 2 kiralama (D2-S); eğitim sahipleri D2-F ile
+    # eklendikçe küme büyür (KAPSAM_ZORUNLU'nun alt kümesi kalır).
+    assert {
+        "service_orders",
+        "service_equipment",
+        "maintenance_contracts",
+        "addresses",
+        "rentals",
+        "rental_assets",
+    } <= ts
     for entity in ts:
         assert ek_api._SAHIP_TABLOSU.get(entity) == entity
     # Kayıtlı kapsam fonksiyonu olan her tür gerçekten bir ek sahibi.

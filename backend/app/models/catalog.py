@@ -49,6 +49,9 @@ KIMLIK_TIPLERI = (
 
 SEBEKE_TEKNOLOJILERI = ("2G", "3G", "4G", "LTE_M", "NB_IOT")
 
+# Yedek parça ölçü birimleri (E11-11): tam sayı birimlerde ondalık reddedilir.
+OLCU_BIRIMLERI = ("ADET", "METRE", "TAKIM", "LITRE", "PAKET", "KUTU")
+
 
 class Product(
     Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, VersionedMixin, SourceMixin
@@ -72,6 +75,16 @@ class Product(
         CheckConstraint(
             "NOT requires_parent OR identity_kind = 'SERI_NO'",
             name="ck_products_ana_cihaz_seri_no_ile",
+        ),
+        # --- Teknik servis yedek parça (Dalga 2, d2a000000004) -------------
+        CheckConstraint(
+            "birim IS NULL OR birim IN (" + ", ".join(f"'{b}'" for b in OLCU_BIRIMLERI) + ")",
+            name="ck_products_birim",
+        ),
+        CheckConstraint("min_stok IS NULL OR min_stok >= 0", name="ck_products_min_stok"),
+        # Seri takipli ürün adetle izlenmez (yalnız yeni bayrağa uygulanır).
+        CheckConstraint(
+            "NOT yedek_parca OR identity_kind = 'YOK'", name="ck_products_yedek_parca_serisiz"
         ),
     )
 
@@ -118,6 +131,17 @@ class Product(
     cover_attachment_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("attachments.id", ondelete="SET NULL")
     )
+
+    # --- Teknik servis yedek parça (Dalga 2; canlı tabloya yalnız default'lu /
+    # nullable kolon, plan §1.12). Yazma `parca.yonet` ucundan; `UrunIn/
+    # UrunPatch`'e EKLENMEZ (yoksa `urun.yaz` ile parça yetkisi atlanırdı).
+    yedek_parca: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
+    # Ölçü birimi (NULL = ADET); teknik servis BİRİMİ (GUVENLIK...) değildir.
+    birim: Mapped[str | None] = mapped_column(String(10))
+    # NULL/0 = az stok uyarısı yok.
+    min_stok: Mapped[int | None] = mapped_column(Integer)
 
     bundle_items: Mapped[list["ProductBundleItem"]] = relationship(
         back_populates="bundle",

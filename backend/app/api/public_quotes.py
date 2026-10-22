@@ -7,6 +7,12 @@ Bu yüzden üç kural var:
 2. Dönen veri müşterinin göremeyeceği hiçbir alanı içermemeli — maliyet,
    iç notlar, diğer müşteriler, teklif sahibi kullanıcı.
 3. Süresi dolmuş veya kararı verilmiş teklifte karar UÇU KAPALIDIR.
+4. Karar YALNIZ güncel sürümde ve karar bekleyen durumda verilir (E07-D01):
+   R1 açıldıktan sonra R0'ın jetonu görüntülenir ama karar almaz ("güncel
+   bir sürüm var" uyarısıyla); iptal edilmiş ya da onaya geri çevrilmiş
+   teklifin linki de karar almaz. Satış teklifine de uygulanır — eski sürümün
+   kabulü canlıda bir veri tutarsızlığıydı (müşteri R0'ı kabul ediyor, sipariş
+   R1'den açılıyordu; sürüm notu).
 
 Yerel kurulumda bu sayfa dışarıdan erişilemez; ekip kararı elle işaretler
 (`/api/teklifler/{id}/karar`). Veri modeli ve uçlar hazır olduğu için
@@ -57,6 +63,7 @@ class AcikTeklif(BaseModel):
     kalemler: list[AcikKalem]
     durum: str
     karar_verilebilir: bool
+    uyari: str | None = None
 
 
 async def _versiyon_bul(db: DbDep, token: str) -> tuple[Quote, QuoteVersion]:
@@ -74,13 +81,7 @@ async def _versiyon_bul(db: DbDep, token: str) -> tuple[Quote, QuoteVersion]:
 
 
 def _karar_verilebilir(t: Quote, v: QuoteVersion, bugun: date) -> bool:
-    if v.accepted_at or v.rejected_at:
-        return False
-    if t.status in ("KABUL", "RED", "SIPARISE_DONUSTU", "SURESI_DOLDU"):
-        return False
-    if v.valid_until and v.valid_until < bugun:
-        return False
-    return v.sent_at is not None
+    return svc.karar_verilebilir_mi(t, v, bugun)
 
 
 @router.get("/{token}", response_model=AcikTeklif)
@@ -93,10 +94,12 @@ async def goruntule(token: Jeton, request: Request, db: DbDep, clock: ClockDep) 
     if v.sent_at is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Teklif bulunamadı")
     musteri = await db.get(Account, t.customer_id)
+    guncel_mi = v.id == t.current_version_id
 
     if v.viewed_at is None:
         v.viewed_at = clock.now()
-        if t.status == "GONDERILDI":
+        # Eski sürümün açılması güncel teklifin durumunu değiştirmez.
+        if t.status == "GONDERILDI" and guncel_mi:
             t.status = "GORUNTULENDI"
         await audit.log(
             db,
@@ -130,8 +133,9 @@ async def goruntule(token: Jeton, request: Request, db: DbDep, clock: ClockDep) 
             )
             for k in sorted(v.lines, key=lambda x: (x.sort_order, x.id))
         ],
-        durum=t.status,
+        durum=t.status if guncel_mi else "REVIZE_EDILDI",
         karar_verilebilir=_karar_verilebilir(t, v, clock.now().date()),
+        uyari=None if guncel_mi else "Bu teklifin güncel bir sürümü var; karar verilemez.",
     )
 
 
@@ -155,14 +159,29 @@ async def karar(
     if not payload.kabul and not payload.red_nedeni:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Red nedeni seçilmelidir")
 
-    await svc.karar_ver(
-        db,
-        v,
-        kabul=payload.kabul,
-        clock=clock,
-        kanal="LINK",
-        red_nedeni=payload.red_nedeni,
-    )
+    try:
+        if payload.kabul and svc.birimli_mi(t):
+            from app.services.teknik_servis import maliyet
+
+            await maliyet.fatura_kilidi_dogrula(db, t)
+        await svc.karar_ver(
+            db,
+            v,
+            kabul=payload.kabul,
+            clock=clock,
+            kanal="LINK",
+            red_nedeni=payload.red_nedeni,
+        )
+        # Birimli teklif: gelir aktarımı, PB düzeltici işi, teklif beklemesi.
+        # Linkte kullanıcı yoktur: denetim ve olaylar `user_id=None` (E07-16).
+        if payload.kabul:
+            await svc.kabul_sonrasi(db, t, user=None, clock=clock)
+        else:
+            await svc.ret_sonrasi(db, t, user=None, clock=clock)
+    except ValueError as exc:  # ServisHatasi/ServisGirdiHatasi/MaliyetHatasi
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Bu teklif için şu anda karar verilemiyor."
+        ) from exc
     await audit.log(
         db,
         "quotes",

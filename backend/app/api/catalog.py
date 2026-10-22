@@ -66,6 +66,7 @@ async def listele(
     marka: str | None = None,
     model: str | None = None,
     pasifler: bool = False,
+    yedek_parca: bool | None = None,
     limit: int = Query(default=200, ge=1, le=500),
 ) -> list[UrunOut]:
     stmt = (
@@ -79,6 +80,8 @@ async def listele(
         stmt = stmt.where(Product.is_active.is_(True))
     if tip:
         stmt = stmt.where(Product.type == tip)
+    if yedek_parca is not None:
+        stmt = stmt.where(Product.yedek_parca.is_(yedek_parca))
     if marka:
         # "(markasız)" filtresi: boş dize markası girilmemişleri seçer.
         stmt = stmt.where(Product.brand.is_(None) if marka == "-" else Product.brand == marka)
@@ -157,6 +160,39 @@ async def olustur(payload: UrunIn, request: Request, db: DbDep, user: Yazici) ->
     return _cikti(urun)
 
 
+async def _envanterli_kimlik_korumasi(db: DbDep, urun: Product) -> None:
+    """Envanterli üründe `identity_kind` değişikliği 409 (TS-118, E06-16; E11-12).
+
+    Yalnız teknik servis defterleri sorulur: kiralık envanter (seri ya da
+    toplu hareket) ve servis yedek parça defteri. Toplu bakiyesi olan ürün
+    seri takipliye çevrilirse bakiye anlamsızlaşır; kiralık cihazın kimlik
+    tipi değişirse seri kuralı kırılır. Mobilite ürünlerinin bugünkü
+    davranışı DEĞİŞMEZ (cihaz kimlik tutarlılığı zaten bileşik FK'de).
+    """
+    from sqlalchemy import func
+
+    from app.models import RentalAsset, RentalInventoryMovement, StockMovement
+
+    kiralik = await db.scalar(
+        select(func.count()).select_from(RentalAsset).where(RentalAsset.product_id == urun.id)
+    )
+    kiralik_hareket = await db.scalar(
+        select(func.count())
+        .select_from(RentalInventoryMovement)
+        .where(RentalInventoryMovement.product_id == urun.id)
+    )
+    servis_kosulu = [StockMovement.product_id == urun.id]
+    if not urun.yedek_parca:
+        servis_kosulu.append(StockMovement.hareket_turu.is_not(None))
+    servis = await db.scalar(select(func.count()).where(*servis_kosulu))
+    if kiralik or kiralik_hareket or servis:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"{urun.code} için kiralık envanter ya da servis stoğu kaydı var; seri takibi "
+            "(kimlik tipi) değiştirilemez.",
+        )
+
+
 @router.patch("/{urun_id}", response_model=UrunOut)
 async def guncelle(
     urun_id: int, payload: UrunPatch, request: Request, db: DbDep, user: Yazici
@@ -169,7 +205,13 @@ async def guncelle(
             status.HTTP_409_CONFLICT,
             "Bu kaydı siz görüntülerken başka biri değiştirdi. Sayfayı yenileyip tekrar deneyin.",
         )
-    for alan, deger in payload.model_dump(exclude_unset=True, exclude={"version"}).items():
+    degisen = payload.model_dump(exclude_unset=True, exclude={"version"})
+    if degisen.get("code") and degisen["code"] != urun.code:
+        if await db.scalar(select(Product.id).where(Product.code == degisen["code"])):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Bu ürün kodu zaten kayıtlı.")
+    if degisen.get("identity_kind") and degisen["identity_kind"] != urun.identity_kind:
+        await _envanterli_kimlik_korumasi(db, urun)
+    for alan, deger in degisen.items():
         setattr(urun, alan, deger)
     urun.updated_by = user.id
     await audit.log_change(db, urun, "guncelle", user_id=user.id, ip=client_ip(request))

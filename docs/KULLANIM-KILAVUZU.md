@@ -467,3 +467,50 @@ ayrı uygulama yoktur.
   eder (kayıt silinmez, iptal olarak görünür).
 - **Bağlantı yoksa** düğmeler kilitlenir: "Bağlantı yok — süreyi sonra elle
   girin". Çevrimdışı basış biriktirilmez.
+
+## 11. Teknik servis — Dalga 2 ekranları
+
+> Bu bölümün iskeleti şema paketinde (D2-S) açıldı; her alt başlığı ilgili
+> modül paketi ekranı bitirince doldurur. Menü kalemleri yalnız izni olan
+> kullanıcıya görünür; mobilite kullanıcısının menüsü değişmez.
+
+### 11.1 Operasyon Merkezi ve SLA
+
+Menü: **Teknik Servis → Operasyon Merkezi** (`operasyon.gor`). SLA tanımları
+ve bekleme nedeni kataloğu **Servis Tanımları** ekranındadır
+(`operasyon.yonet`). SLA hedefi işe açılışta damgalanır; SLA durumu yalnız
+sunucuda hesaplanır. *(D2-G dolduracak.)*
+
+### 11.2 Atölye
+
+Menü: **Teknik Servis → Atölye** (`atolye.gor`, yazma `atolye.yaz`). Her
+atölye kaydı bir cihaz ve bir servis işidir; tamir bedeli yalnız maliyet
+yetkisi olana görünür. *(D2-B dolduracak.)*
+
+### 11.3 Kiralama ve kiralık envanter
+
+Menü: **Teknik Servis → Kiralamalar / Kiralık Envanter** (`kiralama.gor`).
+Kiralık cihazlar mobilite stoğundan ayrı izlenir; kiralama depoları mobilite
+depo listesinde görünmez. *(D2-C dolduracak.)*
+
+### 11.4 Yedek parça
+
+Menü: **Teknik Servis → Yedek Parça** (`parca.gor`). Parça çıkışı açık servis
+işine yapılır; düzeltme silme değil ters kayıttır. *(D2-D dolduracak.)*
+
+### 11.5 Servis teklifi ve maliyet
+
+Servis teklifleri **Teklifler** ekranında birimli teklif olarak durur (iç
+onaydan geçer); maliyet ve gelir **Teknik Servis → Servis Maliyet**
+ekranındadır (`maliyet.gor`). *(D2-E dolduracak.)*
+
+### 11.6 Eğitim ve Gelişim Kartım
+
+Menü: **İnsan Kaynakları → Eğitim ve Gelişim** (`egitim.gor`) ve **Gelişim
+Kartım** (`egitim.kendim`). *(D2-F dolduracak.)*
+
+### 11.7 Ana veri kalitesi ve eski sistem verisi
+
+Menü: **Teknik Servis → Ana Veri Kalitesi** (`hesap.birlestir`). Eski
+sistemden gelen serbest metin müşteri/lokasyon eşleştirmesi burada onaylanır.
+*(D2-I dolduracak.)*

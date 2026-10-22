@@ -19,6 +19,15 @@
   Arial'dı ve şablon da öyle yazılmıştı, ama bu tek belgeyi ERP'nin geri
   kalanından ve hak ediş dökümünden ayrı düşürüyordu. Artık her yerde
   Archivo + IBM Plex Mono. Düzen, ölçüler ve sadelik aynen korunur.
+
+  TS-143 (Dalga 2) EKLEMELERİ — yalnız ekleme, yeni renk/kutu yok:
+  * "Sayfa x/y" sayfa altında; bunun için ALT kenar boşluğu 0 → 10 mm
+    (satış PDF'inde de; sürüm notu). Çok sayfalı teklif artık numaralı.
+  * Açıklama hücresi uzun kelimede (seri no, URL) sarılır
+    (`overflow-wrap: anywhere`); 500 karakter yalnız birimli teklifte.
+  * KDV oran bazında dökülür (`kdv_dokumu`); bağlam gelmezse eski tek satır.
+  * "Onaylayan" yalnız doluysa basılır; irtibat kişisi müşteri bloğunda.
+  * Teklif No. revizyonda `TKF…-R1` biçiminde (`teklif_no_gosterim`).
 #}
 <!doctype html>
 <html lang="tr">
@@ -83,7 +92,16 @@
       U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
   }
 
-  @page { size: A4; margin: 0; }
+  @page {
+    size: A4;
+    margin: 0 0 10mm 0;
+    @bottom-right {
+      content: "Sayfa " counter(page) "/" counter(pages);
+      font-family: "Archivo", "DejaVu Sans", sans-serif;
+      font-size: 7.5pt;
+      margin-right: 12mm;
+    }
+  }
   body {
     margin: 0; padding: 11mm 12mm;
     font-family: "Archivo", "DejaVu Sans", sans-serif;
@@ -128,7 +146,8 @@
   table.grid thead { display: table-header-group; }
 
   .s-items td.qty  { text-align: center; width: 16%; }
-  .s-items td.desc { width: 36%; }
+  .s-items td.desc { width: 36%; overflow-wrap: anywhere; word-break: break-word; }
+  table.grid.s-items { table-layout: fixed; }
   .s-items td.unit { text-align: right;  width: 16%; }
   .s-items td.tax  { text-align: center; width: 16%; }
   .s-items td.amt  { text-align: right;  width: 16%; }
@@ -155,7 +174,7 @@
     </div>
     <table class="s-meta">
       <tr><td class="lbl">TARİH</td><td class="val">{{ bugun }}</td></tr>
-      <tr><td class="lbl">Teklif No.</td><td class="val">{{ teklif.quote_no }}{% if versiyon.version_no > 1 %} · rev {{ versiyon.version_no }}{% endif %}</td></tr>
+      <tr><td class="lbl">Teklif No.</td><td class="val">{% if teklif_no_gosterim is defined %}{{ teklif_no_gosterim }}{% else %}{{ teklif.quote_no }}{% if versiyon.version_no > 1 %} · rev {{ versiyon.version_no }}{% endif %}{% endif %}</td></tr>
       <tr><td class="lbl">Müşteri Kimliği</td><td class="val">{{ musteri.tax_no or musteri.id }}</td></tr>
     </table>
   </div>
@@ -171,12 +190,14 @@
       Açık Adres : {{ adres or "—" }}<br>
       Telefon : {{ musteri.phone or "—" }}
       {%- if musteri.email %}<br>E-posta : {{ musteri.email }}{% endif %}
+      {%- if irtibat is defined and irtibat %}<br>İlgili Kişi : {{ irtibat.ad }}{% if irtibat.telefon %} · {{ irtibat.telefon }}{% endif %}{% if irtibat.eposta %} · {{ irtibat.eposta }}{% endif %}{% endif %}
     </div>
     <div class="s-preparer">
       <span class="h">Hazırlayan:</span><br>
       {{ hazirlayan }}<br>
       {{ firma.telefon }}<br>
       {{ firma.eposta }}
+      {%- if onaylayan is defined and onaylayan %}<br><span class="h">Onaylayan:</span> {{ onaylayan }}{% endif %}
     </div>
   </div>
 
@@ -219,7 +240,13 @@
       {% if toplam.iskonto_var %}
       <tr><td class="lbl">İSKONTO</td><td class="box">{{ toplam.iskonto }}</td></tr>
       {% endif %}
+      {% if kdv_dokumu is defined and kdv_dokumu %}
+      {% for d in kdv_dokumu %}
+      <tr><td class="lbl">KDV {{ d.oran }} <span class="mono">({{ d.matrah }})</span></td><td class="box">{{ d.kdv }}</td></tr>
+      {% endfor %}
+      {% else %}
       <tr><td class="lbl">SATIŞ VERGİSİ</td><td class="box">{{ toplam.kdv }}</td></tr>
+      {% endif %}
       <tr class="grand"><td class="lbl">TOPLAM</td><td class="box">{{ toplam.genel }}</td></tr>
     </table>
   </div>

@@ -46,6 +46,14 @@ EK_SAHIPLERI = (
     "service_equipment",
     "maintenance_contracts",
     "addresses",
+    # Dalga 2 (D2-S): kiralama. Eğitim sahipleri D2-F'nin dalıdır.
+    "rentals",
+    "rental_assets",
+    # Dalga 2 (D2-F): eğitim — gözlem fotoğrafı, düzeltici faaliyet kanıtı,
+    # sertifika taraması. Kapsam `services/teknik_servis/egitim_gozlem.py`.
+    "training_observations",
+    "training_corrective_actions",
+    "personnel_certificates",
 )
 
 # İşin niteliğine göre sınıflandırma — "eksik fotoğraf" kesintisi (brief §4.7)

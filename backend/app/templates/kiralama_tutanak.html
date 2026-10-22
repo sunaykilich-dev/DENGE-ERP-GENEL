@@ -1,0 +1,160 @@
+{#
+  Kiralama teslim/iade tutanağı — TS-117, E06-13.
+
+  Bağlam services/teknik_servis/kiralama.tutanak_baglami'ndan gelir (KD-18).
+  BİLEREK: FİYAT YOK (K13; bağlamda fiyat/tutar/maliyet anahtarı da yok).
+  Yalnız tahsisli seriler/adetler listelenir. Sevk yapılmadan alınan teslim
+  tutanağına TASLAK filigranı basılır. İmzalı tarama kiralamanın eklerine
+  IMZA türüyle yüklenir. Kullanıcının basılı formu gelince yalnız HTML
+  düzeyinde güncellenir.
+#}
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>{{ baslik }} {{ rental_no }}</title>
+<style>
+  @font-face {
+    font-family: "Archivo";
+    src: url("{{ font_dir }}/archivo-latin-wdth-normal.woff2") format("woff2");
+    font-weight: 100 900;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+      U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+      U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "Archivo";
+    src: url("{{ font_dir }}/archivo-latin-ext-wdth-normal.woff2") format("woff2");
+    font-weight: 100 900;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+      U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+      U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "PlexMono";
+    src: url("{{ font_dir }}/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+    font-weight: 400;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+      U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+      U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "PlexMono";
+    src: url("{{ font_dir }}/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2");
+    font-weight: 400;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+      U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+      U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+
+  @page {
+    size: A4; margin: 11mm 12mm 14mm 12mm;
+    @bottom-right { content: "Sayfa " counter(page) " / " counter(pages); font-size: 7.5pt; }
+  }
+  body { margin: 0; font-family: "Archivo", "DejaVu Sans", sans-serif; color: #000; font-size: 8.5pt; }
+  .mono { font-family: "PlexMono", "DejaVu Sans Mono", monospace; }
+  .ust { display: flex; justify-content: space-between; align-items: flex-start; }
+  .firma { line-height: 1.45; }
+  .firma .ad { font-weight: 700; font-size: 10pt; }
+  .belge { text-align: right; }
+  .belge .baslik { font-size: 12pt; font-weight: 700; }
+  table { border-collapse: collapse; width: 100%; margin-top: 3mm; }
+  th, td { border: 1px solid #000; padding: 1.2mm 1.6mm; vertical-align: top; text-align: left; }
+  th { font-weight: 600; }
+  .bilgi th { width: 34mm; }
+  .sayi { text-align: right; }
+  .bolum { font-weight: 700; margin-top: 5mm; font-size: 9pt; }
+  .imza { margin-top: 8mm; display: flex; justify-content: space-between; gap: 8mm; }
+  .imza .kutu { flex: 1; border: 1px solid #000; min-height: 26mm; padding: 1.6mm; }
+  .not { margin-top: 4mm; font-size: 7.5pt; }
+  .filigran {
+    position: fixed; top: 45%; left: 0; right: 0; text-align: center;
+    font-size: 90pt; font-weight: 800; color: rgba(0, 0, 0, 0.08); transform: rotate(-30deg);
+  }
+</style>
+</head>
+<body>
+  {% if taslak %}<div class="filigran">TASLAK</div>{% endif %}
+  <div class="ust">
+    <div class="firma">
+      <div class="ad">{{ firma.unvan }}</div>
+      <div>{{ firma.adres }}</div>
+      <div>{{ firma.telefon }} · {{ firma.eposta }}</div>
+    </div>
+    <div class="belge">
+      <div class="baslik">{{ baslik }}</div>
+      <div class="mono">{{ rental_no }}</div>
+      {% if belge_tarihi %}<div>Tarih: {{ belge_tarihi }}</div>{% endif %}
+    </div>
+  </div>
+
+  <table class="bilgi">
+    <tr><th>Müşteri</th><td>{{ musteri }}</td></tr>
+    {% if lokasyon %}<tr><th>Lokasyon</th><td>{{ lokasyon }}</td></tr>{% endif %}
+    {% if proje_adi %}<tr><th>Proje</th><td>{{ proje_adi }}</td></tr>{% endif %}
+    <tr><th>Birim</th><td>{{ birim }}</td></tr>
+    <tr><th>Kiralama dönemi</th><td>{{ baslangic }} – {{ bitis }} (iade günü)</td></tr>
+    <tr><th>Durum</th><td>{{ durum }}</td></tr>
+    {% if irtibatlar %}
+    <tr><th>İrtibat</th><td>
+      {% for i in irtibatlar %}{{ i.ad }} ({{ i.rol }}){% if i.telefon %} · {{ i.telefon }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}
+    </td></tr>
+    {% endif %}
+  </table>
+
+  <div class="bolum">{% if tur == "TESLIM" %}Teslim edilen ekipman{% else %}İade durumu{% endif %}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Ürün</th>
+        <th>Seri no</th>
+        <th class="sayi">Adet</th>
+        {% if tur == "IADE" %}
+        <th class="sayi">Sevk</th>
+        <th class="sayi">İade</th>
+        <th class="sayi">Kayıp</th>
+        <th class="sayi">Müşteride</th>
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for k in kalemler %}
+        {% for s in k.satirlar %}
+        <tr>
+          <td>{{ k.urun_kodu }} — {{ k.urun_adi }}</td>
+          <td class="mono">{{ s.seri or "—" }}</td>
+          <td class="sayi">{{ s.adet }}</td>
+          {% if tur == "IADE" %}
+          <td class="sayi">{{ s.sevk }}</td>
+          <td class="sayi">{{ s.iade }}</td>
+          <td class="sayi">{{ s.kayip }}</td>
+          <td class="sayi">{{ s.musteride }}</td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+          <td>{{ k.urun_kodu }} — {{ k.urun_adi }}</td>
+          <td>Henüz tahsis edilmedi</td>
+          <td class="sayi">0 / {{ k.istenen }}</td>
+          {% if tur == "IADE" %}<td></td><td></td><td></td><td></td>{% endif %}
+        </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if iade_notlari %}
+  <div class="bolum">Notlar</div>
+  <ul>{% for n in iade_notlari %}<li>{{ n }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  <div class="imza">
+    <div class="kutu"><strong>Teslim eden</strong><br>Ad soyad / imza</div>
+    <div class="kutu"><strong>Teslim alan</strong><br>Ad soyad / imza</div>
+  </div>
+  <div class="not">
+    Bu tutanak fiyat bilgisi içermez. Hasar ve eksik tespiti depoda dönüş kontrolünde yapılır.
+    {% if taslak %}Sevk yapılmadan alındığı için TASLAKTIR.{% endif %}
+  </div>
+</body>
+</html>

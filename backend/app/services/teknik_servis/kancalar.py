@@ -19,8 +19,8 @@ tamamı geri alınır.
 | `durum_degisti(db, so, onceki, hedef, kaynak, clock)` | aynı fonksiyon (yazdıktan sonra) |
 | `is_olusturuldu(db, so, clock)` | `is_emirleri.olustur` |
 | `ekip_degisiyor(db, so, cikan_user_ids)` | `atama.ata/toplu_ata`, `planlama.ekip_degisti` |
-| `ekip_degisti(db, so, yeni_ekip)` | `atama.ata/toplu_ata` |
-| `oncelik_birim_degisti(db, so)` | `is_emirleri.guncelle` |
+| `ekip_degisti(db, so, yeni_ekip, clock)` | `atama.ata/toplu_ata` |
+| `oncelik_birim_degisti(db, so, clock)` | `is_emirleri.guncelle` |
 | `zaman_bolumu_acildi(db, bolum)` | `zaman.baslat/gecis` |
 """
 
@@ -109,12 +109,21 @@ async def ekip_degisiyor(db: AsyncSession, so: ServiceOrder, cikan_user_ids: Ite
     await cagir("ekip_degisiyor", db, so, tuple(cikan_user_ids))
 
 
-async def ekip_degisti(db: AsyncSession, so: ServiceOrder, yeni_ekip: Iterable[Any]) -> None:
-    await cagir("ekip_degisti", db, so, tuple(yeni_ekip))
+async def ekip_degisti(
+    db: AsyncSession, so: ServiceOrder, yeni_ekip: Iterable[Any], clock: Clock
+) -> None:
+    """Dalga 2 (D2-S, Dalga 1 doğrulayıcı talebi): imza `clock` taşır.
+
+    Kaydolanlar saati yalnız buradan okur; önceden planlama kancası zamanı
+    atama satırlarının damgasından türetiyordu (dolaylı, kırılgan).
+    """
+    await cagir("ekip_degisti", db, so, tuple(yeni_ekip), clock)
 
 
-async def oncelik_birim_degisti(db: AsyncSession, so: ServiceOrder) -> None:
-    await cagir("oncelik_birim_degisti", db, so)
+async def oncelik_birim_degisti(db: AsyncSession, so: ServiceOrder, clock: Clock) -> None:
+    """Dalga 2: imza `clock` taşır (SLA yeniden damgası DUZELTME olayını Clock'la
+    yazar). Çağıran öncelik VEYA tür/kategori değişince çağırır."""
+    await cagir("oncelik_birim_degisti", db, so, clock)
 
 
 async def zaman_bolumu_acildi(db: AsyncSession, bolum: ServiceTimeEntry) -> None:

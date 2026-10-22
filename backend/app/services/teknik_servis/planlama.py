@@ -949,35 +949,16 @@ async def yeniden_planla(
 # --- Ekip senkronu kancası (E02-D01) ------------------------------------------------
 
 
-async def _son_atama_ani(db: AsyncSession, so_id: int) -> Any:
-    """Kancanın saati: atama satırlarının en son damgası (Clock'tan yazıldılar).
-
-    Kanca imzası (`ekip_degisti(db, so, yeni_ekip)`) Clock taşımıyor; saat
-    yalnız Clock'tan okunabildiği için zaman, `atama.ata`'nın aynı
-    transaction'da Clock ile yazdığı damgalardan alınır. Damga yoksa DB
-    `now()` (transaction başı) kullanılır.
-    """
-    an = await db.scalar(
-        select(
-            func.max(
-                func.greatest(
-                    ServiceOrderAssignment.assigned_at,
-                    func.coalesce(
-                        ServiceOrderAssignment.removed_at, ServiceOrderAssignment.assigned_at
-                    ),
-                )
-            )
-        ).where(ServiceOrderAssignment.service_order_id == so_id)
-    )
-    return an if an is not None else func.now()
-
-
-async def ekip_degisti(db: AsyncSession, so: ServiceOrder, yeni_ekip: Sequence[Any]) -> None:
+async def ekip_degisti(
+    db: AsyncSession, so: ServiceOrder, yeni_ekip: Sequence[Any], clock: Clock
+) -> None:
     """`ekip_degisti` kancası: aktif planda EKIP_DEGISIMI satırı açar.
 
     Plan tarihi/saati/aracı aynen kopyalanır; üyeler = yeni ekip. Aktif plan
     yoksa hiçbir şey yapmaz (plansız iş: ekip yalnız atamada durur). Planlama
     kendi yazımında bu kancayı devre dışı bırakır (çift satır olmasın).
+    Önceki planın kapanış anı kancanın `clock`'undan (Dalga 2'de imzaya
+    eklendi; önceden atama damgalarından türetiliyordu).
     """
     if _PLAN_YAZILIYOR.get():
         return
@@ -989,7 +970,7 @@ async def ekip_degisti(db: AsyncSession, so: ServiceOrder, yeni_ekip: Sequence[A
     if {(u.user_id, u.rol) for u in eski_uyeler} == {(s.user_id, s.rol) for s in ekip}:
         return  # yalnız sorumlu değişti: plan ekibi aynı
     sahaya_giden = {u.user_id for u in eski_uyeler if u.rol == "SEF" and u.sahaya_gidiyor}
-    an = await _son_atama_ani(db, so.id)
+    an = clock.now()
     yapan = next(
         (getattr(s, "assigned_by", None) for s in ekip if getattr(s, "assigned_by", None)), None
     )

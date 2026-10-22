@@ -1,0 +1,132 @@
+{#
+  Atölye cihaz teslim tutanağı (TS-095, E05-04).
+
+  Bağlam `services/teknik_servis/atolye.teslim_tutanagi_baglami`'ndan gelir.
+  TUTAR yalnız `tamir_bedeli` anahtarı varsa basılır (`maliyet.gor`).
+  Aksesuar satırları teslimdeki iade işaretiyle karşılaştırmalı basılır;
+  eksik aksesuar açıkça "EKSİK" yazar.
+#}
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>{{ baslik }}</title>
+<style>
+  @font-face {
+    font-family: "Archivo";
+    src: url("{{ font_dir }}/archivo-latin-wdth-normal.woff2") format("woff2");
+    font-weight: 100 900;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+      U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+      U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "Archivo";
+    src: url("{{ font_dir }}/archivo-latin-ext-wdth-normal.woff2") format("woff2");
+    font-weight: 100 900;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+      U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+      U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "PlexMono";
+    src: url("{{ font_dir }}/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+    font-weight: 400;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+      U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+      U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "PlexMono";
+    src: url("{{ font_dir }}/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2");
+    font-weight: 400;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+      U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+      U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @page {
+    size: A4; margin: 11mm 12mm 14mm 12mm;
+    @bottom-right { content: "Sayfa " counter(page) " / " counter(pages); font-size: 7.5pt; }
+  }
+  body { margin: 0; font-family: "Archivo", "DejaVu Sans", sans-serif; color: #000; font-size: 8.5pt; }
+  .mono { font-family: "PlexMono", "DejaVu Sans Mono", monospace; }
+  .ust { display: flex; justify-content: space-between; align-items: flex-start; }
+  .firma { line-height: 1.45; }
+  .firma .ad { font-weight: 700; font-size: 10pt; }
+  .belge { text-align: right; }
+  .belge .baslik { font-size: 12pt; font-weight: 700; }
+  table { border-collapse: collapse; width: 100%; margin-top: 3mm; }
+  th, td { border: 1px solid #000; padding: 1.2mm 1.6mm; vertical-align: top; text-align: left; }
+  th { font-weight: 600; width: 34mm; }
+  thead th { width: auto; }
+  .bolum { font-weight: 700; margin-top: 5mm; font-size: 9pt; }
+  .eksik { font-weight: 700; }
+  .imza { margin-top: 6mm; display: flex; justify-content: space-between; gap: 8mm; }
+  .imza .kutu { flex: 1; border: 1px solid #000; min-height: 26mm; padding: 1.6mm; }
+  .not { margin-top: 4mm; font-size: 7.5pt; }
+</style>
+</head>
+<body>
+  {% set k = kayitlar[0] %}
+  <div class="ust">
+    <div class="firma">
+      <div class="ad">{{ firma.unvan }}</div>
+      <div>{{ firma.adres }}</div>
+      <div>Tel: {{ firma.telefon }}{% if firma.eposta %} · {{ firma.eposta }}{% endif %}</div>
+    </div>
+    <div class="belge">
+      <div class="baslik">{{ baslik }}</div>
+      <div class="mono">{{ k.atolye_no }} · {{ k.so_no }}</div>
+      {% if k.teslim_tarihi %}<div>Teslim: {{ k.teslim_tarihi }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="bolum">Müşteri ve cihaz</div>
+  <table>
+    <tr><th>Müşteri</th><td>{{ k.musteri or "—" }}</td></tr>
+    <tr><th>Kabul</th><td>{{ k.kabul_tarihi }}</td></tr>
+    <tr><th>Marka / Model</th><td>{{ [k.cihaz.marka, k.cihaz.model] | select | join(" ") or "—" }}</td></tr>
+    <tr><th>Seri No</th><td class="mono">{{ k.cihaz.seri or "—" }}</td></tr>
+    <tr><th>Şikâyet</th><td>{{ k.sikayet }}</td></tr>
+  </table>
+
+  <div class="bolum">Yapılan işlem</div>
+  <table>
+    <tr><th>Arıza nedeni</th><td>{{ k.ariza_nedeni or "—" }}</td></tr>
+    {% if k.teshis %}<tr><th>Teşhis</th><td>{{ k.teshis }}</td></tr>{% endif %}
+    <tr><th>Onarım</th><td>{{ k.onarim or "—" }}{% if k.onarim_notu %} — {{ k.onarim_notu }}{% endif %}</td></tr>
+    <tr><th>Test</th><td>{{ k.test or "—" }}</td></tr>
+    <tr><th>Durum</th><td>{{ k.durum }}</td></tr>
+    {% if tamir_bedeli is defined %}<tr><th>Tamir bedeli</th><td>{{ tamir_bedeli | tl }} ₺</td></tr>{% endif %}
+  </table>
+
+  <div class="bolum">Aksesuar karşılaştırması</div>
+  <table>
+    <thead><tr><th>Aksesuar</th><th>Adet</th><th>Teslimde</th><th>Not</th></tr></thead>
+    {% for a in k.aksesuarlar %}
+    <tr>
+      <td>{{ a.tur }}{% if a.aciklama %} ({{ a.aciklama }}){% endif %}</td>
+      <td>{{ a.adet }}</td>
+      <td>{% if a.iade is none %}İşaretlenmedi{% elif a.iade %}İade edildi{% else %}<span class="eksik">EKSİK</span>{% endif %}</td>
+      <td>{{ a.iade_notu or "" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">Aksesuar alınmamıştı</td></tr>
+    {% endfor %}
+  </table>
+
+  <div class="bolum">Teslim</div>
+  <table>
+    <tr><th>Teslim tipi</th><td>{{ k.teslim_tipi or "—" }}</td></tr>
+    {% if k.kargo_firmasi %}<tr><th>Kargo</th><td>{{ k.kargo_firmasi }} · <span class="mono">{{ k.takip_no }}</span></td></tr>{% endif %}
+    <tr><th>Teslim alan</th><td>{{ k.teslim_alan or "" }}</td></tr>
+    {% if k.teslim_notu %}<tr><th>Açıklama</th><td>{{ k.teslim_notu }}</td></tr>{% endif %}
+  </table>
+
+  <div class="imza">
+    <div class="kutu"><div>Teslim alan (müşteri)</div><div>Ad Soyad / İmza:</div></div>
+    <div class="kutu"><div>Teslim eden (Denge)</div></div>
+  </div>
+  <div class="not">Cihaz yukarıdaki aksesuarlarla eksiksiz/eksik bilgisiyle teslim edilmiştir.</div>
+</body>
+</html>

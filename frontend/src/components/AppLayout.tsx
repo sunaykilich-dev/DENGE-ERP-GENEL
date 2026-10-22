@@ -1,21 +1,27 @@
 import {
+  AlertOutlined,
+  AppstoreOutlined,
   AuditOutlined,
   BarChartOutlined,
+  BuildOutlined,
   CalendarOutlined,
   CarOutlined,
   ContainerOutlined,
   CheckSquareOutlined,
   ClusterOutlined,
   DashboardOutlined,
+  DatabaseOutlined,
   DollarOutlined,
   FileTextOutlined,
   FieldTimeOutlined,
   HddOutlined,
   IdcardOutlined,
   ImportOutlined,
+  InboxOutlined,
   LogoutOutlined,
   PieChartOutlined,
   ProfileOutlined,
+  ReadOutlined,
   SafetyCertificateOutlined,
   ScheduleOutlined,
   SettingOutlined,
@@ -74,7 +80,7 @@ export interface MenuKalemi {
  * kontrolünü ayrıca yapar (bkz. require_permission).
  *
  * Canlı kalemler AYNI sırada ve grupsuz kalır ("İş Emirleri" = mobilite,
- * "RMA / Servis" adları değişmez). Teknik servis kalemleri yalnız Dalga 0/1
+ * "RMA / Servis" adları değişmez). Teknik servis kalemleri Dalga 0/1/2
  * ekranlarıdır; sonraki dalgaların kalemleri kendi rotalarıyla eklenir —
  * rotası olmayan kalem tıklanınca açılışa geri düşerdi.
  */
@@ -116,6 +122,13 @@ export const MENU: MenuKalemi[] = [
     grup: "Teknik Servis",
   },
   {
+    key: "/operasyon",
+    label: "Operasyon Merkezi",
+    icon: <AlertOutlined />,
+    izin: "operasyon.gor",
+    grup: "Teknik Servis",
+  },
+  {
     key: "/servis-isleri",
     label: "Servis İşleri",
     icon: <UnorderedListOutlined />,
@@ -150,6 +163,49 @@ export const MENU: MenuKalemi[] = [
     izin: "bakim.gor",
     grup: "Teknik Servis",
   },
+  // --- Dalga 2 (D2-S) ---
+  {
+    key: "/atolye",
+    label: "Atölye",
+    icon: <BuildOutlined />,
+    izin: "atolye.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/kiralamalar",
+    label: "Kiralamalar",
+    icon: <InboxOutlined />,
+    izin: "kiralama.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/kiralik-envanter",
+    label: "Kiralık Envanter",
+    icon: <DatabaseOutlined />,
+    izin: "kiralama.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/yedek-parca",
+    label: "Yedek Parça",
+    icon: <AppstoreOutlined />,
+    izin: "parca.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/servis-maliyet",
+    label: "Servis Maliyet",
+    icon: <DollarOutlined />,
+    izin: "maliyet.gor",
+    grup: "Teknik Servis",
+  },
+  {
+    key: "/servis-ana-veri",
+    label: "Ana Veri Kalitesi",
+    icon: <AuditOutlined />,
+    izin: "hesap.birlestir",
+    grup: "Teknik Servis",
+  },
   {
     key: "/servis-tanimlar",
     label: "Servis Tanımları",
@@ -163,6 +219,20 @@ export const MENU: MenuKalemi[] = [
     label: "Personel",
     icon: <TeamOutlined />,
     izin: "personel.gor",
+    grup: "İnsan Kaynakları",
+  },
+  {
+    key: "/egitim",
+    label: "Eğitim ve Gelişim",
+    icon: <ReadOutlined />,
+    izin: "egitim.gor",
+    grup: "İnsan Kaynakları",
+  },
+  {
+    key: "/gelisim-kartim",
+    label: "Gelişim Kartım",
+    icon: <IdcardOutlined />,
+    izin: "egitim.kendim",
     grup: "İnsan Kaynakları",
   },
   {

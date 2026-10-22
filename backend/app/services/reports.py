@@ -89,6 +89,9 @@ async def dashboard(db: AsyncSession, clock: Clock) -> dict:
             .outerjoin(Order, Order.quote_id == Quote.id)
             .where(
                 Quote.is_deleted.is_(False),
+                # Satış paneli yalnız satış tekliflerini sayar (E07-D02): birimli
+                # servis teklifleri buraya karışsaydı "bekleyen teklif" şişerdi.
+                Quote.birim.is_(None),
                 Quote.status.in_(("GONDERILDI", "GORUNTULENDI", "REVIZE_EDILDI")),
             )
         )
@@ -132,21 +135,40 @@ async def dashboard(db: AsyncSession, clock: Clock) -> dict:
     }
 
 
-async def teklif_donusumu(db: AsyncSession, *, gun: int = 365, clock: Clock) -> dict:
-    """Teklif dönüşüm oranı — kaç teklif siparişe döndü."""
+def _teklif_turu(birim: str | None):
+    """Varsayılan (birim None) SATIŞ teklifleridir — canlı sayılar değişmez
+    (E07-D02); `birim` verilirse yalnız o birimin servis teklifleri."""
+    return Quote.birim.is_(None) if birim is None else Quote.birim == birim
+
+
+async def teklif_donusumu(
+    db: AsyncSession,
+    *,
+    gun: int = 365,
+    clock: Clock,
+    birim: str | None = None,
+    user=None,
+) -> dict:
+    """Teklif dönüşüm oranı — kaç teklif siparişe döndü.
+
+    `birim` verilirse servis teklifleri (kullanıcı verilirse `teklif_kapsami`
+    ile süzülür); servis teklifinde IPTAL kaybedilen sayılmaz, ayrı verilir.
+    """
     baslangic = clock.now().date() - timedelta(days=gun)
-    satirlar = dict(
-        (
-            await db.execute(
-                select(Quote.status, func.count())
-                .where(
-                    Quote.is_deleted.is_(False),
-                    func.date(Quote.created_at) >= baslangic,
-                )
-                .group_by(Quote.status)
-            )
-        ).all()
+    stmt = (
+        select(Quote.status, func.count())
+        .where(
+            Quote.is_deleted.is_(False),
+            _teklif_turu(birim),
+            func.date(Quote.created_at) >= baslangic,
+        )
+        .group_by(Quote.status)
     )
+    if user is not None and birim is not None:
+        from app.services.quotes import teklif_kapsami
+
+        stmt = teklif_kapsami(stmt, user)
+    satirlar = dict((await db.execute(stmt)).all())
     toplam = sum(satirlar.values())
     kazanilan = satirlar.get("KABUL", 0) + satirlar.get("SIPARISE_DONUSTU", 0)
     kaybedilen = satirlar.get("RED", 0) + satirlar.get("SURESI_DOLDU", 0)
@@ -157,6 +179,7 @@ async def teklif_donusumu(db: AsyncSession, *, gun: int = 365, clock: Clock) -> 
             select(Quote.lost_reason, func.count())
             .where(
                 Quote.is_deleted.is_(False),
+                _teklif_turu(birim),
                 Quote.status == "RED",
                 Quote.lost_reason.is_not(None),
                 func.date(Quote.created_at) >= baslangic,
@@ -169,6 +192,8 @@ async def teklif_donusumu(db: AsyncSession, *, gun: int = 365, clock: Clock) -> 
 
     return {
         "gun": gun,
+        "birim": birim,
+        "iptal": satirlar.get("IPTAL", 0),
         "toplam_teklif": toplam,
         "durumlar": satirlar,
         "kazanilan": kazanilan,

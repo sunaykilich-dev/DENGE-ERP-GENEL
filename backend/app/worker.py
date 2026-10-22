@@ -140,6 +140,25 @@ async def bakim_donem_uzlastirma(db: AsyncSession, clock: Clock) -> str:
     return await bakim_formu.donem_uzlastirma_gorevi(db, clock)
 
 
+async def servis_sla_uyarilari(db: AsyncSession, clock: Clock) -> str:
+    """Kalıcı SLA bildirimlerini açar/kapatır (TS-083) ve tutarsız bekleme sayar (E10-11).
+
+    Zil sayısı bu göreve BAĞLI DEĞİL (anlık hesaplanır); tablo yalnız "görüldü"
+    ve e-posta tekilliği içindir. `servis_uyari_uretimi_acik=false` iken yazmaz.
+    İdempotent: `uq_salert_acik` + ON CONFLICT DO NOTHING. Tek kopya worker.
+    """
+    from app.services.teknik_servis import uyari_uretimi
+
+    return await uyari_uretimi.uretim_gorevi(db, clock)
+
+
+async def servis_uyari_temizligi(db: AsyncSession, clock: Clock) -> str:
+    """`servis_uyari_saklama_gun`'den eski KAPALI SLA bildirimlerini siler (TS-083)."""
+    from app.services.teknik_servis import uyari_uretimi
+
+    return await uyari_uretimi.temizlik_gorevi(db, clock)
+
+
 GOREVLER: tuple[Gorev, ...] = (
     Gorev("cihaz-uzlastirma", timedelta(hours=24), cihaz_uzlastirma),
     Gorev("oturum-temizligi", timedelta(hours=6), oturum_temizligi),
@@ -147,6 +166,8 @@ GOREVLER: tuple[Gorev, ...] = (
     Gorev("ek-dosya-temizligi", timedelta(hours=24), ek_dosya_temizligi),
     Gorev("pb-uretimi", timedelta(hours=24), pb_uretimi),
     Gorev("bakim-donem-uzlastirma", timedelta(hours=24), bakim_donem_uzlastirma),
+    Gorev("servis-sla-uyarilari", timedelta(minutes=5), servis_sla_uyarilari),
+    Gorev("servis-uyari-temizligi", timedelta(hours=24), servis_uyari_temizligi),
 )
 
 

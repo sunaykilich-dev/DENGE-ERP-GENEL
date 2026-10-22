@@ -183,7 +183,7 @@ async def _uygula(
             "sorumlu": sorumlu,
         },
     )
-    await kancalar.ekip_degisti(db, so, atamalar)
+    await kancalar.ekip_degisti(db, so, atamalar, clock)
     await db.refresh(so, attribute_names=["atamalar"])
     return await aktif_ekip(db, so), True
 

@@ -44,4 +44,40 @@ from app.services.teknik_servis import bakim_formu  # noqa: F401
 from app.services.teknik_servis import zaman  # noqa: F401
 from app.services.teknik_servis import mobil  # noqa: F401
 
-# --- Dalga 2+ (D2-S buraya ekler: sla, atolye, kiralama, parca, ...) -------------
+# --- Dalga 2 (D2-S sıraladı; plan §1.8 çağrı sırası) ------------------------------
+# durum_degisti: bekletme → bakim_formu → sla → parca → kiralama
+# is_olusturuldu: sla → tekrar_ariza ; durum_dogrula: ... → atolye
+# SLA / operasyon (D2-G)
+from app.services.teknik_servis import sla  # noqa: F401
+from app.services.teknik_servis import sla_takvim  # noqa: F401
+from app.services.teknik_servis import tekrar_ariza  # noqa: F401
+from app.services.teknik_servis import operasyon  # noqa: F401
+from app.services.teknik_servis import uyari_uretimi  # noqa: F401
+
+# Atölye (D2-B)
+from app.services.teknik_servis import atolye  # noqa: F401
+from app.services.teknik_servis import atolye_rapor  # noqa: F401
+
+# Yedek parça (D2-D) — kiralamadan ÖNCE (durum_degisti sırası)
+from app.services.teknik_servis import parca  # noqa: F401
+
+# Kiralama (D2-C)
+from app.services.teknik_servis import kiralama  # noqa: F401
+from app.services.teknik_servis import kiralama_tahsis  # noqa: F401
+from app.services.teknik_servis import kiralik_envanter  # noqa: F401
+from app.services.teknik_servis import kiralama_raporlar  # noqa: F401
+
+# Teklif / maliyet (D2-E)
+from app.services.teknik_servis import maliyet  # noqa: F401
+
+# Eğitim (D2-F)
+from app.services.teknik_servis import egitim  # noqa: F401
+from app.services.teknik_servis import egitim_gozlem  # noqa: F401
+from app.services.teknik_servis import egitim_yetkinlik  # noqa: F401
+from app.services.teknik_servis import egitim_rapor  # noqa: F401
+
+# Göç-1 / veri kalitesi (D2-I)
+from app.services.teknik_servis import ad_esleme  # noqa: F401
+from app.services.teknik_servis import veri_kalitesi  # noqa: F401
+
+# --- Dalga 3+ (D3-S buraya ekler) ---------------------------------------------------

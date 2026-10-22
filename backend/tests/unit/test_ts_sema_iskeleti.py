@@ -100,10 +100,10 @@ def test_bilinmeyen_kanca_adi_reddedilir() -> None:
 async def test_kayitsiz_kanca_no_op_ve_kayit_sirasi() -> None:
     cagrilar: list[str] = []
 
-    async def birinci(db, so) -> None:
+    async def birinci(db, so, clock) -> None:
         cagrilar.append("1")
 
-    async def ikinci(db, so) -> None:
+    async def ikinci(db, so, clock) -> None:
         cagrilar.append("2")
 
     onceki = kancalar.kayitlilar("oncelik_birim_degisti")
@@ -111,7 +111,7 @@ async def test_kayitsiz_kanca_no_op_ve_kayit_sirasi() -> None:
         kancalar.kaydet("oncelik_birim_degisti", birinci)
         kancalar.kaydet("oncelik_birim_degisti", ikinci)
         kancalar.kaydet("oncelik_birim_degisti", birinci)  # ikinci kez eklenmez
-        await kancalar.oncelik_birim_degisti(None, None)  # type: ignore[arg-type]
+        await kancalar.oncelik_birim_degisti(None, None, None)  # type: ignore[arg-type]
     finally:
         kancalar._KAYIT["oncelik_birim_degisti"][:] = list(onceki)
     assert cagrilar == ["1", "2"]

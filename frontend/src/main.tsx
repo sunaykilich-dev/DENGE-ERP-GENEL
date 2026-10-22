@@ -9,9 +9,18 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import AppLayout, { acilisYolu } from "./components/AppLayout";
+import AtolyePage from "./pages/AtolyePage";
 import BakimPage from "./pages/BakimPage";
 import BenimIslerimPage from "./pages/BenimIslerimPage";
+import EgitimPage from "./pages/EgitimPage";
+import GelisimKartimPage from "./pages/GelisimKartimPage";
+import KiralamalarPage from "./pages/KiralamalarPage";
+import KiralikEnvanterPage from "./pages/KiralikEnvanterPage";
+import OperasyonMerkeziPage from "./pages/OperasyonMerkeziPage";
 import PersonelPage from "./pages/PersonelPage";
+import ServisAnaVeriPage from "./pages/ServisAnaVeriPage";
+import ServisMaliyetPage from "./pages/ServisMaliyetPage";
+import YedekParcaPage from "./pages/YedekParcaPage";
 import ServisEkipmanPage from "./pages/ServisEkipmanPage";
 import ServisIsKartiMobil from "./pages/ServisIsKartiMobil";
 import ServisIsleriPage from "./pages/ServisIsleriPage";
@@ -130,6 +139,19 @@ function KorumaliUygulama() {
         <Route path="/servis-tanimlar" element={<ServisTanimlarPage />} />
         <Route path="/personel" element={<PersonelPage />} />
         <Route path="/personel/:id" element={<PersonelPage />} />
+        {/* --- Teknik servis (Dalga 2, plan §1.10) --- */}
+        <Route path="/operasyon" element={<OperasyonMerkeziPage />} />
+        <Route path="/atolye" element={<AtolyePage />} />
+        <Route path="/atolye/:id" element={<AtolyePage />} />
+        <Route path="/kiralamalar" element={<KiralamalarPage />} />
+        <Route path="/kiralamalar/:id" element={<KiralamalarPage />} />
+        <Route path="/kiralik-envanter" element={<KiralikEnvanterPage />} />
+        <Route path="/yedek-parca" element={<YedekParcaPage />} />
+        <Route path="/servis-maliyet" element={<ServisMaliyetPage />} />
+        <Route path="/servis-ana-veri" element={<ServisAnaVeriPage />} />
+        <Route path="/egitim" element={<EgitimPage />} />
+        <Route path="/egitim/:id" element={<EgitimPage />} />
+        <Route path="/gelisim-kartim" element={<GelisimKartimPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

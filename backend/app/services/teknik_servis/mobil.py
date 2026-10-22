@@ -19,7 +19,13 @@ yazılmaz (plan §1.5).
 **Fiyat/maliyet alanı YOK** (kart ve liste); irtibat telefonu yalnız
 `servis.irtibat_gor` ya da işe atanmış kişiye açık, diğerinde maskeli.
 
-Dalga 2'de SLA bloğu D2-G tarafından eklenir (`sla` anahtarı).
+**SLA bloğu (Dalga 2, D2-G, TS-085 / E10-16):** her iş satırı ve iş kartı
+`sla` anahtarı taşır (durum, kalan dk, hedef, PB'de `vade_ay` "Ekim 2026").
+Değer TEK SLA modülünden (`sla.sla_bloklari`) gelir; istemci hesaplamaz.
+Aynı plan günü/saatindeki işler SLA hedefi en yakın olan önce sıralanır.
+Ekran başlıkları ayrıktır: "İş Beklemesi" (SLA'yı durdurabilen iş
+beklemesi) ≠ "Personel Bekleme Süresi" (sayaçtaki BEKLEME faaliyeti; işi
+BEKLEMEDE yapmaz, SLA'yı durdurmaz) — `sla.TERIMLER`.
 """
 
 from __future__ import annotations
@@ -230,15 +236,20 @@ async def benim_islerim(
     stmt = stmt.order_by(
         ServicePlan.plan_date.asc().nulls_last(),
         ServicePlan.starts_at.asc().nulls_last(),
+        # E10-16: aynı gün/saatte (ve plansızlarda) SLA hedefi en yakın iş önce.
+        ServiceOrder.cozum_hedef_at.asc().nulls_last(),
         ServiceOrder.so_no,
     ).limit(TUMU_UST_SINIR + 1)
     satirlar = (await db.execute(stmt)).all()
     kesildi = len(satirlar) > TUMU_UST_SINIR
     satirlar = satirlar[:TUMU_UST_SINIR]
 
+    from app.services.teknik_servis import sla
+
     so_idler = [s[0].id for s in satirlar]
     ozetler = await zaman.sure_ozeti_toplu(db, so_idler)
     atanan = await _aktif_atama_kumesi(db, user, so_idler)
+    sla_bloklari = await sla.sla_bloklari(db, [s[0] for s in satirlar], clock)
 
     gruplar: dict[str, OrderedDict[Any, dict[str, Any]]] = {k: OrderedDict() for k, _ in GRUPLAR}
     for so, plan, adres, musteri in satirlar:
@@ -276,6 +287,7 @@ async def benim_islerim(
                 "sayac_acilabilir": so.status in DURUM_GRUPLARI["SAYAC_ACILABILIR"],
                 "kisi_saat_dk": ozet.kisi_saat_dk if ozet else None,
                 "sure_durumu": ozet.sure_durumu if ozet else None,
+                "sla": sla_bloklari.get(so.id),
             }
         )
 
@@ -284,6 +296,7 @@ async def benim_islerim(
         "bugun": bugun,
         "gorunum": gorunum,
         "kesildi": kesildi,
+        "terimler": dict(sla.TERIMLER),
         "gruplar": [
             {"kod": kod, "baslik": baslik, "ziyaretler": list(gruplar[kod].values())}
             for kod, baslik in GRUPLAR
@@ -321,10 +334,15 @@ async def is_karti(db: AsyncSession, user: User, clock: Clock, so: ServiceOrder)
     adres_metni = None
     if adres is not None:
         adres_metni = ", ".join(p for p in (adres.line, adres.district, adres.city) if p) or None
+    from app.services.teknik_servis import sla
+
     sayac = await benim_sayacim(db, user, clock)
     ozet = await zaman.sure_ozeti(db, so.id)
     bu_isteki = sayac["acik_bolum"] and sayac["acik_bolum"]["service_order_id"] == so.id
+    sla_blogu = (await sla.sla_bloklari(db, [so], clock))[so.id]
     return {
+        "sla": sla_blogu,
+        "terimler": dict(sla.TERIMLER),
         "sunucu_zamani": sayac["sunucu_zamani"],
         "id": so.id,
         "so_no": so.so_no,

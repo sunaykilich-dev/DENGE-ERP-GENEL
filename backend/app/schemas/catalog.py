@@ -93,5 +93,11 @@ class UrunOut(BaseModel):
     # Serisiz üründe adet stoğu, serilide cihaz sayısı — liste ekranı
     # "elimde kaç tane var" sorusunu ürün kartından ayrı sormasın diye.
     stok_adedi: int | None = None
+    # Yedek parça stok alanları (E11-12) — YALNIZ çıktıda. `UrunIn/UrunPatch`'e
+    # eklenmez: `urun.yaz` ile `parca.yonet` atlanarak değiştirilemesinler
+    # (yazma `PATCH /api/teknik-servis/parca/kartlar`).
+    yedek_parca: bool = False
+    birim: str | None = None
+    min_stok: int | None = None
 
     model_config = {"from_attributes": True}

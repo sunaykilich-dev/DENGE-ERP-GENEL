@@ -68,6 +68,7 @@ import {
 } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
 import EkYukleyici from "../components/EkYukleyici";
+import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
 import { PlanGecmisiSekmesi, ZamanSekmesi } from "../components/ServisIsSekmeleri";
 import BakimFormu from "./BakimFormu";
@@ -919,6 +920,16 @@ function IsDetayCekmecesi({
                 label: "Plan Geçmişi",
                 children: <PlanGecmisiSekmesi isId={d.id} />,
               },
+              // Saha gözlemi (TS-156, D2-F): iş no ve birim kilitli form.
+              ...(yetkili("egitim.gor") || yetkili("egitim.gozlem")
+                ? [
+                    {
+                      key: "gozlem",
+                      label: "Saha Gözlemleri",
+                      children: <ServisGozlemleri soId={d.id} soNo={d.so_no} birim={d.birim} />,
+                    },
+                  ]
+                : []),
               ...(yetkili("gorev.gor")
                 ? [
                     {
