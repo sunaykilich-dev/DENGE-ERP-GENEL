@@ -69,7 +69,8 @@ import {
   planlamaP3Api,
 } from "../api/servisPlanlama";
 import { useAuth } from "../auth/AuthContext";
-import KpiKutusu from "../components/KpiKutusu";
+import KategoriSeridi from "../fiori/KategoriSeridi";
+import { KpiKutucugu } from "../fiori/ListeRaporu";
 import PlanPenceresi, { type PlanModu, type PlanPenceresiProps } from "../components/PlanPenceresi";
 import { KaynakSekmesi, PlanUyumuSekmesi } from "./ServisPlanlamaP3";
 
@@ -662,58 +663,63 @@ export default function ServisPlanlamaPage() {
 
   const takvimSekmesi = (
     <>
-      <Row gutter={[8, 8]} style={{ marginBottom: 12 }}>
-        {(kpi.data ?? []).map((k) => (
-          <Col key={k.kod} xs={12} sm={8} xl={4}>
-            <KpiKutusu
+      {(kpi.data ?? []).length > 0 && (
+        <div className="fl-kutucuklar" style={{ marginBottom: 12 }}>
+          {(kpi.data ?? []).map((k) => (
+            <KpiKutucugu
+              key={k.kod}
               kod={k.kod}
               baslik={k.baslik}
               tanim={k.tanim}
               deger={k.deger}
+              ikon={<CalendarOutlined />}
               vurgu={k.kod === "cakismali" && k.deger > 0 ? "kritik" : "normal"}
               yol={`/servis-planlama?kpi=${k.kod}&gun=${gun.format(ISO)}`}
             />
-          </Col>
-        ))}
-      </Row>
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Button icon={<LeftOutlined />} onClick={() => kaydirma(-1)} aria-label="Önceki" />
-        <Button onClick={() => setGun(dayjs().startOf("day"))}>Bugün</Button>
-        <Button icon={<RightOutlined />} onClick={() => kaydirma(1)} aria-label="Sonraki" />
-        <DatePicker value={gun} allowClear={false} format="DD.MM.YYYY" onChange={(d) => d && setGun(d)} />
-        <Segmented
-          value={gorunum}
-          onChange={(v) => setGorunum(v as Gorunum)}
-          options={[
-            { value: "gun", label: "Gün" },
-            { value: "hafta", label: "Hafta" },
-            { value: "ay", label: "Ay" },
+          ))}
+        </div>
+      )}
+      <div className="fl-rapor" style={{ marginBottom: 12 }}>
+        <KategoriSeridi
+          kategoriler={[
+            { kod: "TUMU", ad: "TÜMÜ", renk: "mavi", ikon: <CalendarOutlined /> },
+            { kod: "SERVIS", ad: "SERVİS", renk: "kirmizi", ipucu: "Servis işleri (arıza, kurulum…)" },
+            { kod: "BAKIM", ad: "PLANLI BAKIM", renk: "yesil", ipucu: "Planlı bakım işleri" },
           ]}
+          secili={tur}
+          onSec={setTur}
         />
-        <Select style={{ width: 170 }} value={birim ?? ""} options={birimSecenekleri} onChange={(v) => setBirim(v || undefined)} />
-        <Segmented
-          value={tur}
-          onChange={(v) => setTur(String(v))}
-          options={[
-            { value: "TUMU", label: "Tümü" },
-            { value: "SERVIS", label: "Servis" },
-            { value: "BAKIM", label: "Bakım" },
-          ]}
-        />
-        {yetkili("servis_rapor.disaaktar") && (
-          <Button
-            icon={<FileExcelOutlined />}
-            onClick={() => window.open(planlamaApi.excelYolu(basStr, bitStr, suzgec), "_blank")}
-          >
-            Excel
-          </Button>
-        )}
-        {!ekran.lg && (
-          <Button icon={<UnorderedListOutlined />} onClick={() => setHavuzAcik(true)}>
-            Havuz ({havuz.data?.toplam ?? 0})
-          </Button>
-        )}
-      </Space>
+        <div className="fm-arac-cubugu" style={{ border: 0, borderRadius: 0 }}>
+          <Button icon={<LeftOutlined />} onClick={() => kaydirma(-1)} aria-label="Önceki" />
+          <Button onClick={() => setGun(dayjs().startOf("day"))}>Bugün</Button>
+          <Button icon={<RightOutlined />} onClick={() => kaydirma(1)} aria-label="Sonraki" />
+          <DatePicker value={gun} allowClear={false} format="DD.MM.YYYY" onChange={(d) => d && setGun(d)} />
+          <Segmented
+            value={gorunum}
+            onChange={(v) => setGorunum(v as Gorunum)}
+            options={[
+              { value: "gun", label: "Gün" },
+              { value: "hafta", label: "Hafta" },
+              { value: "ay", label: "Ay" },
+            ]}
+          />
+          <Select style={{ width: 170 }} value={birim ?? ""} options={birimSecenekleri} onChange={(v) => setBirim(v || undefined)} />
+          <span className="fm-bosluk" />
+          {yetkili("servis_rapor.disaaktar") && (
+            <Button
+              icon={<FileExcelOutlined />}
+              onClick={() => window.open(planlamaApi.excelYolu(basStr, bitStr, suzgec), "_blank")}
+            >
+              Excel
+            </Button>
+          )}
+          {!ekran.lg && (
+            <Button icon={<UnorderedListOutlined />} onClick={() => setHavuzAcik(true)}>
+              Havuz ({havuz.data?.toplam ?? 0})
+            </Button>
+          )}
+        </div>
+      </div>
       <Row gutter={12}>
         <Col xs={24} lg={17}>
           <Card

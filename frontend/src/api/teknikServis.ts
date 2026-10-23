@@ -1,5 +1,5 @@
 /**
- * Servis işleri (liste, detay, durum, bekleme, sonuç, atama, onay, panel) — API tipleri ve çağrıları.
+ * Servis işleri (liste, detay, durum, bekleme, sonuç, tayin, onay, panel) — API tipleri ve çağrıları.
  *
  * Sözleşme: `backend/app/api/teknik_servis.py` (D1-B Pydantic şemaları) ve
  * panel/onay iş kuralı `services/teknik_servis/panel.py`, `onay.py` (D1-C).
@@ -340,12 +340,12 @@ export const KPI_ADLARI: Record<string, string> = {
   sahada: "Sahada",
   atolyede: "Atölyede",
   beklemede: "Beklemede",
-  atanmamis: "Atanmamış",
+  atanmamis: "Tayin Edilmemiş",
   kritik_acik: "Kritik açık",
   bugun_acilan: "Bugün açılan",
   bugun_planli: "Bugün planlı",
   kapanis_bekleyen: "Kapanış bekleyen",
-  kritik_atanmamis: "Atanmamış kritik iş",
+  kritik_atanmamis: "Tayin edilmemiş kritik iş",
   kapanis_gecikmis: "Kapanışı gecikmiş iş",
   uzun_beklemede: "Uzun süredir beklemede",
   tamamlanan: "Tamamlanan",
@@ -454,7 +454,7 @@ export const teknikServisApi = {
   ekip: (id: number) => api.get<EkipUyesi[]>(`${isYolu(id)}/ekip`),
   ata: (id: number, atamalar: AtamaSatiri[]) =>
     api.put<EkipUyesi[]>(`${isYolu(id)}/atama`, { atamalar }),
-  /** Tekli atama + yetkinlik uyarıları (TS-198; uyarı atamayı engellemez). */
+  /** Tekli tayin + yetkinlik uyarıları (TS-198; uyarı tayini engellemez). */
   ataUyarili: (id: number, atamalar: AtamaSatiri[]) =>
     api
       .putBaslikli<EkipUyesi[]>(`${isYolu(id)}/atama`, { atamalar }, "X-Atama-Uyarilari")

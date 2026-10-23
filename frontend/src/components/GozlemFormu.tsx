@@ -4,7 +4,7 @@
  * Kurallar sunucudadır; form yalnız kolaylaştırır:
  * - Puan ve sonuç SUNUCUDA hesaplanır; formda gösterilen rozet önizlemedir.
  * - Kritik maddelerin varsayılanı YOK (seçim zorunlu); "Gözlenmedi" gerekçe ister.
- * - Servis işinden açılınca iş no ve birim kilitlidir; işe atanmış kişiler
+ * - Servis işinden açılınca iş no ve birim kilitlidir; işe tayin edilmiş kişiler
  *   personel seçiminde önce gelir. Gözlemci oturumdaki kullanıcıdır.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -112,7 +112,7 @@ export default function GozlemFormu({ open, onClose, servis, kisiId, onKaydedild
     const sirali = [...liste.filter((k) => atanan.has(k.id)), ...liste.filter((k) => !atanan.has(k.id))];
     return sirali.map((k) => ({
       value: k.id,
-      label: `${k.ad}${atanan.has(k.id) ? " (bu işte atanmış)" : ""}`,
+      label: `${k.ad}${atanan.has(k.id) ? " (bu işe tayin edilmiş)" : ""}`,
     }));
   }, [kisiler.data, ekip.data]);
 

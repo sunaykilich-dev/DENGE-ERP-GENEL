@@ -39,7 +39,7 @@ RMA/garanti rolü) bunlardan ayrıdır ve aynen kalır.
 | Teknik Servis Müdürü | Servis işinin tamamı, tanımlar, bakım, atölye, kiralama, parça, eğitim, personel, servis raporları | Tüm birimler |
 | Teknik Servis Şefi | Planlama, onay, kapatma, bakım onayı, servis raporları | Kendi birimleri |
 | Teknik Servis Operasyon Uzmanı | İş açma, uzaktan çözüm, kiralama kaydı | Kendi birimleri |
-| Servis Teknisyeni | Benim İşlerim: sayaç, sonuç, fotoğraf, parça kullanımı | Yalnız kendisine atanmış işler |
+| Servis Teknisyeni | Benim İşlerim: sayaç, sonuç, fotoğraf, parça kullanımı | Yalnız kendisine tayin edilmiş işler |
 | Atölye Kabul / Usta | Atölye kabulü, onarım, teslim | Kendi birimleri |
 | Servis Deposu / Yedek Parça | Parça stoğu, transfer, sayım, talepler | Kendi birimleri |
 | Kiralama Deposu | Kiralık envanter, tahsis, sevk, iade | Kendi birimleri |
@@ -458,7 +458,7 @@ Menü: **Teknik Servis → Benim İşlerim** (`zaman.yaz` izni). Saha teknisyeni
 giriş yaptığında doğrudan bu ekran açılır. Telefonda tarayıcıdan kullanılır;
 ayrı uygulama yoktur.
 
-- **İşlerim:** size atanmış açık işler Geciken / Bugün / Yarın / Sonraki günler /
+- **İşlerim:** size tayin edilmiş açık işler Geciken / Bugün / Yarın / Sonraki günler /
   Plansız gruplarında. Aynı gün aynı tesise gidilecek işler tek **ziyaret
   kartında** toplanır (ör. 17 cihazlık bakım); her iş ayrı açılır. Şef ve
   müdür "Tümü (birimim)" görünümüne de geçebilir.
@@ -509,7 +509,7 @@ sunucuda hesaplanır.
   alır; personel beklemesi almaz. Öncelik ya da tür değişince hedef yeniden
   damgalanır. Sonuç işin ilk *Tamamlandı* anında donar.
 - **Operasyon Merkezi:** üstteki sayaçlar tıklanınca aynı sayıda satırlık
-  listeyi SLA sırasıyla açar; birim ve öncelik süzülür. Toplu atama ve toplu
+  listeyi SLA sırasıyla açar; birim ve öncelik süzülür. Toplu tayin ve toplu
   plan servis işleri ekranındaki aynı işlemlerdir. *Personel iş yükü*
   sekmesinde çalışılan dakika yalnız `servis_rapor.personel` sahibine görünür.
 - **Bildirimler:** SLA uyarıları kalıcıdır ve rozet sayısı anlık hesaplanır;
@@ -702,8 +702,8 @@ Menü: **Personel** kartında **İşten çıkış** (`personel.cikis`).
   sayısı, eğitim planları ve düzeltici faaliyetleri. Önizleme hiçbir şey
   yazmaz.
 - Onayda tek işlemle giriş kapatılır, oturumlar düşer, kişi açık işlerin
-  ekiplerinden çıkarılır (atama silinmez, sonlandırılır). İş durumları
-  değişmez; sorumlusu kalmayan iş "Atanmamış" listesine düşer. Kişi kendini
+  ekiplerinden çıkarılır (tayin silinmez, sonlandırılır). İş durumları
+  değişmez; sorumlusu kalmayan iş "Tayin Edilmemiş" listesine düşer. Kişi kendini
   çıkaramaz; son yönetici çıkarılamaz.
 - **Açık sayaç kapatılmaz:** uyarı merkezine kritik uyarı düşer ve görev
   panosunda inceleme kartı açılır; o işte kişi sayaç kapanınca ekipten

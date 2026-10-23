@@ -8,15 +8,22 @@
  * aynen alır. `/servis-ekipman/:id` kartı doğrudan açar (görev ve arama
  * bağlantıları buraya gelir).
  */
+import {
+  DatabaseOutlined,
+  EditOutlined,
+  PlusOutlined,
+  SafetyOutlined,
+  WifiOutlined,
+} from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ColumnsType } from "antd/es/table";
 import {
   App,
   Button,
-  Card,
   Checkbox,
   Col,
-  Empty,
   Form,
+  Grid,
   Input,
   Modal,
   Row,
@@ -33,7 +40,6 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import {
   DURUM_ETIKETLERI,
-  DURUM_RENKLERI,
   EKIPMAN_TIPLERI,
   ekipmanApi,
   GARANTI_ETIKETLERI,
@@ -48,7 +54,19 @@ import EkipmanFormu from "../components/EkipmanFormu";
 import EkipmanKarti, { GarantiEtiketi } from "../components/EkipmanKarti";
 import EkipmanTopluIslemleri from "../components/EkipmanTopluIslemleri";
 import EkipmanVeriKalitesi from "../components/EkipmanVeriKalitesi";
-import KpiKutusu from "../components/KpiKutusu";
+import {
+  Aciklama,
+  AltNot,
+  DurumBaglantisi,
+  Kucuk,
+  KucukGri,
+  NoRozeti,
+  TUMU_KATEGORISI,
+  gunu,
+  kategorilerOlustur,
+  tekliGruplar,
+} from "../fiori/ListeOgeleri";
+import ListeRaporu, { KpiKutucugu, type FioriEylem } from "../fiori/ListeRaporu";
 
 const SAYFA_BOYU = 50;
 const TOPLU_UST_SINIR = 200;
@@ -106,6 +124,8 @@ export default function ServisEkipmanPage() {
   const [onizleme, setOnizleme] = useState<GarantiSonucu | null>(null);
   const [topluForm] = Form.useForm<{ hedef: string; gerekce: string }>();
   const [aramaMetni, setAramaMetni] = useState(suzgec.q ?? "");
+  const [cokluSecim, setCokluSecim] = useState(false);
+  const [suzgecAcik, setSuzgecAcik] = useState(false);
 
   const kartId = id ? Number(id) : null;
   const yolEki = arama.toString() ? `?${arama.toString()}` : "";
@@ -167,22 +187,292 @@ export default function ServisEkipmanPage() {
   const kartAc = (r: EkipmanSatiri) => git(`/servis-ekipman/${r.id}${yolEki}`);
   const kartKapat = () => git(`/servis-ekipman${yolEki}`);
 
+  const ekran = Grid.useBreakpoint();
+  const kayitlar = liste.data?.kayitlar ?? [];
+  const tek = secili.length === 1 ? (seciliSatirlar[secili[0]] ?? kayitlar.find((r) => r.id === secili[0])) : null;
+  const secimVar = yazabilir || aktarabilir || yetkili("servis.yaz") || yetkili("bakim.yaz");
+  const kategoriler = kategorilerOlustur(
+    EKIPMAN_TIPLERI.map((t) => ({ kod: t, ad: TIP_ETIKETLERI[t] ?? t })),
+    (t) => (t === "XRAY" || t.includes("DEDEKTOR") || t === "DIGER_GUVENLIK" ? "kirmizi" : "yesil"),
+    (t) => (t.startsWith("TELSIZ") || t === "ROLE_TEKRARLAYICI" ? <WifiOutlined /> : <SafetyOutlined />),
+  );
+  const durumGruplari = tekliGruplar(DURUM_ETIKETLERI);
+  const ekSuzgecSayisi = [
+    suzgec.birim,
+    suzgec.garanti,
+    suzgec.lokasyonsuz,
+    suzgec.sozlesmesiz,
+    suzgec.pasifler_dahil,
+  ].filter(Boolean).length;
+  const secimDegisti = (k: number[], satirlar: EkipmanSatiri[]) => {
+    setSecili(k);
+    // Sayfa değişse de seçili satırların verisi (müşteri, tür) elde kalsın.
+    setSeciliSatirlar((eski) => {
+      const yeni = { ...eski };
+      for (const s of satirlar) if (s) yeni[s.id] = s;
+      return yeni;
+    });
+  };
+
+  const sutunlar: ColumnsType<EkipmanSatiri> = [
+    {
+      title: "Durum",
+      key: "durum",
+      width: 150,
+      align: "center",
+      render: (_, r) => (
+        <DurumBaglantisi
+          metin={DURUM_ETIKETLERI[r.lifecycle_status] ?? r.lifecycle_status}
+          ton={r.lifecycle_status === "HURDA" ? "olumsuz" : !r.is_active || r.lifecycle_status === "DEVRE_DISI" ? "kapali" : undefined}
+          onClick={() => kartAc(r)}
+          alt={
+            <>
+              {r.serviste && <AltNot tur="uyari">SERVİSTE</AltNot>}
+              {!r.is_active && <AltNot>PASİF</AltNot>}
+            </>
+          }
+        />
+      ),
+    },
+    {
+      title: "Seri No",
+      dataIndex: "serial_no",
+      width: 150,
+      align: "center",
+      render: (s: string | null, r) =>
+        s ? <NoRozeti no={s} onClick={() => kartAc(r)} /> : <Tag color="gold">eksik</Tag>,
+    },
+    {
+      title: "Açıklama",
+      key: "mm",
+      width: 260,
+      render: (_, r) => (
+        <Aciklama
+          metin={[r.brand, r.model].filter(Boolean).join(" ") || TIP_ETIKETLERI[r.equipment_type] || r.equipment_type}
+          onClick={() => kartAc(r)}
+        />
+      ),
+    },
+    {
+      title: "Ekipman",
+      dataIndex: "equipment_type",
+      width: 130,
+      align: "center",
+      responsive: ["lg"],
+      render: (t: string) => <Kucuk>{TIP_ETIKETLERI[t] ?? t}</Kucuk>,
+    },
+    {
+      title: "Mahal",
+      key: "lok",
+      width: 200,
+      align: "center",
+      responsive: ["md"],
+      render: (_, r) => (
+        <>
+          <Kucuk kalin>{r.hesap_unvan}</Kucuk>
+          {(r.lokasyon_adi || r.il) && <Kucuk>{[r.lokasyon_adi, r.il].filter(Boolean).join(" · ")}</Kucuk>}
+        </>
+      ),
+    },
+    {
+      title: "Garanti",
+      key: "garanti",
+      width: 140,
+      align: "center",
+      responsive: ["sm"],
+      render: (_, r) => (
+        <>
+          <GarantiEtiketi durum={r.garanti_durumu} />
+          {r.warranty_end && <KucukGri>{gunu(r.warranty_end)}</KucukGri>}
+        </>
+      ),
+    },
+    {
+      title: "Sözleşme",
+      dataIndex: "sozlesme_sayisi",
+      width: 90,
+      align: "center",
+      responsive: ["lg"],
+      render: (n: number) => (n ? <Tag color="blue">{n}</Tag> : "—"),
+    },
+  ];
+
+  const eylemler: FioriEylem[] = [
+    {
+      anahtar: "liste",
+      ad: "Liste",
+      menu: [
+        ...(aktarabilir
+          ? [{ key: "excel", label: `Excel'e aktar${secili.length ? ` (${secili.length} seçili)` : ""}` }]
+          : []),
+        ...(secimVar ? [{ key: "coklu", label: cokluSecim ? "Tekli seçime dön" : "Çoklu seçim (toplu işlem)" }] : []),
+        { key: "kalite", label: kalitePaneli ? "Veri Kalitesi panelini kapat" : "Veri Kalitesi" },
+        { key: "temizle", label: "Seçimi temizle", disabled: !secili.length },
+        { type: "divider" as const },
+        { key: "yenile", label: "Listeyi yenile" },
+      ],
+      onMenu: (k) => {
+        if (k === "excel") window.open(ekipmanApi.excelYolu(suzgec, secili), "_blank");
+        else if (k === "coklu") {
+          setCokluSecim(!cokluSecim);
+          setSecili((x) => (cokluSecim ? x.slice(0, 1) : x));
+        } else if (k === "kalite") suzgecDegistir(suzgec, kalitePaneli ? { sekme: undefined } : { sekme: "kalite" });
+        else if (k === "temizle") setSecili([]);
+        else if (k === "yenile") void liste.refetch();
+      },
+    },
+    {
+      anahtar: "durum",
+      ad: secili.length > 1 ? `Durum Değiştir (${secili.length})` : "Durum Değiştir",
+      kisalt: true,
+      gizli: !yazabilir,
+      devreDisi: !secili.length || secili.length > TOPLU_UST_SINIR,
+      ipucu: secili.length > TOPLU_UST_SINIR ? `En çok ${TOPLU_UST_SINIR} ekipman` : undefined,
+      onClick: () => {
+        topluForm.resetFields();
+        setTopluDurumAcik(true);
+      },
+    },
+    {
+      anahtar: "garanti",
+      ad: `Garanti Hesapla${secili.length ? ` (${secili.length})` : ""}`,
+      kisalt: true,
+      gizli: !yazabilir,
+      onClick: () => {
+        setOnizleme(null);
+        setGarantiAcik(true);
+        garanti.mutate(false);
+      },
+    },
+    {
+      anahtar: "duzenle",
+      ad: "Kartı Aç / Düzenle",
+      ikon: <EditOutlined />,
+      yalnizIkon: true,
+      devreDisi: !tek,
+      onClick: () => tek && kartAc(tek),
+    },
+  ];
+  const sagEylemler: FioriEylem[] = [
+    {
+      anahtar: "yeni",
+      ad: "Yeni Ekipman",
+      ikon: <PlusOutlined />,
+      vurgulu: true,
+      kisalt: true,
+      gizli: !yazabilir,
+      onClick: () => {
+        setDuzenlenen(null);
+        setFormAcik(true);
+      },
+    },
+  ];
+
+  const suzgecPaneli = (
+    <Row gutter={[8, 8]}>
+      <Col xs={12} md={6}>
+        <Select
+          allowClear
+          style={{ width: "100%" }}
+          placeholder="Birim"
+          value={suzgec.birim}
+          onChange={(v) => suzgecDegistir({ ...suzgec, birim: v })}
+          options={BIRIM_KODLARI.map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] }))}
+        />
+      </Col>
+      <Col xs={12} md={6}>
+        <Select
+          allowClear
+          style={{ width: "100%" }}
+          placeholder="Garanti"
+          value={suzgec.garanti}
+          onChange={(v) => suzgecDegistir({ ...suzgec, garanti: v })}
+          options={Object.entries(GARANTI_ETIKETLERI).map(([k, v]) => ({ value: k, label: v }))}
+        />
+      </Col>
+      <Col xs={24} md={12}>
+        <Space wrap>
+          <Checkbox
+            checked={!!suzgec.lokasyonsuz}
+            onChange={(e) => suzgecDegistir({ ...suzgec, lokasyonsuz: e.target.checked || undefined })}
+          >
+            Lokasyonsuz
+          </Checkbox>
+          <Checkbox
+            checked={!!suzgec.sozlesmesiz}
+            onChange={(e) => suzgecDegistir({ ...suzgec, sozlesmesiz: e.target.checked || undefined })}
+          >
+            Sözleşmesiz
+          </Checkbox>
+          <Checkbox
+            checked={!!suzgec.pasifler_dahil}
+            onChange={(e) => suzgecDegistir({ ...suzgec, pasifler_dahil: e.target.checked || undefined })}
+          >
+            Pasifler dahil
+          </Checkbox>
+        </Space>
+      </Col>
+    </Row>
+  );
+
+  const ustBilgi =
+    suzgec.kalite || suzgec.kpi || Object.values(suzgec).some((v) => v !== undefined) || secili.length > 0 ? (
+      <Space wrap>
+        {suzgec.kalite && (
+          <Tag closable onClose={() => suzgecDegistir({ ...suzgec, kalite: undefined })} color="gold">
+            Kalite: {suzgec.kalite}
+          </Tag>
+        )}
+        {suzgec.kpi && (
+          <Tag closable onClose={() => suzgecDegistir({ ...suzgec, kpi: undefined })} color="orange">
+            KPI: {ozet.data?.find((k) => k.kod === suzgec.kpi)?.baslik ?? suzgec.kpi}
+          </Tag>
+        )}
+        {Object.values(suzgec).some((v) => v !== undefined) && (
+          <Button
+            size="small"
+            type="link"
+            onClick={() => {
+              setAramaMetni("");
+              suzgecDegistir({});
+            }}
+          >
+            Süzgeci temizle
+          </Button>
+        )}
+        {secili.length > 0 && (yazabilir || yetkili("servis.yaz") || yetkili("bakim.yaz")) && (
+          <>
+            <Typography.Text>{secili.length} ekipman seçili</Typography.Text>
+            <EkipmanTopluIslemleri
+              secili={secili.map((i) => seciliSatirlar[i]).filter((s): s is EkipmanSatiri => !!s)}
+              onBitti={() => {
+                setSecili([]);
+                tazele();
+              }}
+            />
+          </>
+        )}
+      </Space>
+    ) : null;
+
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      <Row gutter={[12, 12]}>
-        {(ozet.data ?? []).map((k) => (
-          <Col key={k.kod} xs={12} sm={8} lg={6} xl={3}>
-            <KpiKutusu
+      {(ozet.data ?? []).length > 0 && (
+        <div className="fl-kutucuklar">
+          {(ozet.data ?? []).map((k) => (
+            <KpiKutucugu
+              key={k.kod}
               kod={k.kod}
               baslik={k.baslik}
               tanim={k.tanim}
               deger={k.deger}
+              ikon={<DatabaseOutlined />}
               yol={`/servis-ekipman?kpi=${k.kod}`}
               vurgu={suzgec.kpi === k.kod ? "uyari" : "normal"}
             />
-          </Col>
-        ))}
-      </Row>
+          ))}
+        </div>
+      )}
 
       {kalitePaneli && (
         <EkipmanVeriKalitesi
@@ -192,273 +482,53 @@ export default function ServisEkipmanPage() {
         />
       )}
 
-      <Card
-        title="Ekipman Kütüğü"
-        extra={
-          <Space wrap>
-            <Button
-              type={kalitePaneli ? "primary" : "default"}
-              ghost={kalitePaneli}
-              onClick={() =>
-                suzgecDegistir(suzgec, kalitePaneli ? { sekme: undefined } : { sekme: "kalite" })
-              }
-            >
-              Veri Kalitesi
-            </Button>
-            {yazabilir && (
-              <Button
-                type="primary"
-                onClick={() => {
-                  setDuzenlenen(null);
-                  setFormAcik(true);
-                }}
-              >
-                Yeni ekipman
-              </Button>
-            )}
-            {aktarabilir && (
-              <Button onClick={() => window.open(ekipmanApi.excelYolu(suzgec, secili), "_blank")}>
-                Excel{secili.length ? ` (${secili.length})` : ""}
-              </Button>
-            )}
-          </Space>
-        }
-      >
-        <Space orientation="vertical" size="small" style={{ width: "100%" }}>
-          <Row gutter={[8, 8]}>
-            <Col xs={24} md={8}>
-              <Input.Search
-                allowClear
-                placeholder="Seri, model, müşteri, tesis, bölge…"
-                value={aramaMetni}
-                onChange={(e) => setAramaMetni(e.target.value)}
-                onSearch={(q) => suzgecDegistir({ ...suzgec, q: q.trim() || undefined })}
-              />
-            </Col>
-            <Col xs={12} md={4}>
-              <Select
-                allowClear
-                style={{ width: "100%" }}
-                placeholder="Birim"
-                value={suzgec.birim}
-                onChange={(v) => suzgecDegistir({ ...suzgec, birim: v })}
-                options={BIRIM_KODLARI.map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] }))}
-              />
-            </Col>
-            <Col xs={12} md={4}>
-              <Select
-                allowClear
-                style={{ width: "100%" }}
-                placeholder="Tip"
-                value={suzgec.tip}
-                onChange={(v) => suzgecDegistir({ ...suzgec, tip: v })}
-                options={EKIPMAN_TIPLERI.map((t) => ({ value: t, label: TIP_ETIKETLERI[t] }))}
-              />
-            </Col>
-            <Col xs={12} md={4}>
-              <Select
-                allowClear
-                style={{ width: "100%" }}
-                placeholder="Durum"
-                value={suzgec.durum}
-                onChange={(v) => suzgecDegistir({ ...suzgec, durum: v })}
-                options={Object.entries(DURUM_ETIKETLERI).map(([k, v]) => ({ value: k, label: v }))}
-              />
-            </Col>
-            <Col xs={12} md={4}>
-              <Select
-                allowClear
-                style={{ width: "100%" }}
-                placeholder="Garanti"
-                value={suzgec.garanti}
-                onChange={(v) => suzgecDegistir({ ...suzgec, garanti: v })}
-                options={Object.entries(GARANTI_ETIKETLERI).map(([k, v]) => ({ value: k, label: v }))}
-              />
-            </Col>
-          </Row>
-          <Space wrap>
-            <Checkbox
-              checked={!!suzgec.lokasyonsuz}
-              onChange={(e) => suzgecDegistir({ ...suzgec, lokasyonsuz: e.target.checked || undefined })}
-            >
-              Lokasyonsuz
-            </Checkbox>
-            <Checkbox
-              checked={!!suzgec.sozlesmesiz}
-              onChange={(e) => suzgecDegistir({ ...suzgec, sozlesmesiz: e.target.checked || undefined })}
-            >
-              Sözleşmesiz
-            </Checkbox>
-            <Checkbox
-              checked={!!suzgec.pasifler_dahil}
-              onChange={(e) => suzgecDegistir({ ...suzgec, pasifler_dahil: e.target.checked || undefined })}
-            >
-              Pasifler dahil
-            </Checkbox>
-            {suzgec.kalite && (
-              <Tag closable onClose={() => suzgecDegistir({ ...suzgec, kalite: undefined })} color="gold">
-                Kalite: {suzgec.kalite}
-              </Tag>
-            )}
-            {suzgec.kpi && (
-              <Tag closable onClose={() => suzgecDegistir({ ...suzgec, kpi: undefined })} color="orange">
-                KPI: {ozet.data?.find((k) => k.kod === suzgec.kpi)?.baslik ?? suzgec.kpi}
-              </Tag>
-            )}
-            {Object.values(suzgec).some((v) => v !== undefined) && (
-              <Button
-                size="small"
-                type="link"
-                onClick={() => {
-                  setAramaMetni("");
-                  suzgecDegistir({});
-                }}
-              >
-                Süzgeci temizle
-              </Button>
-            )}
-          </Space>
-
-          {secili.length > 0 && (yazabilir || yetkili("servis.yaz") || yetkili("bakim.yaz")) && (
-            <Space wrap>
-              <Typography.Text>{secili.length} ekipman seçili</Typography.Text>
-              {yazabilir && (
-                <Button
-                  size="small"
-                  disabled={secili.length > TOPLU_UST_SINIR}
-                  onClick={() => {
-                    topluForm.resetFields();
-                    setTopluDurumAcik(true);
-                  }}
-                >
-                  Durum değiştir
-                </Button>
-              )}
-              <EkipmanTopluIslemleri
-                secili={secili.map((i) => seciliSatirlar[i]).filter((s): s is EkipmanSatiri => !!s)}
-                onBitti={() => {
-                  setSecili([]);
-                  tazele();
-                }}
-              />
-              <Button size="small" onClick={() => setSecili([])}>
-                Seçimi kaldır
-              </Button>
-            </Space>
-          )}
-          {yazabilir && (
-            <Button
-              size="small"
-              onClick={() => {
-                setOnizleme(null);
-                setGarantiAcik(true);
-                garanti.mutate(false);
-              }}
-            >
-              Garanti hesapla{secili.length ? ` (${secili.length} seçili)` : ""}
-            </Button>
-          )}
-
-          <Table<EkipmanSatiri>
-            rowKey="id"
+      <ListeRaporu<EkipmanSatiri>
+        kategoriler={kategoriler}
+        seciliKategori={suzgec.tip ?? TUMU_KATEGORISI.kod}
+        onKategori={(k) => suzgecDegistir({ ...suzgec, tip: k === TUMU_KATEGORISI.kod ? undefined : k })}
+        kayitSayisi={liste.data?.toplam}
+        ustSag={
+          <Input.Search
+            allowClear
             size="small"
-            scroll={{ x: 900 }}
-            loading={liste.isLoading}
-            dataSource={liste.data?.kayitlar ?? []}
-            locale={{ emptyText: <Empty description="Bu süzgeçte ekipman yok" /> }}
-            rowSelection={
-              yazabilir || aktarabilir || yetkili("servis.yaz") || yetkili("bakim.yaz")
-                ? {
-                    selectedRowKeys: secili,
-                    onChange: (k, satirlar) => {
-                      setSecili(k as number[]);
-                      // Sayfa değişse de seçili satırların verisi (müşteri, tür) elde kalsın.
-                      setSeciliSatirlar((eski) => {
-                        const yeni = { ...eski };
-                        for (const s of satirlar) if (s) yeni[s.id] = s;
-                        return yeni;
-                      });
-                    },
-                    preserveSelectedRowKeys: true,
-                  }
-                : undefined
-            }
-            pagination={{
-              current: sayfa,
-              pageSize: SAYFA_BOYU,
-              total: liste.data?.toplam ?? 0,
-              showSizeChanger: false,
-              onChange: setSayfa,
-              showTotal: (t) => `${t.toLocaleString("tr-TR")} ekipman`,
-            }}
-            onRow={(r) => ({ onClick: () => kartAc(r), style: { cursor: "pointer" } })}
-            columns={[
-              {
-                title: "Tip",
-                dataIndex: "equipment_type",
-                width: 130,
-                render: (t: string) => TIP_ETIKETLERI[t] ?? t,
-              },
-              {
-                title: "Seri no",
-                dataIndex: "serial_no",
-                width: 140,
-                render: (s: string | null) =>
-                  s ? <span className="mono">{s}</span> : <Tag color="gold">eksik</Tag>,
-              },
-              {
-                title: "Marka / model",
-                key: "mm",
-                ellipsis: true,
-                render: (_, r) => [r.brand, r.model].filter(Boolean).join(" ") || "—",
-              },
-              { title: "Müşteri", dataIndex: "hesap_unvan", ellipsis: true, render: (v) => v ?? "—" },
-              {
-                title: "Lokasyon",
-                key: "lok",
-                ellipsis: true,
-                render: (_, r) => [r.lokasyon_adi, r.il].filter(Boolean).join(" · ") || "—",
-              },
-              {
-                title: "Durum",
-                key: "durum",
-                width: 170,
-                render: (_, r) => (
-                  <Space size={4} wrap>
-                    <Tag color={DURUM_RENKLERI[r.lifecycle_status]}>
-                      {DURUM_ETIKETLERI[r.lifecycle_status] ?? r.lifecycle_status}
-                    </Tag>
-                    {r.serviste && <Tag color="volcano">Serviste</Tag>}
-                    {!r.is_active && <Tag>Pasif</Tag>}
-                  </Space>
-                ),
-              },
-              {
-                title: "Garanti",
-                key: "garanti",
-                width: 150,
-                render: (_, r) => (
-                  <Space size={4} orientation="vertical">
-                    <GarantiEtiketi durum={r.garanti_durumu} />
-                    {r.warranty_end && (
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        {tarih(r.warranty_end)}
-                      </Typography.Text>
-                    )}
-                  </Space>
-                ),
-              },
-              {
-                title: "Sözleşme",
-                dataIndex: "sozlesme_sayisi",
-                width: 90,
-                align: "center",
-                render: (n: number) => (n ? <Tag color="blue">{n}</Tag> : "—"),
-              },
-            ]}
+            style={{ width: ekran.sm ? 280 : 190 }}
+            placeholder="Seri, model, müşteri, tesis, bölge…"
+            value={aramaMetni}
+            onChange={(e) => setAramaMetni(e.target.value)}
+            onSearch={(q) => suzgecDegistir({ ...suzgec, q: q.trim() || undefined })}
           />
-        </Space>
-      </Card>
+        }
+        durumCubugu={{
+          gruplar: durumGruplari,
+          secili: suzgec.durum,
+          onSec: (kod) => suzgecDegistir({ ...suzgec, durum: kod }),
+          onYenile: () => void liste.refetch(),
+          yenileniyor: liste.isFetching,
+          onSuzgec: () => setSuzgecAcik(!suzgecAcik),
+          suzgecAcik,
+          suzgecSayisi: ekSuzgecSayisi,
+        }}
+        suzgecPaneli={suzgecPaneli}
+        ustBilgi={ustBilgi}
+        sutunlar={sutunlar}
+        veri={kayitlar}
+        satirAnahtari="id"
+        yukleniyor={liste.isFetching}
+        bosMetin={liste.isError ? (liste.error as Error).message : "Veri yok"}
+        scrollX={ekran.lg ? 1200 : ekran.md ? 1000 : ekran.sm ? 820 : 640}
+        secimModu={secimVar ? (cokluSecim ? "coklu" : "tek") : "yok"}
+        secili={secili}
+        onSecim={(k, satirlar) => secimDegisti(k as number[], satirlar)}
+        onSatirAc={kartAc}
+        sayfalama={{
+          sayfa,
+          boyut: SAYFA_BOYU,
+          toplam: liste.data?.toplam ?? 0,
+          onChange: setSayfa,
+        }}
+        eylemler={eylemler}
+        sagEylemler={sagEylemler}
+      />
 
       <EkipmanKarti
         ekipmanId={kartId}

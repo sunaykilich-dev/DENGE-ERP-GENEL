@@ -405,13 +405,13 @@ for _t in (
     KpiTanimi("sahada", "Sahada", "Yola çıkıldı, sahada ya da işlemde olan işler.", _durum(*sorted(DURUM_GRUPLARI["SAHA"]))),  # noqa: E501
     KpiTanimi("atolyede", "Atölyede", "Kategorisi ATÖLYE olan açık işler.", _s_atolyede),
     KpiTanimi("beklemede", "Beklemede", "Beklemeye alınmış işler (neden kırılımı listede).", _durum("BEKLEMEDE")),  # noqa: E501
-    KpiTanimi("atanmamis", "Atanmamış", "Aktif teknisyen ataması olmayan açık işler.", _s_atanmamis, vurgu="uyari"),  # noqa: E501
+    KpiTanimi("atanmamis", "Tayin Edilmemiş", "Aktif teknisyen tayini olmayan açık işler.", _s_atanmamis, vurgu="uyari"),  # noqa: E501
     KpiTanimi("kritik_acik", "Kritik açık", "Önceliği KRİTİK olan açık işler.", _s_kritik_acik, vurgu="kritik"),  # noqa: E501
     KpiTanimi("bugun_acilan", "Bugün açılan", "Bugün (Türkiye günü) sisteme açılan işler.", _s_bugun_acilan),  # noqa: E501
     KpiTanimi("bugun_planli", "Bugün planlı", "Aktif planı bugüne olan açık işler.", _s_bugun_planli),  # noqa: E501
     KpiTanimi("kapanis_bekleyen", "Kapanış bekleyen", "TAMAMLANDI durumunda, şef kapanışı bekleyen işler.", _durum("TAMAMLANDI")),  # noqa: E501
     # Uyarı listeleri (E01-18) — panelde gösterilmez, zil buradan sayar.
-    KpiTanimi("kritik_atanmamis", "Atanmamış kritik iş", "Önceliği KRİTİK olup aktif teknisyen ataması olmayan açık işler.", _s_kritik_atanmamis, grup="UYARI", vurgu="kritik"),  # noqa: E501
+    KpiTanimi("kritik_atanmamis", "Tayin edilmemiş kritik iş", "Önceliği KRİTİK olup aktif teknisyen tayini olmayan açık işler.", _s_kritik_atanmamis, grup="UYARI", vurgu="kritik"),  # noqa: E501
     KpiTanimi("kapanis_gecikmis", "Kapanışı gecikmiş iş", f"{KAPANIS_BEKLEME_UYARI_GUN} günden uzun süredir TAMAMLANDI durumunda bekleyen işler.", _s_kapanis_gecikmis, grup="UYARI", vurgu="uyari"),  # noqa: E501
     KpiTanimi("uzun_beklemede", "Uzun süredir beklemede", f"{BEKLEME_UYARI_GUN} günden uzun süredir beklemede olan işler.", _s_uzun_beklemede, grup="UYARI", vurgu="uyari"),  # noqa: E501
     # Dönemsel
@@ -603,7 +603,7 @@ def tanimlar() -> list[dict[str, Any]]:
 # kapsamı `kpi_sayisi` içinde uygulanır (A biriminin şefi B'nin işini saymaz).
 
 _UYARI_KPI = (
-    ("kritik_atanmamis", "kritik", "Kritik öncelikli işe teknisyen atanmamış."),
+    ("kritik_atanmamis", "kritik", "Kritik öncelikli işe teknisyen tayin edilmemiş."),
     (
         "kapanis_gecikmis",
         "uyari",

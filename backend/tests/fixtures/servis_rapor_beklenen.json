@@ -109,7 +109,7 @@
     "birim": {"Güvenlik Sistemleri": 26, "Haberleşme": 1},
     "sehir": {"Muğla": 20, "İstanbul": 7},
     "musteri": {"AKYAKA AVM Yönetimi": 20, "Beta Lojistik A.Ş.": 7},
-    "sef": {"Selim Şef": 1, "Şef atanmamış": 26}
+    "sef": {"Selim Şef": 1, "Şef tayin edilmemiş": 26}
   },
   "personel_A": {
     "Ali Veli": {"kisi_saat": 6.0, "farkli_is": 2},

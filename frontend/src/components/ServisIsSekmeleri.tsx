@@ -15,6 +15,7 @@ import { useState } from "react";
 import { DEGISIM_ETIKETLERI, PLAN_NEDENLERI, planlamaApi } from "../api/servisPlanlama";
 import { FAALIYET_ADLARI, SURE_DURUMU_ADLARI, servisZaman, sureMetni } from "../api/servisZaman";
 import { useAuth } from "../auth/AuthContext";
+import { TAYIN } from "../fiori/etiketler";
 import { ManuelKayitPenceresi } from "./SayacDugmeleri";
 
 const zaman = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY HH:mm") : "—");
@@ -104,7 +105,8 @@ export function PlanGecmisiSekmesi({ isId }: { isId: number }) {
               {p.aktif ? <Tag color="green">Aktif</Tag> : <Tag>Geçmiş</Tag>}
             </Space>
             <Typography.Text>
-              {p.ekip.map((e) => e.ad ?? `#${e.user_id}`).join(", ") || "Ekip yok"}
+              {p.ekip.length ? `${TAYIN.tayinEdilen}: ` : ""}
+              {p.ekip.map((e) => e.ad ?? `#${e.user_id}`).join(", ") || TAYIN.tayinEdilmemis}
             </Typography.Text>
             {(p.degisim_nedeni || p.iptal_nedeni) && (
               <Typography.Text type="secondary">

@@ -1,9 +1,11 @@
-import { SearchOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, SearchOutlined } from "@ant-design/icons";
 import { AutoComplete, Input, Space, Tag } from "antd";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
+import { UYGULAMALAR, uygulamaYetkili } from "../fiori/uygulamalar";
 
 interface Sonuc {
   tur: string;
@@ -22,24 +24,65 @@ const TUR_ADI: Record<string, string> = {
   HAT: "Hat",
 };
 
+type Secenek = { value: string; label: React.ReactNode };
+
+const kucuk = (s: string) => s.toLocaleLowerCase("tr");
+
 /**
- * Üst bardaki tek arama kutusu — IMEI, plaka, ICCID, şase, firma, ürün.
- * Kabul kriteri 1'in giriş noktası. Modüller geldikçe sunucu tarafında yeni
- * kaynak eklenir; bu bileşen değişmez.
+ * Kabuktaki tek arama kutusu (Fiori "Arama yeri: Uygulamalar").
+ *
+ * Önce kullanıcının YETKİLİ olduğu uygulamalar adlarıyla eşleşir (Fiori
+ * launchpad araması gibi), ardından sunucu araması gelir — IMEI, plaka,
+ * ICCID, şase, firma, ürün (kabul kriteri 1). Modüller geldikçe sunucu
+ * tarafında yeni kaynak eklenir; bu bileşen değişmez.
  */
-export default function GlobalSearch() {
-  const [secenekler, setSecenekler] = useState<{ value: string; label: React.ReactNode }[]>([]);
+export default function GlobalSearch({
+  otomatikOdak = false,
+  onSecildi,
+}: {
+  otomatikOdak?: boolean;
+  onSecildi?: () => void;
+}) {
+  const { yetkili } = useAuth();
+  const [secenekler, setSecenekler] = useState<Secenek[]>([]);
+  const [deger, setDeger] = useState("");
+  const sonIstek = useRef(0);
   const navigate = useNavigate();
 
+  function uygulamaSonuclari(terim: string): Secenek[] {
+    const t = kucuk(terim.trim());
+    if (!t) return [];
+    return UYGULAMALAR.filter(
+      (u) =>
+        u.kpi?.tur !== "uyari" &&
+        uygulamaYetkili(u, yetkili) &&
+        (kucuk(u.baslik).includes(t) || kucuk(u.altBaslik ?? "").includes(t)),
+    )
+      .slice(0, 6)
+      .map((u) => ({
+        value: u.yol,
+        label: (
+          <Space size={6}>
+            <AppstoreOutlined style={{ color: "#0a6ed1" }} />
+            <span>{u.baslik}</span>
+            {u.altBaslik && <span style={{ opacity: 0.6, fontSize: 12 }}>{u.altBaslik}</span>}
+          </Space>
+        ),
+      }));
+  }
+
   async function ara(terim: string) {
-    if (terim.trim().length < 2) {
-      setSecenekler([]);
-      return;
-    }
+    setDeger(terim);
+    const uygulamalar = uygulamaSonuclari(terim);
+    setSecenekler(uygulamalar);
+    const istek = ++sonIstek.current;
+    if (terim.trim().length < 2) return;
     try {
       const sonuc = await api.get<Sonuc[]>(`/api/arama?q=${encodeURIComponent(terim)}`);
-      setSecenekler(
-        sonuc.map((s) => ({
+      if (istek !== sonIstek.current) return;
+      setSecenekler([
+        ...uygulamalar,
+        ...sonuc.map((s) => ({
           value: s.yol,
           label: (
             <Space size={6}>
@@ -49,25 +92,33 @@ export default function GlobalSearch() {
             </Space>
           ),
         })),
-      );
+      ]);
     } catch {
-      setSecenekler([]);
+      /* sunucu araması düşerse uygulama eşleşmeleri kalır */
     }
   }
 
   return (
     <AutoComplete
+      className="fiori-arama"
+      value={deger}
       options={secenekler}
-      onSearch={ara}
-      onSelect={(yol: string) => navigate(yol)}
-      // Sabit 340 px dar ekranda taşıyordu; kutu mevcut alana uyar.
-      style={{ width: "100%", maxWidth: 340, minWidth: 0 }}
+      onSearch={(t) => void ara(t)}
+      onSelect={(yol: string) => {
+        setDeger("");
+        setSecenekler([]);
+        navigate(yol);
+        onSecildi?.();
+      }}
+      style={{ width: "100%", minWidth: 0 }}
       popupMatchSelectWidth={420}
     >
       <Input
-        prefix={<SearchOutlined style={{ opacity: 0.5 }} />}
-        placeholder="IMEI, plaka, ICCID, şase, firma…"
-        allowClear
+        autoFocus={otomatikOdak}
+        suffix={<SearchOutlined style={{ color: "#0a6ed1" }} />}
+        placeholder='Arama yeri: "Uygulamalar"'
+        aria-label="Uygulama, IMEI, plaka, ICCID, şase, firma ara"
+        title="Uygulama adı, IMEI, plaka, ICCID, şase ya da firma"
       />
     </AutoComplete>
   );

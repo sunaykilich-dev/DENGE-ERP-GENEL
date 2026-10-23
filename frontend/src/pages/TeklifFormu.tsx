@@ -567,7 +567,7 @@ export default function TeklifFormu({
                 </tr>
                 <tr>
                   <td className="lbl">Teklif No.</td>
-                  <td className="val">{"— (kayıtta atanır)"}</td>
+                  <td className="val">{"— (kayıtta verilir)"}</td>
                 </tr>
                 <tr>
                   <td className="lbl">Müşteri Kimliği</td>

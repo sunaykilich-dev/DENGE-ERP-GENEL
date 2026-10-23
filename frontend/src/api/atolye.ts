@@ -5,7 +5,7 @@
  * kimliğiyle adresler (`/{so_id}`); ekran bağlantısı `/atolye/{so_id}`.
  *
  * İzinler: okuma `atolye.gor`, yazma `atolye.yaz`; iptal/geri alma ayrıca
- * `servis.kapat`; atama `atolye.yaz` + `servis.planla`; Excel `atolye.gor` +
+ * `servis.kapat`; tayin (uç: ata) `atolye.yaz` + `servis.planla`; Excel `atolye.gor` +
  * `servis_rapor.disaaktar`. `repair_amount` yalnız `maliyet.gor` sahibine
  * gelir (anahtar hiç yoktur) — istemci tutarı hesaplamaz, yalnız gösterir.
  *
@@ -417,6 +417,11 @@ export function suzgecParametreleri(s: AtolyeSuzgeci): URLSearchParams {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(s)) {
     if (v === undefined || v === null || v === "" || v === false) continue;
+    // Fiori durum çubuğu bir grubu "A,B" olarak yazar; uç `durum`u çoklu alır.
+    if (k === "durum" && String(v).includes(",")) {
+      for (const d of String(v).split(",")) if (d) p.append(k, d);
+      continue;
+    }
     p.set(k, String(v));
   }
   return p;

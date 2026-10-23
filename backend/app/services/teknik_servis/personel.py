@@ -753,7 +753,7 @@ async def atanabilir_personel(
         raise PersonelKapsamDisi("Birim bulunamadı")
     bilinmeyen = set(saha_rolleri) - set(ATANABILIR_SAHA_ROLLERI)
     if bilinmeyen:
-        raise PersonelGirdiHatasi(f"Atanamayan saha rolü: {', '.join(sorted(bilinmeyen))}")
+        raise PersonelGirdiHatasi(f"Tayin edilemeyen saha rolü: {', '.join(sorted(bilinmeyen))}")
 
     stmt = select(User).where(atanabilir_kosulu(birim, saha_rolleri)).order_by(User.full_name)
     if user.role.scope == SCOPE_OWN_JOBS:
@@ -1025,11 +1025,11 @@ async def cikis_onizleme(
     if egitim["sorumlu_oldugu_acik_faaliyet"]:
         uyarilar.append(
             f"Sorumlusu olduğu {egitim['sorumlu_oldugu_acik_faaliyet']} açık düzeltici "
-            "faaliyet sorumlusuz kalacak; yeni sorumlu atayın."
+            "faaliyet sorumlusuz kalacak; yeni sorumlu tayin edin."
         )
     if mobilite:
         uyarilar.append(
-            f"Mobilite iş emirlerinde {mobilite} açık ataması var; bu akış onları "
+            f"Mobilite iş emirlerinde {mobilite} açık tayini var; bu akış onları "
             "değiştirmez (iş emri ekranından devredin)."
         )
 
@@ -1112,7 +1112,7 @@ async def _ekipten_cikar(
         so,
         "ATAMA",
         "İşten çıkış: personel ekipten çıkarıldı"
-        + (" (sorumlu teknisyendi; yeni sorumlu atanmalı)" if sorumluydu else ""),
+        + (" (sorumlu teknisyendi; yeni sorumlu tayin edilmeli)" if sorumluydu else ""),
         user=aktor,
         clock=clock,
         veri={"cikan": [kisi.id], "neden": "ISTEN_CIKIS", "sorumluydu": sorumluydu},
@@ -1179,7 +1179,7 @@ async def _inceleme_karti_ac(
     satirlar = [f"Personel #{kisi.id} işten çıkarıldı ({ayrilis_tarihi.isoformat()})."]
     if cikarilan:
         satirlar.append(
-            "Ekipten çıkarılan açık işler (yeniden atanmalı): " + ", ".join(cikarilan) + "."
+            "Ekipten çıkarılan açık işler (yeniden tayin edilmeli): " + ", ".join(cikarilan) + "."
         )
     if bolum is not None:
         satirlar.append(
@@ -1394,7 +1394,7 @@ async def sorumlusuz_faaliyet_uyarisi(db: AsyncSession, user: User, clock: Clock
             adet=await _sayim(db, sorumlusuz_faaliyet_sorgusu(user)),
             yol="/egitim",
             onem="uyari",
-            aciklama="Faaliyetin sorumlusu işten ayrıldı; yeni sorumlu atayın.",
+            aciklama="Faaliyetin sorumlusu işten ayrıldı; yeni sorumlu tayin edin.",
         )
     ]
 

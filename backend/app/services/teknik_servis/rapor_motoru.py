@@ -427,7 +427,7 @@ def kapsam_metni(user: User) -> str:
         return "Tüm birimler"
     birimler = ", ".join(BIRIMLER.get(b, b) for b in sorted(kapsam.kullanici_birimleri(user)))
     if kapsam_kodu == SCOPE_OWN_JOBS:
-        return f"Atandığım işler ({birimler or 'birim yok'})"
+        return f"Tayin edildiğim işler ({birimler or 'birim yok'})"
     return f"Birimler: {birimler or 'yok'}"
 
 
@@ -701,7 +701,7 @@ async def _etiketler(db: AsyncSession, boyut: str, anahtarlar) -> dict[Any, str]
         return {a: sonuc.KANAL_ADLARI.get(a, a) if a else "Sonuç girilmemiş" for a in anahtarlar}
     if boyut in ("sef", "teknisyen"):
         adlar = await _adlar(db, User, anahtarlar, User.full_name)
-        bos = "Şef atanmamış" if boyut == "sef" else "Teknisyen atanmamış"
+        bos = "Şef tayin edilmemiş" if boyut == "sef" else "Teknisyen tayin edilmemiş"
         return {a: adlar.get(a, "?") if a is not None else bos for a in anahtarlar}
     raise KeyError(boyut)
 

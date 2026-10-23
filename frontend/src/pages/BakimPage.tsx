@@ -2,8 +2,13 @@
  * Planlı Bakım — sözleşme, dönem, eşleştirme, PB üretimi, uygunsuzluk ve
  * kapsam dışı talepleri (TS-060…069).
  *
- * - Üstte tıklanabilir KPI kutuları (`KpiKutusu`): sayı sunucudan, tıklama
- *   aynı süzgeçle sekmeye gider ("sayı = liste").
+ * - Fiori görünümü (rehber §3, fotoğraf 9): ilk sekme "Bakım Bildirimleri"
+ *   servis işi liste raporudur (`ServisIsListesi`); kategori şeridi PLANSIZ
+ *   (kırmızı) / PLANLI (yeşil) mantığıyla tür ve bakım KPI'larını süzer.
+ *   Parametresiz `/bakim` bu sekmeyi açar; eski bağlantılar (`?durum=…`,
+ *   `?suresi_doluyor=1`) sözleşmelere gitmeye devam eder.
+ * - Üstte tıklanabilir Fiori KPI kutucukları (`KpiKutucugu`): sayı sunucudan,
+ *   tıklama aynı süzgeçle sekmeye gider ("sayı = liste").
  * - Sözleşme: tek pencere hem yeni hem düzenleme; kapsam tür+adet; ücret
  *   alanları yalnız `maliyet.gor` sahibine görünür ve ayrı uçtan yazılır.
  *   Tesis çakışması 409'da onay + gerekçe sorulur.
@@ -62,15 +67,67 @@ import {
   type Uygunsuzluk,
   type UretimKaydi,
 } from "../api/bakim";
+import { CalendarOutlined, FieldTimeOutlined, ToolOutlined, WarningOutlined } from "@ant-design/icons";
+
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
 import EkYukleyici from "../components/EkYukleyici";
 import KayitGorevleri from "../components/KayitGorevleri";
-import KpiKutusu from "../components/KpiKutusu";
 import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "../components/MusteriLokasyonSecici";
 import PlanPenceresi from "../components/PlanPenceresi";
+import { BAKIM_DURUM_GRUPLARI, TAYIN } from "../fiori/etiketler";
+import { KpiKutucugu } from "../fiori/ListeRaporu";
 import BakimFormu from "./BakimFormu";
 import BakimRaporlari from "./BakimRaporlari";
+import { ServisIsListesi, type ServisKategorisi } from "./ServisIsleriPage";
+
+/** Fotoğraf 9: PLANSIZ (kırmızı) / PLANLI (yeşil) kategori şeridi. */
+const BAKIM_KATEGORILERI: ServisKategorisi[] = [
+  {
+    kod: "PLANSIZ",
+    ad: "PLANSIZ BAKIM",
+    renk: "kirmizi",
+    ipucu: "Plansız bakım işleri",
+    suzgec: { tur: "PLANSIZ_BAKIM" },
+  },
+  { kod: "PLANLI", ad: "PLANLI BAKIM", renk: "yesil", ipucu: "Planlı bakım (PB) işleri", suzgec: { tur: "PB" } },
+  {
+    kod: "PLANLI_AY",
+    ad: "PLANLI BU AY",
+    renk: "yesil",
+    ikon: <CalendarOutlined />,
+    ipucu: "Aktif planı bu aya düşen PB işleri",
+    suzgec: { kpi: "bakim_bu_ay_planli" },
+  },
+  {
+    kod: "PLANLI_GECIKEN",
+    ad: "PLANLI GECİKEN",
+    renk: "yesil",
+    ikon: <FieldTimeOutlined />,
+    ipucu: "Bakım döneminin hedef tarihi geçmiş açık PB işleri",
+    suzgec: { kpi: "bakim_geciken" },
+  },
+];
+
+/** Bakım bildirimleri sekmesi: ayrıntı Drawer'ı sayfa içinde (rota değişmez). */
+function BakimBildirimleri() {
+  const [detay, setDetay] = useState<number | null>(null);
+  return (
+    <ServisIsListesi
+      kategoriler={BAKIM_KATEGORILERI}
+      varsayilanKategori="PLANLI"
+      durumGruplari={BAKIM_DURUM_GRUPLARI}
+      detayId={detay}
+      detayAc={setDetay}
+      sabitParametreler={{ sekme: "bildirimler" }}
+      noRozeti={false}
+      yeniKayit={false}
+    />
+  );
+}
+
+const KUTUCUK_IKONU = (kod: string) =>
+  /gecik|doldu|suresi/i.test(kod) ? <WarningOutlined /> : /donem|vade|ay/i.test(kod) ? <CalendarOutlined /> : <ToolOutlined />;
 
 const SAYFA = 25;
 const tarih = (v: string | null | undefined) => (v ? dayjs(v).format("DD.MM.YYYY") : "—");
@@ -90,7 +147,9 @@ const KAPANIS: Record<string, string> = {
 export default function BakimPage() {
   const { yetkili } = useAuth();
   const [params, setParams] = useSearchParams();
-  const sekme = params.get("sekme") ?? "sozlesmeler";
+  // Parametresiz giriş Fiori liste raporunu açar; parametreli eski bağlantılar
+  // (sekmesiz `?durum=…`) sözleşmelere gider.
+  const sekme = params.get("sekme") ?? (params.toString() ? "sozlesmeler" : "bildirimler");
   const [formSo, setFormSo] = useState<number | null>(null);
 
   const ozet = useQuery({ queryKey: ["bakim", "ozet"], queryFn: bakimApi.ozet });
@@ -103,29 +162,32 @@ export default function BakimPage() {
 
   return (
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
-      <Row gutter={[12, 12]}>
-        {(ozet.data?.kutular ?? []).map((k) => (
-          <Col key={k.kod} xs={12} sm={8} lg={4}>
-            <KpiKutusu
-              kod={k.kod}
-              baslik={k.baslik}
-              tanim={
-                k.birim === "yuzde" && k.payda !== undefined
-                  ? `${k.tanim} — ${k.pay ?? 0}/${k.payda}`
-                  : k.tanim
-              }
-              deger={k.deger}
-              yol={k.yol}
-              yukleniyor={ozet.isLoading}
-            />
-          </Col>
-        ))}
-      </Row>
-      <Card>
+      <div className="fl-kutucuklar">
+        {ozet.isLoading
+          ? Array.from({ length: 4 }, (_, i) => <KpiKutucugu key={i} baslik="" yukleniyor />)
+          : (ozet.data?.kutular ?? []).map((k) => (
+              <KpiKutucugu
+                key={k.kod}
+                kod={k.kod}
+                baslik={k.baslik}
+                tanim={
+                  k.birim === "yuzde" && k.payda !== undefined
+                    ? `${k.tanim} — ${k.pay ?? 0}/${k.payda}`
+                    : k.tanim
+                }
+                deger={k.deger}
+                birim={k.birim === "yuzde" ? "%" : undefined}
+                ikon={KUTUCUK_IKONU(k.kod)}
+                yol={k.yol}
+              />
+            ))}
+      </div>
+      <Card styles={{ body: { paddingTop: 4 } }}>
         <Tabs
           activeKey={sekme}
           onChange={sekmeDegistir}
           items={[
+            { key: "bildirimler", label: "Bakım Bildirimleri", children: <BakimBildirimleri /> },
             { key: "sozlesmeler", label: "Sözleşmeler", children: <SozlesmelerSekmesi /> },
             {
               key: "donemler",
@@ -1007,7 +1069,7 @@ function DonemCekmecesi({
       {yetkili("servis.planla") && (
         <Space style={{ marginBottom: 12 }}>
           <Button type="primary" disabled={!secilen.length} onClick={() => setPlanAcik(true)}>
-            Seçilenleri Planla + Ata ({secilen.length})
+            Seçilenleri {TAYIN.planlaVeTayinEt} ({secilen.length})
           </Button>
         </Space>
       )}

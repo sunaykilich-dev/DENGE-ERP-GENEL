@@ -1,0 +1,169 @@
+/* Fiori yaygınlaştırma ekleri (Paket D): mobil nesne kartı, bölüm kutusu,
+   üst araç çubuğu ve rapor seçici. Önek `fm-`; `fl-` sınıflarını (fiori.css)
+   değiştirmez, onlarla birlikte kullanılır. */
+
+.fm-sayfa {
+  --fl-mavi: #0a6ed1;
+  --fl-mavi-koyu: #0854a0;
+  --fl-kirmizi: #bb0000;
+  --fl-yesil: #107e3e;
+  --fl-turuncu: #e9730c;
+  --fl-kenar: #e5e5e5;
+  --fl-yazi: #32363a;
+  --fl-gri: #6a6d70;
+  font-family: "72", "72full", Arial, Helvetica, sans-serif;
+  color: var(--fl-yazi);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* --- Bölüm kutusu ----------------------------------------------------------- */
+.fm-bolum {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  min-width: 0;
+}
+.fm-bolum-ust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.fm-bolum-baslik { font-size: 16px; font-weight: 700; color: #32363a; }
+.fm-bolum-sag { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.fm-bolum-govde { padding: 12px; }
+
+/* --- Mobil nesne kartı ----------------------------------------------------- */
+.fm-liste { display: flex; flex-direction: column; gap: 8px; }
+.fm-grup-baslik {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 2px 2px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  color: #6a6d70;
+}
+.fm-grup-baslik .fm-grup-sayi { font-weight: 400; }
+.fm-grup-baslik.kirmizi { color: #bb0000; }
+.fm-kart {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-left: 3px solid #0a6ed1;
+  border-radius: 6px;
+  color: #32363a;
+  min-width: 0;
+}
+.fm-kart.tiklanir { cursor: pointer; }
+.fm-kart.tiklanir:hover, .fm-kart.tiklanir:focus-visible {
+  background: #f5f9fd;
+  outline: none;
+  border-color: #0a6ed1;
+}
+.fm-kart-govde { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.fm-kart-ust { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fm-kart-durum {
+  color: #0a6ed1;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+.fm-kart-durum.kapali { color: #6a6d70; }
+.fm-kart-durum.olumsuz { color: #bb0000; }
+.fm-kart-baslik {
+  color: #0a6ed1;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fm-kart-alt { font-size: 12px; color: #6a6d70; overflow-wrap: anywhere; }
+.fm-kart-sag { flex: 0 0 auto; color: #89919a; }
+.fm-kart .fl-no-rozet { padding: 2px 6px; font-size: 12px; }
+
+.fm-ziyaret {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.fm-ziyaret-ust {
+  padding: 8px 12px;
+  background: #f7f7f7;
+  border-bottom: 1px solid #e5e5e5;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #32363a;
+  overflow-wrap: anywhere;
+}
+.fm-ziyaret-ust .fm-kart-alt { font-weight: 400; text-transform: none; }
+.fm-ziyaret .fm-kart { border: 0; border-bottom: 1px solid #ededed; border-left: 3px solid #0a6ed1; border-radius: 0; }
+.fm-ziyaret .fm-kart:last-child { border-bottom: 0; }
+
+/* --- Nesne sayfası başlığı -------------------------------------------------- */
+.fm-nesne-basligi {
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fm-nesne-baslik {
+  font-size: 18px;
+  font-weight: 700;
+  color: #32363a;
+  overflow-wrap: anywhere;
+}
+
+/* --- Üst araç çubuğu (takvim/rapor ekranları) ------------------------------- */
+.fm-arac-cubugu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+}
+.fm-arac-cubugu .fm-arac-baslik { font-size: 14px; font-weight: 700; margin-right: 4px; }
+.fm-arac-cubugu .fm-bosluk { flex: 1 1 auto; }
+
+/* --- Rapor seçici kutucukları --------------------------------------------- */
+.fm-kutucuk-grubu { margin-bottom: 18px; }
+.fm-kutucuk-grubu .fl-kutucuk.secili {
+  border-color: #0a6ed1;
+  box-shadow: 0 0 0 2px #0a6ed1, 0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* --- Mobil durum süzgeci (BenimIslerim) ----------------------------------- */
+.fm-sayfa .fl-rapor { border-radius: 8px; }
+.fm-sayfa .fl-kategori-seridi { background: #fff; }
+
+@media (max-width: 575px) {
+  .fm-bolum-govde { padding: 10px 8px; }
+  .fm-bolum-ust { padding: 8px; }
+  .fm-arac-cubugu { padding: 8px; }
+  .fm-nesne-baslik { font-size: 16px; }
+}

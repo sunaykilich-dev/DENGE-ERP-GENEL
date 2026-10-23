@@ -44,7 +44,7 @@ NOT_UZUNLUGU = 500
 OLAY_ADLARI: dict[str, str] = {
     "OLUSTUR": "Açılış",
     "DURUM": "Durum",
-    "ATAMA": "Atama",
+    "ATAMA": "Tayin",
     "PLAN": "Plan",
     "BEKLEME": "Bekleme",
     "BEKLEME_BITTI": "Bekleme bitti",

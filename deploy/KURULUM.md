@@ -1210,7 +1210,7 @@ Notlar:
   önerir, karar İK'nındır. Onaylanmayan ad "eşleşmedi" kalır; zaman kaydı
   `user_id` boş + ham adla gelir. Sonradan onay verilirse
   `$GOC.servis_ad_esleme uygula` (`make goc-servis-ad-uygula`) bu satırları
-  bağlar, `goc-servis-uygula` yeniden koşulursa eksik atamalar eklenir.
+  bağlar, `goc-servis-uygula` yeniden koşulursa eksik tayinler eklenir.
 - Bakım teyit Excel'inde **ücret kolonları yoktur**. Ücretli liste yalnız
   `maliyet.gor` sahibine `--ucret` ile üretilir; ücretsiz kullanıcının yüklediği
   dosyadaki ücretler yok sayılır. Ekrandan yönetilen (TEYIT_BEKLIYOR dışı)

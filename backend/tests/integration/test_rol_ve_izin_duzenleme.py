@@ -170,7 +170,7 @@ async def test_rol_onizlemesi_servis_ve_personel_sayfalarini_tanir(client, kulla
 
     tekn = (await client.get("/api/roller/SERVIS_TEKNISYEN/yetkiler")).json()
     assert "Hesaplar" not in tekn["sayfalar"], "teknisyende hesap.gor yok (KD-09)"
-    assert "yalnız atandığı" in tekn["scope_aciklama"]
+    assert "yalnız tayin edildiği" in tekn["scope_aciklama"]
 
     # "Herhangi biri" izinli sayfa: Servis Tanımları servis.tanim VEYA operasyon.yonet.
     await client.post(

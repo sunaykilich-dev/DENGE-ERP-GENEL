@@ -444,7 +444,7 @@ async def baslat(
     """
     _sayac_acilabilir(so)
     if not await _aktif_atamali_mi(db, so.id, user.id):
-        raise ZamanGirdiHatasi(f"{so.so_no} işine atanmadığınız için sayaç başlatamazsınız")
+        raise ZamanGirdiHatasi(f"{so.so_no} işine tayin edilmediğiniz için sayaç başlatamazsınız")
     await _bekleme_nedeni_dogrula(db, faaliyet, bekleme_nedeni)
     await _acik_bolum_yok(db, user)
     an = clock.now()
@@ -514,7 +514,7 @@ async def gecis(
         hedef = hedef_is
         _sayac_acilabilir(hedef)
         if not await _aktif_atamali_mi(db, hedef.id, user.id):
-            raise ZamanHatasi(f"{hedef.so_no} işine atanmadığınız için sayaç oraya taşınamaz")
+            raise ZamanHatasi(f"{hedef.so_no} işine tayin edilmediğiniz için sayaç oraya taşınamaz")
     else:
         hedef = kaynak_so
         if yeni_faaliyet == bolum.faaliyet and bekleme_nedeni == bolum.bekleme_nedeni:
@@ -764,7 +764,7 @@ async def manuel_kaydet(
     else:
         atamali = await _aktif_atamali_mi(db, so.id, kisi_id)
     if not atamali:
-        raise ZamanGirdiHatasi(f"Kişi {so.so_no} işine atanmış değil")
+        raise ZamanGirdiHatasi(f"Kişi {so.so_no} işine tayin edilmiş değil")
     await _bekleme_nedeni_dogrula(db, girdi.faaliyet, girdi.bekleme_nedeni)
     await _cakisma_yok(db, kisi_id, bas, bit)
     kayit = ServiceTimeEntry(

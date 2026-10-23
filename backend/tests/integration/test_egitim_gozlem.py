@@ -121,7 +121,7 @@ async def test_servis_isinden_gozlem_birim_isten_atama_uyarisi(
         "/api/egitim/gozlemler", json=_govde(ortam, 2, 2, 2, 2, service_order_id=so_atamasiz.id)
     )
     assert r.status_code == 201
-    assert any("ataması yok" in u for u in r.json()["uyarilar"])
+    assert any("tayini yok" in u for u in r.json()["uyarilar"])
 
 
 async def test_kritik_faaliyet_acilir_ve_sonraki_gozlemle_kapanir(client, db, ortam) -> None:

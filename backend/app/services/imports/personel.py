@@ -170,7 +170,7 @@ class PersonelProfili(Profil):
                 else:
                     r.veri["saha_rolu"] = saha
             else:
-                r.uyarilar.append("Saha rolü boş — kişi atama listelerinde görünmez")
+                r.uyarilar.append("Saha rolü boş — kişi tayin listelerinde görünmez")
 
             birim_ham = clean_cell(ham.get("birimler"))
             if birim_ham:

@@ -1,5 +1,5 @@
 /**
- * Personel kartı, birim üyeliği ve atanabilir personel — API tipleri ve çağrıları
+ * Personel kartı, birim üyeliği ve tayin edilebilir personel (uç: atanabilir) — API tipleri ve çağrıları
  * (TS-002 / TS-008 / TS-009; sunucu: `backend/app/api/personel.py`).
  *
  * Personel = kullanıcı: rol, izin, parola ve giriş aç/kapat burada YOK

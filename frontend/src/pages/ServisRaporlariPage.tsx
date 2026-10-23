@@ -1,4 +1,14 @@
-import { FileExcelOutlined } from "@ant-design/icons";
+import {
+  BarChartOutlined,
+  DashboardOutlined,
+  FieldTimeOutlined,
+  FileExcelOutlined,
+  LineChartOutlined,
+  PieChartOutlined,
+  RedoOutlined,
+  TeamOutlined,
+  ToolOutlined,
+} from "@ant-design/icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -12,14 +22,13 @@ import {
   Space,
   Spin,
   Table,
-  Tabs,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import {
@@ -36,8 +45,9 @@ import {
   type TrendSatiri,
 } from "../api/servisRaporlari";
 import { useAuth } from "../auth/AuthContext";
-import KpiKutusu from "../components/KpiKutusu";
 import RaporFiltresi from "../components/RaporFiltresi";
+import { FioriBolum } from "../fiori/ListeOgeleri";
+import { KpiKutucugu } from "../fiori/ListeRaporu";
 import Statistic from "../components/Statistic";
 
 /**
@@ -87,50 +97,76 @@ interface SekmeProps {
   listeYolu: (kod: string) => string;
 }
 
+/** Kutucuk alt başlığı: önceki dönem ve fark (sunucu değerleri; hesap yok). */
+function farkYazisi(k: { fark: number | null; fark_yuzde: number | null; onceki: number | null }): string {
+  if (k.onceki === null || k.fark === null) return "Önceki: —";
+  const isaret = k.fark > 0 ? "+" : "";
+  return `Önceki ${sayi(k.onceki)} · ${isaret}${sayi(k.fark)}${
+    k.fark_yuzde !== null ? ` (${isaret}${sayi(k.fark_yuzde)} %)` : ""
+  }`;
+}
+
 function KpiIzgarasi({ kpiler, listeYolu }: { kpiler: (RaporKpi | BasitKpi)[]; listeYolu: (kod: string) => string }) {
   return (
-    <Row gutter={[12, 12]}>
+    <div className="fl-kutucuklar">
       {kpiler.map((k) => (
-        <Col key={k.kod} xs={12} sm={8} md={6} xl={4}>
-          <KpiKutusu
-            kod={k.kod}
-            baslik={k.baslik}
-            tanim={k.tanim}
-            deger={k.deger}
-            yol={listeYolu(k.kod)}
-            vurgu={"vurgu" in k ? k.vurgu : "normal"}
-          />
-          {"fark" in k && <FarkMetni k={k} />}
-        </Col>
+        <KpiKutucugu
+          key={k.kod}
+          kod={k.kod}
+          baslik={k.baslik}
+          altBaslik={"fark" in k ? farkYazisi(k) : undefined}
+          tanim={k.tanim}
+          deger={k.deger}
+          ikon={<BarChartOutlined />}
+          yol={listeYolu(k.kod)}
+          vurgu={"vurgu" in k ? k.vurgu : "normal"}
+        />
       ))}
-    </Row>
+    </div>
   );
 }
 
 function OlcuKarti({ o }: { o: RaporOlcumu }) {
   return (
-    <Card size="small" style={{ height: "100%" }}>
-      <Statistic
-        title={
-          <Tooltip title={o.tanim}>
-            <span>{o.baslik}</span>
-          </Tooltip>
-        }
-        value={o.deger === null ? "—" : o.deger}
-        suffix={o.deger === null ? undefined : OLCU_EKI[o.olcu_birimi]}
-        precision={o.deger === null ? undefined : 1}
-      />
-      <FarkMetni k={o} />
-      {o.deger === null && o.eksik ? (
-        <div>
+    <div className="fl-kutucuk statik" style={{ width: "100%" }}>
+      <div>
+        <Tooltip title={o.tanim}>
+          <div className="fl-kutucuk-baslik">{o.baslik}</div>
+        </Tooltip>
+        <div className="fl-kutucuk-alt">
+          <FarkMetni k={o} />
+        </div>
+        {o.deger === null && o.eksik ? (
           <Typography.Text type="warning" style={{ fontSize: 12 }}>
             {o.eksik} çözülmüş işte süre kaydı eksik
           </Typography.Text>
-        </div>
-      ) : null}
-    </Card>
+        ) : null}
+      </div>
+      <div className="fl-kutucuk-dip">
+        <span className="fl-kutucuk-ikon">
+          <FieldTimeOutlined />
+        </span>
+        <span className="fl-kutucuk-sayi">
+          {o.deger === null ? "—" : o.deger.toLocaleString("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 })}
+          {o.deger !== null && OLCU_EKI[o.olcu_birimi] && (
+            <span className="fl-kutucuk-birim">{OLCU_EKI[o.olcu_birimi]}</span>
+          )}
+        </span>
+      </div>
+    </div>
   );
 }
+
+/** Rapor seçici kutucukları (launchpad kutucuğu görünümünde). */
+const RAPOR_KUTUCUKLARI: { key: string; baslik: string; alt: string; ikon: ReactNode; kisisel?: boolean }[] = [
+  { key: "ozet", baslik: "Özet", alt: "KPI ve ölçümler", ikon: <DashboardOutlined /> },
+  { key: "kirilim", baslik: "Kırılımlar", alt: "Birim, tür, müşteri…", ikon: <PieChartOutlined /> },
+  { key: "kisi", baslik: "Kişi-Saat", alt: "Personel süreleri", ikon: <TeamOutlined />, kisisel: true },
+  { key: "sla", baslik: "SLA ve Bekleme", alt: "Hedef ve beklemeler", ikon: <FieldTimeOutlined /> },
+  { key: "tekrar", baslik: "Tekrar Arıza", alt: "Aynı cihazda tekrar", ikon: <ToolOutlined /> },
+  { key: "yeniden", baslik: "Yeniden Açılan", alt: "Kapanıp açılan işler", ikon: <RedoOutlined /> },
+  { key: "trend", baslik: "12 Ay Trend", alt: "Aylık seyir", ikon: <LineChartOutlined /> },
+];
 
 function OzetSekmesi({ filtre, listeYolu }: SekmeProps) {
   const ozet = useQuery({
@@ -289,7 +325,7 @@ function KisiSaatSekmesi({ filtre }: SekmeProps) {
       <Alert
         type="info"
         showIcon
-        message="Kişi-saat bordro değildir; mola dahil değildir. Süre kaydı olmayan atanmış teknisyen &quot;eksik&quot; satırıyla gösterilir."
+        message="Kişi-saat bordro değildir; mola dahil değildir. Süre kaydı olmayan tayin edilmiş teknisyen &quot;eksik&quot; satırıyla gösterilir."
       />
       {veri.error && <Alert type="error" showIcon message={(veri.error as Error).message} />}
       <Table
@@ -635,38 +671,60 @@ export default function ServisRaporlariPage() {
   const ortak: SekmeProps = { filtre, listeYolu };
   const kisisel = yetkili("servis_rapor.personel");
 
+  const kutucuklar = RAPOR_KUTUCUKLARI.filter((r) => !r.kisisel || kisisel);
+  const etkin = kutucuklar.some((r) => r.key === sekme) ? sekme : "ozet";
+  const icerik: Record<string, ReactNode> = {
+    ozet: <OzetSekmesi {...ortak} />,
+    kirilim: <KirilimSekmesi {...ortak} />,
+    kisi: kisisel ? <KisiSaatSekmesi {...ortak} /> : null,
+    sla: <SlaSekmesi {...ortak} />,
+    tekrar: <TekrarSekmesi {...ortak} />,
+    yeniden: <YenidenSekmesi {...ortak} />,
+    trend: <TrendSekmesi {...ortak} />,
+  };
+  const seciliRapor = kutucuklar.find((r) => r.key === etkin);
+
   return (
-    <Card>
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-        <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
-          <Typography.Title level={4} style={{ margin: 0 }}>
-            Servis Raporları
-          </Typography.Title>
-          {yetkili("servis.gor", "servis_rapor.disaaktar") && (
-            <Button
-              icon={<FileExcelOutlined />}
-              onClick={() => window.open(servisRaporlariApi.kitapAdresi(filtre), "_blank")}
+    <div className="fm-sayfa">
+      <div className="fm-kutucuk-grubu">
+        <div className="fl-kutucuk-grubu-baslik">Raporlar</div>
+        <div className="fl-kutucuklar" role="tablist" aria-label="Rapor seçici">
+          {kutucuklar.map((r) => (
+            <div
+              key={r.key}
+              role="tab"
+              tabIndex={0}
+              aria-selected={r.key === etkin}
+              className={`fl-kutucuk${r.key === etkin ? " secili" : ""}`}
+              onClick={() => yaz(filtre, { sekme: r.key })}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && yaz(filtre, { sekme: r.key })}
             >
-              Excel (servis kitabı)
-            </Button>
-          )}
-        </Space>
-        <RaporFiltresi deger={filtre} degisti={(f) => yaz(f, { sekme })} tekrarGun={sekme === "tekrar"} />
-        <Tabs
-          activeKey={sekme}
-          onChange={(k) => yaz(filtre, { sekme: k })}
-          destroyOnHidden
-          items={[
-            { key: "ozet", label: "Özet", children: <OzetSekmesi {...ortak} /> },
-            { key: "kirilim", label: "Kırılımlar", children: <KirilimSekmesi {...ortak} /> },
-            ...(kisisel ? [{ key: "kisi", label: "Kişi-Saat", children: <KisiSaatSekmesi {...ortak} /> }] : []),
-            { key: "sla", label: "SLA ve Bekleme", children: <SlaSekmesi {...ortak} /> },
-            { key: "tekrar", label: "Tekrar Arıza", children: <TekrarSekmesi {...ortak} /> },
-            { key: "yeniden", label: "Yeniden Açılan", children: <YenidenSekmesi {...ortak} /> },
-            { key: "trend", label: "12 Ay Trend", children: <TrendSekmesi {...ortak} /> },
-          ]}
-        />
-      </Space>
+              <div>
+                <div className="fl-kutucuk-baslik">{r.baslik}</div>
+                <div className="fl-kutucuk-alt">{r.alt}</div>
+              </div>
+              <div className="fl-kutucuk-dip">
+                <span className="fl-kutucuk-ikon">{r.ikon}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="fm-arac-cubugu">
+        <RaporFiltresi deger={filtre} degisti={(f) => yaz(f, { sekme: etkin })} tekrarGun={etkin === "tekrar"} />
+        <span className="fm-bosluk" />
+        {yetkili("servis.gor", "servis_rapor.disaaktar") && (
+          <Button
+            icon={<FileExcelOutlined />}
+            onClick={() => window.open(servisRaporlariApi.kitapAdresi(filtre), "_blank")}
+          >
+            Excel (servis kitabı)
+          </Button>
+        )}
+      </div>
+      <FioriBolum baslik={seciliRapor?.baslik}>
+        <div key={etkin}>{icerik[etkin]}</div>
+      </FioriBolum>
       {liste && (
         <KpiListesi
           filtre={filtre}
@@ -678,6 +736,6 @@ export default function ServisRaporlariPage() {
           }}
         />
       )}
-    </Card>
+    </div>
   );
 }

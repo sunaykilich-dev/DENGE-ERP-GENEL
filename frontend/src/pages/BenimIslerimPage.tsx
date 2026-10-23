@@ -12,28 +12,31 @@
  *
  * Kayıt yoksa süre "Süre kaydı eksik" yazılır — "0 dk" DEĞİL.
  */
-import { EditOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
+import { CalendarOutlined, EditOutlined, RightOutlined, ToolOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Alert,
-  Button,
-  Card,
-  DatePicker,
-  Empty,
-  List,
-  Segmented,
-  Space,
-  Spin,
-  Tabs,
-  Tag,
-  Timeline,
-  Typography,
-} from "antd";
+import { Alert, Button, DatePicker, Empty, List, Space, Spin, Tabs, Tag, Timeline, Typography } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import DurumCubugu from "../fiori/DurumCubugu";
+import {
+  ONCELIK_ETIKETLERI,
+  SERVIS_DURUM_GRUPLARI,
+  TAYIN,
+  servisDurumEtiketi,
+  type KategoriRengi,
+} from "../fiori/etiketler";
+import KategoriSeridi from "../fiori/KategoriSeridi";
+import {
+  AltNot,
+  FioriBolum,
+  FioriKart,
+  TUMU_KATEGORISI,
+  gunu,
+  kategorilerOlustur,
+} from "../fiori/ListeOgeleri";
 import { ManuelKayitPenceresi } from "../components/SayacDugmeleri";
 import SlaEtiketi from "../components/SlaEtiketi";
 import Statistic from "../components/Statistic";
@@ -46,134 +49,146 @@ import {
   type Ziyaret,
 } from "../api/servisZaman";
 
-const GRUP_RENGI: Record<string, string> = {
-  GECIKEN: "red",
-  BUGUN: "blue",
-  YARIN: "geekblue",
-  SONRA: "default",
-  PLANSIZ: "default",
+/** Zaman grubu → kategori şeridi rengi (gecikmiş/plansız kırmızı, planlı yeşil). */
+const GRUP_KATEGORI_RENGI: Record<string, KategoriRengi> = {
+  GECIKEN: "kirmizi",
+  BUGUN: "yesil",
+  YARIN: "yesil",
+  SONRA: "yesil",
+  PLANSIZ: "kirmizi",
 };
 
-const ONCELIK_RENGI: Record<string, string> = { KRITIK: "red", YUKSEK: "orange" };
-
 function IsSatiri({ is }: { is: MobilIs }) {
+  const git = useNavigate();
+  const kapali = ["TAMAMLANDI", "KAPATILDI", "IPTAL"].includes(is.durum);
   return (
-    <Link to={`/benim-islerim/${is.id}`} style={{ display: "block", color: "inherit" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Space size={4} wrap>
-            <Typography.Text strong>{is.so_no}</Typography.Text>
-            <Tag style={{ marginInlineEnd: 0 }}>{is.durum.replaceAll("_", " ")}</Tag>
-            {ONCELIK_RENGI[is.oncelik] && <Tag color={ONCELIK_RENGI[is.oncelik]}>{is.oncelik}</Tag>}
-            {!is.bana_atanmis && <Tag color="purple">ekip</Tag>}
-            <SlaEtiketi sla={is.sla} />
-          </Space>
-          <Typography.Paragraph
-            style={{ margin: 0, fontSize: 13, overflowWrap: "anywhere" }}
-            ellipsis={{ rows: 2 }}
-          >
-            {is.konu}
-          </Typography.Paragraph>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {is.plan_baslangic ? dayjs(is.plan_baslangic).format("HH:mm") + " · " : ""}
-            {is.sure_durumu === "EKSIK"
-              ? "Süre kaydı eksik"
-              : sureMetni(is.kisi_saat_dk) ?? SURE_DURUMU_ADLARI[is.sure_durumu ?? ""] ?? ""}
-          </Typography.Text>
-        </div>
-        <RightOutlined style={{ color: "#999" }} />
-      </div>
-    </Link>
+    <FioriKart
+      durum={servisDurumEtiketi(is.durum)}
+      durumTon={is.durum === "IPTAL" ? "olumsuz" : kapali ? "kapali" : undefined}
+      no={is.so_no}
+      rozetler={
+        <>
+          {ONCELIK_ETIKETLERI[is.oncelik] && (
+            <AltNot tur={is.oncelik === "KRITIK" ? "kritik" : "uyari"}>{ONCELIK_ETIKETLERI[is.oncelik]}</AltNot>
+          )}
+          {!is.bana_atanmis && <Tag color="purple">ekip</Tag>}
+          <SlaEtiketi sla={is.sla} />
+        </>
+      }
+      baslik={is.konu}
+      altSatirlar={[
+        (is.plan_baslangic ? dayjs(is.plan_baslangic).format("HH:mm") + " · " : "") +
+          (is.sure_durumu === "EKSIK"
+            ? "Süre kaydı eksik"
+            : (sureMetni(is.kisi_saat_dk) ?? SURE_DURUMU_ADLARI[is.sure_durumu ?? ""] ?? "")),
+      ]}
+      sag={<RightOutlined />}
+      onClick={() => git(`/benim-islerim/${is.id}`)}
+    />
   );
 }
 
-function ZiyaretKarti({ z }: { z: Ziyaret }) {
+function ZiyaretKarti({ z, isler }: { z: Ziyaret; isler: MobilIs[] }) {
   const baslik = [z.musteri, z.lokasyon].filter(Boolean).join(" · ") || "Lokasyon belirtilmemiş";
   return (
-    <Card
-      size="small"
-      style={{ marginBottom: 8 }}
-      title={
-        <div style={{ whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.3 }}>
-          {baslik}
-          <div style={{ fontWeight: 400, fontSize: 12, color: "#888" }}>
-            {[z.ilce, z.il].filter(Boolean).join(" / ")}
-            {z.plan_tarihi ? ` · ${dayjs(z.plan_tarihi).format("DD.MM.YYYY")}` : ""}
-            {z.isler.length > 1 ? ` · ${z.isler.length} iş` : ""}
-          </div>
+    <div className="fm-ziyaret">
+      <div className="fm-ziyaret-ust">
+        {baslik}
+        <div className="fm-kart-alt">
+          {[z.ilce, z.il].filter(Boolean).join(" / ")}
+          {z.plan_tarihi ? ` · ${gunu(z.plan_tarihi)}` : ""}
+          {isler.length > 1 ? ` · ${isler.length} iş` : ""}
         </div>
-      }
-    >
-      <List
-        size="small"
-        dataSource={z.isler}
-        rowKey="id"
-        renderItem={(is) => (
-          <List.Item style={{ paddingInline: 0 }}>
-            <div style={{ width: "100%" }}>
-              <IsSatiri is={is} />
-            </div>
-          </List.Item>
-        )}
-      />
-    </Card>
+      </div>
+      {isler.map((is) => (
+        <IsSatiri key={is.id} is={is} />
+      ))}
+    </div>
   );
 }
 
 function Islerim() {
   const { yetkili } = useAuth();
   const [gorunum, setGorunum] = useState<"benim" | "tumu">("benim");
+  const [kategori, setKategori] = useState<string>(TUMU_KATEGORISI.kod);
+  const [durumGrubu, setDurumGrubu] = useState<string | undefined>();
   const liste = useQuery({
     queryKey: ["benim-islerim", gorunum],
     queryFn: () => servisZaman.benimIslerim(gorunum),
     refetchInterval: 60_000,
   });
   const gruplar = liste.data?.gruplar ?? [];
-  const bos = gruplar.every((g) => g.ziyaretler.length === 0);
+  const planlayabilir = yetkili("servis.planla");
+  const durumlar = SERVIS_DURUM_GRUPLARI.find((g) => g.kod === durumGrubu)?.durumlar;
+  const uyar = (is: MobilIs) => !durumlar || durumlar.includes(is.durum);
+
+  // Süzgeç yalnız sunucunun döndürdüğü listeyi daraltır (sayım = görünen kart).
+  const gorunen = gruplar
+    .filter((g) => kategori === TUMU_KATEGORISI.kod || g.kod === kategori)
+    .map((g) => ({
+      ...g,
+      ziyaretler: g.ziyaretler
+        .map((z) => ({ z, isler: z.isler.filter(uyar) }))
+        .filter((x) => x.isler.length > 0),
+    }))
+    .filter((g) => g.ziyaretler.length > 0);
+  const sayi = gorunen.reduce((n, g) => n + g.ziyaretler.reduce((m, x) => m + x.isler.length, 0), 0);
+  const kategoriler = kategorilerOlustur(
+    gruplar.map((g) => ({ kod: g.kod, ad: g.baslik })),
+    (k) => GRUP_KATEGORI_RENGI[k] ?? "yesil",
+    (k) => (k === "GECIKEN" || k === "PLANSIZ" ? <ToolOutlined /> : <CalendarOutlined />),
+  ).map((k) =>
+    k.kod === TUMU_KATEGORISI.kod
+      ? k
+      : { ...k, sayi: gruplar.find((g) => g.kod === k.kod)?.ziyaretler.reduce((n, z) => n + z.isler.length, 0) },
+  );
 
   return (
-    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-      <Space wrap>
-        {yetkili("servis.planla") && (
-          <Segmented
-            value={gorunum}
-            onChange={(v) => setGorunum(v as "benim" | "tumu")}
-            options={[
-              { value: "benim", label: "Bana atananlar" },
-              { value: "tumu", label: "Tümü (birimim)" },
-            ]}
-          />
+    <div className="fl-rapor">
+      <KategoriSeridi kategoriler={kategoriler} secili={kategori} onSec={setKategori} />
+      <div className="fl-ust">
+        <span className="fl-kayit-sayisi">Kayıt Sayısı: {liste.isLoading ? "…" : sayi}</span>
+      </div>
+      <DurumCubugu
+        gruplar={SERVIS_DURUM_GRUPLARI}
+        secili={durumGrubu}
+        onSec={setDurumGrubu}
+        banaAit={gorunum === "benim"}
+        onBanaAit={planlayabilir ? (v) => setGorunum(v ? "benim" : "tumu") : undefined}
+        banaAitIpucu={
+          gorunum === "benim" ? `${TAYIN.banaTayinEdilenler} · kapatınca birimimin tümü` : TAYIN.banaTayinEdilenler
+        }
+        onYenile={() => void liste.refetch()}
+        yenileniyor={liste.isFetching}
+      />
+      <div style={{ padding: "0 8px 10px" }}>
+        {liste.isError && <Alert type="error" showIcon title={(liste.error as Error).message} />}
+        {liste.data?.kesildi && (
+          <Alert type="warning" showIcon title="Liste uzun; yalnız ilk 500 iş gösteriliyor." />
         )}
-        <Button icon={<ReloadOutlined />} onClick={() => void liste.refetch()}>
-          Yenile
-        </Button>
-      </Space>
-      {liste.isError && <Alert type="error" showIcon title={(liste.error as Error).message} />}
-      {liste.data?.kesildi && (
-        <Alert type="warning" showIcon title="Liste uzun; yalnız ilk 500 iş gösteriliyor." />
-      )}
-      {liste.isLoading ? (
-        <Spin />
-      ) : bos ? (
-        <Empty description="Açık işiniz yok" />
-      ) : (
-        gruplar
-          .filter((g) => g.ziyaretler.length > 0)
-          .map((g) => (
-            <div key={g.kod}>
-              <Typography.Title level={5} style={{ margin: "4px 0 8px" }}>
-                <Tag color={GRUP_RENGI[g.kod]}>{g.baslik}</Tag>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {g.ziyaretler.reduce((n, z) => n + z.isler.length, 0)} iş
-                </Typography.Text>
-              </Typography.Title>
-              {g.ziyaretler.map((z) => (
-                <ZiyaretKarti key={z.anahtar} z={z} />
-              ))}
-            </div>
-          ))
-      )}
-    </Space>
+        {liste.isLoading ? (
+          <Spin />
+        ) : sayi === 0 ? (
+          <Empty description={gruplar.length && (durumGrubu || kategori !== TUMU_KATEGORISI.kod) ? "Veri yok" : "Açık işiniz yok"} />
+        ) : (
+          <div className="fm-liste">
+            {gorunen.map((g) => (
+              <div key={g.kod} className="fm-liste">
+                <div className={`fm-grup-baslik${GRUP_KATEGORI_RENGI[g.kod] === "kirmizi" ? " kirmizi" : ""}`}>
+                  {g.baslik}
+                  <span className="fm-grup-sayi">
+                    · {g.ziyaretler.reduce((n, x) => n + x.isler.length, 0)} iş
+                  </span>
+                </div>
+                {g.ziyaretler.map((x) => (
+                  <ZiyaretKarti key={x.z.anahtar} z={x.z} isler={x.isler} />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -199,7 +214,7 @@ function Bugunum() {
       {ozet.isError && <Alert type="error" showIcon title={(ozet.error as Error).message} />}
       {v && (
         <>
-          <Card size="small">
+          <FioriBolum baslik="Günün özeti">
             <Space wrap size={[24, 8]}>
               {v.kisi_saat_dk === null ? (
                 <Statistic title="Kişi-saat" value="Kayıt yok" />
@@ -217,9 +232,9 @@ function Bugunum() {
                 <Statistic title="Mola (hariç)" value={sureMetni(v.mola_dk) ?? ""} />
               )}
             </Space>
-          </Card>
+          </FioriBolum>
 
-          <Card size="small" title="Süre kaydı eksik işler">
+          <FioriBolum baslik="Süre kaydı eksik işler">
             {v.sure_eksik_isler.length === 0 ? (
               <Typography.Text type="secondary">Eksik kayıt yok.</Typography.Text>
             ) : (
@@ -242,17 +257,19 @@ function Bugunum() {
                     ]}
                   >
                     <div style={{ minWidth: 0 }}>
-                      <Link to={`/benim-islerim/${i.id}`}>{i.so_no}</Link>{" "}
+                      <Link to={`/benim-islerim/${i.id}`} className="fl-no-rozet">
+                        {i.so_no}
+                      </Link>{" "}
                       <Tag color="red">Süre kaydı eksik</Tag>
-                      <div style={{ fontSize: 12, overflowWrap: "anywhere" }}>{i.konu}</div>
+                      <div className="fm-kart-baslik">{i.konu}</div>
                     </div>
                   </List.Item>
                 )}
               />
             )}
-          </Card>
+          </FioriBolum>
 
-          <Card size="small" title="Bölümler">
+          <FioriBolum baslik="Bölümler">
             {v.bolumler.length === 0 ? (
               <Typography.Text type="secondary">Bu gün kayıt yok.</Typography.Text>
             ) : (
@@ -276,7 +293,7 @@ function Bugunum() {
                 }))}
               />
             )}
-          </Card>
+          </FioriBolum>
         </>
       )}
       <ManuelKayitPenceresi
@@ -293,10 +310,7 @@ export default function BenimIslerimPage() {
   const [params, setParams] = useSearchParams();
   const sekme = params.get("sekme") === "bugunum" ? "bugunum" : "islerim";
   return (
-    <div style={{ maxWidth: 720 }}>
-      <Typography.Title level={4} style={{ marginTop: 0 }}>
-        Benim İşlerim
-      </Typography.Title>
+    <div className="fm-sayfa" style={{ maxWidth: 760 }}>
       <Tabs
         activeKey={sekme}
         onChange={(k) => setParams(k === "bugunum" ? { sekme: "bugunum" } : {})}

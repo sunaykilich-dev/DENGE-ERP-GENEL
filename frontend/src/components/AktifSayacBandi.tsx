@@ -6,7 +6,7 @@
  * (hafif uç; süre özeti hesaplanmaz). Geçen süre SUNUCU saatine göre sayılır
  * (`sunucuSimdi`): telefon saati kaymış olsa da gösterge doğru kalır.
  *
- * Bitir düğmesi atamaya bakmaz: sahibi kendi sayacını her zaman kapatabilir.
+ * Bitir düğmesi tayine bakmaz: sahibi kendi sayacını her zaman kapatabilir.
  * Uzun (≥10 sa ya da dünden kalmış) sayaçta kırmızı uyarı ve "Unuttum".
  */
 import { FieldTimeOutlined } from "@ant-design/icons";

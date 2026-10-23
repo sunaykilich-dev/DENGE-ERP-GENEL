@@ -78,7 +78,8 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     ),
     "servis.planla": (
         "Teknik Servis",
-        "Plan ve ekip atar, toplu plan/atama, erteleme, müsaitlik; çakışmayı gerekçeyle geçer",
+        "Plan yapar, ekip tayin eder, toplu plan/tayin, erteleme, müsaitlik; "
+        "çakışmayı gerekçeyle geçer",
     ),
     "servis.tamamla": ("Teknik Servis", "Sonuç girer ve işi TAMAMLANDI yapar"),
     "servis.kapat": (
@@ -92,7 +93,7 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     # girmesin (KVKK en az erişim).
     "servis.irtibat_gor": (
         "Teknik Servis",
-        "Saha yetkilisi, telefon ve açık adresi görür (atandığı işte izinsiz de görür)",
+        "Saha yetkilisi, telefon ve açık adresi görür (tayin edildiği işte izinsiz de görür)",
     ),
     # --- Ana veri (hesap genişletmesi) ------------------------------------------
     "lokasyon.yaz": (

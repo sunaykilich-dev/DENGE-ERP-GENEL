@@ -353,7 +353,7 @@ def kpi_tanimlari(teslim_esik_gun: int = VARSAYILAN_TESLIM_ESIGI) -> list[dict[s
             "baslik": "Süre kaydı eksik (açık)",
             "tanim": (
                 "Açık atölye kayıtlarından çalışılmış ama zaman kaydı olmayan ya da "
-                "atanan teknisyenlerden birinin kaydı eksik olanlar"
+                "tayin edilen teknisyenlerden birinin kaydı eksik olanlar"
             ),
             "sorgu": {"durum_grubu": "ACIK", "sure_eksik": True},
         }

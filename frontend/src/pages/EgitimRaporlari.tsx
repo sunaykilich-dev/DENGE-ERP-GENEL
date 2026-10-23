@@ -8,7 +8,7 @@
  * - Yeniden değerlendir (E08-16 P3): başarılı 90. gün gözleminden sonra bağlı
  *   yetkinliği değerlendirilmemiş kişiler; seviye kendiliğinden değişmez.
  * - Eşlemeler: kurs ↔ yetkinlik bağı ve servis işi türü → asgari yetkinlik
- *   (E08-22). Eşleme atamayı ENGELLEMEZ, yalnız uyarı üretir. Yazma `egitim.yaz`.
+ *   (E08-22). Eşleme tayini ENGELLEMEZ, yalnız uyarı üretir. Yazma `egitim.yaz`.
  */
 import { DownloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -469,7 +469,7 @@ export function EslemeSekmesi() {
           <Typography.Text type="secondary">Birim ve iş türü seçin.</Typography.Text>
         )}
         <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }}>
-          Eşleme atamayı engellemez: eşik altındaki teknisyen yine atanır, atama yanıtında ve
+          Eşleme tayini engellemez: eşik altındaki teknisyen yine tayin edilir, tayin yanıtında ve
           olay geçmişinde uyarı görünür.
         </Typography.Paragraph>
       </Card>

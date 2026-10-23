@@ -6,7 +6,7 @@
  * - Liste SLA kalan süresine göre sunucuda sıralıdır. SLA durumu, kalan süre ve
  *   hedef YALNIZ sunucudan gelir; bu ekran öncelikten süre türetmez
  *   (`backend/tests/unit/test_on_yuz_sla_hesabi_yok.py`).
- * - Toplu işlemler için yeni uç YOK: toplu atama `PUT /isler/toplu-atama`,
+ * - Toplu işlemler için yeni uç YOK: toplu tayin `PUT /isler/toplu-atama`,
  *   toplu plan `POST /planlama/toplu-plan` (PlanPenceresi) çağrılır.
  * - "Bugün çalışılan dk" sütunu yalnız `servis_rapor.personel` ile görünür.
  * - Bildirimler kalıcıdır; "görüldü" kişiye özeldir, rozet sayısı anlık hesaptır.
@@ -14,7 +14,14 @@
  *   servis e-postasını aç/kapat, özet saati, deneme sınırı ve giden kutusu.
  *   SMTP sırları bu ekrana gelmez (yalnız "tanımlı mı").
  */
-import { CheckOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  CalendarOutlined,
+  CheckOutlined,
+  DashboardOutlined,
+  FieldTimeOutlined,
+  ReloadOutlined,
+  UserAddOutlined,
+} from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -22,14 +29,11 @@ import {
   Badge,
   Button,
   Card,
-  Col,
   Empty,
   Modal,
   Radio,
-  Row,
   Select,
   Space,
-  Statistic,
   Switch,
   Table,
   Tabs,
@@ -40,7 +44,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { BIRIM_ETIKETLERI, personelApi } from "../api/personel";
 import {
@@ -56,11 +60,24 @@ import { teknikServisApi, type AtamaSatiri } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
 import PlanPenceresi from "../components/PlanPenceresi";
 import SlaEtiketi, { SlaKartiPenceresi } from "../components/SlaEtiketi";
+import { ONCELIK_ETIKETLERI, TAYIN, servisDurumEtiketi } from "../fiori/etiketler";
+import {
+  Aciklama,
+  AltNot,
+  DurumBaglantisi,
+  Kucuk,
+  NoRozeti,
+  PersonelHucresi,
+  TUMU_KATEGORISI,
+  buyuk,
+  gunu,
+  kategorilerOlustur,
+  saati,
+} from "../fiori/ListeOgeleri";
+import ListeRaporu from "../fiori/ListeRaporu";
 
 const SAYFA = 50;
 const YENILEME_MS = 60_000;
-const ONCELIK_RENGI: Record<string, string> = { KRITIK: "red", YUKSEK: "orange", NORMAL: "blue", DUSUK: "default" };
-const VURGU_RENGI: Record<string, string | undefined> = { kritik: "#cf1322", uyari: "#d48806", normal: undefined };
 const ONEM_RENGI: Record<string, string> = { KRITIK: "red", UYARI: "gold", BILGI: "blue" };
 
 function TopluAtama({
@@ -103,7 +120,7 @@ function TopluAtama({
   const secenekler = (aday.data ?? []).map((k) => ({ value: k.id, label: `${k.ad} · ${k.saha_rolu}` }));
   return (
     <Modal
-      title={`Toplu atama (${isIdler.length} iş)`}
+      title={isIdler.length > 1 ? `${TAYIN.topluTayin} (${isIdler.length} iş)` : TAYIN.ekipTayini}
       open={acik}
       onCancel={kapat}
       onOk={() => kaydet.mutate()}
@@ -115,7 +132,7 @@ function TopluAtama({
     >
       <Space orientation="vertical" style={{ width: "100%" }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {BIRIM_ETIKETLERI[birim] ?? birim} biriminin atanabilir saha personeli.
+          {BIRIM_ETIKETLERI[birim] ?? birim} biriminin tayin edilebilir saha personeli.
         </Typography.Text>
         <Radio.Group
           value={mod}
@@ -151,7 +168,17 @@ function TopluAtama({
   );
 }
 
-function IsListesi({ suzgec, baslik }: { suzgec: OperasyonSuzgeci; baslik: string }) {
+function IsListesi({
+  suzgec,
+  baslik,
+  oncelikler,
+  degistir,
+}: {
+  suzgec: OperasyonSuzgeci;
+  baslik: string;
+  oncelikler: string[];
+  degistir: (anahtar: string, deger: string | undefined) => void;
+}) {
   const { yetkili } = useAuth();
   const qc = useQueryClient();
   const [sayfa, setSayfa] = useState(1);
@@ -178,119 +205,183 @@ function IsListesi({ suzgec, baslik }: { suzgec: OperasyonSuzgeci; baslik: strin
     qc.invalidateQueries({ queryKey: ["operasyon-isler"] });
     qc.invalidateQueries({ queryKey: ["operasyon-ozet"] });
   };
+  const git = useNavigate();
+  const isAc = (r: OperasyonSatiri) => git(`/servis-isleri/${r.id}`);
+
+  const atayabilir = yetkili("servis.ata");
+  const planlayabilir = yetkili("servis.planla");
+  const kayitlar = liste.data?.kayitlar ?? [];
 
   const sutunlar: ColumnsType<OperasyonSatiri> = [
     {
-      title: "İş",
+      title: "Durum",
+      dataIndex: "status",
+      width: 150,
+      align: "center",
+      render: (s: string, r) => (
+        <DurumBaglantisi
+          metin={servisDurumEtiketi(s, r.aktif_bekleme)}
+          ipucu={s}
+          onClick={() => isAc(r)}
+        />
+      ),
+    },
+    {
+      title: "İş No",
       dataIndex: "so_no",
+      width: 170,
+      align: "center",
       render: (no: string, r) => (
-        <Space size={4}>
-          <Link to={`/servis-isleri/${r.id}`} className="mono">
-            {no}
-          </Link>
-          {r.tekrar_ariza_aday && (
-            <Tooltip title="Son günlerde aynı cihazda kapanmış iş var (tekrar arıza adayı)">
-              <Tag color="magenta">Tekrar?</Tag>
-            </Tooltip>
-          )}
-        </Space>
+        <NoRozeti
+          no={no}
+          onClick={() => isAc(r)}
+          alt={
+            <>
+              {ONCELIK_ETIKETLERI[r.oncelik] && (
+                <AltNot tur={r.oncelik === "KRITIK" ? "kritik" : "uyari"}>{ONCELIK_ETIKETLERI[r.oncelik]}</AltNot>
+              )}
+              {r.tekrar_ariza_aday && (
+                <Tooltip title="Son günlerde aynı cihazda kapanmış iş var (tekrar arıza adayı)">
+                  <Tag color="magenta" style={{ marginTop: 2 }}>
+                    Tekrar?
+                  </Tag>
+                </Tooltip>
+              )}
+            </>
+          }
+        />
       ),
     },
     {
       title: "SLA",
       key: "sla",
+      width: 110,
+      align: "center",
       render: (_, r) => (
         <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setKartIs(r.id)} aria-label="SLA kartı">
           <SlaEtiketi sla={r.sla} />
         </Button>
       ),
     },
+    { title: "Açılış\nTarihi", dataIndex: "created_at", width: 100, align: "center", responsive: ["sm"], render: gunu },
+    { title: "Açılış\nSaati", dataIndex: "created_at", key: "saat", width: 90, align: "center", responsive: ["md"], render: saati },
+    { title: "Açıklama", dataIndex: "konu", width: 280, render: (v: string, r) => <Aciklama metin={v} onClick={() => isAc(r)} /> },
     {
-      title: "Öncelik",
-      dataIndex: "oncelik",
-      render: (o: string) => <Tag color={ONCELIK_RENGI[o]}>{o}</Tag>,
+      title: "Mahal",
+      key: "musteri",
+      width: 180,
+      align: "center",
+      responsive: ["md"],
+      render: (_, r) => <Kucuk kalin>{r.musteri?.title ?? r.customer_name_raw}</Kucuk>,
     },
-    { title: "Birim", dataIndex: "birim", render: (b: string) => BIRIM_ETIKETLERI[b] ?? b },
-    { title: "Konu", dataIndex: "konu", ellipsis: true },
-    { title: "Müşteri", key: "musteri", render: (_, r) => r.musteri?.title ?? r.customer_name_raw ?? "—" },
     {
-      title: "Ekip",
+      title: "Sistem",
+      dataIndex: "birim",
+      width: 120,
+      align: "center",
+      responsive: ["lg"],
+      render: (b: string) => <Kucuk>{BIRIM_ETIKETLERI[b] ?? b}</Kucuk>,
+    },
+    {
+      title: "Personel",
       key: "ekip",
-      render: (_, r) =>
-        r.sorumlu ? `${r.sorumlu.ad}${r.ekip_sayisi > 1 ? ` +${r.ekip_sayisi - 1}` : ""}` : <Tag>Atanmamış</Tag>,
-    },
-    {
-      title: "Durum",
-      dataIndex: "status",
-      render: (s: string, r) => (
-        <Space size={4} wrap>
-          <Tag>{s}</Tag>
-          {r.aktif_bekleme && <Tag color="blue">İş beklemesi: {r.aktif_bekleme}</Tag>}
-        </Space>
+      width: 80,
+      align: "center",
+      render: (_, r) => (
+        <PersonelHucresi
+          sorumlu={r.sorumlu?.ad}
+          kisiSayisi={r.ekip_sayisi}
+          etiket={`${r.so_no} ${TAYIN.tayinEdilenEkip}`}
+          onTayin={
+            atayabilir
+              ? () => {
+                  setSecili([r]);
+                  setAtamaAcik(true);
+                }
+              : undefined
+          }
+        />
       ),
-    },
-    {
-      title: "Açılış",
-      dataIndex: "created_at",
-      render: (t: string) => dayjs(t).format("DD.MM.YYYY HH:mm"),
     },
   ];
 
-  const atayabilir = yetkili("servis.ata");
-  const planlayabilir = yetkili("servis.planla");
+  const birimUyari = secili.length > 1 && !tekBirim ? "Seçili işler aynı birimde olmalı" : undefined;
+
   return (
-    <Card
-      size="small"
-      title={baslik}
-      extra={
-        <Space wrap>
-          {(atayabilir || planlayabilir) && (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+    <>
+      <ListeRaporu<OperasyonSatiri>
+        kategoriler={kategorilerOlustur(
+          Object.entries(BIRIM_ETIKETLERI).map(([kod, ad]) => ({ kod, ad })),
+          () => "kirmizi",
+        )}
+        seciliKategori={suzgec.birim ?? TUMU_KATEGORISI.kod}
+        onKategori={(k) => degistir("birim", k === TUMU_KATEGORISI.kod ? undefined : k)}
+        kayitSayisi={liste.data?.toplam}
+        ustSag={<Typography.Text strong>{baslik}</Typography.Text>}
+        durumCubugu={{
+          gruplar: oncelikler.map((o) => ({ kod: o, ad: ONCELIK_ETIKETLERI[o] ?? buyuk(o), durumlar: [o] })),
+          secili: suzgec.oncelik,
+          onSec: (o) => degistir("oncelik", o),
+          onYenile: () => void liste.refetch(),
+          yenileniyor: liste.isFetching,
+        }}
+        sutunlar={sutunlar}
+        veri={kayitlar}
+        satirAnahtari="id"
+        yukleniyor={liste.isFetching}
+        bosMetin={liste.isError ? (liste.error as Error).message : "Veri yok"}
+        scrollX={1380}
+        secimModu={atayabilir || planlayabilir ? "coklu" : "yok"}
+        secili={secili.map((s) => s.id)}
+        onSecim={(_, satirlar) => setSecili(satirlar)}
+        onSatirAc={isAc}
+        sayfalama={{ sayfa, boyut: SAYFA, toplam: liste.data?.toplam ?? 0, onChange: setSayfa }}
+        eylemBilgisi={
+          atayabilir || planlayabilir ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
               {secili.length ? `${secili.length} iş seçili` : "Toplu işlem için iş seçin"}
             </Typography.Text>
-          )}
-          {atayabilir && (
-            <Tooltip title={secili.length && !tekBirim ? "Seçili işler aynı birimde olmalı" : undefined}>
-              <Button size="small" disabled={!tekBirim} onClick={() => setAtamaAcik(true)}>
-                Toplu atama
-              </Button>
-            </Tooltip>
-          )}
-          {planlayabilir && (
-            <Tooltip title={secili.length && !tekBirim ? "Seçili işler aynı birimde olmalı" : undefined}>
-              <Button size="small" disabled={!tekBirim} onClick={() => setPlanAcik(true)}>
-                Toplu plan
-              </Button>
-            </Tooltip>
-          )}
-        </Space>
-      }
-    >
-      <Table<OperasyonSatiri>
-        rowKey="id"
-        size="small"
-        loading={liste.isLoading}
-        dataSource={liste.data?.kayitlar ?? []}
-        columns={sutunlar}
-        scroll={{ x: true }}
-        rowSelection={
-          atayabilir || planlayabilir
-            ? {
-                selectedRowKeys: secili.map((s) => s.id),
-                onChange: (_, satirlar) => setSecili(satirlar),
-                preserveSelectedRowKeys: true,
-              }
-            : undefined
+          ) : undefined
         }
-        locale={{ emptyText: <Empty description="Bu süzgeçte iş yok" /> }}
-        pagination={{
-          current: sayfa,
-          pageSize: SAYFA,
-          total: liste.data?.toplam ?? 0,
-          showSizeChanger: false,
-          showTotal: (t) => `${t} iş`,
-          onChange: setSayfa,
-        }}
+        eylemler={[
+          {
+            anahtar: "liste",
+            ad: "Liste",
+            menu: [
+              { key: "temizle", label: "Seçimi temizle", disabled: !secili.length },
+              { key: "yenile", label: "Listeyi yenile" },
+            ],
+            onMenu: (k) => (k === "temizle" ? setSecili([]) : yenile()),
+          },
+          {
+            anahtar: "tayin",
+            ad: secili.length > 1 ? TAYIN.topluTayin : TAYIN.tayinEt,
+            ikon: <UserAddOutlined />,
+            kisalt: true,
+            gizli: !atayabilir,
+            ipucu: birimUyari,
+            devreDisi: !tekBirim,
+            onClick: () => setAtamaAcik(true),
+          },
+          {
+            anahtar: "plan",
+            ad: "Toplu Plan",
+            ikon: <CalendarOutlined />,
+            kisalt: true,
+            gizli: !planlayabilir,
+            ipucu: birimUyari,
+            devreDisi: !tekBirim,
+            onClick: () => setPlanAcik(true),
+          },
+          {
+            anahtar: "sla",
+            ad: "SLA Kartı",
+            ikon: <FieldTimeOutlined />,
+            yalnizIkon: true,
+            devreDisi: secili.length !== 1,
+            onClick: () => secili.length === 1 && setKartIs(secili[0].id),
+          },
+        ]}
       />
       <SlaKartiPenceresi soId={kartIs} onKapat={() => setKartIs(null)} />
       {tekBirim && (
@@ -319,7 +410,7 @@ function IsListesi({ suzgec, baslik }: { suzgec: OperasyonSuzgeci; baslik: strin
           />
         </>
       )}
-    </Card>
+    </>
   );
 }
 
@@ -351,7 +442,7 @@ function PersonelSekmesi({ birim }: { birim?: string }) {
           <Typography.Text type="secondary">Açık sayaç yok</Typography.Text>
         ),
     },
-    { title: "Açık atanmış iş", dataIndex: "acik_atanmis", align: "right" },
+    { title: "Açık tayin edilmiş iş", dataIndex: "acik_atanmis", align: "right" },
     { title: "Bugün planlı", dataIndex: "bugun_planli", align: "right" },
     { title: "Yarın planlı", dataIndex: "yarin_planli", align: "right" },
     ...(veri.data?.kisi_saat_gorunur
@@ -650,104 +741,100 @@ export default function OperasyonMerkeziPage() {
   const seciliSayac = ozet.data?.sayaclar.find((s) => s.kod === suzgec.kpi);
 
   return (
-    <Card
-      title="Operasyon Merkezi"
-      extra={
+    <div className="fm-sayfa">
+      {sozluk.data && !sozluk.data.sla_yururlukte && (
+        <Alert
+          type="info"
+          showIcon
+          message="SLA henüz yürürlükte değil: işlere hedef damgalanmıyor, SLA sayaçları boş kalır."
+        />
+      )}
+      {ozet.error && <Alert type="error" showIcon message={(ozet.error as Error).message} />}
+      {gruplar.map(([grup, sayaclar]) => (
+        <div key={grup}>
+          <div className="fl-kutucuk-grubu-baslik">{grup}</div>
+          <div className="fl-kutucuklar">
+            {sayaclar.map((s) => {
+              const sec = () => {
+                degistir("kpi", s.kod);
+                if (sekme !== "isler") degistir("sekme", undefined);
+              };
+              return (
+                <Tooltip key={s.kod} title={s.tanim}>
+                  <div
+                    className="fl-kutucuk"
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={s.kod === suzgec.kpi}
+                    onClick={sec}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && sec()}
+                    style={s.kod === suzgec.kpi ? { borderColor: "#0a6ed1", boxShadow: "0 0 0 2px #0a6ed1" } : undefined}
+                  >
+                    <div className="fl-kutucuk-baslik">{s.baslik}</div>
+                    <div className="fl-kutucuk-dip">
+                      <span className="fl-kutucuk-ikon">
+                        <DashboardOutlined />
+                      </span>
+                      <span
+                        className={`fl-kutucuk-sayi${s.deger > 0 && s.vurgu === "kritik" ? " kritik" : s.deger > 0 && s.vurgu === "uyari" ? " uyari" : ""}`}
+                      >
+                        {s.deger.toLocaleString("tr-TR")}
+                      </span>
+                    </div>
+                  </div>
+                </Tooltip>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {ozet.data && (
         <Space wrap>
-          <Select
-            allowClear
-            placeholder="Tüm birimler"
-            style={{ minWidth: 180 }}
-            value={suzgec.birim}
-            onChange={(v) => degistir("birim", v)}
-            options={Object.entries(BIRIM_ETIKETLERI).map(([value, label]) => ({ value, label }))}
-          />
-          <Select
-            allowClear
-            placeholder="Tüm öncelikler"
-            style={{ minWidth: 150 }}
-            value={suzgec.oncelik}
-            onChange={(v) => degistir("oncelik", v)}
-            options={(sozluk.data?.oncelikler ?? []).map((o) => ({ value: o, label: o }))}
-          />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Güncelleme {dayjs(ozet.data.sunucu_zamani).format("DD.MM.YYYY HH:mm")} · "SLA riskte" eşiği: hedef
+            süresinin %{ozet.data.risk_yuzde}'i geçmiş açık işler
+          </Typography.Text>
           <Tooltip title="Yenile (ekran dakikada bir kendiliğinden yenilenir)">
             <Button
+              size="small"
               icon={<ReloadOutlined />}
               aria-label="Yenile"
               onClick={() => qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("operasyon") })}
             />
           </Tooltip>
         </Space>
-      }
-    >
-      {sozluk.data && !sozluk.data.sla_yururlukte && (
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginBottom: 12 }}
-          message="SLA henüz yürürlükte değil: işlere hedef damgalanmıyor, SLA sayaçları boş kalır."
-        />
       )}
-      {ozet.error && (
-        <Alert type="error" showIcon style={{ marginBottom: 12 }} message={(ozet.error as Error).message} />
-      )}
-      <Space orientation="vertical" style={{ width: "100%" }} size={12}>
-        {gruplar.map(([grup, sayaclar]) => (
-          <Row gutter={[8, 8]} key={grup}>
-            {sayaclar.map((s) => (
-              <Col key={s.kod} xs={12} sm={8} md={6} lg={4}>
-                <Tooltip title={s.tanim}>
-                  <Card
-                    size="small"
-                    hoverable
-                    onClick={() => {
-                      degistir("kpi", s.kod);
-                      if (sekme !== "isler") degistir("sekme", undefined);
-                    }}
-                    style={s.kod === suzgec.kpi ? { borderColor: "var(--ant-color-primary)" } : undefined}
-                  >
-                    <Statistic
-                      title={s.baslik}
-                      value={s.deger}
-                      valueStyle={s.deger > 0 ? { color: VURGU_RENGI[s.vurgu] } : undefined}
-                    />
-                  </Card>
-                </Tooltip>
-              </Col>
-            ))}
-          </Row>
-        ))}
-        {ozet.data && (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Güncelleme {dayjs(ozet.data.sunucu_zamani).format("DD.MM.YYYY HH:mm")} · "SLA riskte" eşiği: hedef
-            süresinin %{ozet.data.risk_yuzde}'i geçmiş açık işler
-          </Typography.Text>
-        )}
-        <Tabs
-          activeKey={sekme}
-          onChange={(k) => degistir("sekme", k === "isler" ? undefined : k)}
-          items={[
-            {
-              key: "isler",
-              label: "İşler",
-              children: <IsListesi suzgec={suzgec} baslik={seciliSayac?.baslik ?? "Açık işler"} />,
-            },
-            { key: "personel", label: "Personel iş yükü", children: <PersonelSekmesi birim={suzgec.birim} /> },
-            {
-              key: "bildirimler",
-              label: (
-                <Badge count={rozet.data?.toplam ?? 0} size="small" offset={[8, -2]}>
-                  SLA bildirimleri
-                </Badge>
-              ),
-              children: <BildirimSekmesi />,
-            },
-            ...(yetkili("operasyon.yonet")
-              ? [{ key: "eposta", label: "E-posta kutusu", children: <EpostaSekmesi /> }]
-              : []),
-          ]}
-        />
-      </Space>
-    </Card>
+      <Tabs
+        activeKey={sekme}
+        onChange={(k) => degistir("sekme", k === "isler" ? undefined : k)}
+        items={[
+          {
+            key: "isler",
+            label: "İşler",
+            children: (
+              <IsListesi
+                suzgec={suzgec}
+                baslik={seciliSayac?.baslik ?? "Açık işler"}
+                oncelikler={sozluk.data?.oncelikler ?? []}
+                degistir={degistir}
+              />
+            ),
+          },
+          { key: "personel", label: "Personel iş yükü", children: <PersonelSekmesi birim={suzgec.birim} /> },
+          {
+            key: "bildirimler",
+            label: (
+              <Badge count={rozet.data?.toplam ?? 0} size="small" offset={[8, -2]}>
+                SLA bildirimleri
+              </Badge>
+            ),
+            children: <BildirimSekmesi />,
+          },
+          ...(yetkili("operasyon.yonet")
+            ? [{ key: "eposta", label: "E-posta kutusu", children: <EpostaSekmesi /> }]
+            : []),
+        ]}
+      />
+    </div>
   );
 }

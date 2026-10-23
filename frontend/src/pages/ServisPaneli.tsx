@@ -1,5 +1,7 @@
 /**
- * Servis Paneli — tıklanabilir KPI kutuları (TS-035, E01-14).
+ * Servis Paneli — tıklanabilir KPI kutucukları (TS-035, E01-14), SAP Fiori
+ * launchpad görünümünde (rehber §2: 176×176 kutucuk, kalın başlık, sol altta
+ * çizgi ikon + büyük KPI sayısı, grup başlıkları 20 px).
  *
  * Kural "sayı = liste": kutudaki sayı sunucunun `KPI_TANIMLARI` süzgecinden
  * gelir ve tıklanınca AYNI süzgeçle `/servis-isleri?kpi=<kod>` açılır; ekran
@@ -8,13 +10,29 @@
  * kutuları etkiler ve tarayıcıda hatırlanır. Mobilite `PanelPage` ayrı ve
  * değişmedi (K17).
  */
+import {
+  AlertOutlined,
+  CalendarOutlined,
+  CarOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  FieldTimeOutlined,
+  PauseCircleOutlined,
+  PhoneOutlined,
+  PieChartOutlined,
+  ReloadOutlined,
+  ToolOutlined,
+  UserAddOutlined,
+} from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Card, Col, Row, Segmented, Space, Statistic, Tooltip, Typography } from "antd";
+import { Alert, Segmented, Space, Typography } from "antd";
 import dayjs from "dayjs";
+import type { ReactNode } from "react";
 import { useState } from "react";
 
 import { DONEMLER, teknikServisApi, type PanelKutusu } from "../api/teknikServis";
-import KpiKutusu from "../components/KpiKutusu";
+import { TAYIN } from "../fiori/etiketler";
+import { KpiKutucugu } from "../fiori/ListeRaporu";
 
 const DONEM_ANAHTARI = "servisPaneli.donem";
 
@@ -29,10 +47,37 @@ function kayitliDonem(): string {
 }
 
 const GRUPLAR: { kod: PanelKutusu["grup"]; baslik: string; aciklama?: string }[] = [
-  { kod: "SERVIS", baslik: "Servis işleri (anlık)", aciklama: "Planlı bakım (PB) işleri bu kutularda sayılmaz." },
+  { kod: "SERVIS", baslik: "Servis İşleri", aciklama: "Anlık. Planlı bakım (PB) işleri bu kutucuklarda sayılmaz." },
   { kod: "DONEM", baslik: "Dönem" },
-  { kod: "BAKIM", baslik: "Planlı bakım" },
+  { kod: "BAKIM", baslik: "Planlı Bakım" },
 ];
+
+/** Sunucunun başlıklarındaki "atanmamış" dilini görünümde "tayin"e çevirir (kod aynı). */
+const tayinDili = (s: string) =>
+  s
+    .replace(/Atanmamış/g, TAYIN.tayinEdilmemis)
+    .replace(/atanmamış/g, TAYIN.tayinEdilmemis.toLocaleLowerCase("tr"))
+    .replace(/Atanan/g, "Tayin edilen")
+    .replace(/atanan/g, "tayin edilen")
+    .replace(/Atandı/g, TAYIN.tayinEdildi)
+    .replace(/atandı/g, "tayin edildi")
+    .replace(/Atama/g, TAYIN.tayin)
+    .replace(/atama/g, "tayin");
+
+/** KPI koduna göre çizgi ikon (yalnız görünüm). */
+function ikonu(kod: string): ReactNode {
+  if (kod.includes("atanmamis")) return <UserAddOutlined />;
+  if (kod.includes("kritik")) return <AlertOutlined />;
+  if (kod.includes("bekle")) return <PauseCircleOutlined />;
+  if (kod.includes("sahada")) return <CarOutlined />;
+  if (kod.includes("gecik") || kod.includes("sure")) return <FieldTimeOutlined />;
+  if (kod.includes("tamam") || kod.includes("kapanis")) return <CheckCircleOutlined />;
+  if (kod.includes("uzaktan")) return <PhoneOutlined />;
+  if (kod.includes("tekrar")) return <ReloadOutlined />;
+  if (kod.includes("plan") || kod.includes("bugun")) return <CalendarOutlined />;
+  if (kod.startsWith("bakim")) return <ToolOutlined />;
+  return <ClockCircleOutlined />;
+}
 
 export default function ServisPaneli() {
   const [donem, setDonem] = useState(kayitliDonem);
@@ -55,92 +100,90 @@ export default function ServisPaneli() {
 
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      <Card
-        size="small"
-        title="Servis Paneli"
-        extra={
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <div>
+          <h2 className="fl-kutucuk-grubu-baslik" style={{ margin: 0 }}>
+            Servis Paneli
+          </h2>
+          {panel.data && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Dönem: {panel.data.donem_adi} ({dayjs(panel.data.donem_baslangic).format("DD.MM.YYYY")} –{" "}
+              {dayjs(panel.data.donem_bitis).format("DD.MM.YYYY")}). Kutucuğa tıklayınca aynı süzgeçle liste
+              açılır.
+            </Typography.Text>
+          )}
+        </div>
+        <div style={{ maxWidth: "100%", overflowX: "auto" }}>
           <Segmented
             size="small"
             value={donem}
             onChange={(v) => donemSec(String(v))}
             options={DONEMLER.map((d) => ({ value: d.kod, label: d.ad }))}
           />
-        }
-      >
-        {panel.data && (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Dönem: {panel.data.donem_adi} (
-            {dayjs(panel.data.donem_baslangic).format("DD.MM.YYYY")} –{" "}
-            {dayjs(panel.data.donem_bitis).format("DD.MM.YYYY")}). Kutuya tıklayınca aynı süzgeçle
-            liste açılır.
-          </Typography.Text>
-        )}
-      </Card>
+        </div>
+      </div>
 
-      {panel.isError && <Alert type="error" showIcon message={(panel.error as Error).message} />}
+      {panel.isError && <Alert type="error" showIcon title={(panel.error as Error).message} />}
 
       {GRUPLAR.map((g) => {
         const grupKutulari = kutular.filter((k) => k.grup === g.kod);
         if (!panel.isLoading && grupKutulari.length === 0) return null;
         return (
-          <Card key={g.kod} size="small" title={g.baslik}>
+          <section key={g.kod} aria-label={g.baslik}>
+            <h3 className="fl-kutucuk-grubu-baslik">{g.baslik}</h3>
             {g.aciklama && (
-              <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 0 }}>
+              <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: -6 }}>
                 {g.aciklama}
               </Typography.Paragraph>
             )}
-            <Row gutter={[12, 12]}>
-              {(panel.isLoading ? Array.from({ length: 4 }, () => null) : grupKutulari).map(
-                (k, i) => (
-                  <Col key={k?.kod ?? i} xs={12} sm={8} md={6} xl={4}>
-                    {k ? (
-                      <KpiKutusu
-                        kod={k.kod}
-                        baslik={k.baslik}
-                        tanim={k.tanim}
-                        deger={k.deger}
-                        yol={k.yol}
-                        vurgu={k.deger > 0 ? k.vurgu : "normal"}
-                      />
-                    ) : (
-                      <KpiKutusu kod="" baslik="" deger={0} yol="/servis-isleri" yukleniyor />
-                    )}
-                  </Col>
-                ),
-              )}
+            <div className="fl-kutucuklar">
+              {panel.isLoading
+                ? Array.from({ length: 4 }, (_, i) => <KpiKutucugu key={i} baslik="" yukleniyor />)
+                : grupKutulari.map((k) => (
+                    <KpiKutucugu
+                      key={k.kod}
+                      kod={k.kod}
+                      baslik={tayinDili(k.baslik)}
+                      tanim={tayinDili(k.tanim)}
+                      deger={k.deger}
+                      ikon={ikonu(k.kod)}
+                      yol={k.yol}
+                      vurgu={k.deger > 0 ? k.vurgu : "normal"}
+                    />
+                  ))}
               {g.kod === "DONEM" && olcum && (
                 <>
-                  <Col xs={12} sm={8} md={6} xl={4}>
-                    <Card size="small" style={{ height: "100%" }}>
-                      <Tooltip title="Dönemde tamamlananlar içinde telefonla/uzaktan çözülenlerin oranı (pay ve payda yandaki kutular).">
-                        <Statistic
-                          title="Telefon/uzaktan oranı"
-                          value={olcum.uzaktan_oran_yuzde ?? "—"}
-                          suffix={olcum.uzaktan_oran_yuzde != null ? "%" : undefined}
-                        />
-                      </Tooltip>
-                    </Card>
-                  </Col>
-                  <Col xs={12} sm={8} md={6} xl={4}>
-                    <Card size="small" style={{ height: "100%" }}>
-                      <Tooltip title="Bildirim (yoksa açılış) anından tamamlanmaya kadar geçen ortalama süre.">
-                        <Statistic
-                          title="Ortalama çözüm süresi"
-                          value={olcum.ortalama_cozum_saat ?? "—"}
-                          suffix={olcum.ortalama_cozum_saat != null ? "saat" : undefined}
-                        />
-                      </Tooltip>
-                      {olcum.cozum_tahmini > 0 && (
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {olcum.cozum_tahmini} işte bildirim anı yok (açılış anı kullanıldı)
-                        </Typography.Text>
-                      )}
-                    </Card>
-                  </Col>
+                  <KpiKutucugu
+                    baslik="Telefon/uzaktan oranı"
+                    tanim="Dönemde tamamlananlar içinde telefonla/uzaktan çözülenlerin oranı (pay ve payda yandaki kutucuklar)."
+                    deger={olcum.uzaktan_oran_yuzde}
+                    birim="%"
+                    ikon={<PieChartOutlined />}
+                  />
+                  <KpiKutucugu
+                    baslik="Ortalama çözüm süresi"
+                    altBaslik={
+                      olcum.cozum_tahmini > 0
+                        ? `${olcum.cozum_tahmini} işte bildirim anı yok (açılış anı kullanıldı)`
+                        : undefined
+                    }
+                    tanim="Bildirim (yoksa açılış) anından tamamlanmaya kadar geçen ortalama süre."
+                    deger={olcum.ortalama_cozum_saat}
+                    birim="saat"
+                    ikon={<ClockCircleOutlined />}
+                  />
                 </>
               )}
-            </Row>
-          </Card>
+            </div>
+          </section>
         );
       })}
     </Space>

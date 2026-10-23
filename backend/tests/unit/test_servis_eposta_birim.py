@@ -73,10 +73,12 @@ def test_worker_gorevi_kayitli() -> None:
 
 def test_planli_bakim_mobilite_bakimdan_ayri_adla() -> None:
     """E04-D05: mobilite iş emri türü `BAKIM` değişmez (raporlar aynı kalır); teknik
-    servis tarafı "Planlı Bakım" adını kullanır, menüde yalın "Bakım" yoktur."""
+    servis tarafı "Planlı Bakım" adını kullanır; launchpad'de yalın "Bakım" adlı
+    uygulama kutucuğu yoktur ("Bakım" yalnız grup/sekme başlığıdır)."""
     assert "BAKIM" in IS_EMRI_TIPLERI
     assert is_emirleri.KATEGORI_ADLARI["PLANLI_BAKIM"] == "Planlı Bakım"
     assert is_emirleri.TUR_ADLARI["PB"] == "Planlı Bakım"
-    menu = (KOK / "frontend" / "src" / "components" / "AppLayout.tsx").read_text(encoding="utf-8")
-    assert 'label: "Planlı Bakım"' in menu
-    assert 'label: "Bakım"' not in menu
+    menu = (KOK / "frontend" / "src" / "fiori" / "uygulamalar.ts").read_text(encoding="utf-8")
+    assert 'baslik: "Planlı Bakım"' in menu
+    yalin = [s for s in menu.splitlines() if 'baslik: "Bakım"' in s]
+    assert all("kod:" in s for s in yalin), yalin

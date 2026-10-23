@@ -22,7 +22,9 @@
  * süzgecinden SONRA uygulanır, yetki genişletmez. Yönetici `personel.yaz` ile
  * kartta seçilir; kapsamınız dışındaki yönetici "Kapsam dışı kişi" görünür.
  */
+import { EditOutlined, PlusOutlined, TeamOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ColumnsType } from "antd/es/table";
 import {
   Alert,
   App,
@@ -33,7 +35,6 @@ import {
   DatePicker,
   Descriptions,
   Drawer,
-  Empty,
   Form,
   Input,
   Modal,
@@ -59,13 +60,23 @@ import {
   type PersonelSuzgeci,
 } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
-import Statistic from "../components/Statistic";
+import {
+  Aciklama,
+  AltNot,
+  DurumBaglantisi,
+  Kucuk,
+  KucukGri,
+  NoRozeti,
+  TUMU_KATEGORISI,
+  buyuk,
+} from "../fiori/ListeOgeleri";
+import ListeRaporu from "../fiori/ListeRaporu";
 
 const SAYFA_BOYU = 25;
 
 const birimSecenekleri = BIRIM_KODLARI.map((k) => ({ value: k, label: BIRIM_ETIKETLERI[k] }));
 const sahaSecenekleri = [
-  { value: "ATANABILIR", label: "Sahaya atanabilir (şef/teknisyen/stajyer)" },
+  { value: "ATANABILIR", label: "Sahaya tayin edilebilir (şef/teknisyen/stajyer)" },
   ...Object.entries(SAHA_ROLU_ETIKETLERI).map(([k, v]) => ({ value: k, label: v })),
   { value: "EKSIK", label: "Saha rolü girilmemiş" },
 ];
@@ -419,6 +430,8 @@ export default function PersonelPage() {
   const [suzgec, setSuzgec] = useState<PersonelSuzgeci>({ durum: "CALISIYOR" });
   const [sayfa, setSayfa] = useState(1);
   const [seciliId, setSeciliId] = useState<number | null>(null);
+  const [isaretli, setIsaretli] = useState<number[]>([]);
+  const [suzgecAcik, setSuzgecAcik] = useState(false);
   const [yeniAcik, setYeniAcik] = useState(false);
   const [kartForm] = Form.useForm<KartFormu>();
   const [yeniForm] = Form.useForm<KartFormu>();
@@ -608,7 +621,7 @@ export default function PersonelPage() {
           <Form.Item
             name="saha_rolu"
             label="Saha rolü"
-            extra="Atama listeleri buna bakar (şef/teknisyen/stajyer)."
+            extra="Tayin listeleri buna bakar (şef/teknisyen/stajyer)."
           >
             <Select
               allowClear
@@ -651,159 +664,198 @@ export default function PersonelPage() {
     </>
   );
 
-  return (
-    <Card
-      title="Personel"
-      extra={
-        <Space wrap>
-          {yetkili("servis_rapor.disaaktar") && (
-            <Button onClick={() => window.open(personelApi.excelYolu(suzgec), "_blank")}>
-              Excel
-            </Button>
-          )}
-          {yazabilir && (
-            <Button type="primary" onClick={() => setYeniAcik(true)}>
-              Yeni personel
-            </Button>
-          )}
-        </Space>
-      }
-    >
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        {(ozet.data ?? []).map((k) => (
-          <Col key={k.kod} xs={12} sm={8} md={6} lg={3}>
-            <Card
-              size="small"
-              hoverable
-              onClick={() => suzgecDegistir(k.suzgec)}
-              style={{ height: "100%" }}
-            >
-              <Statistic title={k.baslik} value={k.adet} />
-            </Card>
-          </Col>
-        ))}
-      </Row>
-
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Input.Search
-          placeholder="Ad, sicil, ünvan"
-          allowClear
-          style={{ width: 200 }}
-          onSearch={(q) => suzgecDegistir({ ...suzgec, q: q || undefined })}
-        />
-        <Select
-          placeholder="Birim"
-          allowClear
-          style={{ width: 170 }}
-          value={suzgec.birimsiz ? "__YOK" : suzgec.birim}
-          options={[...birimSecenekleri, { value: "__YOK", label: "Birimsiz" }]}
-          onChange={(v?: string) =>
-            suzgecDegistir({
-              ...suzgec,
-              birim: v && v !== "__YOK" ? v : undefined,
-              birimsiz: v === "__YOK" || undefined,
-            })
+  const kayitlar = liste.data?.kayitlar ?? [];
+  const tek = kayitlar.find((r) => r.id === isaretli[0]) ?? null;
+  const kategoriler = [
+    TUMU_KATEGORISI,
+    ...birimSecenekleri.map((b) => ({ kod: b.value, ad: buyuk(b.label), ipucu: b.label, renk: "yesil" as const, ikon: <TeamOutlined /> })),
+    { kod: "__YOK", ad: "BİRİMSİZ", renk: "kirmizi" as const, ikon: <TeamOutlined /> },
+  ];
+  const sutunlar: ColumnsType<Personel> = [
+    {
+      title: "Durum",
+      key: "durum",
+      width: 130,
+      align: "center",
+      render: (_, r) => (
+        <DurumBaglantisi
+          metin={r.calisiyor ? "ÇALIŞIYOR" : "AYRILDI"}
+          ton={r.calisiyor ? undefined : "kapali"}
+          onClick={() => kartiAc(r)}
+          alt={
+            <>
+              {!r.giris_acik && <AltNot>GİRİŞ YOK</AltNot>}
+              {r.acik_sayac_var && <AltNot tur="uyari">SAAT AÇIK</AltNot>}
+            </>
           }
         />
-        <Select
-          placeholder="Saha rolü"
-          allowClear
-          style={{ width: 200 }}
-          value={suzgec.saha_rolu}
-          options={sahaSecenekleri}
-          onChange={(v?: string) => suzgecDegistir({ ...suzgec, saha_rolu: v })}
-        />
-        <Select
-          placeholder="Durum"
-          allowClear
-          style={{ width: 130 }}
-          value={suzgec.durum}
-          options={[
-            { value: "CALISIYOR", label: "Çalışıyor" },
-            { value: "AYRILDI", label: "Ayrıldı" },
-          ]}
-          onChange={(v?: string) => suzgecDegistir({ ...suzgec, durum: v })}
-        />
-        <Select
-          placeholder="Giriş"
-          allowClear
-          style={{ width: 130 }}
-          value={suzgec.giris}
-          options={[
-            { value: "ACIK", label: "Giriş açık" },
-            { value: "KAPALI", label: "Girişsiz" },
-          ]}
-          onChange={(v?: string) => suzgecDegistir({ ...suzgec, giris: v })}
-        />
-        <Tooltip title="Yalnız size doğrudan bağlı çalışan personel. Süzgeçtir; kapsamınız dışındaki kişiyi göstermez.">
-          <Checkbox
-            checked={!!suzgec.ekibim}
-            onChange={(e) => suzgecDegistir({ ...suzgec, ekibim: e.target.checked || undefined })}
-          >
-            Ekibim
-          </Checkbox>
-        </Tooltip>
-      </Space>
+      ),
+    },
+    {
+      title: "Sicil",
+      dataIndex: "sicil_no",
+      width: 110,
+      align: "center",
+      render: (v: string | null, r) => (v ? <NoRozeti no={v} onClick={() => kartiAc(r)} /> : <KucukGri />),
+    },
+    { title: "Ad Soyad", dataIndex: "full_name", width: 220, render: (v: string, r) => <Aciklama metin={v} onClick={() => kartiAc(r)} /> },
+    { title: "Ünvan", dataIndex: "unvan", width: 160, align: "center", responsive: ["md"], render: (v: string | null) => <Kucuk>{v}</Kucuk> },
+    {
+      title: "Saha Rolü",
+      dataIndex: "saha_rolu",
+      width: 110,
+      align: "center",
+      render: (v: string | null) => (v ? <Kucuk>{SAHA_ROLU_ETIKETLERI[v] ?? v}</Kucuk> : <Tag color="gold">girilmemiş</Tag>),
+    },
+    {
+      title: "Sistem",
+      key: "birimler",
+      width: 200,
+      align: "center",
+      responsive: ["sm"],
+      render: (_, r: Personel) =>
+        r.birimler.length ? (
+          <Kucuk>
+            {r.birimler.map((b) => `${BIRIM_ETIKETLERI[b.birim] ?? b.birim}${b.birincil && r.birimler.length > 1 ? " ★" : ""}`).join(" · ")}
+          </Kucuk>
+        ) : (
+          <Tag color="gold">birimsiz</Tag>
+        ),
+    },
+    {
+      title: "Yönetici",
+      key: "yonetici",
+      width: 160,
+      align: "center",
+      responsive: ["lg"],
+      render: (_, r: Personel) => <KucukGri>{r.yonetici?.ad}</KucukGri>,
+    },
+  ];
+  const ekSuzgecSayisi = [suzgec.saha_rolu, suzgec.giris].filter(Boolean).length;
 
-      <Table
-        rowKey="id"
-        size="small"
-        scroll={{ x: 760 }}
-        loading={liste.isLoading}
-        dataSource={liste.data?.kayitlar ?? []}
-        locale={{ emptyText: <Empty description="Bu süzgeçte personel yok" /> }}
-        pagination={{
-          current: sayfa,
-          pageSize: SAYFA_BOYU,
-          total: liste.data?.toplam ?? 0,
-          showSizeChanger: false,
-          onChange: setSayfa,
-          showTotal: (t) => `${t.toLocaleString("tr-TR")} personel`,
+  return (
+    <div className="fm-sayfa">
+      {(ozet.data ?? []).length > 0 && (
+        <div className="fl-kutucuklar">
+          {(ozet.data ?? []).map((k) => (
+            <div
+              key={k.kod}
+              className="fl-kutucuk"
+              role="button"
+              tabIndex={0}
+              onClick={() => suzgecDegistir(k.suzgec)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && suzgecDegistir(k.suzgec)}
+            >
+              <div className="fl-kutucuk-baslik">{k.baslik}</div>
+              <div className="fl-kutucuk-dip">
+                <span className="fl-kutucuk-ikon">
+                  <TeamOutlined />
+                </span>
+                <span className="fl-kutucuk-sayi">{k.adet.toLocaleString("tr-TR")}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ListeRaporu<Personel>
+        kategoriler={kategoriler}
+        seciliKategori={suzgec.birimsiz ? "__YOK" : (suzgec.birim ?? TUMU_KATEGORISI.kod)}
+        onKategori={(k) =>
+          suzgecDegistir({
+            ...suzgec,
+            birim: k !== TUMU_KATEGORISI.kod && k !== "__YOK" ? k : undefined,
+            birimsiz: k === "__YOK" || undefined,
+          })
+        }
+        kayitSayisi={liste.data?.toplam}
+        ustSag={
+          <Input.Search
+            placeholder="Ad, sicil, ünvan"
+            allowClear
+            size="small"
+            style={{ width: 200 }}
+            onSearch={(q) => suzgecDegistir({ ...suzgec, q: q || undefined })}
+          />
+        }
+        durumCubugu={{
+          gruplar: [
+            { kod: "CALISIYOR", ad: "ÇALIŞIYOR", durumlar: ["CALISIYOR"] },
+            { kod: "AYRILDI", ad: "AYRILDI", durumlar: ["AYRILDI"] },
+          ],
+          secili: suzgec.durum,
+          onSec: (v) => suzgecDegistir({ ...suzgec, durum: v }),
+          banaAit: !!suzgec.ekibim,
+          onBanaAit: (v) => suzgecDegistir({ ...suzgec, ekibim: v || undefined }),
+          banaAitIpucu: "Ekibim — yalnız size doğrudan bağlı çalışan personel (süzgeçtir)",
+          onYenile: () => void liste.refetch(),
+          yenileniyor: liste.isFetching,
+          onSuzgec: () => setSuzgecAcik(!suzgecAcik),
+          suzgecAcik,
+          suzgecSayisi: ekSuzgecSayisi,
         }}
-        onRow={(r) => ({ onClick: () => kartiAc(r), style: { cursor: "pointer" } })}
-        columns={[
-          { title: "Ad soyad", dataIndex: "full_name", ellipsis: true },
-          { title: "Sicil", dataIndex: "sicil_no", width: 100, className: "mono" },
-          { title: "Ünvan", dataIndex: "unvan", ellipsis: true },
+        suzgecPaneli={
+          <Space wrap>
+            <Select
+              placeholder="Saha rolü"
+              allowClear
+              style={{ width: 240 }}
+              value={suzgec.saha_rolu}
+              options={sahaSecenekleri}
+              onChange={(v?: string) => suzgecDegistir({ ...suzgec, saha_rolu: v })}
+            />
+            <Select
+              placeholder="Giriş"
+              allowClear
+              style={{ width: 140 }}
+              value={suzgec.giris}
+              options={[
+                { value: "ACIK", label: "Giriş açık" },
+                { value: "KAPALI", label: "Girişsiz" },
+              ]}
+              onChange={(v?: string) => suzgecDegistir({ ...suzgec, giris: v })}
+            />
+          </Space>
+        }
+        sutunlar={sutunlar}
+        veri={kayitlar}
+        satirAnahtari="id"
+        yukleniyor={liste.isFetching}
+        bosMetin={liste.isError ? (liste.error as ApiError).message : "Veri yok"}
+        scrollX={1000}
+        secili={isaretli}
+        onSecim={(k) => setIsaretli(k as number[])}
+        onSatirAc={kartiAc}
+        sayfalama={{ sayfa, boyut: SAYFA_BOYU, toplam: liste.data?.toplam ?? 0, onChange: setSayfa }}
+        eylemler={[
           {
-            title: "Saha rolü",
-            dataIndex: "saha_rolu",
-            width: 110,
-            render: (v: string | null) =>
-              v ? SAHA_ROLU_ETIKETLERI[v] ?? v : <Tag color="gold">girilmemiş</Tag>,
+            anahtar: "liste",
+            ad: "Liste",
+            menu: [
+              ...(yetkili("servis_rapor.disaaktar") ? [{ key: "excel", label: "Excel'e aktar" }] : []),
+              { key: "yenile", label: "Listeyi yenile" },
+            ],
+            onMenu: (k) =>
+              k === "excel" ? window.open(personelApi.excelYolu(suzgec), "_blank") : void liste.refetch(),
           },
           {
-            title: "Birimler",
-            width: 220,
-            render: (_, r: Personel) =>
-              r.birimler.length ? (
-                <Space size={4} wrap>
-                  {r.birimler.map((b) => (
-                    <Tag key={b.birim} color={b.birincil ? "blue" : undefined}>
-                      {BIRIM_ETIKETLERI[b.birim] ?? b.birim}
-                    </Tag>
-                  ))}
-                </Space>
-              ) : (
-                <Tag color="gold">birimsiz</Tag>
-              ),
+            anahtar: "kart",
+            ad: "Kartı Aç / Düzenle",
+            ikon: <EditOutlined />,
+            kisalt: true,
+            devreDisi: !tek,
+            onClick: () => tek && kartiAc(tek),
           },
+        ]}
+        sagEylemler={[
           {
-            title: "Durum",
-            width: 150,
-            render: (_, r: Personel) => (
-              <Space size={4} wrap>
-                {r.calisiyor ? <Tag color="green">çalışıyor</Tag> : <Tag>ayrıldı</Tag>}
-                {!r.giris_acik && <Tag>giriş yok</Tag>}
-                {r.acik_sayac_var && <Tag color="blue">sayaç açık</Tag>}
-              </Space>
-            ),
-          },
-          {
-            title: "Yönetici",
-            width: 160,
-            ellipsis: true,
-            render: (_, r: Personel) => r.yonetici?.ad ?? "—",
+            anahtar: "yeni",
+            ad: "Yeni Personel",
+            ikon: <PlusOutlined />,
+            vurgulu: true,
+            kisalt: true,
+            gizli: !yazabilir,
+            onClick: () => setYeniAcik(true),
           },
         ]}
       />
@@ -981,7 +1033,7 @@ export default function PersonelPage() {
               size="small"
               pagination={false}
               dataSource={o.aktif_isler}
-              locale={{ emptyText: "Açık servis işinde ataması yok" }}
+              locale={{ emptyText: "Açık servis işinde tayini yok" }}
               title={() =>
                 `Açık servis işleri (${o.aktif_isler.length}${
                   o.kapsam_disi_is_sayisi ? ` + kapsamınız dışında ${o.kapsam_disi_is_sayisi}` : ""
@@ -1067,6 +1119,6 @@ export default function PersonelPage() {
           </Checkbox>
         </Space>
       </Modal>
-    </Card>
+    </div>
   );
 }

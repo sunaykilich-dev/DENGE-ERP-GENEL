@@ -78,7 +78,7 @@ interface Props {
   /** Kartın işi; verilmezse yalnız açık sayaç düğmeleri çizilir (bant). */
   isId?: number;
   sayac: BenimSayacim | undefined;
-  /** İş sayaç başlatmaya uygun mu (kapalı/beklemede değil, bana atanmış). */
+  /** İş sayaç başlatmaya uygun mu (kapalı/beklemede değil, bana tayin edilmiş). */
   baslatilabilir?: boolean;
   /** Aynı ziyaretteki sonraki işler (Sonraki Cihaza Geç). */
   sonrakiIsler?: { id: number; so_no: string }[];
@@ -150,7 +150,7 @@ export default function SayacDugmeleri({
     if (!baslatilabilir) {
       return (
         <Typography.Text type="secondary">
-          Bu işte sayaç başlatılamaz (işe atanmamışsınız ya da iş kapalı/beklemede).
+          Bu işte sayaç başlatılamaz (işe tayin edilmemişsiniz ya da iş kapalı/beklemede).
         </Typography.Text>
       );
     }

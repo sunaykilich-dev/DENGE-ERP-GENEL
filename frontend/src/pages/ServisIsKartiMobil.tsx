@@ -16,7 +16,7 @@ import {
   PhoneOutlined,
 } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, Card, Descriptions, Empty, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Descriptions, Empty, Space, Spin, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -26,6 +26,8 @@ import EkYukleyici from "../components/EkYukleyici";
 import SayacDugmeleri, { ManuelKayitPenceresi } from "../components/SayacDugmeleri";
 import SlaEtiketi from "../components/SlaEtiketi";
 import { SURE_DURUMU_ADLARI, servisZaman, sureMetni } from "../api/servisZaman";
+import { ONCELIK_ETIKETLERI, SERVIS_TUR_ETIKETLERI, servisDurumEtiketi } from "../fiori/etiketler";
+import { FioriBolum, NesneBasligi } from "../fiori/ListeOgeleri";
 
 export default function ServisIsKartiMobil() {
   const { id } = useParams();
@@ -71,7 +73,7 @@ export default function ServisIsKartiMobil() {
   const ozet = k.sure_ozeti;
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div className="fm-sayfa" style={{ maxWidth: 760, gap: 0 }}>
       <Button
         type="link"
         icon={<ArrowLeftOutlined />}
@@ -81,19 +83,22 @@ export default function ServisIsKartiMobil() {
         Benim İşlerim
       </Button>
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-        <Card size="small">
-          <Space size={6} wrap>
-            <Typography.Title level={5} style={{ margin: 0 }}>
-              {k.so_no}
-            </Typography.Title>
-            <Tag>{k.durum.replaceAll("_", " ")}</Tag>
-            <Tag color="blue">{k.tur}</Tag>
-            {k.oncelik !== "NORMAL" && <Tag color="red">{k.oncelik}</Tag>}
-            <SlaEtiketi sla={k.sla} kisa={false} />
-          </Space>
-          <Typography.Paragraph style={{ margin: "6px 0 0", overflowWrap: "anywhere" }}>
-            {k.konu}
-          </Typography.Paragraph>
+        <div>
+          <NesneBasligi
+            no={k.so_no}
+            durum={servisDurumEtiketi(k.durum)}
+            durumTon={k.durum === "IPTAL" ? "olumsuz" : undefined}
+            rozetler={
+              <>
+                <Tag color="blue">{SERVIS_TUR_ETIKETLERI[k.tur]?.ad ?? k.tur}</Tag>
+                {k.oncelik !== "NORMAL" && (
+                  <Tag color="red">{ONCELIK_ETIKETLERI[k.oncelik] ?? k.oncelik}</Tag>
+                )}
+                <SlaEtiketi sla={k.sla} kisa={false} />
+              </>
+            }
+            baslik={k.konu}
+          />
           {k.aciklama && (
             <Typography.Paragraph
               type="secondary"
@@ -103,18 +108,18 @@ export default function ServisIsKartiMobil() {
               {k.aciklama}
             </Typography.Paragraph>
           )}
-        </Card>
+        </div>
 
-        <Card size="small" title="Sayaç">
+        <FioriBolum baslik="Sayaç">
           <SayacDugmeleri
             isId={k.id}
             sayac={k}
             baslatilabilir={k.sayac_acilabilir && k.bana_atanmis}
             sonrakiIsler={sonrakiIsler}
           />
-        </Card>
+        </FioriBolum>
 
-        <Card size="small" title="Müşteri ve saha">
+        <FioriBolum baslik="Müşteri ve saha">
           <Space orientation="vertical" size={6} style={{ width: "100%" }}>
             <Typography.Text strong style={{ overflowWrap: "anywhere" }}>
               {k.musteri ?? "—"}
@@ -151,9 +156,9 @@ export default function ServisIsKartiMobil() {
               </div>
             )}
           </Space>
-        </Card>
+        </FioriBolum>
 
-        <Card size="small" title="İş bilgisi">
+        <FioriBolum baslik="İş bilgisi">
           <Descriptions column={1} size="small">
             {k.seriler.length > 0 && (
               <Descriptions.Item label="Seri">
@@ -207,7 +212,7 @@ export default function ServisIsKartiMobil() {
               Elle süre gir
             </Button>
           )}
-        </Card>
+        </FioriBolum>
 
         <Space orientation="vertical" size={8} style={{ width: "100%" }}>
           {k.acik_bolum_bu_iste && (

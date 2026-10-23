@@ -99,7 +99,7 @@ def _satirlari_dogrula(atamalar: Sequence[AtamaSatiri]) -> list[AtamaSatiri]:
         raise ServisGirdiHatasi("Aynı kişi ekipte iki kez olamaz")
     for a in atamalar:
         if a.rol not in ATAMA_ROLLERI:
-            raise ServisGirdiHatasi(f"Bilinmeyen atama rolü: {a.rol}")
+            raise ServisGirdiHatasi(f"Bilinmeyen tayin rolü: {a.rol}")
         if a.is_lead and a.rol != "TEKNISYEN":
             raise ServisGirdiHatasi("Sorumlu yalnız teknisyen rolünde olabilir")
     if sum(1 for a in atamalar if a.is_lead) > 1:
@@ -119,9 +119,9 @@ async def _atanabilirlik_dogrula(db: AsyncSession, birim: str, kimlikler: set[in
         if kisi is None:
             raise ServisGirdiHatasi(f"Kullanıcı bulunamadı (#{kimlik})")
         if not kisi.is_active or kisi.ayrilis_tarihi is not None:
-            raise ServisGirdiHatasi(f"{kisi.full_name} ayrılmış/pasif; atanamaz")
+            raise ServisGirdiHatasi(f"{kisi.full_name} ayrılmış/pasif; tayin edilemez")
         if kisi.saha_rolu not in ATANABILIR_SAHA_ROLLERI:
-            raise ServisGirdiHatasi(f"{kisi.full_name} saha personeli değil; atanamaz")
+            raise ServisGirdiHatasi(f"{kisi.full_name} saha personeli değil; tayin edilemez")
         if birim not in kisi.birim_kodlari:
             raise AtamaHatasi(f"{kisi.full_name} bu işin biriminde değil")
 
@@ -157,7 +157,7 @@ async def _uygula(
 ) -> tuple[list[ServiceOrderAssignment], bool]:
     """Ekibi verilen listeye eşitler. (yeni ekip, değişti mi)."""
     if so.is_deleted or so.status in ("TAMAMLANDI", "KAPATILDI", "IPTAL"):
-        raise AtamaHatasi(f"{so.so_no}: kapalı işe atama yapılamaz")
+        raise AtamaHatasi(f"{so.so_no}: kapalı işe tayin yapılamaz")
     mevcut = await aktif_ekip(db, so)
     mevcut_harita = {a.user_id: a for a in mevcut}
     yeni_harita = {a.user_id: a for a in atamalar}
@@ -213,7 +213,7 @@ async def _uygula(
         "sorumlu": sorumlu,
     }
     if uyarilar:
-        ozet += " — yetkinlik uyarısıyla atandı"
+        ozet += " — yetkinlik uyarısıyla tayin edildi"
         veri["yetkinlik_uyarisi"] = True
         veri["uyari_sayisi"] = len(uyarilar)
         _uyari_ekle(uyarilar)
@@ -262,13 +262,13 @@ async def toplu_ata(
     from app.services import settings as ayar_svc
 
     if mod not in TOPLU_MODLAR:
-        raise ServisGirdiHatasi(f"Bilinmeyen toplu atama modu: {mod}")
+        raise ServisGirdiHatasi(f"Bilinmeyen toplu tayin modu: {mod}")
     kimlikler = list(dict.fromkeys(is_idler))
     if not kimlikler:
         raise ServisGirdiHatasi("En az bir iş seçilmeli")
     ust = int(await ayar_svc.get(db, "servis_toplu_atama_ust_sinir"))
     if len(kimlikler) > ust:
-        raise AtamaSinirHatasi(f"Toplu atamada en çok {ust} iş seçilebilir")
+        raise AtamaSinirHatasi(f"Toplu tayinde en çok {ust} iş seçilebilir")
     satirlar = _satirlari_dogrula(atamalar)
     isler = (
         await db.scalars(
@@ -284,11 +284,11 @@ async def toplu_ata(
             raise AtamaKapsamDisi("Seçilen işlerden biri bulunamadı")
     kapali = [so.so_no for so in isler if so.status in ("TAMAMLANDI", "KAPATILDI", "IPTAL")]
     if kapali:
-        raise AtamaHatasi(f"Kapalı işlere atama yapılamaz: {', '.join(kapali)}")
+        raise AtamaHatasi(f"Kapalı işlere tayin yapılamaz: {', '.join(kapali)}")
     birimler = {so.birim for so in isler}
     if len(birimler) > 1:
         raise AtamaHatasi(
-            "Toplu atamada tüm işler aynı birimde olmalı (seçilen birimler: "
+            "Toplu tayinde tüm işler aynı birimde olmalı (seçilen birimler: "
             + ", ".join(sorted(birimler))
             + ")"
         )

@@ -299,7 +299,7 @@ async def gozlem_kaydet(
             )
         )
         if atama is None:
-            uyarilar.append("Gözlenen kişinin bu servis işinde ataması yok.")
+            uyarilar.append("Gözlenen kişinin bu servis işinde tayini yok.")
 
     kriterler = await kurs_kriterleri(db, kurs.id)
     puan, sonuc = sonuc_hesapla(veri.puanlar, kriterler, await _esik(db, kurs))

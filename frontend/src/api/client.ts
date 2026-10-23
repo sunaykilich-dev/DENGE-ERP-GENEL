@@ -90,7 +90,7 @@ async function getSayfa<T>(yol: string): Promise<Sayfa<T>> {
 }
 
 /**
- * Gövdesi liste kalan bir uç ek bilgiyi başlıkta taşıdığında (ör. atamanın
+ * Gövdesi liste kalan bir uç ek bilgiyi başlıkta taşıdığında (ör. tayinin
  * yetkinlik uyarıları `X-Atama-Uyarilari`, yüzde kodlu JSON dizi) kullanılır.
  */
 async function putBaslikli<T>(

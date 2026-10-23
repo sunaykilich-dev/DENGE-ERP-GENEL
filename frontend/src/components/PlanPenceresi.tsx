@@ -47,6 +47,7 @@ import {
   planlamaApi,
   sorunluIsler,
 } from "../api/servisPlanlama";
+import { TAYIN } from "../fiori/etiketler";
 
 export type PlanModu = "tekli" | "toplu" | "yeniden";
 
@@ -189,7 +190,7 @@ export default function PlanPenceresi({
       if (uyarilar.length) {
         // TS-198: yetkinlik eksikliği planı engellemez, yalnız uyarır.
         Modal.warning({
-          title: "Yetkinlik uyarısıyla atandı",
+          title: TAYIN.yetkinlikUyarisiylaTayinEdildi,
           content: (
             <ul style={{ paddingLeft: 18, margin: 0 }}>
               {uyarilar.map((u) => (
@@ -273,12 +274,12 @@ export default function PlanPenceresi({
   const pencereBasligi =
     baslik ??
     (mod === "toplu"
-      ? `Toplu Plan (${isIdler.length} iş)`
+      ? `Toplu Plan ve ${TAYIN.tayin} (${isIdler.length} iş)`
       : mod === "yeniden"
         ? `Seçilenleri Taşı (${isIdler.length} iş)`
         : mevcut
-          ? "Planı Düzenle"
-          : "Planla");
+          ? `Planı ve ${TAYIN.tayin}i Düzenle`
+          : TAYIN.planlaVeTayinEt);
 
   return (
     <>
@@ -335,7 +336,7 @@ export default function PlanPenceresi({
           </Row>
           <Row gutter={12}>
             <Col xs={24} sm={12}>
-              <Form.Item name="sef_idler" label="Şef (sorumlu)">
+              <Form.Item name="sef_idler" label="Tayin edilecek şef (sorumlu)">
                 <Select
                   mode="multiple"
                   allowClear
@@ -352,7 +353,7 @@ export default function PlanPenceresi({
             <Col xs={24} sm={12}>
               <Form.Item
                 name="teknisyen_idler"
-                label="Teknisyenler"
+                label="Tayin edilecek teknisyenler"
                 rules={
                   mod === "toplu"
                     ? [
@@ -360,7 +361,7 @@ export default function PlanPenceresi({
                           validator: (_, v: number[] | undefined) =>
                             (v?.length ?? 0) > 0 || (getFieldValue("sef_idler")?.length ?? 0) > 0
                               ? Promise.resolve()
-                              : Promise.reject(new Error("Toplu planda en az bir kişi seçin")),
+                              : Promise.reject(new Error("Toplu planda en az bir kişi tayin edin")),
                         }),
                       ]
                     : []

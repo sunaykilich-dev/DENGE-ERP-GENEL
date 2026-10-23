@@ -172,7 +172,7 @@ _KAPSAMLAR: dict[str, tuple[str, str]] = {
     ),
     SCOPE_OWN_JOBS: (
         "Yalnız kendi işleri",
-        "Servis işlerinde yalnız atandığı ya da planında olduğu işleri, diğer teknik "
+        "Servis işlerinde yalnız tayin edildiği ya da planında olduğu işleri, diğer teknik "
         "servis kayıtlarında üyesi olduğu birimleri görür (birimi yoksa hiçbirini); "
         "diğer modüllerde tüm kayıtlar",
     ),

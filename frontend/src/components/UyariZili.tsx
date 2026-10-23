@@ -87,8 +87,9 @@ export default function UyariZili() {
           toplamı "99+" olarak çıkıyordu ve üç satırlık bir liste için
           yanıltıcıydı. Kayıt adedi her satırın kendi etiketinde. */}
       <Badge count={uyarilar.length} overflowCount={99} color={kritikVar ? "red" : "orange"}>
+        {/* Fiori kabuğu açık zeminli: zil koyu gri (eskiden lacivert bardaydı, beyazdı). */}
         <BellOutlined
-          style={{ color: "#fff", fontSize: 18, cursor: "pointer" }}
+          style={{ color: "#556b82", fontSize: 18, cursor: "pointer" }}
           aria-label="Uyarılar"
         />
       </Badge>

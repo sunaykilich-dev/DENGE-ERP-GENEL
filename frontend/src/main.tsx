@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { App as AntApp, Card, ConfigProvider, Empty } from "antd";
+import { App as AntApp, ConfigProvider } from "antd";
 import trTR from "antd/locale/tr_TR";
 import dayjs from "dayjs";
 import "dayjs/locale/tr";
@@ -8,7 +8,8 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider, useAuth } from "./auth/AuthContext";
-import AppLayout, { acilisYolu } from "./components/AppLayout";
+import AppLayout from "./components/AppLayout";
+import BaslangicPage from "./pages/BaslangicPage";
 import AtolyePage from "./pages/AtolyePage";
 import BakimPage from "./pages/BakimPage";
 import BenimIslerimPage from "./pages/BenimIslerimPage";
@@ -77,20 +78,14 @@ function Yonlendirici() {
 }
 
 /**
- * Açılış (`/`): Panel yalnız `rapor.gor` sahibine çizilir; diğer kullanıcı
- * izninden türeyen ilk ekrana yönlendirilir (plan §1.10, KD-30). Servis
- * kullanıcısı `/` PanelPage'in 403 yağmurunu görmez.
+ * Mobilite Paneli (`/panel`) yalnız `rapor.gor` sahibine çizilir; izni
+ * olmayan launchpad'e döner — servis kullanıcısı PanelPage'in 403 yağmurunu
+ * görmez (plan §1.10, KD-30).
  */
-function Acilis() {
+function PanelKapisi() {
   const { yetkili } = useAuth();
-  const hedef = acilisYolu(yetkili);
-  if (hedef === "/") return <PanelPage />;
-  if (hedef) return <Navigate to={hedef} replace />;
-  return (
-    <Card>
-      <Empty description="Hesabınıza tanımlı bir ekran yok. Yöneticinizden yetki isteyin." />
-    </Card>
-  );
+  if (!yetkili("rapor.gor")) return <Navigate to="/" replace />;
+  return <PanelPage />;
 }
 
 function KorumaliUygulama() {
@@ -106,7 +101,10 @@ function KorumaliUygulama() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<Acilis />} />
+        {/* Açılış artık Fiori launchpad; rol bazlı açılış ilgili sekmeye kaydırır. */}
+        <Route path="/" element={<BaslangicPage />} />
+        <Route path="/baslangic" element={<BaslangicPage />} />
+        <Route path="/panel" element={<PanelKapisi />} />
         <Route path="/gorevler" element={<GorevlerPage />} />
         <Route path="/raporlar" element={<RaporlarPage />} />
         <Route path="/kvkk" element={<KvkkPage />} />

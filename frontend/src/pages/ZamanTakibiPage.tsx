@@ -1,7 +1,7 @@
 /**
  * Saha / Zaman Takibi yönetim ekranı (TS-189, E09-14/15).
  *
- * - Üstte tıklanabilir KPI kutuları (`KpiKutusu`): kutudaki sayı sunucunun
+ * - Üstte tıklanabilir Fiori KPI kutucukları (`KpiKutucugu`): kutudaki sayı sunucunun
  *   `deger`idir; tıklanınca `?kpi=` ile alttaki ayrıntı tablosu süzülür ve
  *   tablo toplamı (`X-Toplam-Kayit`) kutudaki adetle aynıdır.
  * - "Şu an çalışanlar": açık sayaçlar; uzun sayaç kırmızı; yönetici
@@ -13,22 +13,18 @@
  *   süre bu ekranda yoktur.
  * - Menü izni `servis_rapor.gor` (KD-06); izni olmayan Benim İşlerim'e döner.
  */
-import { DownloadOutlined } from "@ant-design/icons";
+import { ClockCircleOutlined, DownloadOutlined, FieldTimeOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   App,
   Button,
-  Card,
-  Col,
   DatePicker,
   Empty,
   Form,
   Input,
   Modal,
-  Row,
   Select,
-  Space,
   Table,
   Tag,
   Typography,
@@ -54,7 +50,20 @@ import {
   zamanTakibi,
 } from "../api/servisZaman";
 import { useAuth } from "../auth/AuthContext";
-import KpiKutusu from "../components/KpiKutusu";
+import {
+  Aciklama,
+  AltNot,
+  DurumBaglantisi,
+  FioriBolum,
+  Kucuk,
+  KucukGri,
+  NoRozeti,
+  TUMU_KATEGORISI,
+  gunu,
+  kategorilerOlustur,
+  saati,
+} from "../fiori/ListeOgeleri";
+import ListeRaporu, { KpiKutucugu } from "../fiori/ListeRaporu";
 
 const ISO = "YYYY-MM-DD";
 const SAYFA = 50;
@@ -92,6 +101,7 @@ export default function ZamanTakibiPage() {
   const [faaliyet, setFaaliyet] = useState<string | undefined>();
   const [sayfa, setSayfa] = useState(1);
   const [kapatilan, setKapatilan] = useState<ZamanKaydi | null>(null);
+  const [seciliAktif, setSeciliAktif] = useState<number[]>([]);
   const [kapatForm] = Form.useForm<{ gercek_bitis?: Dayjs; gerekce: string }>();
 
   const kpiKodu = params.get("kpi") ?? undefined;
@@ -175,71 +185,6 @@ export default function ZamanTakibiPage() {
     setSayfa(1);
   };
 
-  const kayitSutunlari = [
-    { title: "İş No", dataIndex: "so_no", className: "mono" },
-    ...(personelGorur ? [{ title: "Personel", dataIndex: "kisi_adi", ellipsis: true }] : []),
-    {
-      title: "Faaliyet",
-      dataIndex: "faaliyet",
-      render: (f: Faaliyet) => FAALIYET_ADLARI[f] ?? f,
-    },
-    { title: "Başlangıç", dataIndex: "started_at", render: an },
-    { title: "Bitiş", dataIndex: "ended_at", render: (t: string | null) => (t ? an(t) : <Tag color="blue">Açık</Tag>) },
-    {
-      title: "Süre",
-      dataIndex: "sure_dk",
-      render: (d: number | null, r: ZamanKaydi) => (r.ended_at ? sure(d) : "—"),
-    },
-    {
-      title: "Kaynak",
-      dataIndex: "kaynak",
-      render: (k: string, r: ZamanKaydi) => (
-        <Space size={2} wrap>
-          {KAYNAK_ADLARI[k] ?? k}
-          {r.gecikmeli && <Tag color="orange">Gecikmeli</Tag>}
-        </Space>
-      ),
-    },
-    { title: "Birim", dataIndex: "birim", render: (b: string | null) => (b ? BIRIM_ETIKETLERI[b] ?? b : "—") },
-  ];
-
-  const aktifSutunlari = [
-    ...(personelGorur ? [{ title: "Personel", dataIndex: "kisi_adi" }] : []),
-    { title: "İş No", dataIndex: "so_no", className: "mono" },
-    { title: "Faaliyet", dataIndex: "faaliyet", render: (f: Faaliyet) => FAALIYET_ADLARI[f] ?? f },
-    { title: "Başlangıç", dataIndex: "started_at", render: an },
-    {
-      title: "Geçen",
-      dataIndex: "gecen_dk",
-      render: (d: number | null, r: ZamanKaydi) => (
-        <Typography.Text type={r.uzun ? "danger" : undefined} strong={r.uzun}>
-          {sureMetni(d) ?? "—"}
-          {r.uzun ? " (uzun)" : ""}
-        </Typography.Text>
-      ),
-    },
-    ...(yonetici
-      ? [
-          {
-            title: "",
-            key: "islem",
-            render: (_: unknown, r: ZamanKaydi) => (
-              <Button
-                size="small"
-                danger={r.uzun}
-                onClick={() => {
-                  kapatForm.resetFields();
-                  setKapatilan(r);
-                }}
-              >
-                Kapat / Düzelt
-              </Button>
-            ),
-          },
-        ]
-      : []),
-  ];
-
   const personelSutunlari = [
     { title: "Personel", dataIndex: "ad", fixed: "left" as const },
     { title: "Kişi-saat", dataIndex: "kisi_saat_dk", render: sure },
@@ -260,39 +205,31 @@ export default function ZamanTakibiPage() {
     { title: "Geri alınan", dataIndex: "geri_alinan_sayisi" },
   ];
 
-  const isSutunlari = [
-    { title: "İş No", dataIndex: "so_no", className: "mono" },
-    { title: "Konu", dataIndex: "konu", ellipsis: true },
-    { title: "Birim", dataIndex: "birim", render: (b: string) => BIRIM_ETIKETLERI[b] ?? b },
-    { title: "Tamamlanma", dataIndex: "completed_at", render: an },
-    { title: "Kişi-saat", dataIndex: "kisi_saat_dk", render: sure },
-    {
-      title: "Süre kaydı",
-      dataIndex: "sure_durumu",
-      render: (d: string | null) => (d ? SURE_DURUMU_ADLARI[d] ?? d : "—"),
-    },
-  ];
-
   const ayrinti = isListesi ? isler : kayitlar;
   const suzgecMetni = ozet.data
     ? `${dayjs(ozet.data.suzgec.bas).format("DD.MM.YYYY")} – ${dayjs(ozet.data.suzgec.bit).format("DD.MM.YYYY")}`
     : "";
 
+  const sayaclar = aktif.data?.sayaclar ?? [];
+  const seciliSayac = sayaclar.find((r) => r.id === seciliAktif[0]) ?? null;
+  const aktarir = yetkili("servis_rapor.disaaktar");
+  const excelAc = () =>
+    window.open(zamanTakibi.excelYolu({ ...suzgec, kpi: isListesi ? undefined : kpiKodu }), "_blank");
+  const faaliyetKategorileri = kategorilerOlustur(
+    Object.entries(FAALIYET_ADLARI).map(([kod, ad]) => ({ kod, ad })),
+    (k) => (k === "MOLA" || k === "BEKLEME" ? "kirmizi" : "yesil"),
+    () => <FieldTimeOutlined />,
+  );
+  const kpiEtiketi = kpiKodu ? (
+    <Tag closable onClose={() => kpiSec(undefined)} color="blue">
+      {kpiBasligi ?? kpiKodu}
+    </Tag>
+  ) : undefined;
+
   return (
-    <Card
-      title="Saha / Zaman Takibi"
-      extra={
-        yetkili("servis_rapor.disaaktar") && (
-          <Button
-            icon={<DownloadOutlined />}
-            onClick={() => window.open(zamanTakibi.excelYolu({ ...suzgec, kpi: isListesi ? undefined : kpiKodu }), "_blank")}
-          >
-            Excel
-          </Button>
-        )
-      }
-    >
-      <Space wrap style={{ marginBottom: 12 }}>
+    <div className="fm-sayfa">
+      <div className="fm-arac-cubugu">
+        <span className="fm-arac-baslik">Süzgeç</span>
         <DatePicker.RangePicker
           format="DD.MM.YYYY"
           value={aralik}
@@ -318,116 +255,229 @@ export default function ZamanTakibiPage() {
             onChange={filtreDegisti((v: number | undefined) => setKisi(v))}
           />
         )}
-        <Select
-          style={{ width: 150 }}
-          allowClear
-          placeholder="Faaliyet"
-          value={faaliyet}
-          options={Object.entries(FAALIYET_ADLARI).map(([value, label]) => ({ value, label }))}
-          onChange={filtreDegisti((v: string | undefined) => setFaaliyet(v))}
-        />
         <Typography.Text type="secondary">{suzgecMetni}</Typography.Text>
-      </Space>
+        <span className="fm-bosluk" />
+        {aktarir && (
+          <Button icon={<DownloadOutlined />} onClick={excelAc}>
+            Excel
+          </Button>
+        )}
+      </div>
 
-      {ozet.isError && <Alert type="error" showIcon message={(ozet.error as ApiError).message} style={{ marginBottom: 12 }} />}
+      {ozet.isError && <Alert type="error" showIcon message={(ozet.error as ApiError).message} />}
 
-      <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
+      <div className="fl-kutucuklar">
         {(ozet.data?.kpi ?? []).map((k) => (
-          <Col key={k.kod} xs={12} sm={8} md={6} xl={4}>
-            <KpiKutusu
-              kod={k.kod}
-              baslik={k.baslik}
-              tanim={k.tanim}
-              deger={k.deger}
-              vurgu={
-                (k.kod === "uzun_sayac" || k.kod === "sure_eksik") && (k.deger ?? 0) > 0 ? "uyari" : "normal"
-              }
-              yol={k.liste ? `/zaman-takibi?kpi=${k.kod}` : "/zaman-takibi"}
-              yukleniyor={ozet.isLoading}
-            />
-          </Col>
+          <KpiKutucugu
+            key={k.kod}
+            kod={k.kod}
+            baslik={k.baslik}
+            tanim={k.tanim}
+            deger={k.deger}
+            ikon={<FieldTimeOutlined />}
+            vurgu={(k.kod === "uzun_sayac" || k.kod === "sure_eksik") && (k.deger ?? 0) > 0 ? "uyari" : "normal"}
+            yol={k.liste ? `/zaman-takibi?kpi=${k.kod}` : "/zaman-takibi"}
+            yukleniyor={ozet.isLoading}
+          />
         ))}
-      </Row>
+      </div>
 
-      <Card size="small" title={`Şu an çalışanlar (${aktif.data?.sayaclar.length ?? 0})`} style={{ marginBottom: 16 }}>
-        <Table
-          size="small"
-          rowKey="id"
-          loading={aktif.isLoading}
-          dataSource={aktif.data?.sayaclar ?? []}
-          columns={aktifSutunlari}
-          pagination={false}
-          scroll={{ x: 560 }}
-          locale={{ emptyText: <Empty description="Açık sayaç yok" /> }}
-          onRow={(r) => (r.uzun ? { style: { background: "#fff1f0" } } : {})}
+      <FioriBolum baslik={`Şu an çalışanlar (${sayaclar.length})`} dolgusuz>
+        <ListeRaporu<ZamanKaydi>
+          kayitSayisi={sayaclar.length}
+          durumCubugu={{
+            gruplar: [],
+            onSec: () => undefined,
+            onYenile: () => void aktif.refetch(),
+            yenileniyor: aktif.isFetching,
+          }}
+          sutunlar={[
+            {
+              title: "Durum",
+              key: "d",
+              width: 130,
+              align: "center",
+              render: (_, r) => (
+                <DurumBaglantisi
+                  metin={r.uzun ? "SAAT AÇIK-UZUN" : "SAAT AÇIK"}
+                  ton={r.uzun ? "olumsuz" : undefined}
+                />
+              ),
+            },
+            {
+              title: "İş No",
+              dataIndex: "so_no",
+              key: "so",
+              width: 170,
+              align: "center",
+              render: (v: string) => <NoRozeti no={v} />,
+            },
+            ...(personelGorur
+              ? [{ title: "Personel", dataIndex: "kisi_adi", key: "p", width: 170, align: "center" as const, render: (v: string) => <Kucuk kalin>{v}</Kucuk> }]
+              : []),
+            {
+              title: "Faaliyet",
+              dataIndex: "faaliyet",
+              key: "f",
+              width: 120,
+              align: "center",
+              render: (f: Faaliyet) => <Kucuk>{FAALIYET_ADLARI[f] ?? f}</Kucuk>,
+            },
+            { title: "Başlangıç\nTarihi", key: "bt", width: 100, align: "center", responsive: ["sm"], render: (_, r) => gunu(r.started_at) },
+            { title: "Başlangıç\nSaati", key: "bs", width: 90, align: "center", render: (_, r) => saati(r.started_at) },
+            {
+              title: "Geçen",
+              dataIndex: "gecen_dk",
+              key: "g",
+              width: 110,
+              align: "center",
+              render: (d: number | null, r) => (
+                <Typography.Text type={r.uzun ? "danger" : undefined} strong>
+                  {sureMetni(d) ?? "—"}
+                </Typography.Text>
+              ),
+            },
+          ]}
+          veri={sayaclar}
+          satirAnahtari="id"
+          yukleniyor={aktif.isFetching}
+          bosMetin="Açık sayaç yok"
+          scrollX={760}
+          secimModu={yonetici ? "tek" : "yok"}
+          secili={seciliAktif}
+          onSecim={(k) => setSeciliAktif(k as number[])}
+          onSatirAc={
+            yonetici
+              ? (r) => {
+                  kapatForm.resetFields();
+                  setKapatilan(r);
+                }
+              : undefined
+          }
+          eylemler={
+            yonetici
+              ? [
+                  {
+                    anahtar: "saat_kapa",
+                    ad: "Saat Kapa / Düzelt",
+                    ikon: <ClockCircleOutlined />,
+                    tehlikeli: !!seciliSayac?.uzun,
+                    devreDisi: !seciliSayac,
+                    ipucu: "Gerçek bitişle kapatır ya da iptal eder (yönetici düzeltmesi)",
+                    onClick: () => {
+                      if (!seciliSayac) return;
+                      kapatForm.resetFields();
+                      setKapatilan(seciliSayac);
+                    },
+                  },
+                ]
+              : undefined
+          }
         />
-      </Card>
+      </FioriBolum>
 
       {ozet.data?.personel && (
-        <Card size="small" title="Personel dağılımı ve veri disiplini" style={{ marginBottom: 16 }}>
-          <Table<PersonelSatiri>
-            size="small"
-            rowKey={(r) => String(r.user_id ?? r.ad)}
-            dataSource={ozet.data.personel}
-            columns={personelSutunlari}
-            pagination={false}
-            scroll={{ x: 1100 }}
-          />
-        </Card>
+        <FioriBolum baslik="Personel dağılımı ve veri disiplini" dolgusuz>
+          <div className="fl-rapor" style={{ border: 0 }}>
+            <Table<PersonelSatiri>
+              className="fl-tablo"
+              size="small"
+              rowKey={(r) => String(r.user_id ?? r.ad)}
+              dataSource={ozet.data.personel}
+              columns={personelSutunlari}
+              pagination={false}
+              scroll={{ x: 1100 }}
+              locale={{ emptyText: "Veri yok" }}
+            />
+          </div>
+        </FioriBolum>
       )}
 
-      <Card
-        size="small"
-        title={
-          <Space wrap>
-            <span>Ayrıntı</span>
-            {kpiKodu && (
-              <Tag closable onClose={() => kpiSec(undefined)} color="blue">
-                {kpiBasligi ?? kpiKodu}
-              </Tag>
-            )}
-            <Typography.Text type="secondary">{ayrinti.data ? `${ayrinti.data.toplam} kayıt` : ""}</Typography.Text>
-          </Space>
-        }
-      >
-        {ayrinti.isError ? (
+      {ayrinti.isError ? (
+        <FioriBolum baslik="Ayrıntı">
           <Empty description={(ayrinti.error as ApiError).message} />
-        ) : isListesi ? (
-          <Table<ZamanIsi>
-            size="small"
-            rowKey="id"
-            loading={isler.isLoading}
-            dataSource={isler.data?.kayitlar ?? []}
-            columns={isSutunlari}
-            scroll={{ x: 640 }}
-            pagination={{
-              current: sayfa,
-              pageSize: SAYFA,
-              total: isler.data?.toplam ?? 0,
-              onChange: setSayfa,
-              showSizeChanger: false,
-              showTotal: (t) => `${t} iş`,
-            }}
-          />
-        ) : (
-          <Table<ZamanKaydi>
-            size="small"
-            rowKey="id"
-            loading={kayitlar.isLoading}
-            dataSource={kayitlar.data?.kayitlar ?? []}
-            columns={kayitSutunlari}
-            scroll={{ x: 760 }}
-            pagination={{
-              current: sayfa,
-              pageSize: SAYFA,
-              total: kayitlar.data?.toplam ?? 0,
-              onChange: setSayfa,
-              showSizeChanger: false,
-              showTotal: (t) => `${t} kayıt`,
-            }}
-          />
-        )}
-      </Card>
+        </FioriBolum>
+      ) : isListesi ? (
+        <ListeRaporu<ZamanIsi>
+          kayitSayisi={isler.data?.toplam}
+          ustBilgi={kpiEtiketi}
+          sutunlar={[
+            {
+              title: "Süre Kaydı",
+              dataIndex: "sure_durumu",
+              key: "sd",
+              width: 140,
+              align: "center",
+              render: (d: string | null) => (
+                <DurumBaglantisi metin={d ? (SURE_DURUMU_ADLARI[d] ?? d) : "—"} ton={d === "EKSIK" ? "olumsuz" : undefined} />
+              ),
+            },
+            { title: "İş No", dataIndex: "so_no", key: "so", width: 170, align: "center", render: (v: string) => <NoRozeti no={v} /> },
+            { title: "Açıklama", dataIndex: "konu", key: "k", width: 280, render: (v: string) => <Aciklama metin={v} /> },
+            { title: "Sistem", dataIndex: "birim", key: "b", width: 130, align: "center", responsive: ["md"], render: (b: string) => <Kucuk>{BIRIM_ETIKETLERI[b] ?? b}</Kucuk> },
+            { title: "Tamamlanma", dataIndex: "completed_at", key: "t", width: 140, align: "center", responsive: ["sm"], render: an },
+            { title: "Kişi-saat", dataIndex: "kisi_saat_dk", key: "ks", width: 110, align: "center", render: sure },
+          ]}
+          veri={isler.data?.kayitlar ?? []}
+          satirAnahtari="id"
+          yukleniyor={isler.isFetching}
+          scrollX={900}
+          secimModu="yok"
+          sayfalama={{ sayfa, boyut: SAYFA, toplam: isler.data?.toplam ?? 0, onChange: setSayfa }}
+          eylemler={aktarir ? [{ anahtar: "excel", ad: "Excel'e aktar", ikon: <DownloadOutlined />, onClick: excelAc }] : undefined}
+        />
+      ) : (
+        <ListeRaporu<ZamanKaydi>
+          kategoriler={faaliyetKategorileri}
+          seciliKategori={faaliyet ?? TUMU_KATEGORISI.kod}
+          onKategori={(k) => {
+            setFaaliyet(k === TUMU_KATEGORISI.kod ? undefined : k);
+            setSayfa(1);
+          }}
+          kayitSayisi={kayitlar.data?.toplam}
+          ustBilgi={kpiEtiketi}
+          sutunlar={[
+            {
+              title: "Durum",
+              key: "d",
+              width: 130,
+              align: "center",
+              render: (_, r) => (
+                <DurumBaglantisi
+                  metin={r.ended_at ? "SAAT KAPANDI" : "SAAT AÇIK"}
+                  ton={r.ended_at ? "kapali" : undefined}
+                  alt={r.gecikmeli ? <AltNot tur="uyari">GECİKMELİ</AltNot> : undefined}
+                />
+              ),
+            },
+            { title: "İş No", dataIndex: "so_no", key: "so", width: 170, align: "center", render: (v: string) => <NoRozeti no={v} /> },
+            { title: "Tarih", key: "t", width: 100, align: "center", render: (_, r) => gunu(r.started_at) },
+            { title: "Başlangıç\nSaati", key: "bs", width: 90, align: "center", responsive: ["sm"], render: (_, r) => saati(r.started_at) },
+            { title: "Bitiş\nSaati", key: "bb", width: 90, align: "center", responsive: ["sm"], render: (_, r) => (r.ended_at ? saati(r.ended_at) : "—") },
+            { title: "Faaliyet", dataIndex: "faaliyet", key: "f", width: 110, align: "center", render: (f: Faaliyet) => <Kucuk>{FAALIYET_ADLARI[f] ?? f}</Kucuk> },
+            ...(personelGorur
+              ? [{ title: "Personel", dataIndex: "kisi_adi", key: "p", width: 160, align: "center" as const, render: (v: string) => <Kucuk kalin>{v}</Kucuk> }]
+              : []),
+            {
+              title: "Süre",
+              dataIndex: "sure_dk",
+              key: "s",
+              width: 100,
+              align: "center",
+              render: (d: number | null, r) => (r.ended_at ? sure(d) : "—"),
+            },
+            { title: "Kaynak", dataIndex: "kaynak", key: "k", width: 130, align: "center", responsive: ["md"], render: (k: string) => <KucukGri>{KAYNAK_ADLARI[k] ?? k}</KucukGri> },
+            { title: "Sistem", dataIndex: "birim", key: "b", width: 120, align: "center", responsive: ["lg"], render: (b: string | null) => <Kucuk>{b ? (BIRIM_ETIKETLERI[b] ?? b) : null}</Kucuk> },
+          ]}
+          veri={kayitlar.data?.kayitlar ?? []}
+          satirAnahtari="id"
+          yukleniyor={kayitlar.isFetching}
+          scrollX={1200}
+          secimModu="yok"
+          sayfalama={{ sayfa, boyut: SAYFA, toplam: kayitlar.data?.toplam ?? 0, onChange: setSayfa }}
+          eylemler={aktarir ? [{ anahtar: "excel", ad: "Excel'e aktar", ikon: <DownloadOutlined />, onClick: excelAc }] : undefined}
+        />
+      )}
 
       <Modal
         open={kapatilan !== null}
@@ -458,6 +508,6 @@ export default function ZamanTakibiPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </Card>
+    </div>
   );
 }

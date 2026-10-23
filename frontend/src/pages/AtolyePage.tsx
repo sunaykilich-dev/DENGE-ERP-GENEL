@@ -12,12 +12,13 @@
  * sunucudan gelir. Tamir bedeli yalnız `maliyet.gor` sahibine gösterilir
  * (anahtar yoksa alan hiç çizilmez). Parça ve süre bölümü salt okunurdur.
  */
+import { EditOutlined, FilePdfOutlined, PlusOutlined, ToolOutlined, UserAddOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ColumnsType } from "antd/es/table";
 import {
   Alert,
   App,
   Button,
-  Card,
   Checkbox,
   Col,
   DatePicker,
@@ -69,11 +70,25 @@ import AtolyeDurumPenceresi from "../components/AtolyeDurumPenceresi";
 import AtolyeKabulPenceresi from "../components/AtolyeKabulPenceresi";
 import AtolyeKpiRaporu from "../components/AtolyeKpiRaporu";
 import EkYukleyici from "../components/EkYukleyici";
-import KpiKutusu from "../components/KpiKutusu";
 import ServisParcalari from "../components/ServisParcalari";
+import { TAYIN, durumGrubuBul } from "../fiori/etiketler";
+import { ATOLYE_DURUM_ETIKETLERI, ATOLYE_DURUM_GRUPLARI, ATOLYE_TUR_RENGI } from "../fiori/etiketlerEk";
+import {
+  Aciklama,
+  AltNot,
+  DurumBaglantisi,
+  Kucuk,
+  NoRozeti,
+  PersonelHucresi,
+  TUMU_KATEGORISI,
+  gunu,
+  kategorilerOlustur,
+  saati,
+} from "../fiori/ListeOgeleri";
+import ListeRaporu, { KpiKutucugu, type FioriEylem } from "../fiori/ListeRaporu";
 
 const SAYFA_BOYU = 50;
-/** Toplu atamanın başlangıç ekibi (sabit referans: pencere her çizimde sıfırlanmasın). */
+/** Toplu tayinin başlangıç ekibi (sabit referans: pencere her çizimde sıfırlanmasın). */
 const BOS_EKIP: { id: number; lead: boolean }[] = [];
 
 const tarih = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY") : "—");
@@ -147,7 +162,7 @@ function GarantiEtiketi({ kod, sozluk }: { kod: string; sozluk?: FormVerileri })
   );
 }
 
-// --- Atama ------------------------------------------------------------------------------
+// --- Tayin (API: ata) ------------------------------------------------------------------------------
 
 function AtamaPenceresi({
   soIdler,
@@ -207,7 +222,7 @@ function AtamaPenceresi({
 
   return (
     <Modal
-      title={toplu ? `Toplu atama (${soIdler.length} kayıt)` : "Usta / ekip ataması"}
+      title={toplu ? `${TAYIN.topluTayin} (${soIdler.length} kayıt)` : "Usta / Ekip Tayini"}
       open={acik}
       onCancel={kapat}
       onOk={() => kaydet.mutate()}
@@ -218,8 +233,8 @@ function AtamaPenceresi({
     >
       <Space orientation="vertical" style={{ width: "100%" }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          Atama servis işine yazılır (tek atama kaynağı). Hepsi ya da hiçbiri: seçilenlerden biri
-          atanamıyorsa hiçbiri değişmez.
+          Tayin servis işine yazılır (tek tayin kaynağı). Hepsi ya da hiçbiri: seçilenlerden biri
+          tayin edilemiyorsa hiçbiri değişmez.
         </Typography.Text>
         {toplu && (
           <Radio.Group
@@ -924,7 +939,7 @@ function AtolyeDetayi({
                             : "—"}
                           {atayabilir && d.acik && (
                             <Button size="small" type="link" onClick={() => setAtamaAcik(true)}>
-                              ata
+                              {d.ekip.length ? TAYIN.tayiniDegistir : TAYIN.tayinEt}
                             </Button>
                           )}
                         </Space>
@@ -1130,6 +1145,9 @@ export default function AtolyePage() {
   // Rapordaki bir KPI kutusu listeyi açınca (adres değişir) pencere kapanır.
   useEffect(() => setRaporAcik(false), [arama]);
   const [topluAtaAcik, setTopluAtaAcik] = useState(false);
+  const [cokluSecim, setCokluSecim] = useState(false);
+  const [suzgecAcik, setSuzgecAcik] = useState(false);
+  const ekran = Grid.useBreakpoint();
   const [aramaMetni, setAramaMetni] = useState(suzgec.q ?? "");
   const [markaMetni, setMarkaMetni] = useState(suzgec.marka ?? "");
   const soId = id ? Number(id) : null;
@@ -1161,260 +1179,407 @@ export default function AtolyePage() {
   const kpiAktif = (sorgu: Record<string, unknown>) =>
     kpiYolu(suzgec, sorgu) === `/atolye?${suzgecYaz(suzgec)}`;
 
+  const kayitlar = liste.data?.kayitlar ?? [];
+  const seciliSatirlar = kayitlar.filter((r) => secili.includes(r.so_id));
+  const tek = seciliSatirlar.length === 1 ? seciliSatirlar[0] : null;
+  const banaAit = !!kullanici && suzgec.teknisyen_id === kullanici.id;
+  const seciliGrup = durumGrubuBul(ATOLYE_DURUM_GRUPLARI, suzgec.durum?.split(","));
+  const durumAdi = (k: string) => s?.durumlar.find((d) => d.kod === k)?.ad ?? k;
+  const ac = (r: AtolyeSatiri) => git(`/atolye/${r.so_id}${yolEki}`);
+  const kategoriler = kategorilerOlustur(
+    s?.servis_turleri ?? [],
+    (k) => ATOLYE_TUR_RENGI[k] ?? "yesil",
+  );
+  const ekSuzgecSayisi = [
+    suzgec.birim,
+    suzgec.marka,
+    suzgec.yas,
+    suzgec.geciken,
+    suzgec.durum_grubu,
+    suzgec.durum && !seciliGrup ? 1 : undefined,
+  ].filter(Boolean).length;
+
+  // Tek seçimde mevcut ekip satırdan (sorumlu + ekip) okunur; toplu tayinde boş başlar.
+  const tekEkip = tek ? tek.ekip.map((e) => ({ id: e.id, lead: e.id === tek.sorumlu?.id })) : BOS_EKIP;
+
+  const sutunlar: ColumnsType<AtolyeSatiri> = [
+    {
+      title: "Durum",
+      key: "d",
+      width: 160,
+      align: "center",
+      render: (_, r) => (
+        <DurumBaglantisi
+          metin={s?.durumlar.length ? durumAdi(r.status) : (ATOLYE_DURUM_ETIKETLERI[r.status] ?? r.status)}
+          ipucu={ATOLYE_DURUM_ETIKETLERI[r.status]}
+          ton={r.status === "IPTAL" ? "olumsuz" : r.acik ? undefined : "kapali"}
+          onClick={() => ac(r)}
+          alt={r.geciken ? <AltNot tur="kritik">GECİKTİ</AltNot> : undefined}
+        />
+      ),
+    },
+    {
+      title: "Atölye No",
+      dataIndex: "atolye_no",
+      width: 160,
+      align: "center",
+      render: (v: string, r) => <NoRozeti no={v} alt={r.so_no} onClick={() => ac(r)} />,
+    },
+    {
+      title: "Kabul\nTarihi",
+      key: "kt",
+      width: 100,
+      align: "center",
+      responsive: ["sm"],
+      render: (_, r) => gunu(r.received_at),
+    },
+    {
+      title: "Kabul\nSaati",
+      key: "ks",
+      width: 90,
+      align: "center",
+      responsive: ["md"],
+      render: (_, r) => saati(r.received_at),
+    },
+    {
+      title: "Açıklama",
+      key: "c",
+      width: 260,
+      render: (_, r) => (
+        <Aciklama
+          metin={r.ekipman ? [r.ekipman.marka, r.ekipman.model].filter(Boolean).join(" ") || r.ekipman.tip : null}
+          onClick={() => ac(r)}
+        />
+      ),
+    },
+    {
+      title: "Ekipman",
+      key: "e",
+      width: 130,
+      align: "center",
+      responsive: ["lg"],
+      render: (_, r) => <Kucuk>{r.ekipman?.seri ?? (r.ekipman ? TIP_ETIKETLERI[r.ekipman.tip] ?? r.ekipman.tip : null)}</Kucuk>,
+    },
+    {
+      title: "Mahal",
+      key: "m",
+      width: 180,
+      align: "center",
+      responsive: ["md"],
+      render: (_, r) => <Kucuk kalin>{r.musteri?.title}</Kucuk>,
+    },
+    {
+      title: "Sistem",
+      key: "sis",
+      width: 150,
+      align: "center",
+      responsive: ["lg"],
+      render: (_, r) => (
+        <>
+          <Kucuk>{s?.servis_turleri.find((t) => t.kod === r.service_type)?.ad ?? r.service_type}</Kucuk>
+          <GarantiEtiketi kod={r.warranty_status} sozluk={s} />
+        </>
+      ),
+    },
+    {
+      title: "Personel",
+      key: "p",
+      width: 80,
+      align: "center",
+      render: (_, r) => (
+        <PersonelHucresi
+          sorumlu={r.sorumlu?.ad}
+          kisiler={r.ekip.map((e) => e.ad)}
+          etiket={`${r.atolye_no} ${TAYIN.tayinEdilenEkip}`}
+          onTayin={
+            atayabilir && r.acik
+              ? () => {
+                  setSecili([r.so_id]);
+                  setTopluAtaAcik(true);
+                }
+              : undefined
+          }
+        />
+      ),
+    },
+    {
+      title: "Bekleme\n(gün)",
+      dataIndex: "bekleme_gunu",
+      width: 80,
+      align: "center",
+      responsive: ["xl"],
+    },
+    ...(bedelGorur
+      ? [
+          {
+            title: "Bedel",
+            key: "b",
+            width: 100,
+            align: "right" as const,
+            responsive: ["xl" as const],
+            render: (_: unknown, r: AtolyeSatiri) =>
+              r.repair_amount != null ? Number(r.repair_amount).toLocaleString("tr-TR") : "—",
+          },
+        ]
+      : []),
+  ];
+
+  const listeMenusu = [
+    ...(aktarabilir ? [{ key: "excel", label: "Excel'e aktar" }] : []),
+    ...(raporGorur ? [{ key: "rapor", label: "Atölye KPI raporu" }] : []),
+    ...(atayabilir
+      ? [{ key: "coklu", label: cokluSecim ? "Tekli seçime dön" : `Çoklu seçim (${TAYIN.topluTayin})` }]
+      : []),
+    ...(suzgec.kabul_grubu ? [{ key: "grup", label: "Grup kabul fişi (PDF)" }] : []),
+    { key: "temizle", label: "Seçimi temizle", disabled: !secili.length },
+    { type: "divider" as const },
+    { key: "yenile", label: "Listeyi yenile" },
+  ];
+  const listeMenusuTikla = (k: string) => {
+    if (k === "excel") window.open(atolyeApi.excelYolu(suzgec), "_blank");
+    else if (k === "rapor") setRaporAcik(true);
+    else if (k === "coklu") {
+      setCokluSecim(!cokluSecim);
+      setSecili((x) => (cokluSecim ? x.slice(0, 1) : x));
+    } else if (k === "grup" && suzgec.kabul_grubu) window.open(atolyeApi.grupFisiYolu(suzgec.kabul_grubu), "_blank");
+    else if (k === "temizle") setSecili([]);
+    else if (k === "yenile") void liste.refetch();
+  };
+  const acikSecili = seciliSatirlar.filter((r) => r.acik);
+
+  const eylemler: FioriEylem[] = [
+    { anahtar: "liste", ad: "Liste", menu: listeMenusu, onMenu: listeMenusuTikla },
+    {
+      anahtar: "durum",
+      ad: "Durum Değiştir",
+      kisalt: true,
+      gizli: !yazabilir,
+      devreDisi: !tek || !tek.acik,
+      ipucu: "Seçili kaydın durum penceresini açar (seçenekler sunucudan)",
+      onClick: () => tek && ac(tek),
+    },
+    {
+      anahtar: "tayin",
+      ad: secili.length > 1 ? TAYIN.topluTayin : TAYIN.tayinEt,
+      ikon: <UserAddOutlined />,
+      yalnizIkon: true,
+      gizli: !atayabilir,
+      ipucu:
+        secili.length > 1 && acikSecili.length !== secili.length
+          ? "Kapalı kayıtlara tayin yapılamaz"
+          : secili.length > 1
+            ? `${TAYIN.topluTayin} (${secili.length} kayıt)`
+            : TAYIN.tayinEt,
+      devreDisi: !secili.length || acikSecili.length !== secili.length,
+      onClick: () => setTopluAtaAcik(true),
+    },
+    {
+      anahtar: "duzenle",
+      ad: "Aç / Düzenle",
+      ikon: <EditOutlined />,
+      yalnizIkon: true,
+      devreDisi: !tek,
+      onClick: () => tek && ac(tek),
+    },
+    {
+      anahtar: "pdf",
+      ad: "Kabul fişi (PDF)",
+      ikon: <FilePdfOutlined />,
+      yalnizIkon: true,
+      devreDisi: !tek,
+      href: tek ? atolyeApi.kabulFisiYolu(tek.so_id) : undefined,
+    },
+  ];
+  const sagEylemler: FioriEylem[] = [
+    {
+      anahtar: "kabul",
+      ad: "Cihaz Kabul",
+      ikon: <PlusOutlined />,
+      vurgulu: true,
+      kisalt: true,
+      gizli: !yazabilir,
+      onClick: () => setKabulAcik(true),
+    },
+  ];
+
+  const suzgecPaneli = (
+    <Row gutter={[8, 8]}>
+      <Col xs={12} md={6}>
+        <Select
+          allowClear
+          style={{ width: "100%" }}
+          placeholder="Durum (ayrıntılı)"
+          value={seciliGrup ? undefined : (suzgec.durum ?? suzgec.durum_grubu)}
+          onChange={(v?: string) =>
+            suzgecDegistir({
+              ...suzgec,
+              durum: v && v !== "ACIK" && v !== "KAPALI" ? v : undefined,
+              durum_grubu: v === "ACIK" || v === "KAPALI" ? v : undefined,
+            })
+          }
+          options={[
+            { value: "ACIK", label: "Açık kayıtlar" },
+            { value: "KAPALI", label: "Teslim / iptal" },
+            ...(s?.durumlar ?? []).map((d) => ({ value: d.kod, label: d.ad })),
+          ]}
+        />
+      </Col>
+      <Col xs={12} md={5}>
+        <Select
+          allowClear
+          style={{ width: "100%" }}
+          placeholder="Birim"
+          value={suzgec.birim}
+          onChange={(v) => suzgecDegistir({ ...suzgec, birim: v })}
+          options={BIRIM_KODLARI.map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] }))}
+        />
+      </Col>
+      <Col xs={12} md={5}>
+        <Input
+          allowClear
+          placeholder="Marka"
+          value={markaMetni}
+          onChange={(e) => {
+            setMarkaMetni(e.target.value);
+            if (!e.target.value) suzgecDegistir({ ...suzgec, marka: undefined });
+          }}
+          onPressEnter={() => suzgecDegistir({ ...suzgec, marka: markaMetni.trim() || undefined })}
+        />
+      </Col>
+      <Col xs={12} md={4}>
+        <Select
+          allowClear
+          style={{ width: "100%" }}
+          placeholder="Bekleme"
+          value={suzgec.yas}
+          onChange={(v) => suzgecDegistir({ ...suzgec, yas: v })}
+          options={(s?.yas_kovalari ?? []).map((k) => ({ value: k, label: `${k} gün` }))}
+        />
+      </Col>
+      <Col xs={24} md={4}>
+        <Checkbox
+          checked={!!suzgec.geciken}
+          onChange={(e) => suzgecDegistir({ ...suzgec, geciken: e.target.checked || undefined })}
+        >
+          Tahmini bitişi geçenler
+        </Checkbox>
+      </Col>
+    </Row>
+  );
+
+  const ozelEtiketler = OZEL_SUZGECLER.filter((o) => suzgec[o.anahtar] !== undefined);
+  const ustBilgi =
+    suzgec.kabul_grubu || ozelEtiketler.length || Object.values(suzgec).some((v) => v !== undefined) ? (
+      <Space wrap>
+        {suzgec.kabul_grubu && (
+          <Tag closable onClose={() => suzgecDegistir({ ...suzgec, kabul_grubu: undefined })} color="blue">
+            Kabul grubu {suzgec.kabul_grubu}
+          </Tag>
+        )}
+        {ozelEtiketler.map((o) => (
+          <Tag
+            key={o.anahtar}
+            color="purple"
+            closable
+            onClose={() => suzgecDegistir({ ...suzgec, [o.anahtar]: undefined })}
+          >
+            {o.etiket(suzgec)}
+          </Tag>
+        ))}
+        <Button
+          size="small"
+          type="link"
+          onClick={() => {
+            setAramaMetni("");
+            setMarkaMetni("");
+            suzgecDegistir({});
+          }}
+        >
+          Süzgeci temizle
+        </Button>
+      </Space>
+    ) : null;
+
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      <Row gutter={[12, 12]}>
-        {(ozet.data ?? []).map((k) => (
-          <Col key={k.kod} xs={12} sm={8} lg={6} xl={3}>
-            <KpiKutusu
+      {(ozet.data ?? []).length > 0 && (
+        <div className="fl-kutucuklar">
+          {(ozet.data ?? []).map((k) => (
+            <KpiKutucugu
+              key={k.kod}
               kod={k.kod}
               baslik={k.baslik}
               tanim={k.tanim}
               deger={k.deger}
+              ikon={<ToolOutlined />}
               yol={kpiYolu(suzgec, k.sorgu)}
               vurgu={kpiAktif(k.sorgu) ? "uyari" : k.kod === "GECIKEN" && k.deger > 0 ? "kritik" : "normal"}
             />
-          </Col>
-        ))}
-      </Row>
+          ))}
+        </div>
+      )}
 
-      <Card
-        title="Atölye"
-        extra={
-          <Space wrap>
-            {yazabilir && (
-              <Button type="primary" onClick={() => setKabulAcik(true)}>
-                Cihaz kabul
-              </Button>
-            )}
-            {raporGorur && <Button onClick={() => setRaporAcik(true)}>KPI raporu</Button>}
-            {aktarabilir && (
-              <Button onClick={() => window.open(atolyeApi.excelYolu(suzgec), "_blank")}>Excel</Button>
-            )}
-          </Space>
-        }
-      >
-        <Space orientation="vertical" size="small" style={{ width: "100%" }}>
-          <Row gutter={[8, 8]}>
-            <Col xs={24} md={7}>
-              <Input.Search
-                allowClear
-                placeholder="Atölye no, servis no, müşteri, seri…"
-                value={aramaMetni}
-                onChange={(e) => setAramaMetni(e.target.value)}
-                onSearch={(q) => suzgecDegistir({ ...suzgec, q: q.trim() || undefined })}
-              />
-            </Col>
-            <Col xs={12} md={4}>
-              <Select
-                allowClear
-                style={{ width: "100%" }}
-                placeholder="Durum"
-                value={suzgec.durum ?? suzgec.durum_grubu}
-                onChange={(v?: string) =>
-                  suzgecDegistir({
-                    ...suzgec,
-                    durum: v && v !== "ACIK" && v !== "KAPALI" ? v : undefined,
-                    durum_grubu: v === "ACIK" || v === "KAPALI" ? v : undefined,
-                  })
-                }
-                options={[
-                  { value: "ACIK", label: "Açık kayıtlar" },
-                  { value: "KAPALI", label: "Teslim / iptal" },
-                  ...(s?.durumlar ?? []).map((d) => ({ value: d.kod, label: d.ad })),
-                ]}
-              />
-            </Col>
-            <Col xs={12} md={3}>
-              <Select
-                allowClear
-                style={{ width: "100%" }}
-                placeholder="Birim"
-                value={suzgec.birim}
-                onChange={(v) => suzgecDegistir({ ...suzgec, birim: v })}
-                options={BIRIM_KODLARI.map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] }))}
-              />
-            </Col>
-            <Col xs={12} md={4}>
-              <Select
-                allowClear
-                style={{ width: "100%" }}
-                placeholder="Servis türü"
-                value={suzgec.servis_turu}
-                onChange={(v) => suzgecDegistir({ ...suzgec, servis_turu: v })}
-                options={(s?.servis_turleri ?? []).map((t) => ({ value: t.kod, label: t.ad }))}
-              />
-            </Col>
-            <Col xs={12} md={3}>
-              <Input
-                allowClear
-                placeholder="Marka"
-                value={markaMetni}
-                onChange={(e) => {
-                  setMarkaMetni(e.target.value);
-                  if (!e.target.value) suzgecDegistir({ ...suzgec, marka: undefined });
-                }}
-                onPressEnter={() => suzgecDegistir({ ...suzgec, marka: markaMetni.trim() || undefined })}
-              />
-            </Col>
-            <Col xs={12} md={3}>
-              <Select
-                allowClear
-                style={{ width: "100%" }}
-                placeholder="Bekleme"
-                value={suzgec.yas}
-                onChange={(v) => suzgecDegistir({ ...suzgec, yas: v })}
-                options={(s?.yas_kovalari ?? []).map((k) => ({ value: k, label: `${k} gün` }))}
-              />
-            </Col>
-          </Row>
-          <Space wrap>
-            <Checkbox
-              checked={!!suzgec.geciken}
-              onChange={(e) => suzgecDegistir({ ...suzgec, geciken: e.target.checked || undefined })}
-            >
-              Tahmini bitişi geçenler
-            </Checkbox>
-            {suzgec.kabul_grubu && (
-              <Tag closable onClose={() => suzgecDegistir({ ...suzgec, kabul_grubu: undefined })} color="blue">
-                Kabul grubu {suzgec.kabul_grubu}
-              </Tag>
-            )}
-            {OZEL_SUZGECLER.filter((o) => suzgec[o.anahtar] !== undefined).map((o) => (
-              <Tag
-                key={o.anahtar}
-                color="purple"
-                closable
-                onClose={() => suzgecDegistir({ ...suzgec, [o.anahtar]: undefined })}
-              >
-                {o.etiket(suzgec)}
-              </Tag>
-            ))}
-            {suzgec.kabul_grubu && (
-              <Button size="small" onClick={() => window.open(atolyeApi.grupFisiYolu(suzgec.kabul_grubu!), "_blank")}>
-                Grup kabul fişi
-              </Button>
-            )}
-            {Object.values(suzgec).some((v) => v !== undefined) && (
-              <Button
-                size="small"
-                type="link"
-                onClick={() => {
-                  setAramaMetni("");
-                  setMarkaMetni("");
-                  suzgecDegistir({});
-                }}
-              >
-                Süzgeci temizle
-              </Button>
-            )}
-          </Space>
-
-          {secili.length > 0 && atayabilir && (
-            <Space wrap>
-              <Typography.Text>{secili.length} kayıt seçili</Typography.Text>
-              <Button size="small" onClick={() => setTopluAtaAcik(true)}>
-                Toplu ata
-              </Button>
-              <Button size="small" onClick={() => setSecili([])}>
-                Seçimi kaldır
-              </Button>
-            </Space>
-          )}
-
-          <Table<AtolyeSatiri>
-            rowKey="so_id"
+      <ListeRaporu<AtolyeSatiri>
+        kategoriler={kategoriler}
+        seciliKategori={suzgec.servis_turu ?? TUMU_KATEGORISI.kod}
+        onKategori={(k) => suzgecDegistir({ ...suzgec, servis_turu: k === TUMU_KATEGORISI.kod ? undefined : k })}
+        kayitSayisi={liste.data?.toplam}
+        ustSag={
+          <Input.Search
+            allowClear
             size="small"
-            scroll={{ x: 1000 }}
-            loading={liste.isLoading}
-            dataSource={liste.data?.kayitlar ?? []}
-            locale={{ emptyText: <Empty description="Bu süzgeçte atölye kaydı yok" /> }}
-            rowSelection={
-              atayabilir
-                ? {
-                    selectedRowKeys: secili,
-                    onChange: (k) => setSecili(k as number[]),
-                    getCheckboxProps: (r) => ({ disabled: !r.acik }),
-                    preserveSelectedRowKeys: true,
-                  }
-                : undefined
-            }
-            pagination={{
-              current: sayfa,
-              pageSize: SAYFA_BOYU,
-              total: liste.data?.toplam ?? 0,
-              showSizeChanger: false,
-              onChange: setSayfa,
-              showTotal: (t) => `${t.toLocaleString("tr-TR")} kayıt`,
-            }}
-            onRow={(r) => ({ onClick: () => git(`/atolye/${r.so_id}${yolEki}`), style: { cursor: "pointer" } })}
-            columns={[
-              {
-                title: "Atölye no",
-                dataIndex: "atolye_no",
-                width: 150,
-                render: (v: string, r) => (
-                  <Space orientation="vertical" size={0}>
-                    <span className="mono">{v}</span>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {r.so_no}
-                    </Typography.Text>
-                  </Space>
-                ),
-              },
-              { title: "Müşteri", key: "m", ellipsis: true, render: (_, r) => r.musteri?.title ?? "—" },
-              {
-                title: "Cihaz",
-                key: "c",
-                ellipsis: true,
-                render: (_, r) =>
-                  r.ekipman ? (
-                    <Space orientation="vertical" size={0}>
-                      <span>{[r.ekipman.marka, r.ekipman.model].filter(Boolean).join(" ")}</span>
-                      <Typography.Text type="secondary" className="mono" style={{ fontSize: 12 }}>
-                        {r.ekipman.seri}
-                      </Typography.Text>
-                    </Space>
-                  ) : (
-                    "—"
-                  ),
-              },
-              {
-                title: "Durum",
-                key: "d",
-                width: 160,
-                render: (_, r) => (
-                  <Space size={4} wrap>
-                    <DurumEtiketi kod={r.status} sozluk={s} />
-                    {r.geciken && <Tag color="red">Gecikmiş</Tag>}
-                  </Space>
-                ),
-              },
-              {
-                title: "Garanti",
-                dataIndex: "warranty_status",
-                width: 130,
-                render: (g: string) => <GarantiEtiketi kod={g} sozluk={s} />,
-              },
-              { title: "Sorumlu", key: "s", width: 140, ellipsis: true, render: (_, r) => r.sorumlu?.ad ?? "—" },
-              { title: "Kabul", dataIndex: "received_at", width: 100, render: tarih },
-              { title: "Gün", dataIndex: "bekleme_gunu", width: 60, align: "right" },
-              ...(bedelGorur
-                ? [
-                    {
-                      title: "Bedel",
-                      key: "b",
-                      width: 100,
-                      align: "right" as const,
-                      render: (_: unknown, r: AtolyeSatiri) =>
-                        r.repair_amount != null ? Number(r.repair_amount).toLocaleString("tr-TR") : "—",
-                    },
-                  ]
-                : []),
-            ]}
+            style={{ width: ekran.sm ? 280 : 190 }}
+            placeholder="Atölye no, servis no, müşteri, seri…"
+            value={aramaMetni}
+            onChange={(e) => setAramaMetni(e.target.value)}
+            onSearch={(q) => suzgecDegistir({ ...suzgec, q: q.trim() || undefined })}
           />
-        </Space>
-      </Card>
+        }
+        durumCubugu={{
+          gruplar: ATOLYE_DURUM_GRUPLARI,
+          secili: seciliGrup,
+          onSec: (kod) =>
+            suzgecDegistir({
+              ...suzgec,
+              durum_grubu: undefined,
+              durum: kod ? ATOLYE_DURUM_GRUPLARI.find((g) => g.kod === kod)?.durumlar.join(",") : undefined,
+            }),
+          banaAit,
+          onBanaAit: kullanici
+            ? (v) => suzgecDegistir({ ...suzgec, teknisyen_id: v ? kullanici.id : undefined })
+            : undefined,
+          onYenile: () => void liste.refetch(),
+          yenileniyor: liste.isFetching,
+          onSuzgec: () => setSuzgecAcik(!suzgecAcik),
+          suzgecAcik,
+          suzgecSayisi: ekSuzgecSayisi,
+        }}
+        suzgecPaneli={suzgecPaneli}
+        ustBilgi={ustBilgi}
+        sutunlar={sutunlar}
+        veri={kayitlar}
+        satirAnahtari="so_id"
+        yukleniyor={liste.isFetching}
+        bosMetin={liste.isError ? (liste.error as Error).message : "Veri yok"}
+        scrollX={ekran.xl ? 1500 : ekran.lg ? 1300 : ekran.md ? 1060 : ekran.sm ? 880 : 720}
+        secimModu={cokluSecim ? "coklu" : "tek"}
+        secili={secili}
+        onSecim={(k, satirlar) =>
+          setSecili(cokluSecim ? satirlar.filter((r) => r.acik).map((r) => r.so_id) : (k as number[]))
+        }
+        onSatirAc={ac}
+        sayfalama={{
+          sayfa,
+          boyut: SAYFA_BOYU,
+          toplam: liste.data?.toplam ?? 0,
+          onChange: (x) => {
+            setSayfa(x);
+            setSecili([]);
+          },
+        }}
+        eylemler={eylemler}
+        sagEylemler={sagEylemler}
+      />
 
       {soId && (
         <AtolyeDetayi
@@ -1456,7 +1621,7 @@ export default function AtolyePage() {
       <AtamaPenceresi
         soIdler={secili}
         birim={seciliBirim}
-        mevcut={BOS_EKIP}
+        mevcut={secili.length === 1 ? tekEkip : BOS_EKIP}
         acik={topluAtaAcik}
         kapat={() => setTopluAtaAcik(false)}
         bitti={() => {

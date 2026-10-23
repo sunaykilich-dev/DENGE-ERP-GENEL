@@ -9,6 +9,15 @@
  * `/egitim/:id` kişi kartını açar. Butonlar `yetkili()` ile gizlenir; sunucu
  * her uçta ayrıca kontrol eder.
  */
+import {
+  CalendarOutlined,
+  CheckCircleOutlined,
+  EyeOutlined,
+  PlusOutlined,
+  ReadOutlined,
+  StopOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   App,
@@ -44,7 +53,6 @@ import {
   egitimApi,
   KATEGORI_ETIKETLERI,
   PLAN_DURUM_ETIKETLERI,
-  PLAN_DURUM_RENKLERI,
   SONUC_ETIKETLERI,
   type Faaliyet,
   type Gozlem,
@@ -57,7 +65,20 @@ import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
 import GozlemFormu, { SonucRozeti } from "../components/GozlemFormu";
 import KatilimTablosu from "../components/KatilimTablosu";
-import KpiKutusu from "../components/KpiKutusu";
+import type { KategoriRengi } from "../fiori/etiketler";
+import {
+  Aciklama,
+  AltNot,
+  DurumBaglantisi,
+  Kucuk,
+  KucukGri,
+  NoRozeti,
+  TUMU_KATEGORISI,
+  buyuk,
+  gunu,
+  tekliGruplar,
+} from "../fiori/ListeOgeleri";
+import ListeRaporu, { KpiKutucugu } from "../fiori/ListeRaporu";
 import { KisiKartiGorunumu } from "./EgitimKisiKarti";
 import { EslemeSekmesi, EtkinlikSekmesi, YenidenDegerlendirSekmesi } from "./EgitimRaporlari";
 
@@ -119,13 +140,21 @@ function OzetSekmesi() {
           onChange={(v) => ayarla("birim", v)}
         />
       </Space>
-      <Row gutter={[12, 12]}>
+      <div className="fl-kutucuklar">
         {(ozet.data?.kutular ?? []).map((k) => (
-          <Col key={k.kod} xs={12} sm={8} lg={6} xl={4}>
-            <KpiKutusu kod={k.kod} baslik={k.baslik} tanim={k.tanim} deger={k.deger} yol={k.yol} vurgu={k.vurgu} />
-          </Col>
+          <KpiKutucugu
+            key={k.kod}
+            kod={k.kod}
+            baslik={k.baslik}
+            tanim={k.tanim}
+            deger={k.deger}
+            yol={k.yol}
+            vurgu={k.vurgu}
+            ikon={<ReadOutlined />}
+            yukleniyor={ozet.isLoading}
+          />
         ))}
-      </Row>
+      </div>
       <Row gutter={[12, 12]}>
         <Col xs={24} md={12}>
           <Card size="small" title={`${yil} yıllık gerçekleşme`} loading={ozet.isLoading}>
@@ -272,6 +301,7 @@ function PlanSekmesi() {
   });
   const [sayfa, setSayfa] = useState(1);
   const [topluAcik, setTopluAcik] = useState(false);
+  const [secili, setSecili] = useState<number[]>([]);
   const [ertelenen, setErtelenen] = useState<Plan | null>(null);
   const [ertelemeForm] = Form.useForm();
   const yazabilir = yetkili("egitim.yaz");
@@ -294,108 +324,158 @@ function PlanSekmesi() {
     },
     onError: (e: ApiError) => message.error(hata(e)),
   });
+  const kayitlar = liste.data?.kayitlar ?? [];
+  const tek = kayitlar.find((r) => r.id === secili[0]) ?? null;
+  const acikPlan = (r: Plan) => ["PLANLANDI", "ERTELENDI", "BASARISIZ_TEKRAR"].includes(r.status);
+  const kisiAc = (r: Plan) => git(`/egitim/${r.user_id}`);
+  const planIptal = (r: Plan) =>
+    gerekceSor(modal, "Planı iptal et", (g) =>
+      egitimApi.planIptal(r, g).then(tazele, (e: ApiError) => {
+        message.error(hata(e));
+        throw e;
+      }),
+    );
   const kolonlar: ColumnsType<Plan> = [
-    { title: "Personel", dataIndex: "ad", render: (ad: string, r) => <a onClick={() => git(`/egitim/${r.user_id}`)}>{ad}</a> },
-    { title: "Eğitim", dataIndex: "kurs" },
-    { title: "Yıl", dataIndex: "plan_yili", width: 70, responsive: ["sm"] },
-    {
-      title: "Hedef",
-      dataIndex: "hedef_tarih",
-      render: (t: string, r) => <Typography.Text type={r.geciken ? "danger" : undefined}>{tarih(t)}</Typography.Text>,
-    },
     {
       title: "Durum",
       dataIndex: "status",
+      width: 140,
+      align: "center",
       render: (s: string, r) => (
-        <Space size={4}>
-          <Tag color={PLAN_DURUM_RENKLERI[s]}>{PLAN_DURUM_ETIKETLERI[s] ?? s}</Tag>
-          {r.gec && <Tag color="orange">Geç</Tag>}
-        </Space>
+        <DurumBaglantisi
+          metin={PLAN_DURUM_ETIKETLERI[s] ?? s}
+          ton={s === "IPTAL" ? "olumsuz" : s === "TAMAMLANDI" ? "kapali" : undefined}
+          onClick={() => kisiAc(r)}
+          alt={
+            <>
+              {r.geciken && <AltNot tur="kritik">GECİKTİ</AltNot>}
+              {r.gec && <AltNot tur="uyari">GEÇ</AltNot>}
+            </>
+          }
+        />
       ),
     },
-    { title: "Tamamlanma", dataIndex: "completed_on", render: tarih, responsive: ["md"] },
-    ...(yazabilir
-      ? [
-          {
-            title: "",
-            key: "islem",
-            render: (_: unknown, r: Plan) =>
-              ["PLANLANDI", "ERTELENDI", "BASARISIZ_TEKRAR"].includes(r.status) && (
-                <Space size={4}>
-                  <Button size="small" onClick={() => setErtelenen(r)}>
-                    Ertele
-                  </Button>
-                  <Button
-                    size="small"
-                    danger
-                    onClick={() =>
-                      gerekceSor(modal, "Planı iptal et", (g) =>
-                        egitimApi.planIptal(r, g).then(tazele, (e: ApiError) => {
-                          message.error(hata(e));
-                          throw e;
-                        }),
-                      )
-                    }
-                  >
-                    İptal
-                  </Button>
-                </Space>
-              ),
-          },
-        ]
-      : []),
+    { title: "Yıl", dataIndex: "plan_yili", width: 70, align: "center", render: (y: number) => <NoRozeti no={String(y)} duz /> },
+    {
+      title: "Hedef\nTarih",
+      dataIndex: "hedef_tarih",
+      width: 100,
+      align: "center",
+      render: (t: string, r) => <Typography.Text type={r.geciken ? "danger" : undefined}>{gunu(t)}</Typography.Text>,
+    },
+    { title: "Açıklama", dataIndex: "kurs", width: 260, render: (v: string, r) => <Aciklama metin={v} onClick={() => kisiAc(r)} /> },
+    {
+      title: "Personel",
+      dataIndex: "ad",
+      width: 180,
+      align: "center",
+      render: (ad: string, r) => (
+        <a onClick={() => kisiAc(r)}>
+          <Kucuk kalin>{ad}</Kucuk>
+        </a>
+      ),
+    },
+    { title: "Tamamlanma", dataIndex: "completed_on", width: 110, align: "center", render: gunu, responsive: ["md"] },
   ];
   const excel = yetkili("egitim.gor", "servis_rapor.disaaktar");
+  const excelYolu = egitimApi.planExcelYolu({ yil: suzgec.yil, durum: suzgec.durum, q: suzgec.q, kpi: suzgec.kpi });
   return (
-    <Card
-      size="small"
-      title={suzgec.kpi ? `Yıllık plan — KPI: ${suzgec.kpi}` : suzgec.vade ? "Hedefi yaklaşan/geçen planlar" : "Yıllık plan"}
-      extra={
-        <Space wrap>
-          {(suzgec.kpi || suzgec.vade) && (
-            <Button size="small" onClick={() => setSuzgec((s) => ({ ...s, kpi: undefined, vade: false }))}>
-              Süzgeci kaldır
-            </Button>
-          )}
-          {excel && (
-            <Button size="small" href={egitimApi.planExcelYolu({ yil: suzgec.yil, durum: suzgec.durum, q: suzgec.q, kpi: suzgec.kpi })}>
-              Excel
-            </Button>
-          )}
-          {yazabilir && (
-            <Button size="small" type="primary" onClick={() => setTopluAcik(true)}>
-              Toplu plan
-            </Button>
-          )}
-        </Space>
-      }
-    >
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Select style={{ width: 100 }} value={suzgec.yil} options={yilSecenekleri} onChange={(v) => { setSuzgec((s) => ({ ...s, yil: v })); setSayfa(1); }} />
-        <Select
-          allowClear
-          placeholder="Durum"
-          style={{ width: 160 }}
-          value={suzgec.durum}
-          options={Object.entries(PLAN_DURUM_ETIKETLERI).map(([k, v]) => ({ value: k, label: v }))}
-          onChange={(v) => { setSuzgec((s) => ({ ...s, durum: v })); setSayfa(1); }}
-        />
-        <Input.Search allowClear placeholder="Personel / eğitim" onSearch={(q) => { setSuzgec((s) => ({ ...s, q })); setSayfa(1); }} style={{ width: 220 }} />
-      </Space>
-      <Table<Plan>
-        size="small"
-        rowKey="id"
-        loading={liste.isLoading}
-        dataSource={liste.data?.kayitlar}
-        columns={kolonlar}
-        scroll={{ x: 640 }}
-        pagination={{
-          current: sayfa,
-          pageSize: SAYFA,
-          total: liste.data?.toplam,
-          onChange: setSayfa,
-          showTotal: (t) => `${t} plan`,
+    <>
+      <ListeRaporu<Plan>
+        kategoriler={yilSecenekleri.map((y) => ({ kod: String(y.value), ad: y.label, renk: y.value === dayjs().year() ? "yesil" : "mavi" }))}
+        seciliKategori={String(suzgec.yil)}
+        onKategori={(k) => {
+          setSuzgec((s) => ({ ...s, yil: Number(k) }));
+          setSayfa(1);
         }}
+        kayitSayisi={liste.data?.toplam}
+        ustSag={
+          <Input.Search
+            allowClear
+            size="small"
+            placeholder="Personel / eğitim"
+            onSearch={(q) => {
+              setSuzgec((s) => ({ ...s, q }));
+              setSayfa(1);
+            }}
+            style={{ width: 220 }}
+          />
+        }
+        ustBilgi={
+          suzgec.kpi || suzgec.vade ? (
+            <Tag closable color="blue" onClose={() => setSuzgec((s) => ({ ...s, kpi: undefined, vade: false }))}>
+              {suzgec.kpi ? `KPI: ${suzgec.kpi}` : "Hedefi yaklaşan/geçen planlar"}
+            </Tag>
+          ) : undefined
+        }
+        durumCubugu={{
+          gruplar: tekliGruplar(PLAN_DURUM_ETIKETLERI),
+          secili: suzgec.durum,
+          onSec: (v) => {
+            setSuzgec((s) => ({ ...s, durum: v }));
+            setSayfa(1);
+          },
+          onYenile: () => void liste.refetch(),
+          yenileniyor: liste.isFetching,
+        }}
+        sutunlar={kolonlar}
+        veri={kayitlar}
+        satirAnahtari="id"
+        yukleniyor={liste.isFetching}
+        scrollX={860}
+        secili={secili}
+        onSecim={(k) => setSecili(k as number[])}
+        onSatirAc={kisiAc}
+        sayfalama={{ sayfa, boyut: SAYFA, toplam: liste.data?.toplam ?? 0, onChange: setSayfa }}
+        eylemler={[
+          {
+            anahtar: "liste",
+            ad: "Liste",
+            menu: [
+              ...(excel ? [{ key: "excel", label: "Excel'e aktar" }] : []),
+              { key: "yenile", label: "Listeyi yenile" },
+            ],
+            onMenu: (k) => (k === "excel" ? window.open(excelYolu, "_blank") : void liste.refetch()),
+          },
+          {
+            anahtar: "ertele",
+            ad: "Ertele",
+            ikon: <CalendarOutlined />,
+            kisalt: true,
+            gizli: !yazabilir,
+            devreDisi: !tek || !acikPlan(tek),
+            onClick: () => tek && setErtelenen(tek),
+          },
+          {
+            anahtar: "iptal",
+            ad: "Planı İptal Et",
+            ikon: <StopOutlined />,
+            yalnizIkon: true,
+            tehlikeli: true,
+            gizli: !yazabilir,
+            devreDisi: !tek || !acikPlan(tek),
+            onClick: () => tek && planIptal(tek),
+          },
+          {
+            anahtar: "kisi",
+            ad: "Kişi Kartı",
+            ikon: <UserOutlined />,
+            yalnizIkon: true,
+            devreDisi: !tek,
+            onClick: () => tek && kisiAc(tek),
+          },
+        ]}
+        sagEylemler={[
+          {
+            anahtar: "toplu",
+            ad: "Toplu Plan",
+            ikon: <PlusOutlined />,
+            vurgulu: true,
+            kisalt: true,
+            gizli: !yazabilir,
+            onClick: () => setTopluAcik(true),
+          },
+        ]}
       />
       <TopluPlanPenceresi acik={topluAcik} kapat={() => setTopluAcik(false)} />
       <Modal
@@ -415,7 +495,7 @@ function PlanSekmesi() {
           </Form.Item>
         </Form>
       </Modal>
-    </Card>
+    </>
   );
 }
 
@@ -739,75 +819,143 @@ function GozlemSekmesi() {
   });
   const [sayfa, setSayfa] = useState(1);
   const [formAcik, setFormAcik] = useState(false);
+  const [secili, setSecili] = useState<number[]>([]);
   const liste = useQuery({
     queryKey: ["egitim-gozlemler", suzgec, sayfa],
     queryFn: () => egitimApi.gozlemler(suzgec, SAYFA, (sayfa - 1) * SAYFA),
   });
   const iptalEdebilir = (g: Gozlem) =>
     !g.cancelled_at && (yetkili("egitim.yaz") || (yetkili("egitim.gozlem") && g.observer_user_id === kullanici?.id));
+  const kayitlar = liste.data?.kayitlar ?? [];
+  const tek = kayitlar.find((g) => g.id === secili[0]) ?? null;
+  const kisiAc = (g: Gozlem) => git(`/egitim/${g.user_id}`);
+  const gozlemIptal = (g: Gozlem) =>
+    gerekceSor(modal, "Gözlemi iptal et", (r) =>
+      egitimApi.gozlemIptal(g, r).then(
+        () => {
+          void qc.invalidateQueries({ queryKey: ["egitim-gozlemler"] });
+          void qc.invalidateQueries({ queryKey: ["egitim-ozet"] });
+        },
+        (e: ApiError) => {
+          message.error(hata(e));
+          throw e;
+        },
+      ),
+    );
   return (
-    <Card
-      size="small"
-      title={suzgec.kpi ? `Saha gözlemleri — KPI: ${suzgec.kpi}` : "Saha gözlemleri"}
-      extra={
-        <Space wrap>
-          {suzgec.kpi && (
-            <Button size="small" onClick={() => setSuzgec((s) => ({ ...s, kpi: undefined }))}>
-              Süzgeci kaldır
-            </Button>
-          )}
-          {yetkili("egitim.gozlem") && (
-            <Button size="small" type="primary" onClick={() => setFormAcik(true)}>
-              Yeni gözlem
-            </Button>
-          )}
-        </Space>
-      }
-    >
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Select style={{ width: 100 }} value={suzgec.yil} options={yilSecenekleri} onChange={(v) => { setSuzgec((s) => ({ ...s, yil: v })); setSayfa(1); }} />
-        <Select allowClear placeholder="Sonuç" style={{ width: 160 }} value={suzgec.sonuc}
-          options={Object.entries(SONUC_ETIKETLERI).map(([k, v]) => ({ value: k, label: v }))}
-          onChange={(v) => { setSuzgec((s) => ({ ...s, sonuc: v })); setSayfa(1); }} />
-        <Select allowClear placeholder="Aşama" style={{ width: 130 }} value={suzgec.asama}
-          options={[0, 30, 60, 90].map((a) => ({ value: a, label: asamaEtiketi(a) }))}
-          onChange={(v) => { setSuzgec((s) => ({ ...s, asama: v })); setSayfa(1); }} />
-      </Space>
-      <Table<Gozlem>
-        size="small"
-        rowKey="id"
-        loading={liste.isLoading}
-        dataSource={liste.data?.kayitlar}
-        scroll={{ x: 640 }}
-        pagination={{ current: sayfa, pageSize: SAYFA, total: liste.data?.toplam, onChange: setSayfa, showTotal: (t) => `${t} gözlem` }}
-        columns={[
-          { title: "Tarih", dataIndex: "gozlem_tarihi", render: tarih },
-          { title: "Personel", dataIndex: "ad", render: (ad: string, g) => <a onClick={() => git(`/egitim/${g.user_id}`)}>{ad}</a> },
-          { title: "Eğitim", dataIndex: "kurs", responsive: ["sm"] },
-          { title: "Aşama", dataIndex: "asama", render: asamaEtiketi, responsive: ["md"] },
-          { title: "Sonuç", key: "sonuc", render: (_, g) => <SonucRozeti g={g} /> },
-          { title: "Gözlemci", dataIndex: "gozlemci_ad", responsive: ["md"] },
-          { title: "Gördü", dataIndex: "gordu_at", render: (t: string | null) => (t ? tarih(t) : "—"), responsive: ["lg"] },
+    <>
+      <ListeRaporu<Gozlem>
+        kategoriler={[
+          TUMU_KATEGORISI,
+          ...[0, 30, 60, 90].map((a) => ({
+            kod: String(a),
+            ad: buyuk(asamaEtiketi(a)),
+            renk: (a === 0 ? "kirmizi" : "yesil") as KategoriRengi,
+            ikon: <EyeOutlined />,
+          })),
+        ]}
+        seciliKategori={suzgec.asama === undefined ? TUMU_KATEGORISI.kod : String(suzgec.asama)}
+        onKategori={(k) => {
+          setSuzgec((s) => ({ ...s, asama: k === TUMU_KATEGORISI.kod ? undefined : Number(k) }));
+          setSayfa(1);
+        }}
+        kayitSayisi={liste.data?.toplam}
+        ustSag={
+          <Select
+            size="small"
+            style={{ width: 100 }}
+            value={suzgec.yil}
+            options={yilSecenekleri}
+            onChange={(v) => {
+              setSuzgec((s) => ({ ...s, yil: v }));
+              setSayfa(1);
+            }}
+          />
+        }
+        ustBilgi={
+          suzgec.kpi ? (
+            <Tag closable color="blue" onClose={() => setSuzgec((s) => ({ ...s, kpi: undefined }))}>
+              KPI: {suzgec.kpi}
+            </Tag>
+          ) : undefined
+        }
+        durumCubugu={{
+          gruplar: tekliGruplar(SONUC_ETIKETLERI),
+          secili: suzgec.sonuc,
+          onSec: (v) => {
+            setSuzgec((s) => ({ ...s, sonuc: v }));
+            setSayfa(1);
+          },
+          onYenile: () => void liste.refetch(),
+          yenileniyor: liste.isFetching,
+        }}
+        sutunlar={[
+          { title: "Sonuç", key: "sonuc", width: 150, align: "center", render: (_, g) => <SonucRozeti g={g} /> },
+          { title: "Gözlem\nTarihi", dataIndex: "gozlem_tarihi", width: 100, align: "center", render: gunu },
+          { title: "Açıklama", dataIndex: "kurs", width: 240, render: (v: string, g) => <Aciklama metin={v} onClick={() => kisiAc(g)} /> },
           {
-            title: "",
-            key: "iptal",
-            render: (_, g) =>
-              iptalEdebilir(g) && (
-                <Button size="small" danger onClick={() =>
-                  gerekceSor(modal, "Gözlemi iptal et", (r) =>
-                    egitimApi.gozlemIptal(g, r).then(
-                      () => { void qc.invalidateQueries({ queryKey: ["egitim-gozlemler"] }); void qc.invalidateQueries({ queryKey: ["egitim-ozet"] }); },
-                      (e: ApiError) => { message.error(hata(e)); throw e; },
-                    ),
-                  )}>
-                  İptal
-                </Button>
-              ),
+            title: "Personel",
+            dataIndex: "ad",
+            width: 170,
+            align: "center",
+            render: (ad: string, g) => (
+              <a onClick={() => kisiAc(g)}>
+                <Kucuk kalin>{ad}</Kucuk>
+              </a>
+            ),
+          },
+          { title: "Aşama", dataIndex: "asama", width: 90, align: "center", render: (a: number) => <Kucuk>{asamaEtiketi(a)}</Kucuk>, responsive: ["md"] },
+          { title: "Gözlemci", dataIndex: "gozlemci_ad", width: 150, align: "center", render: (v: string) => <KucukGri>{v}</KucukGri>, responsive: ["md"] },
+          { title: "Gördü", dataIndex: "gordu_at", width: 100, align: "center", render: (t: string | null) => (t ? gunu(t) : "—"), responsive: ["lg"] },
+        ]}
+        veri={kayitlar}
+        satirAnahtari="id"
+        yukleniyor={liste.isFetching}
+        scrollX={1000}
+        secili={secili}
+        onSecim={(k) => setSecili(k as number[])}
+        onSatirAc={kisiAc}
+        sayfalama={{ sayfa, boyut: SAYFA, toplam: liste.data?.toplam ?? 0, onChange: setSayfa }}
+        eylemler={[
+          {
+            anahtar: "liste",
+            ad: "Liste",
+            menu: [{ key: "yenile", label: "Listeyi yenile" }],
+            onMenu: () => void liste.refetch(),
+          },
+          {
+            anahtar: "kisi",
+            ad: "Kişi Kartı",
+            ikon: <UserOutlined />,
+            kisalt: true,
+            devreDisi: !tek,
+            onClick: () => tek && kisiAc(tek),
+          },
+          {
+            anahtar: "iptal",
+            ad: "Gözlemi İptal Et",
+            ikon: <StopOutlined />,
+            yalnizIkon: true,
+            tehlikeli: true,
+            gizli: !yetkili("egitim.yaz") && !yetkili("egitim.gozlem"),
+            devreDisi: !tek || !iptalEdebilir(tek),
+            onClick: () => tek && gozlemIptal(tek),
+          },
+        ]}
+        sagEylemler={[
+          {
+            anahtar: "yeni",
+            ad: "Yeni Gözlem",
+            ikon: <PlusOutlined />,
+            vurgulu: true,
+            kisalt: true,
+            gizli: !yetkili("egitim.gozlem"),
+            onClick: () => setFormAcik(true),
           },
         ]}
       />
       <GozlemFormu open={formAcik} onClose={() => setFormAcik(false)} />
-    </Card>
+    </>
   );
 }
 
@@ -857,6 +1005,7 @@ function FaaliyetSekmesi() {
   const [durum, setDurum] = useState<string | undefined>("ACIK");
   const [kpi, setKpi] = useState(al("kpi"));
   const [sayfa, setSayfa] = useState(1);
+  const [secili, setSecili] = useState<number[]>([]);
   const p = kpi ? { kpi } : { durum };
   const liste = useQuery({ queryKey: ["egitim-faaliyetler", p, sayfa], queryFn: () => egitimApi.faaliyetler(p, SAYFA, (sayfa - 1) * SAYFA) });
   const kapat = (f: Faaliyet) => {
@@ -871,40 +1020,98 @@ function FaaliyetSekmesi() {
         ),
     });
   };
+  const kayitlar = liste.data?.kayitlar ?? [];
+  const tek = kayitlar.find((f) => f.id === secili[0]) ?? null;
   return (
-    <Card
-      size="small"
-      title="Düzeltici faaliyetler (kritik İSG)"
-      extra={
-        <Space>
-          {kpi && <Button size="small" onClick={() => setKpi(undefined)}>Süzgeci kaldır</Button>}
-          <Select allowClear placeholder="Tümü" style={{ width: 140 }} value={durum} onChange={(v) => { setDurum(v); setSayfa(1); }}
-            options={[{ value: "ACIK", label: "Açık" }, { value: "KAPATILDI", label: "Kapatıldı" }]} />
-        </Space>
-      }
-    >
+    <>
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
         Faaliyet, kritik maddeleri "Uygun" alan sonraki gözlemle kendiliğinden kapanır; elle kapanış eğitim yöneticisinin
         (egitim.yaz) kanıtıyla yapılır. Gözlemi iptal edilen faaliyet açık kalır.
       </Typography.Paragraph>
-      <Table<Faaliyet>
-        size="small"
-        rowKey="id"
-        loading={liste.isLoading}
-        dataSource={liste.data?.kayitlar}
-        pagination={{ current: sayfa, pageSize: SAYFA, total: liste.data?.toplam, onChange: setSayfa }}
-        columns={[
-          { title: "Personel", dataIndex: "ad" },
-          { title: "Eğitim", dataIndex: "kurs", responsive: ["sm"] },
-          { title: "Gözlem", dataIndex: "gozlem_tarihi", render: (t: string, f) => <Space size={4}>{tarih(t)}{f.gozlem_iptal && <Tag>İptal edildi</Tag>}</Space> },
-          { title: "Termin", dataIndex: "termin", render: (t: string, f) => <Typography.Text type={f.gecikmis ? "danger" : undefined}>{tarih(t)}</Typography.Text> },
-          { title: "Durum", dataIndex: "status", render: (s: string, f) => (s === "ACIK" ? <Tag color={f.gecikmis ? "red" : "orange"}>Açık</Tag> : <Tag color="green">{f.kapanis_turu === "OTOMATIK_GOZLEM" ? "Gözlemle kapandı" : "Kapatıldı"}</Tag>) },
-          ...(yetkili("egitim.yaz")
-            ? [{ title: "", key: "k", render: (_: unknown, f: Faaliyet) => f.status === "ACIK" && <Button size="small" onClick={() => kapat(f)}>Kapat</Button> }]
-            : []),
+      <ListeRaporu<Faaliyet>
+        kayitSayisi={liste.data?.toplam}
+        ustBilgi={
+          kpi ? (
+            <Tag closable color="blue" onClose={() => setKpi(undefined)}>
+              KPI: {kpi}
+            </Tag>
+          ) : undefined
+        }
+        durumCubugu={{
+          gruplar: [
+            { kod: "ACIK", ad: "AÇIK", durumlar: ["ACIK"] },
+            { kod: "KAPATILDI", ad: "TAMAMLANDI", durumlar: ["KAPATILDI"] },
+          ],
+          secili: durum,
+          onSec: (v) => {
+            setDurum(v);
+            setSayfa(1);
+          },
+          onYenile: () => void liste.refetch(),
+          yenileniyor: liste.isFetching,
+        }}
+        sutunlar={[
+          {
+            title: "Durum",
+            dataIndex: "status",
+            width: 160,
+            align: "center",
+            render: (s: string, f) => (
+              <DurumBaglantisi
+                metin={s === "ACIK" ? "AÇIK" : f.kapanis_turu === "OTOMATIK_GOZLEM" ? "TAMAMLANDI-GÖZLEMLE" : "TAMAMLANDI"}
+                ton={s === "ACIK" ? (f.gecikmis ? "olumsuz" : undefined) : "kapali"}
+                alt={f.gecikmis && s === "ACIK" ? <AltNot tur="kritik">GECİKTİ</AltNot> : undefined}
+              />
+            ),
+          },
+          {
+            title: "Termin",
+            dataIndex: "termin",
+            width: 100,
+            align: "center",
+            render: (t: string, f) => <Typography.Text type={f.gecikmis ? "danger" : undefined}>{gunu(t)}</Typography.Text>,
+          },
+          {
+            title: "Gözlem\nTarihi",
+            dataIndex: "gozlem_tarihi",
+            width: 110,
+            align: "center",
+            render: (t: string, f) => (
+              <>
+                {gunu(t)}
+                {f.gozlem_iptal && <AltNot>İPTAL EDİLDİ</AltNot>}
+              </>
+            ),
+          },
+          { title: "Açıklama", dataIndex: "kurs", width: 240, render: (v: string) => <Aciklama metin={v} /> },
+          { title: "Personel", dataIndex: "ad", width: 170, align: "center", render: (v: string) => <Kucuk kalin>{v}</Kucuk> },
+        ]}
+        veri={kayitlar}
+        satirAnahtari="id"
+        yukleniyor={liste.isFetching}
+        scrollX={800}
+        secili={secili}
+        onSecim={(k) => setSecili(k as number[])}
+        sayfalama={{ sayfa, boyut: SAYFA, toplam: liste.data?.toplam ?? 0, onChange: setSayfa }}
+        eylemler={[
+          {
+            anahtar: "liste",
+            ad: "Liste",
+            menu: [{ key: "yenile", label: "Listeyi yenile" }],
+            onMenu: () => void liste.refetch(),
+          },
+          {
+            anahtar: "kapat",
+            ad: "Faaliyeti Kapat",
+            ikon: <CheckCircleOutlined />,
+            kisalt: true,
+            gizli: !yetkili("egitim.yaz"),
+            devreDisi: !tek || tek.status !== "ACIK",
+            onClick: () => tek && kapat(tek),
+          },
         ]}
       />
-    </Card>
+    </>
   );
 }
 

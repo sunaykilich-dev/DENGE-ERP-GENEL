@@ -50,7 +50,13 @@
 }
 
 html, body, #root { height: 100%; margin: 0; }
-body { background: #f1eee8; }
+/* SAP Fiori Quartz Light sayfa zemini (rehber §4). "72" yazı tipi kurulu
+   değilse Arial'e düşer; teklif önizlemesi kendi yazı tipini taşır. */
+body {
+  background: #f7f7f7;
+  color: #32363a;
+  font-family: "72", "72full", Arial, Helvetica, sans-serif;
+}
 
 /* Sayısal veri mono ile dizilir: IMEI, ICCID, plaka, tutar, tarih.
    Sabit genişlik sayesinde 15 haneli IMEI'ler alt alta hizalanır ve
@@ -63,23 +69,274 @@ body { background: #f1eee8; }
   white-space: nowrap;
 }
 
-/* Üst bar — dar ekran.
-   Marka bloğu yan menü genişliğine (228 px) sabitlenmişti: 375 px'lik bir
-   telefonda arama kutusu ve kullanıcı menüsü ekranın dışında kalıyor, sayfa
-   yatay da kaymadığı için ÇIKIŞ YAP menüsüne hiç erişilemiyordu. */
-.baslik-marka { width: 208px; }
-.ant-layout-header .ant-select { min-width: 0; }
+/* ===== SAP Fiori kabuğu (Shell Bar) — rehber §1 =====
+   Beyaz üst çubuk, ince alt çizgi; sol: geri, kare logo, "Başlık ▾";
+   orta: pill arama; sağ: zil ve baş harfleri dairesi. Sol kenar menüsü yok.
+   375 px'te: arama ikona düşer, başlık kısalır; kullanıcı menüsüne (ÇIKIŞ)
+   her genişlikte erişilir — eski barda telefonda erişilemiyordu. */
+.fiori-uygulama { min-height: 100vh; background: #f7f7f7; }
 
-@media (max-width: 991px) {
-  /* Yan menü ikonlara düştüğünde (antd `breakpoint="lg"`) marka bloğunun
-     hizalama görevi de biter; genişliği içeriğine bırakılır. */
-  .baslik-marka { width: auto; }
+.fiori-kabuk {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #d9d9d9;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+}
+.fiori-kabuk-sol,
+.fiori-kabuk-sag { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.fiori-kabuk-sol { flex: 1 1 0; }
+.fiori-kabuk-sag { flex: 1 1 0; justify-content: flex-end; gap: 8px; }
+.fiori-kabuk-orta { flex: 0 1 460px; min-width: 0; display: flex; justify-content: center; }
+
+.fiori-kabuk-dugme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #556b82;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.fiori-kabuk-dugme:hover { background: #eaecee; }
+button.fiori-kabuk-dugme:focus-visible,
+.fiori-kabuk-baslik:focus-visible,
+.fiori-kabuk-avatar:focus-visible { outline: 2px solid #0a6ed1; outline-offset: 1px; }
+
+.fiori-kabuk-logo { display: inline-flex; flex-shrink: 0; margin-inline: 4px 6px; }
+.fiori-kabuk-logo img { width: 32px; height: 32px; border-radius: 4px; display: block; }
+
+.fiori-kabuk-baslik {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #32363a;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fiori-kabuk-baslik:hover { background: #eaecee; }
+.fiori-kabuk-baslik-metin { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fiori-kabuk-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #d9d9d9;
+  background: #f2f2f2;
+  color: #556b82;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.fiori-kabuk-avatar:hover { background: #e5f0fa; border-color: #0a6ed1; color: #0854a0; }
+
+/* Pill arama kutusu: "Arama yeri: "Uygulamalar"" — yer tutucu italik. */
+.fiori-arama .ant-input-affix-wrapper {
+  border-radius: 18px;
+  background: #f7f7f7;
+  border-color: #c6c6c6;
+  padding-inline: 14px;
+}
+.fiori-arama .ant-input-affix-wrapper:hover,
+.fiori-arama .ant-input-affix-wrapper-focused { background: #ffffff; }
+.fiori-arama input::placeholder { font-style: italic; color: #6a6d70; }
+
+.fiori-kabuk-arama-ikon { display: none; }
+.fiori-kabuk-mobil-arama {
+  position: sticky;
+  top: 52px;
+  z-index: 99;
+  padding: 8px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #d9d9d9;
 }
 
-@media (max-width: 575px) {
-  /* Ad yerine yalnız kullanıcı ikonu: menü erişilebilir kalsın. */
-  .baslik-kullanici { display: none; }
+/* İçerik alanı */
+.fiori-icerik { padding: 16px 24px 24px; min-width: 0; }
+.fiori-icerik-lp { padding: 0; }
+.fiori-sayac-bandi:empty { display: none; }
+.fiori-icerik-lp .fiori-sayac-bandi { padding: 12px 24px 0; }
+
+@media (max-width: 767px) {
+  .fiori-kabuk { padding: 0 8px; gap: 4px; }
+  .fiori-kabuk-orta { display: none; }
+  .fiori-kabuk-arama-ikon { display: inline-flex; }
+  .fiori-kabuk-sol { flex: 1 1 auto; }
+  .fiori-kabuk-sag { flex: 0 0 auto; gap: 2px; }
+  .fiori-kabuk-baslik { font-size: 15px; padding: 0 6px; }
+  .fiori-kabuk-logo { margin-inline: 2px; }
+  .fiori-kabuk-logo img { width: 28px; height: 28px; }
+  .fiori-icerik { padding: 12px 16px 16px; }
+  .fiori-icerik-lp { padding: 0; }
+  .fiori-icerik-lp .fiori-sayac-bandi { padding: 12px 16px 0; }
 }
+@media (min-width: 768px) {
+  .fiori-kabuk-mobil-arama { display: none; }
+}
+
+/* ===== Fiori launchpad (Başlangıç sayfası) — rehber §2 ===== */
+.fiori-lp { min-height: calc(100vh - 52px); }
+.fiori-lp-sekmeler {
+  position: sticky;
+  top: 52px;
+  z-index: 90;
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #d9d9d9;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.fiori-lp-sekmeler::-webkit-scrollbar { display: none; }
+.fiori-lp-sekme {
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: #32363a;
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.fiori-lp-sekme:hover { color: #0854a0; }
+.fiori-lp-sekme.secili { color: #0a6ed1; border-bottom-color: #0a6ed1; font-weight: 700; }
+.fiori-lp-sekme:focus-visible { outline: 2px solid #0a6ed1; outline-offset: -2px; }
+
+.fiori-lp-icerik { padding: 16px 24px 48px; }
+.fiori-lp-grup { scroll-margin-top: 108px; padding-bottom: 24px; }
+.fiori-lp-grup-baslik {
+  margin: 8px 0 12px;
+  font-size: 20px;
+  font-weight: 400;
+  color: #32363a;
+}
+.fiori-lp-kutucuklar { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Kutucuk: 176×176, beyaz, 8 px köşe, hafif gölge; üzerine gelince gölge
+   artar ve mavi kenar çizilir. Sol üst kalın başlık, sol alt ikon + KPI. */
+.fiori-kutucuk {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 176px;
+  height: 176px;
+  padding: 16px;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.08);
+  color: #32363a;
+  text-align: left;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.fiori-kutucuk:hover {
+  color: #32363a;
+  border-color: #0a6ed1;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 6px 14px rgba(0, 0, 0, 0.14);
+}
+.fiori-kutucuk:focus-visible { outline: 2px solid #0a6ed1; outline-offset: 2px; }
+.fiori-kutucuk-ust { min-width: 0; }
+.fiori-kutucuk-baslik {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fiori-kutucuk-alt {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #6a6d70;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fiori-kutucuk-alt-satir { display: flex; align-items: flex-end; gap: 10px; min-width: 0; }
+.fiori-kutucuk-ikon { font-size: 30px; color: #556b82; flex-shrink: 0; }
+.fiori-kutucuk-kpi {
+  font-size: 36px;
+  font-weight: 300;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fiori-kutucuk-birim {
+  position: absolute;
+  left: 16px;
+  bottom: 4px;
+  font-size: 11px;
+  color: #6a6d70;
+}
+.fiori-lp-bos { padding: 48px 16px; }
+
+.fiori-uyari-satiri {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 8px;
+  border: 0;
+  border-bottom: 1px solid #e5e5e5;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.fiori-uyari-satiri:hover { background: #f5f5f5; }
+
+@media (max-width: 767px) {
+  .fiori-lp-sekmeler { padding: 0 8px; }
+  .fiori-lp-icerik { padding: 12px 16px 32px; }
+  .fiori-lp-grup-baslik { font-size: 18px; }
+  .fiori-kutucuk { width: 148px; height: 148px; padding: 12px; }
+  .fiori-kutucuk-ikon { font-size: 26px; }
+  .fiori-kutucuk-kpi { font-size: 30px; }
+  .fiori-kutucuk-birim { left: 12px; bottom: 2px; }
+}
+
+/* AntD bileşenlerinde Fiori ince ayarı (tema token'larının erişemediği yerler). */
+.ant-table-wrapper .ant-table-thead > tr > th {
+  font-size: 13px;
+  font-weight: 400;
+}
+.ant-card { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06); }
 
 /* ===== Teklif A4 önizlemesi =====
    `backend/app/templates/teklif.html` ile BİREBİR aynı ölçüler ve tipografi.

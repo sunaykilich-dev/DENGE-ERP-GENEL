@@ -4,7 +4,7 @@
   farklı toplam görür (JSON ve Excel), yetkisiz birim süzgeci 403.
 - Maliyet/tutar sütunu yetkisiz kullanıcıda Excel'de de YOKTUR (fatura devri).
 - TS-198: atama/plan yanıtı yetkinlik uyarılarını taşır, atama ENGELLENMEZ ve
-  ATAMA olayına "yetkinlik uyarısıyla atandı" notu düşer (kişi adı olay
+  ATAMA olayına "yetkinlik uyarısıyla tayin edildi" notu düşer (kişi adı olay
   verisine yazılmaz).
 - Kayıt noktaları: kiralık envanter göç profili İçe Aktarma'da; `Personnel.
   FullName` ad eşleme alanlarında; bakım rapor KPI'ları servis paketi
@@ -192,7 +192,7 @@ async def test_tekli_atama_uyari_basligi_engellemez_ve_olay_notu(
     )
     assert aktif == t1.id
     [olay] = await _olaylar(db, so.id)
-    assert "yetkinlik uyarısıyla atandı" in olay.ozet
+    assert "yetkinlik uyarısıyla tayin edildi" in olay.ozet
     assert olay.veri["yetkinlik_uyarisi"] is True
     assert t1.full_name not in json.dumps(olay.veri, ensure_ascii=False)
 
