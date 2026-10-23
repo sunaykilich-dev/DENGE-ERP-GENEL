@@ -162,32 +162,42 @@ export default function BakimPage() {
 
   return (
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
-      <div className="fl-kutucuklar">
-        {ozet.isLoading
-          ? Array.from({ length: 4 }, (_, i) => <KpiKutucugu key={i} baslik="" yukleniyor />)
-          : (ozet.data?.kutular ?? []).map((k) => (
-              <KpiKutucugu
-                key={k.kod}
-                kod={k.kod}
-                baslik={k.baslik}
-                tanim={
-                  k.birim === "yuzde" && k.payda !== undefined
-                    ? `${k.tanim} — ${k.pay ?? 0}/${k.payda}`
-                    : k.tanim
-                }
-                deger={k.deger}
-                birim={k.birim === "yuzde" ? "%" : undefined}
-                ikon={KUTUCUK_IKONU(k.kod)}
-                yol={k.yol}
-              />
-            ))}
-      </div>
       <Card styles={{ body: { paddingTop: 4 } }}>
         <Tabs
           activeKey={sekme}
           onChange={sekmeDegistir}
           items={[
             { key: "bildirimler", label: "Bakım Bildirimleri", children: <BakimBildirimleri /> },
+            {
+              // Fiori'de liste raporu açılışta en üsttedir (foto 9); göstergeler
+              // ayrı sekmede durur, launchpad'de de özet kutucukları vardır.
+              key: "gostergeler",
+              label: "Göstergeler",
+              children: (
+                <div className="fl-kutucuklar">
+                  {ozet.isLoading
+                    ? Array.from({ length: 4 }, (_, i) => (
+                        <KpiKutucugu key={i} baslik="" yukleniyor />
+                      ))
+                    : (ozet.data?.kutular ?? []).map((k) => (
+                        <KpiKutucugu
+                          key={k.kod}
+                          kod={k.kod}
+                          baslik={k.baslik}
+                          tanim={
+                            k.birim === "yuzde" && k.payda !== undefined
+                              ? `${k.tanim} — ${k.pay ?? 0}/${k.payda}`
+                              : k.tanim
+                          }
+                          deger={k.deger}
+                          birim={k.birim === "yuzde" ? "%" : undefined}
+                          ikon={KUTUCUK_IKONU(k.kod)}
+                          yol={k.yol}
+                        />
+                      ))}
+                </div>
+              ),
+            },
             { key: "sozlesmeler", label: "Sözleşmeler", children: <SozlesmelerSekmesi /> },
             {
               key: "donemler",
