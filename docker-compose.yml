@@ -26,10 +26,17 @@ services:
     # Izin katalogu (app/permissions.py) senkronu ACILISTA kosar: yeni bir izin
     # eklendiginde migration degil seed degisir, ve senkron atlanirsa yetki
     # sessizce kimsede gorunmez -- KVKK ekrani tam boyle kayboldu.
+    # Gercek istemci IP'si (TS-211): Caddy host'ta, API konteynerde. Konteynerin
+    # gordugu kaynak Docker ag gecidi (172.x) oldugu icin uvicorn varsayilanda
+    # (yalniz 127.0.0.1'e guvenir) X-Forwarded-For'u yok sayiyor ve denetim
+    # kaydina her giris icin ag gecidi IP'si yaziliyordu. FORWARDED_ALLOW_IPS
+    # .env'de Docker ag gecidi olmali (ornek: 172.18.0.1); bos ise 127.0.0.1.
+    # `$$` compose'un degil konteyner kabugunun degiskeni acmasi icindir.
     command: >
       sh -c "alembic upgrade head
       && python -m app.seeds.dev
-      && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --proxy-headers --forwarded-allow-ips \"$${FORWARDED_ALLOW_IPS:-127.0.0.1}\""
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://dengeerp:${POSTGRES_PASSWORD}@db:5432/dengeerp

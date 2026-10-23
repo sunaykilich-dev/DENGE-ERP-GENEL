@@ -39,6 +39,8 @@ EK_SAHIPLERI = (
     "contracts",
     "settlements",
     "import_files",
+    # RMA (TS-217, Dalga 4): arıza fotoğrafı ve üretici iade evrakı.
+    "rma_cases",
     # --- Teknik servis (plan §1.11). Yalnız tablosu VAR olanlar: kiralama ve
     # eğitim sahipleri kendi dalgalarında eklenir. Bu türlerin ek kapsamı
     # `services/teknik_servis/ek_kapsam.py` kayıt defterindedir (fail-closed).

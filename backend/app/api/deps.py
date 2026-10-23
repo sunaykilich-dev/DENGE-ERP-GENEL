@@ -43,6 +43,22 @@ MFA_MUAF_YOLLAR = frozenset(
 )
 
 
+# Parola değiştirilmeden erişilebilen TEK yollar (TS-212, E13-13). Yönetici
+# parolayı belirlediyse/ürettiyse ya da ilk kurulumun yönetici parolasıysa
+# (`parola_degismeli`) oturum yalnız parolayı değiştirmeye yarar. MFA kurulum
+# yolları da açıktır: iki kapı birlikte kapalıysa sıra MFA → parola olur;
+# aksi hâlde biri diğerinin çıkışını kapatırdı.
+PAROLA_MUAF_YOLLAR = frozenset(
+    {
+        "/api/auth/me",
+        "/api/auth/logout",
+        "/api/auth/parola",
+        "/api/auth/mfa/enroll",
+        "/api/auth/mfa/confirm",
+    }
+)
+
+
 def mfa_kurulumu_gerekli(user: User) -> bool:
     # Kural User.mfa_kurulumu_gerekli()'de; burada yalnız devredilir.
     return user.mfa_kurulumu_gerekli()
@@ -69,6 +85,18 @@ async def current_user(request: Request, db: DbDep, clock: ClockDep) -> User:
                 "mesaj": "İki adımlı doğrulama kurulmadan işlem yapılamaz.",
             },
         )
+    if user.parola_degismeli and request.url.path not in PAROLA_MUAF_YOLLAR:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {
+                "kod": "PAROLA_DEGISMELI",
+                "mesaj": "Devam etmeden önce parolanızı değiştirmelisiniz.",
+            },
+        )
+    # Süreli vekâlet (TS-213): kullanıcının süreli istisnaları İSTEK anına göre
+    # değerlendirilir. An atanmazsa süreli satırlar hiç sayılmaz (fail-closed);
+    # süre dolunca ek bir iş gerekmeden bir sonraki istek 403 alır.
+    user.izin_anini_ata(clock.now())
     return user
 
 

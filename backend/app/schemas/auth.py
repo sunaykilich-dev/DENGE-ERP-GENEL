@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -63,6 +65,14 @@ class UserOut(BaseModel):
         )
 
 
+class KullaniciGuncellemeSonucu(UserOut):
+    """`PATCH /api/kullanicilar/{id}` yanıtı: `parola_sifirla` istendiyse
+    üretilen geçici parola YALNIZ burada ve yalnız bir kez döner."""
+
+    gecici_parola: str | None = None
+    gecici_parola_bitis: datetime | None = None
+
+
 class LoginResult(BaseModel):
     # mfa_required True ise oturum AÇILMADI; istemci kodu /login/mfa'ya gönderir.
     mfa_required: bool = False
@@ -81,6 +91,15 @@ class MfaCodeRequest(BaseModel):
 
 class MfaDisableRequest(BaseModel):
     password: str = Field(min_length=1, max_length=200)
+
+
+class ParolaDegistirRequest(BaseModel):
+    """Kullanıcının kendi parolasını değiştirmesi (TS-212). Uzunluk ve
+    içerik kuralı serviste (`parola_kurali_hatalari`): tek kaynak, Türkçe
+    mesaj; burada yalnız kaba sınır."""
+
+    mevcut: str = Field(min_length=1, max_length=200)
+    yeni: str = Field(min_length=1, max_length=200)
 
 
 class UserCreate(BaseModel):
@@ -104,7 +123,11 @@ class UserPatch(BaseModel):
     # Girişi açma/kapama yalnız kullanıcı yönetiminden (E13-03); kapatma bütün
     # oturumları düşürür (TS-007).
     giris_acik: bool | None = None
+    # Yönetici parolası GEÇİCİDİR (TS-212): kullanıcı ilk girişte değiştirir,
+    # 72 saat ve tek giriş geçerlidir.
     password: str | None = Field(default=None, min_length=8, max_length=200)
+    # Sunucu tek seferlik parola üretir ve yanıtta BİR KEZ döner (denetimde yok).
+    parola_sifirla: bool | None = None
     reset_mfa: bool | None = None  # admin: kullanıcının MFA'sını sıfırla (cihaz kaybı)
     # İyimser kilitleme: istemci gördüğü sürümü geri gönderir.
     version: int | None = None

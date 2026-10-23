@@ -112,6 +112,12 @@ async def _canliya_hazirla(yaz: bool) -> int:
         if admin is not None:
             yeni_parola = secrets.token_urlsafe(12)
             admin.password_hash = auth_service.hash_password(yeni_parola)
+            # Ekranda görünen parola kurulum parolasıdır: ilk girişte
+            # değiştirilmesi zorunlu (TS-212). Süre sınırı konmaz — ilk kurulum
+            # yöneticisiyle aynı (`seeds/dev.py`): komut ile ilk giriş arasındaki
+            # süre bilinmez.
+            admin.parola_degismeli = True
+            admin.gecici_parola_bitis = None
             admin.mfa_enabled = False
             admin.totp_secret = None
 
@@ -124,7 +130,7 @@ async def _canliya_hazirla(yaz: bool) -> int:
         print("\n  YÖNETİCİ PAROLASI (BİR KEZ GÖRÜNÜR, ŞİMDİ KAYDEDİN):")
         print("      kullanıcı: admin")
         print(f"      parola   : {yeni_parola}")
-        print("\n  İlk girişte iki adımlı doğrulama kurulumu çıkacak.")
+        print("\n  İlk girişte parola değişimi ve iki adımlı doğrulama kurulumu çıkacak.")
     return 0
 
 

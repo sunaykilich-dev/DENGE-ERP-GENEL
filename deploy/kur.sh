@@ -102,7 +102,7 @@ find "$HEDEF" -name '._*' -delete 2>/dev/null || true
 find "$HEDEF" -name '.DS_Store' -delete 2>/dev/null || true
 # Betikler kaynak arsivinde de var; paketteki surum daha yeni olabilir diye
 # uzerine yazariz (eski bir arsivle yeni bir paket karistirilirsa diye).
-for b in kur.sh on-kontrol.sh dogrula.sh; do
+for b in kur.sh on-kontrol.sh dogrula.sh yedekle.sh geri-yukle.sh cikis-provasi.sh; do
   [ -f "$PAKET/$b" ] && cp "$PAKET/$b" "$HEDEF/deploy/$b"
 done
 chmod +x "$HEDEF/deploy/"*.sh 2>/dev/null || true
@@ -220,9 +220,18 @@ dc exec -T db psql -U dengeerp -d dengeerp -P pager=off -c \
    UNION ALL SELECT 'is_emri', count(*)::text FROM work_orders
    UNION ALL SELECT 'hakedis_dokumu', count(*)::text FROM partner_settlements
    UNION ALL SELECT 'hakedis_toplam', to_char(coalesce(sum(gross_amount),0),'FM999G999G990D00') FROM partner_settlements
+   UNION ALL SELECT 'goc_surumu', (select version_num from alembic_version)
    UNION ALL SELECT 'cakisan_acik_donem', count(*)::text FROM (
      SELECT device_id FROM device_vehicle_assignments WHERE valid_to IS NULL
      GROUP BY device_id HAVING count(*)>1) x;" 2>/dev/null | sed 's/^/   /' || true
+
+# Göç sürümü koddaki head ile aynı olmalı: api açılışında `alembic upgrade
+# head` koştu mu? EK E (en az yetkili kullanıcı) uygulandıysa açılış komutundan
+# çıkarılmıştır ve migration sahibiyle elle koşulur — o durumda burada durur.
+BEKLENEN=$(dc exec -T api alembic heads 2>/dev/null | tr -d '\r' | awk 'NF{print $1}')
+GERCEK=$(dc exec -T db psql -U dengeerp -d dengeerp -tAc 'select version_num from alembic_version' | tr -d ' \r')
+[ "$BEKLENEN" = "$GERCEK" ] || dur "göç sürümü $GERCEK, beklenen $BEKLENEN. EK E uygulandıysa: KURULUM.md EK G.0 'migration sahibiyle'."
+tamam "göç sürümü $GERCEK (koddaki head)"
 
 KOD=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/)
 [ "$KOD" = 200 ] || dur "arayüz / isteğine $KOD döndü (200 beklenir)."

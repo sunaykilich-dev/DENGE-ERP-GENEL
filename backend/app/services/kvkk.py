@@ -18,7 +18,14 @@ alanlarını bu dosyayı düzenlemeden, kendi dosyalarının sonunda kaydeder �
 `VERI_BUL_KANCALARI` (ilgili kişi başvurusunda ek arama), ve
 `DENETIM_MASKE_VARLIKLARI` (geçmiş denetim satırlarının maskelenmesi). Bu
 dosya Dalga 1'den sonra dondurulur; bir modülün kişisel alanı ancak buraya
-kaydolursa imhaya girer.
+kaydolursa imhaya girer. Personel (ayrılmış çalışan) için aynı kalıbın kişi
+karşılığı Dalga 4'te eklendi: `PERSONEL_ANONIMLESTIRME_KANCALARI` ve
+`PERSONEL_DENETIM_MASKE_KANCALARI` (müsaitlik notu, servis e-posta kutusu).
+
+**Denetim değişmezliği (TS-211):** `trg_audit_degistirilemez` denetim
+satırının yalnız `is_personal_data` olanında değerleri `DEGER_SILINDI`
+maskesine çevirmeye izin verir; maskeleyen her UPDATE'ten önce
+`imha_bayragini_kur` (`SET LOCAL denge.kvkk_imha = '1'`) çağrılır.
 """
 
 from collections.abc import Awaitable, Callable
@@ -26,7 +33,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select, text
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -323,6 +330,19 @@ def _anonim_mi(deger: str | None) -> bool:
     return bool(deger) and ANONIM_ISARETI in deger
 
 
+async def imha_bayragini_kur(db: AsyncSession) -> None:
+    """Bu transaction'ın KVKK imhası olduğunu veritabanına bildirir (TS-211).
+
+    `trg_audit_degistirilemez` (d4a000000001) denetim satırında yalnız
+    `is_personal_data` satırının değerlerini `DEGER_SILINDI` maskesine
+    çevirmeye izin verir; içerik kuralı bayraktan bağımsızdır. Bayrak
+    (`SET LOCAL`, transaction sonunda kendiliğinden düşer) DB oturum
+    kayıtlarında "bu UPDATE imha akışından geldi" izini bırakır ve ileride
+    tetikleyici bayrağı da şart koşarsa imha yolları hazır olur.
+    """
+    await db.execute(text("SET LOCAL denge.kvkk_imha = '1'"))
+
+
 # --- Anonimleştirme -----------------------------------------------------------
 
 
@@ -446,6 +466,7 @@ async def _denetim_izini_maskele(db: AsyncSession, account_id: int, kisi_ids: li
         )
     for kanca in DENETIM_MASKE_VARLIKLARI.values():
         kosul.extend(await kanca(db, account_id))
+    await imha_bayragini_kur(db)
     sonuc = await db.execute(
         sa_update(AuditLog)
         .where(or_(*kosul), AuditLog.is_personal_data.is_(True))
@@ -637,6 +658,41 @@ async def _takma_ad_bul(db: AsyncSession, arama: VeriBulAramasi) -> list[dict]:
 PERSONEL_ANONIM_EYLEMI = "kvkk.personel_anonimlestir"
 PERSONEL_TEMIZLENEN_ALANLAR = ("personel_notu", "ayrilis_nedeni", "email", "totp_secret")
 
+# Personel anonimleştirme kayıt defterleri (Dalga 4, D4-A): hesap kancalarının
+# kişi karşılığı. Kişinin başka tablolarda tuttuğu serbest metin (müsaitlik
+# notu "doktor raporu", e-posta kutusundaki alıcı adresi) ve o tabloların
+# denetim satırları da imhaya girer.
+# (db, user_id, clock) → {"etiket": temizlenen_satir_sayisi}
+PersonelAnonimKancasi = Callable[[AsyncSession, int, Clock], Awaitable[dict[str, int]]]
+# (db, user_id) → kişiye ait (users dışındaki) denetim satırlarını seçen koşullar
+PersonelDenetimKancasi = Callable[[AsyncSession, int], Awaitable[list[ColumnElement[bool]]]]
+PERSONEL_ANONIMLESTIRME_KANCALARI: list[PersonelAnonimKancasi] = []
+PERSONEL_DENETIM_MASKE_KANCALARI: dict[str, PersonelDenetimKancasi] = {}
+
+
+def personel_anonimlestirme_kaydet(fn: PersonelAnonimKancasi) -> PersonelAnonimKancasi:
+    """Personel anonimleştirilirken çalışacak temizleyiciyi kaydeder (idempotent)."""
+    if fn not in PERSONEL_ANONIMLESTIRME_KANCALARI:
+        PERSONEL_ANONIMLESTIRME_KANCALARI.append(fn)
+    return fn
+
+
+def personel_denetim_maske_kaydet(entity: str, fn: PersonelDenetimKancasi) -> None:
+    """`entity` denetim satırlarından kişiye ait olanları maskelenecekler arasına ekler."""
+    PERSONEL_DENETIM_MASKE_KANCALARI[entity] = fn
+
+
+def denetim_kisi_kosulu(entity: str, user_id: int, anahtar: str = "user_id") -> ColumnElement[bool]:
+    """`entity` denetim satırlarından değerinde `anahtar` = kişi olanlar."""
+    kisi = str(user_id)
+    return and_(
+        AuditLog.entity == entity,
+        or_(
+            AuditLog.new_value.op("->>")(anahtar) == kisi,
+            AuditLog.old_value.op("->>")(anahtar) == kisi,
+        ),
+    )
+
 
 async def personel_anonim_mi(db: AsyncSession, user_id: int) -> bool:
     return (
@@ -690,11 +746,24 @@ async def personeli_anonimlestir(
     kisi.mfa_enabled = False
     await db.flush()
 
+    # Modül temizleyicileri (müsaitlik notu, e-posta kutusu ...). Denetim
+    # maskesinden ÖNCE: ürettikleri yazımlar da maskelenecek satırlar arasında.
+    kanca_sayilari: dict[str, int] = {}
+    for kanca in PERSONEL_ANONIMLESTIRME_KANCALARI:
+        for etiket, adet in (await kanca(db, user_id, clock)).items():
+            kanca_sayilari[etiket] = kanca_sayilari.get(etiket, 0) + adet
+    await db.flush()
+
+    kosullar: list[ColumnElement[bool]] = [
+        and_(AuditLog.entity == "users", AuditLog.entity_id == str(user_id))
+    ]
+    for kanca in PERSONEL_DENETIM_MASKE_KANCALARI.values():
+        kosullar.extend(await kanca(db, user_id))
+    await imha_bayragini_kur(db)
     sonuc = await db.execute(
         sa_update(AuditLog)
         .where(
-            AuditLog.entity == "users",
-            AuditLog.entity_id == str(user_id),
+            or_(*kosullar),
             AuditLog.is_personal_data.is_(True),
             AuditLog.action != "kisisel.eris",
         )
@@ -707,12 +776,59 @@ async def personeli_anonimlestir(
         PERSONEL_ANONIM_EYLEMI,
         entity_id=user_id,
         old_value={"temizlenen_alanlar": temizlenen},
-        new_value={"gerekce": gerekce, "denetim_satiri": maskelenen},
+        new_value={"gerekce": gerekce, "denetim_satiri": maskelenen, **kanca_sayilari},
         user_id=aktor_id,
         ip=ip,
         is_personal_data=True,
     )
-    return {"personel_id": user_id, "temizlenen_alanlar": temizlenen, "denetim_satiri": maskelenen}
+    return {
+        "personel_id": user_id,
+        "temizlenen_alanlar": temizlenen,
+        "denetim_satiri": maskelenen,
+        **kanca_sayilari,
+    }
+
+
+# --- Personel kancaları: müsaitlik notu ve servis e-posta kutusu (D4-A) ------------
+
+
+async def _musaitlik_notlarini_temizle(db: AsyncSession, user_id: int, _clock: Clock) -> dict:
+    """Müsaitlik bloklarının notu ("rapor", "hastane") silinir; blok DURUR.
+
+    Blok tarih/tür olarak planlama geçmişinin parçasıdır (o gün neden
+    atanmadı); yalnız serbest metin kişiseldir.
+    """
+    from app.models import ServiceUnavailability
+
+    sonuc = await db.execute(
+        sa_update(ServiceUnavailability)
+        .where(ServiceUnavailability.user_id == user_id, ServiceUnavailability.note.is_not(None))
+        .values(note=None, version=ServiceUnavailability.version + 1)
+        .execution_options(synchronize_session=False)
+    )
+    return {"musaitlik_notu": sonuc.rowcount or 0}
+
+
+async def _musaitlik_denetim_kosulu(db: AsyncSession, user_id: int) -> list[ColumnElement[bool]]:
+    # `planlama._blok_denetim` değerinde `user_id` ve `not` taşır.
+    return [denetim_kisi_kosulu("service_unavailability", user_id)]
+
+
+async def _eposta_kutusunu_temizle(db: AsyncSession, user_id: int, _clock: Clock) -> dict:
+    """Kişinin servis e-posta kutusu satırları (alıcı adresi + gövde) silinir.
+
+    Kutu bir gönderim kuyruğudur, kayıt değildir; ayrılmış kişiye zaten
+    e-posta gitmez (worker saklama temizliği de pasif kişinin satırını
+    siler). Anonimleştirme bunu beklemeden yapar.
+    """
+    from app.models import ServiceMailOutbox
+
+    sonuc = await db.execute(
+        delete(ServiceMailOutbox)
+        .where(ServiceMailOutbox.user_id == user_id)
+        .execution_options(synchronize_session=False)
+    )
+    return {"eposta_kutusu": sonuc.rowcount or 0}
 
 
 async def _personel_bul(db: AsyncSession, arama: VeriBulAramasi) -> list[dict]:
@@ -738,6 +854,9 @@ async def _personel_bul(db: AsyncSession, arama: VeriBulAramasi) -> list[dict]:
 
 
 anonimlestirme_kaydet(_tesisleri_anonimlestir)
+personel_anonimlestirme_kaydet(_musaitlik_notlarini_temizle)
+personel_anonimlestirme_kaydet(_eposta_kutusunu_temizle)
+personel_denetim_maske_kaydet("service_unavailability", _musaitlik_denetim_kosulu)
 veri_bul_kaydet("personel", _personel_bul)
 denetim_maske_kaydet("addresses", _adres_denetim_kosulu)
 denetim_maske_kaydet("account_aliases", _takma_ad_denetim_kosulu)

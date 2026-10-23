@@ -63,8 +63,47 @@ PY
 
 echo
 echo "3) Migration zinciri"
-ADET=$(python3 -c "import pathlib;print(sum(1 for f in pathlib.Path('backend/alembic/versions').glob('*.py') if not f.name.startswith('._')))")
-[ "$ADET" -ge 20 ] && gec "$ADET migration dosyasi" || kal "yalnizca $ADET migration (en az 20 beklenir)"
+# Alt sinir (TS-219): teknik servis Dalga 0-4 ile 39 dosya (d3a000000003
+# bilerek atlandi). Daha azi eksik acilmis arsiv ya da eski paket demektir.
+# Sayi tek basina yetmez: zincir tek head'de bitmeli ve SURUM.txt'teki
+# "hedef head" ile ayni olmali; alembic'e gerek kalmadan dosyalardan okunur.
+MIGRATION_ALT_SINIR=39
+python3 - "$MIGRATION_ALT_SINIR" <<'PY'
+import pathlib, re, sys
+alt = int(sys.argv[1])
+dosyalar = [f for f in pathlib.Path("backend/alembic/versions").glob("*.py")
+            if not f.name.startswith("._")]
+rev, onceki = {}, set()
+for f in dosyalar:
+    m = f.read_text(encoding="utf-8", errors="replace")
+    r = re.search(r'^revision(?:: str)?\s*=\s*["\']([^"\']+)', m, re.M)
+    d = re.search(r'^down_revision[^=]*=\s*(.+)$', m, re.M)
+    if r:
+        rev[r.group(1)] = f.name
+    if d:
+        onceki.update(re.findall(r'["\']([^"\']+)["\']', d.group(1)))
+head = sorted(set(rev) - onceki)
+kod = 0
+if len(dosyalar) >= alt:
+    print(f"  TAMAM  {len(dosyalar)} migration dosyasi (alt sinir {alt})")
+else:
+    print(f"  HATA   yalnizca {len(dosyalar)} migration (en az {alt} beklenir)"); kod = 1
+if len(head) == 1:
+    print(f"  TAMAM  tek head: {head[0]}")
+else:
+    print(f"  HATA   head sayisi {len(head)}: {head}"); kod = 1
+surum = pathlib.Path("SURUM.txt")
+if surum.exists() and len(head) == 1:
+    for satir in surum.read_text(encoding="utf-8", errors="replace").splitlines():
+        if satir.startswith("hedef head"):
+            beklenen = satir.split(":", 1)[1].strip()
+            if beklenen == head[0]:
+                print(f"  TAMAM  SURUM.txt hedef head ile ayni")
+            else:
+                print(f"  HATA   SURUM.txt hedef head {beklenen}, kaynak agaci {head[0]}"); kod = 1
+sys.exit(kod)
+PY
+[ $? -eq 0 ] || HATA=1
 
 echo
 echo "4) .env"

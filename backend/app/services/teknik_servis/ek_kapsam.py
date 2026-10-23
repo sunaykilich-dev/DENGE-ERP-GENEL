@@ -127,8 +127,42 @@ async def _lokasyon_kapsami(db: AsyncSession, user: User, entity_id: int, yazma:
     return not await kapsam_disinda_mi(db, user, hesap_id)
 
 
+async def _cihaz_kapsami(db: AsyncSession, user: User, entity_id: int, yazma: bool) -> bool:
+    """`devices` dalı (TS-217) — cihaz kartıyla aynı kural.
+
+    Kart kapsamsızken eki de kapsamsızdı; kart kapsama alınınca ek ucu
+    açık kalsaydı montaj fotoğrafı/ruhsat sıralı ek kimliğiyle taranırdı.
+    Müşterisiz (stok) cihaz kapsam dışı sayılmaz."""
+    from app.models import Device
+    from app.services.accounts import kapsam_disinda_mi
+
+    musteri_id = await db.scalar(select(Device.current_customer_id).where(Device.id == entity_id))
+    return not await kapsam_disinda_mi(db, user, musteri_id)
+
+
+async def _rma_kapsami(db: AsyncSession, user: User, entity_id: int, yazma: bool) -> bool:
+    """`rma_cases` dalı (TS-217) — RMA liste/kart kuralının AYNISI: kaydın
+    müşterisi portföy dışındaysa ek görünmez/yüklenmez; müşterisiz kayıt açık."""
+    from app.models import RmaCase
+    from app.services.accounts import kapsam_disinda_mi
+
+    satir = (
+        await db.execute(
+            select(RmaCase.customer_id, RmaCase.is_deleted).where(RmaCase.id == entity_id)
+        )
+    ).first()
+    if satir is None:
+        return True  # kayıt yok: varlık kontrolü API'de (404)
+    musteri_id, silinmis = satir
+    if silinmis:
+        return False
+    return not await kapsam_disinda_mi(db, user, musteri_id)
+
+
 kaydet("accounts", _hesap_kapsami)
 kaydet("addresses", _lokasyon_kapsami)
+kaydet("devices", _cihaz_kapsami)
+kaydet("rma_cases", _rma_kapsami)
 
 
 # --- İçerik doğrulama (magic byte) ---------------------------------------------
@@ -182,15 +216,81 @@ class IcerikUyusmazligi(DepoHatasi):
 _ICERIK_HATASI_400 = frozenset({"service_orders"})
 
 
-def icerik_dogrula(entity: str, icerik: bytes, mime: str) -> None:
-    """Teknik servis eklerinde içerik beyanla uyuşmuyorsa `IcerikUyusmazligi`."""
-    if entity not in KAPSAM_ZORUNLU:
-        return
-    if not _uyusuyor(icerik, mime):
+def icerik_dogrula(entity: str, icerik: bytes, mime: str, *, canli_zorunlu: bool = False) -> bool:
+    """İçerik beyanla uyuşmuyorsa `IcerikUyusmazligi`; dönüş = içerik uyuşuyor mu.
+
+    Teknik servis türlerinde denetim her zaman zorunludur. Canlı türlerde
+    (hesap, cihaz, araç, ürün, RMA...) TS-218 ile yayıldı ama KURU KOŞU ile
+    başlar: `canli_zorunlu=False` iken uyuşmazlık reddedilmez, yalnız `False`
+    döner (çağıran denetim kaydı yazar). Mevcut yüklemeleri kıracak türler
+    önce raporlanır (`mevcut_ekleri_denetle`, `GET /api/ekler/icerik-denetimi`);
+    rapor temizse `ek_icerik_denetimi_canli_turler` ayarı açılır.
+    """
+    if _uyusuyor(icerik, mime):
+        return True
+    if entity in KAPSAM_ZORUNLU or canli_zorunlu:
         raise IcerikUyusmazligi(
             "Dosya içeriği türüyle uyuşmuyor; dosya bozuk ya da uzantısı yanlış",
             400 if entity in _ICERIK_HATASI_400 else 422,
         )
+    return False
+
+
+async def mevcut_ekleri_denetle(
+    db: AsyncSession, *, entity: str | None = None, limit: int = 500
+) -> dict:
+    """KURU KOŞU (TS-218): diskteki mevcut eklerin hangileri içerik denetimine
+    takılırdı? Hiçbir şey değiştirmez; yalnız raporlar.
+
+    Dosyanın yalnız ilk 4 KB'ı okunur (imza + metin NUL denetimi için yeter).
+    Diskte bulunamayan dosya ayrı sayılır — o da işletme için bilgi.
+    """
+    from app.models import Attachment
+    from app.services import storage as depo
+
+    stmt = select(
+        Attachment.id,
+        Attachment.entity,
+        Attachment.entity_id,
+        Attachment.mime_type,
+        Attachment.file_name,
+        Attachment.storage_path,
+    ).order_by(Attachment.id)
+    if entity is not None:
+        stmt = stmt.where(Attachment.entity == entity)
+    incelenen = 0
+    eksik_dosya = 0
+    uyusmayan: list[dict] = []
+    tur_sayilari: dict[str, int] = {}
+    for ek_id, sahip, sahip_id, mime, ad, yol in (await db.execute(stmt)).all():
+        incelenen += 1
+        try:
+            with depo.yol(yol).open("rb") as f:
+                bas = f.read(4096)
+        except (depo.DepoHatasi, OSError):
+            eksik_dosya += 1
+            continue
+        if _uyusuyor(bas, mime):
+            continue
+        tur_sayilari[mime] = tur_sayilari.get(mime, 0) + 1
+        if len(uyusmayan) < limit:
+            uyusmayan.append(
+                {
+                    "ek_id": ek_id,
+                    "entity": sahip,
+                    "entity_id": sahip_id,
+                    "mime_type": mime,
+                    "file_name": ad,
+                    "zorunlu_tur": sahip in KAPSAM_ZORUNLU,
+                }
+            )
+    return {
+        "incelenen": incelenen,
+        "eksik_dosya": eksik_dosya,
+        "uyusmayan_sayisi": sum(tur_sayilari.values()),
+        "tur_bazinda": tur_sayilari,
+        "uyusmayanlar": uyusmayan,
+    }
 
 
 # --- Sahip türüne özgü ek kuralları (yükleme/silme kancaları) -------------------

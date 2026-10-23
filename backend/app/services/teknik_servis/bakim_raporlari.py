@@ -74,7 +74,8 @@ _COZULDU = sorted(DURUM_GRUPLARI["COZULDU"])
 _KAPALI = sorted(DURUM_GRUPLARI["KAPALI"])
 # Rapor aralığı sınırı (E12-08: 24 ay; daha uzunu 400).
 AZAMI_AY = 24
-# Excel satır sınırı (E12 `servis_rapor_excel_azami_satir` varsayılanı).
+# Excel satır sınırı: ayar `servis_rapor_excel_azami_satir` (Dalga 4); bu
+# sabit yalnız varsayılandır, okuma `rapor_tanimlari.excel_azami_satir`.
 EXCEL_AZAMI_SATIR = 50_000
 # Açık uygunsuzluk aksiyon yaşı kovaları (gün, üst sınır dahil).
 YAS_KOVALARI = (7, 30, 90)
@@ -800,14 +801,15 @@ async def excel_sayfalari(
     sınırı aşılırsa `BakimRaporHatasi` (400, "süzgeci daraltın").
     """
     from app.services import export as export_svc
+    from app.services.teknik_servis.rapor_tanimlari import excel_azami_satir
 
     S = export_svc.Sutun
+    azami_satir = await excel_azami_satir(db)
     rapor = await donem_tamamlama(db, user, clock, f)
     donemler = rapor["satirlar"]
-    if len(donemler) > EXCEL_AZAMI_SATIR:
+    if len(donemler) > azami_satir:
         raise BakimRaporHatasi(
-            f"{len(donemler)} satır var; Excel en çok {EXCEL_AZAMI_SATIR} satır alır. "
-            "Süzgeci daraltın."
+            f"{len(donemler)} satır var; Excel en çok {azami_satir} satır alır. Süzgeci daraltın."
         )
     donem_sutunlari = [
         S("Sözleşme No"),
@@ -859,7 +861,7 @@ async def excel_sayfalari(
                 )
             )
             .order_by(MaintenanceNonconformity.created_at, MaintenanceNonconformity.id)
-            .limit(EXCEL_AZAMI_SATIR)
+            .limit(azami_satir)
         )
     ).all()
     sayfalar = [

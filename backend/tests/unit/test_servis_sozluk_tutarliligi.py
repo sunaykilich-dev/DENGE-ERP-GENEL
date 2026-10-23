@@ -131,10 +131,18 @@ _PLAN_1_9 = {
 
 # Dalga 1 bütünleştirmesinde onaylanan ayar talepleri (eskiden kod sabiti).
 _DALGA1_EKLERI = {"bakim_sozlesme_bitis_uyari_gun"}
+# Dalga 4 (D4-B): teklif gönderim hız sınırı (TS-215), ek içerik denetimi (TS-218);
+# bütünleştirme: erişim gözden geçirme eşiği (TS-214), servis Excel satır sınırı.
+_DALGA4_EKLERI = {
+    "teklif_gonderim_dakika_limiti",
+    "ek_icerik_denetimi_canli_turler",
+    "erisim_girissiz_gun",
+    "servis_rapor_excel_azami_satir",
+}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
-    beklenen = _PLAN_1_9 | _DALGA1_EKLERI
+    beklenen = _PLAN_1_9 | _DALGA1_EKLERI | _DALGA4_EKLERI
     assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.
     assert set(ayar.AYAR_SINIRLARI) == beklenen

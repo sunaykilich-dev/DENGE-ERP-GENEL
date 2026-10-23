@@ -121,8 +121,13 @@ async def _baglantilari_doldur(db: DbDep, cihazlar: list[Device], cikti: list[Ci
 
 
 @router.get("/{kimlik}", response_model=CihazKarti)
-async def kart(kimlik: str, db: DbDep, _: Okuyucu) -> CihazKarti:
-    """IMEI, seri no veya id ile cihaz kartı — kabul kriteri 1."""
+async def kart(kimlik: str, db: DbDep, user: Okuyucu) -> CihazKarti:
+    """IMEI, seri no veya id ile cihaz kartı — kabul kriteri 1.
+
+    Kapsam (TS-217): liste `kapsam_musteri` ile süzülüyordu ama kart
+    süzülmüyordu; satış temsilcisi başka portföydeki cihazın kartını (hat,
+    araç, müşteri, durum geçmişi) IMEI ya da sıralı kimlikle açabiliyordu.
+    Kapsam dışı cihaz yokmuş gibi 404; müşterisiz (stok) cihaz görünür."""
     kosul = or_(Device.imei == kimlik, Device.serial_no == kimlik)
     if kimlik.isdigit() and len(kimlik) < 15:
         kosul = or_(kosul, Device.id == int(kimlik))
@@ -134,7 +139,7 @@ async def kart(kimlik: str, db: DbDep, _: Okuyucu) -> CihazKarti:
             .where(kosul, Device.is_deleted.is_(False))
         )
     ).first()
-    if satir is None:
+    if satir is None or await hesap_svc.kapsam_disinda_mi(db, user, satir[0].current_customer_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"'{kimlik}' ile cihaz bulunamadı")
     cihaz, urun = satir
 
@@ -231,7 +236,11 @@ async def durum_degistir(
     user: Yazici,
 ) -> CihazOut:
     cihaz = await db.get(Device, cihaz_id)
-    if cihaz is None or cihaz.is_deleted:
+    if (
+        cihaz is None
+        or cihaz.is_deleted
+        or await hesap_svc.kapsam_disinda_mi(db, user, cihaz.current_customer_id)
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cihaz bulunamadı")
     try:
         await svc.durum_degistir(

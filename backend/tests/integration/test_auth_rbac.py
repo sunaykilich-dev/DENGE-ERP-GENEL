@@ -39,10 +39,14 @@ async def test_bes_hatali_denemede_hesap_kilitlenir(client, kullanici_ac):
     await kullanici_ac("depocu", "DEPO")
     for _ in range(4):
         assert (await _giris(client, "depocu", "yanlis")).status_code == 401
-    # 5. deneme kilitler
-    assert (await _giris(client, "depocu", "yanlis")).status_code == 423
-    # Doğru parola bile artık geçmez
-    assert (await _giris(client, "depocu")).status_code == 423
+    # 5. deneme kilitler. Kilit de 401 ve AYNI metin döner (TS-212, sürüm notu):
+    # 423 yalnız var olan kullanıcıda çıktığı için kullanıcı adını ele veriyordu.
+    ilk = await _giris(client, "depocu", "yanlis")
+    assert ilk.status_code == 401
+    # Doğru parola bile artık geçmez — yanıt hatalı parolanınkiyle aynı
+    kilitli = await _giris(client, "depocu")
+    assert kilitli.status_code == 401
+    assert kilitli.json() == ilk.json()
 
 
 async def test_kilit_zaman_gecince_acilmaz(client, kullanici_ac):
@@ -55,7 +59,7 @@ async def test_kilit_zaman_gecince_acilmaz(client, kullanici_ac):
         await _giris(client, "depocu", "yanlis")
 
     client.clock.advance(days=7)
-    assert (await _giris(client, "depocu")).status_code == 423
+    assert (await _giris(client, "depocu")).status_code == 401  # 423 → 401 (TS-212)
 
 
 async def test_yonetici_kilidi_acabilir(client, kullanici_ac, db):
@@ -63,7 +67,7 @@ async def test_yonetici_kilidi_acabilir(client, kullanici_ac, db):
     await kullanici_ac("patron", "ADMIN")
     for _ in range(5):
         await _giris(client, "depocu", "yanlis")
-    assert (await _giris(client, "depocu")).status_code == 423
+    assert (await _giris(client, "depocu")).status_code == 401  # 423 → 401 (TS-212)
 
     await _giris(client, "patron")
     kilitliler = await client.get("/api/kullanicilar/kilitli")

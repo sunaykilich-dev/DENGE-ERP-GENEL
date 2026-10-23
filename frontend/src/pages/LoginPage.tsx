@@ -40,7 +40,15 @@ export default function LoginPage() {
           </Typography.Paragraph>
         </div>
 
-        {hata && <Alert type="error" title={hata} style={{ marginBottom: 16 }} showIcon />}
+        {hata && (
+          <Alert
+            type="error"
+            title={hata}
+            description="Art arda hatalı girişte hesap kilitlenir; kilitlendiyse yöneticinize başvurun."
+            style={{ marginBottom: 16 }}
+            showIcon
+          />
+        )}
 
         {bekleyen === null ? (
           <Form

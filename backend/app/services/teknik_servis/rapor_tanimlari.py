@@ -59,11 +59,24 @@ SLA_KATEGORISI = "GUNLUK_SERVIS"
 UZAKTAN_KANALLAR = ("TELEFON", "UZAKTAN")
 TEKRAR_GUN_ALT, TEKRAR_GUN_UST = 7, 180
 
-# Rapor ayarları (plan §1.9'da karşılığı yok; ayarlar Dalga 3'te donmuş →
-# kod sabiti, talep raporda). Ayar gelirse yalnız buradan okunur.
+# Rapor sınırları. Aralık (24 ay) kod sabitidir (eşzamanlı süzgeç doğrulaması).
+# Excel satır sınırı Dalga 4'te `servis_rapor_excel_azami_satir` ayarına taşındı;
+# `EXCEL_AZAMI_SATIR` yalnız ayarın okunamadığı durumdaki varsayılandır —
+# çağıranlar `excel_azami_satir(db)` kullanır.
 RAPOR_AZAMI_AY = panel.RAPOR_AZAMI_AY
 EXCEL_AZAMI_SATIR = 50_000
 JSON_AZAMI_SATIR = 200  # hiçbir JSON uç bundan fazla ham satır dönmez (E12-10)
+
+
+async def excel_azami_satir(db: Any) -> int:
+    """Excel satır üst sınırı (`servis_rapor_excel_azami_satir`, varsayılan 50 000)."""
+    from app.services import settings as ayar_svc
+
+    try:
+        return int(await ayar_svc.get(db, "servis_rapor_excel_azami_satir"))
+    except (KeyError, TypeError, ValueError):
+        return EXCEL_AZAMI_SATIR
+
 
 TARIH_ESASLARI: dict[str, str] = {
     "ACILIS": "Açılış tarihi",
@@ -594,6 +607,7 @@ def kisisel_anahtarlar() -> frozenset[str]:
 __all__ = [
     "BOYUTLAR",
     "EXCEL_AZAMI_SATIR",
+    "excel_azami_satir",
     "JSON_AZAMI_SATIR",
     "OLCULER",
     "RAPOR_KPI_BOLUMU",

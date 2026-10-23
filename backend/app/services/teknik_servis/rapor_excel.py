@@ -368,10 +368,11 @@ async def kitap(
     Satır sınırı `EXCEL_AZAMI_SATIR` aşılırsa `RaporHatasi` (400, "daraltın")."""
     from app.services.teknik_servis import is_emirleri
 
+    azami_satir = await rt.excel_azami_satir(db)
     toplam = await rm.say(db, rm.detay_sorgusu(user, f))
-    if toplam > rt.EXCEL_AZAMI_SATIR:
+    if toplam > azami_satir:
         raise rm.RaporHatasi(
-            f"{toplam} iş var; Excel en çok {rt.EXCEL_AZAMI_SATIR} satır alır, filtreyi daraltın"
+            f"{toplam} iş var; Excel en çok {azami_satir} satır alır, filtreyi daraltın"
         )
     kisisel = user.has("servis_rapor.personel")
     is_sema = rt.sutunlar("is_listesi", user)
@@ -412,9 +413,9 @@ async def kitap(
             sayfa("Personel KPI", rt.sutunlar("personel_kpi", user), personel, otomatik_filtre=True)
         )
         sure_satirlari, sure_toplam = await rh.sure_hareketleri(db, user, f, limit=None)
-        if sure_toplam > rt.EXCEL_AZAMI_SATIR:
+        if sure_toplam > azami_satir:
             raise rm.RaporHatasi(
-                f"{sure_toplam} süre kaydı var; Excel en çok {rt.EXCEL_AZAMI_SATIR} satır alır, "
+                f"{sure_toplam} süre kaydı var; Excel en çok {azami_satir} satır alır, "
                 "filtreyi daraltın"
             )
         sayfalar.append(

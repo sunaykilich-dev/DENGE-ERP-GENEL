@@ -12,6 +12,10 @@
 # Kaynak arşivine .env ASLA girmez — sırlar sunucuda üretilir (KURULUM.md
 # Adım 4). Arayüz derlenmiş halde gider; sunucuda node kurulu olması
 # gerekmesin diye.
+#
+# Nerede çalışır: macOS ya da Linux (bash, git, docker compose, node/npm,
+# python3). Windows'ta PowerShell'den ÇALIŞMAZ; Git Bash + Docker Desktop
+# ile ya da WSL içinde çalıştırın (KURULUM.md EK G.8).
 set -euo pipefail
 
 PROJE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -19,7 +23,44 @@ CIKTI=${1:-$HOME/Downloads/denge-canli}
 HAZIRLIK=$(mktemp -d)
 trap 'rm -rf "$HAZIRLIK"' EXIT
 
+# Teknik servis modüllerinin bu pakette hangi dalgaya kadar geldiği. SURUM.txt
+# "sunucuda hangi servis sürümü kurulu" sorusunu da cevaplasın (TS-220).
+SERVIS_SURUMU=${SERVIS_SURUMU:-"Dalga 0-4 (TS-001…TS-220; R4)"}
+
+# `--no-mac-metadata` yalnız bsdtar'da (macOS) var; GNU tar (Linux, Git Bash)
+# bilinmeyen seçenekte durur. macOS yan dosyaları zaten aşağıda siliniyor.
+TAR_EK=()
+if tar --help 2>&1 | grep -q -- '--no-mac-metadata'; then
+  TAR_EK=(--no-mac-metadata --no-xattrs)
+fi
+
+for k in git docker npm python3; do
+  command -v "$k" >/dev/null || { echo "HATA: '$k' yok (KURULUM.md EK G.8)"; exit 1; }
+done
+
 cd "$PROJE"
+
+# Hedef head koddan, migration dosyalarından okunur (veritabanından değil):
+# paket hangi şemaya yükseltecekse onu söyler. Tek head değilse paket çıkmaz.
+HEDEF_HEAD=$(python3 - <<'PY'
+import pathlib, re, sys
+rev, onceki = set(), set()
+for f in pathlib.Path("backend/alembic/versions").glob("*.py"):
+    if f.name.startswith("._"):
+        continue
+    m = f.read_text(encoding="utf-8")
+    r = re.search(r'^revision(?:: str)?\s*=\s*["\']([^"\']+)', m, re.M)
+    d = re.search(r'^down_revision[^=]*=\s*(.+)$', m, re.M)
+    if r:
+        rev.add(r.group(1))
+    if d:
+        onceki.update(re.findall(r'["\']([^"\']+)["\']', d.group(1)))
+head = sorted(rev - onceki)
+if len(head) != 1:
+    sys.exit(f"HATA: migration head sayisi {len(head)}: {head}")
+print(head[0])
+PY
+)
 
 echo "1/5 Arayüz derleniyor…"
 # `npm run build` ciktiyi frontend/dist'e yazar; backend/app/static'e KOPYALAMAK
@@ -33,6 +74,9 @@ test -f backend/app/static/index.html || { echo "HATA: static/index.html yok"; e
 # ekran, sessizce eski surum demek.
 grep -rq "Görevler" backend/app/static/assets/*.js || {
   echo "HATA: derlenmis arayuzde 'Görevler' yok — eski build paketlenmis"; exit 1; }
+# Teknik servis ekranları da derlenmiş arayüzde olmalı (Dalga 2-3 ekranı).
+grep -rq "Operasyon Merkezi" backend/app/static/assets/*.js || {
+  echo "HATA: derlenmis arayuzde 'Operasyon Merkezi' yok — teknik servis ekranlari eksik"; exit 1; }
 
 echo "2/5 Kaynak arşivi…"
 mkdir -p "$HAZIRLIK/denge-erp"
@@ -43,15 +87,20 @@ mkdir -p "$HAZIRLIK/denge-erp"
   echo "paket tarihi : $(date '+%Y-%m-%d %H:%M')"
   echo "commit       : $(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
   echo "commit tarihi: $(git log -1 --date=short --pretty=%ad)"
-  echo "goc surumu   : $(docker compose exec -T db psql -U dengeerp -d dengeerp -tA -c 'select version_num from alembic_version')"
+  echo "goc surumu   : $(docker compose exec -T db psql -U dengeerp -d dengeerp -tA -c 'select version_num from alembic_version' | tr -d '\r')"
+  echo "hedef head   : $HEDEF_HEAD"
+  echo "teknik servis: $SERVIS_SURUMU"
 } > "$HAZIRLIK/SURUM.txt"
-git ls-files -z | tar --null -T - --no-mac-metadata --no-xattrs -cf - | tar -xf - -C "$HAZIRLIK/denge-erp"
+# "goc surumu" dökümün şeması, "hedef head" kurulumdan sonra olması gereken.
+# Farklıysa kur.sh/api açılışı aradaki migration'ları ileri uygular.
+git ls-files -z | tar --null -T - ${TAR_EK[@]+"${TAR_EK[@]}"} -cf - | tar -xf - -C "$HAZIRLIK/denge-erp"
 mkdir -p "$HAZIRLIK/denge-erp/backend/app/static"
 cp -a backend/app/static/. "$HAZIRLIK/denge-erp/backend/app/static/"
 find "$HAZIRLIK/denge-erp" -name ".env" -delete
 mkdir -p "$CIKTI"
 cp "$HAZIRLIK/SURUM.txt" "$HAZIRLIK/denge-erp/SURUM.txt"
-tar --no-mac-metadata --no-xattrs -czf "$CIKTI/denge-erp-kaynak.tar.gz" -C "$HAZIRLIK" denge-erp
+find "$HAZIRLIK/denge-erp" \( -name '._*' -o -name '.DS_Store' \) -delete
+tar ${TAR_EK[@]+"${TAR_EK[@]}"} -czf "$CIKTI/denge-erp-kaynak.tar.gz" -C "$HAZIRLIK" denge-erp
 cp "$HAZIRLIK/SURUM.txt" "$CIKTI/SURUM.txt"
 
 echo "3/5 Veritabanı dökümü…"
@@ -66,8 +115,15 @@ cp deploy/KURULUM.md deploy/Caddyfile deploy/db-least-privilege.sql \
    deploy/denge-erp.service "$CIKTI/"
 # Kurulum artik elle komut dizisi degil: kur.sh her seyi yapar, on-kontrol.sh
 # her adimda mekanik dogrular, dogrula.sh kurulumdan sonra durum verir.
-cp deploy/kur.sh deploy/on-kontrol.sh deploy/dogrula.sh "$CIKTI/"
-chmod +x "$CIKTI/kur.sh" "$CIKTI/on-kontrol.sh" "$CIKTI/dogrula.sh"
+# yedekle.sh ve geri-yukle.sh da pakette: yükseltmeden ÖNCE yedek ve geri
+# dönüş (önce geri-yukle.sh, sonra önceki paket) paketten yapılabilsin;
+# cikis-provasi.sh canlı döküm kopyasında zaman damgalı tutanak üretir.
+PAKET_BETIKLERI=(kur.sh on-kontrol.sh dogrula.sh yedekle.sh geri-yukle.sh cikis-provasi.sh)
+for b in "${PAKET_BETIKLERI[@]}"; do
+  cp "deploy/$b" "$CIKTI/"
+  chmod +x "$CIKTI/$b"
+done
+cp deploy/servis_duman.py deploy/CIKIS-PROVASI-TUTANAGI.md "$CIKTI/"
 cp -a deploy/fail2ban "$CIKTI/"
 [ -f .env.example ] && cp .env.example "$CIKTI/"
 
@@ -79,7 +135,8 @@ echo "--- kaynak arşivinde .env var mı (boş olmalı) ---"
 tar -tzf "$CIKTI/denge-erp-kaynak.tar.gz" | grep -E "(^|/)\.env$" || echo "yok — iyi"
 echo
 tar -tzf "$CIKTI/denge-erp-kaynak.tar.gz" | grep -c "backend/app/static/" | xargs echo "static dosya adedi:"
-tar -tzf "$CIKTI/denge-erp-kaynak.tar.gz" | grep -c "alembic/versions/" | xargs echo "migration adedi:"
+tar -tzf "$CIKTI/denge-erp-kaynak.tar.gz" | grep -c "alembic/versions/.*\.py$" | xargs echo "migration adedi:"
+echo "hedef head: $HEDEF_HEAD"
 
 # Arsivin KENDISINE on kontrolu kosar. Elle yazilan dogrulama komutlari bu
 # projede iki kez yanlis negatif verdi: `*.py` kabuk kalibi bastaki noktayi

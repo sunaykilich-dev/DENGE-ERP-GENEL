@@ -50,6 +50,7 @@ import HesaplarPage from "./pages/HesaplarPage";
 import IceAktarmaPage from "./pages/IceAktarmaPage";
 import LoginPage from "./pages/LoginPage";
 import MfaKurulumPage from "./pages/MfaKurulumPage";
+import ParolaDegistirPage from "./pages/ParolaDegistirPage";
 import RmaPage from "./pages/RmaPage";
 import SatinAlmaPage from "./pages/SatinAlmaPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -99,6 +100,9 @@ function KorumaliUygulama() {
   // MFA zorunluysa kurulum bitene kadar uygulamanın hiçbir ekranı çizilmez;
   // backend zaten uçları kapatıyor, burası kullanıcıya çıkışı gösteriyor.
   if (kullanici.mfa_kurulumu_gerekli) return <MfaKurulumPage />;
+  // Geçici/ilk kurulum parolası (TS-212): sunucu diğer uçları 403
+  // PAROLA_DEGISMELI ile kapatıyor; kullanıcı değiştirene kadar uygulama çizilmez.
+  if (kullanici.parola_degismeli) return <ParolaDegistirPage />;
   return (
     <Routes>
       <Route element={<AppLayout />}>

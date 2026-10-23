@@ -117,7 +117,14 @@ async def sync_roles(db: AsyncSession) -> None:
 
 
 async def ensure_admin(db: AsyncSession, full_name: str) -> str | None:
-    """İlk yöneticiyi açar. Kullanıcı zaten varsa dokunmaz ve None döner."""
+    """İlk yöneticiyi açar. Kullanıcı zaten varsa dokunmaz ve None döner.
+
+    Parola konsola bir kez basılır; kurulumu yapan kişi onu görmüş olur.
+    Bu yüzden ilk girişte değiştirmek ZORUNLUDUR (`parola_degismeli`, TS-212).
+    Süre sınırı (`gecici_parola_bitis`) konmaz: kurulum ile ilk giriş
+    arasında kaç gün geçeceği belli değil, süresi dolan tek yönetici
+    parolası sunucuda elle kurtarma gerektirirdi.
+    """
     if await db.scalar(select(User).limit(1)):
         return None
     role = await db.scalar(select(Role).where(Role.code == "ADMIN"))
@@ -128,6 +135,7 @@ async def ensure_admin(db: AsyncSession, full_name: str) -> str | None:
             username="admin",
             password_hash=auth_service.hash_password(parola),
             role_id=role.id,
+            parola_degismeli=True,
         )
     )
     await db.flush()
@@ -207,6 +215,7 @@ async def main(argv: list[str] | None = None) -> int:
                 print("  Kullanıcı : admin")
                 print(f"  Parola    : {parola}")
                 print("  Bu parolayı şimdi kaydedin — bir daha gösterilmeyecek.")
+                print("  İlk girişte parolayı değiştirmeniz istenecek.")
                 print("=" * 52 + "\n")
         await db.commit()
     return 0

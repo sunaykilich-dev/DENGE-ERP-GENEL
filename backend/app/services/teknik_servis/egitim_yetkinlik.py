@@ -624,9 +624,9 @@ async def atama_uyarilari(
     açık kritik düzeltici faaliyet var. PB işlerinde de iş başına değerlendirilir
     (toplu atamada çağıran her iş için ayrı çağırır); PB üretimine dokunulmaz.
 
-    `kancalar.atama_uyarilari` imzasında saat yok (plan §1.8); çağıran saat
-    vermezse gerçek saat (`RealClock`) kullanılır — yalnız belge geçerliliği
-    için.
+    Saat Dalga 4'te kanca imzasına eklendi (`kancalar.atama_uyarilari(...,
+    clock)`); çağıran saat vermezse gerçek saat (`RealClock`) kullanılır —
+    yalnız belge geçerliliği için.
     """
     from app.clock import RealClock
     from app.models import TrainingCorrectiveAction, TrainingCourse
@@ -683,9 +683,11 @@ async def atama_uyarilari(
     return uyarilar
 
 
-async def _atama_uyarisi_kancasi(db: AsyncSession, so: Any, user_ids: tuple[int, ...]) -> list[str]:
-    """`kancalar.atama_uyarilari` kaydı (imza plan §1.8)."""
-    return await atama_uyarilari(db, so, user_ids)
+async def _atama_uyarisi_kancasi(
+    db: AsyncSession, so: Any, user_ids: tuple[int, ...], *, clock: Clock | None = None
+) -> list[str]:
+    """`kancalar.atama_uyarilari` kaydı (imza plan §1.8; `clock` Dalga 4)."""
+    return await atama_uyarilari(db, so, user_ids, clock=clock)
 
 
 kancalar.kaydet("atama_uyarilari", _atama_uyarisi_kancasi)

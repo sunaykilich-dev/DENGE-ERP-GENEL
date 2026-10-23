@@ -172,6 +172,19 @@ async def servis_eposta(db: AsyncSession, clock: Clock) -> str:
     return await eposta.gorev(db, clock)
 
 
+async def vekalet_sona_erme(db: AsyncSession, clock: Clock) -> str:
+    """Süresi dolan vekâletleri denetim izine BİR KEZ yazar (TS-213).
+
+    Yetki bu göreve BAĞLI DEĞİL: süre her istekte `Clock` ile denetlenir,
+    görev koşmasa da süresi dolan izin 403 verir. Görev yalnız "vekâlet sona
+    erdi" olayını denetimde görünür kılar. İdempotent (aynı kişi+izin+bitiş
+    için ikinci satır yazılmaz).
+    """
+    from app.services import yetki
+
+    return await yetki.suresi_dolan_vekaletleri_kaydet(db, clock)
+
+
 GOREVLER: tuple[Gorev, ...] = (
     Gorev("cihaz-uzlastirma", timedelta(hours=24), cihaz_uzlastirma),
     Gorev("oturum-temizligi", timedelta(hours=6), oturum_temizligi),
@@ -182,6 +195,7 @@ GOREVLER: tuple[Gorev, ...] = (
     Gorev("servis-sla-uyarilari", timedelta(minutes=5), servis_sla_uyarilari),
     Gorev("servis-uyari-temizligi", timedelta(hours=24), servis_uyari_temizligi),
     Gorev("servis-eposta", timedelta(minutes=5), servis_eposta),
+    Gorev("vekalet-sona-erme", timedelta(hours=24), vekalet_sona_erme),
 )
 
 

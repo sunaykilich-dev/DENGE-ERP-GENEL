@@ -10,6 +10,7 @@ from app.schemas.auth import (
     MfaCodeRequest,
     MfaDisableRequest,
     MfaVerifyRequest,
+    ParolaDegistirRequest,
     UserOut,
 )
 from app.services import audit
@@ -34,35 +35,47 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+# Hatalı parola, var olmayan kullanıcı, girişi kapalı hesap, süresi dolmuş
+# geçici parola ve KİLİTLİ hesap AYNI kodu ve AYNI metni alır (TS-212, K-04).
+# Eskiden kilit 423 ile ayrı bildiriliyordu; yalnız var olan kullanıcı
+# kilitlendiği için 423 "bu kullanıcı adı var" demekti. Kilit bilgisi
+# denetim kaydında ve yönetici ekranındaki "kilitli" rozetinde görünür.
+# Metin canlıdakiyle AYNI kalır (istemciler ve testler bu metne bakıyor);
+# "kilitlendiyse yöneticinize başvurun" yönlendirmesi giriş ekranının işidir.
+GIRIS_HATASI = "Kullanıcı adı veya parola hatalı"
+
+
+def _oturum_ac(response: Response, token: str, user: User, clock) -> LoginResult:
+    user.izin_anini_ata(clock.now())
+    _set_session_cookie(response, token)
+    return LoginResult(user=UserOut.of(user))
+
+
 @router.post("/login", response_model=LoginResult)
 async def login(
     payload: LoginRequest, request: Request, response: Response, db: DbDep, clock: ClockDep
 ) -> LoginResult:
-    # 1) Brute-force kilidi — kendiliğinden açılmaz, yönetici açar.
-    if await auth_service.kilit_zamani(db, payload.username) is not None:
-        raise HTTPException(
-            status.HTTP_423_LOCKED,
-            "Çok fazla hatalı deneme. Hesap kilitlendi; bir yöneticinin açması gerekiyor.",
-        )
-
-    # 2) Parola doğrulama
-    user = await auth_service.authenticate(db, payload.username, payload.password)
-    if user is None:
+    # 1) Parola doğrulama HER ZAMAN koşar (kilitli hesapta da): yanıt süresi
+    # kullanıcı adının varlığını ya da kilidi ele vermesin.
+    user = await auth_service.authenticate(db, payload.username, payload.password, clock)
+    # 2) Brute-force kilidi — kendiliğinden açılmaz, yönetici açar. Doğru
+    # parola da kilidi aşamaz.
+    kilitli = await auth_service.kilit_zamani(db, payload.username) is not None
+    if user is None or kilitli:
         locked = await auth_service.record_failed_login(db, payload.username, clock)
         await audit.log(
             db,
             "users",
             "giris.basarisiz",
-            new_value={"username": payload.username, "kilitlendi": locked},
+            new_value={
+                "username": payload.username,
+                "kilitlendi": locked,
+                **({"kilitli_hesap": True} if kilitli else {}),
+            },
             ip=client_ip(request),
         )
         await db.commit()
-        if locked:
-            raise HTTPException(
-                status.HTTP_423_LOCKED,
-                "Çok fazla hatalı deneme. Hesap kilitlendi; bir yöneticinin açması gerekiyor.",
-            )
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Kullanıcı adı veya parola hatalı")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, GIRIS_HATASI)
 
     await auth_service.reset_login_attempts(db, user.username)
 
@@ -74,10 +87,10 @@ async def login(
 
     # 4) MFA yok → oturumu aç
     token = await auth_service.create_session(db, user, clock)
+    await auth_service.giris_tamamlandi(db, user, clock)
     await audit.log(db, "users", "giris", entity_id=user.id, user_id=user.id, ip=client_ip(request))
     await db.commit()
-    _set_session_cookie(response, token)
-    return LoginResult(user=UserOut.of(user))
+    return _oturum_ac(response, token, user, clock)
 
 
 @router.post("/login/mfa", response_model=LoginResult)
@@ -95,6 +108,10 @@ async def login_mfa(
     # pending_token ile oturum açmasına izin veriyordu (E13-02 c).
     if user is None or not user.giris_yapabilir_mi():
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Oturum geçersiz")
+    # Parola adımından sonra kilitlenen hesap (paralel denemeler) bekleyen
+    # jetonla da oturum açamaz.
+    if await auth_service.kilit_zamani(db, user.username) is not None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, GIRIS_HATASI)
 
     if not mfa_service.check_login_code(user, payload.code):
         locked = await auth_service.record_failed_login(db, user.username, clock)
@@ -112,6 +129,7 @@ async def login_mfa(
 
     await auth_service.reset_login_attempts(db, user.username)
     token = await auth_service.create_session(db, user, clock)
+    await auth_service.giris_tamamlandi(db, user, clock)
     await audit.log(
         db,
         "users",
@@ -122,8 +140,7 @@ async def login_mfa(
         ip=client_ip(request),
     )
     await db.commit()
-    _set_session_cookie(response, token)
-    return LoginResult(user=UserOut.of(user))
+    return _oturum_ac(response, token, user, clock)
 
 
 @router.post("/logout")
@@ -141,6 +158,54 @@ async def logout(request: Request, response: Response, db: DbDep, user: CurrentU
 async def me(user: CurrentUser) -> UserOut:
     # Bayrağı UserOut.of() dolduruyor; burada ayrıca atanmıyor ki giriş
     # yanıtıyla /me arasında fark kalmasın.
+    return UserOut.of(user)
+
+
+@router.post("/parola", response_model=UserOut)
+async def parola_degistir(
+    payload: ParolaDegistirRequest,
+    request: Request,
+    response: Response,
+    db: DbDep,
+    clock: ClockDep,
+    user: CurrentUser,
+) -> UserOut:
+    """Kullanıcı kendi parolasını değiştirir (TS-212, E13-13).
+
+    `parola_degismeli` iken de açıktır (`PAROLA_MUAF_YOLLAR`). Yanlış mevcut
+    parola başarısız giriş sayacına girer: çalınmış bir oturumla parola
+    denemek de brute-force'tur. Sayaç kilitlerse bütün oturumlar düşer.
+    Başarılıysa BU oturum kalır, diğerleri düşer.
+    """
+    token = request.cookies.get(SESSION_COOKIE)
+    try:
+        await auth_service.parola_degistir(
+            db, user, mevcut=payload.mevcut, yeni=payload.yeni, clock=clock, korunan_oturum=token
+        )
+    except auth_service.ParolaHatasi as exc:
+        # Kurallar yazmadan ÖNCE denetlenir; geri alınacak değişiklik yok.
+        if isinstance(exc, auth_service.MevcutParolaHatali):
+            locked = await auth_service.record_failed_login(db, user.username, clock)
+            await audit.log(
+                db,
+                "users",
+                "parola.degistir_basarisiz",
+                entity_id=user.id,
+                new_value={"kilitlendi": locked},
+                user_id=user.id,
+                ip=client_ip(request),
+            )
+            if locked:
+                await auth_service.revoke_all_sessions(db, user.id)
+                await db.commit()
+                response.delete_cookie(SESSION_COOKIE, path="/")
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, GIRIS_HATASI) from exc
+            await db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await audit.log(
+        db, "users", "parola.degistir", entity_id=user.id, user_id=user.id, ip=client_ip(request)
+    )
+    await db.commit()
     return UserOut.of(user)
 
 

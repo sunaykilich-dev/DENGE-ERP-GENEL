@@ -30,7 +30,27 @@ eksik olan yetkidir, modül değil. Yetki isteğinizi sistem yöneticisine ileti
 | Muhasebe Destek | Hak ediş, tahsilat, dışa aktarım | Evet |
 | Yönetim | Her şeyi görür, hiçbir şeyi değiştirmez | Evet |
 
-Bu dokuz rol kurulumla gelir; **düzenlenebilir** ve yenisi tanımlanabilir
+Teknik servis modülleriyle sekiz rol daha gelir. Hiçbirinde mobilite iş emri,
+hak ediş, tahsilat ya da maliyet yetkisi yoktur; "Teknik Servis" (mobilite
+RMA/garanti rolü) bunlardan ayrıdır ve aynen kalır.
+
+| Rol | Ne yapar | Gördüğü kayıtlar |
+|---|---|---|
+| Teknik Servis Müdürü | Servis işinin tamamı, tanımlar, bakım, atölye, kiralama, parça, eğitim, personel, servis raporları | Tüm birimler |
+| Teknik Servis Şefi | Planlama, onay, kapatma, bakım onayı, servis raporları | Kendi birimleri |
+| Teknik Servis Operasyon Uzmanı | İş açma, uzaktan çözüm, kiralama kaydı | Kendi birimleri |
+| Servis Teknisyeni | Benim İşlerim: sayaç, sonuç, fotoğraf, parça kullanımı | Yalnız kendisine atanmış işler |
+| Atölye Kabul / Usta | Atölye kabulü, onarım, teslim | Kendi birimleri |
+| Servis Deposu / Yedek Parça | Parça stoğu, transfer, sayım, talepler | Kendi birimleri |
+| Kiralama Deposu | Kiralık envanter, tahsis, sevk, iade | Kendi birimleri |
+| İnsan Kaynakları / Eğitim | Personel, işten çıkış, eğitim ve belge | Tüm birimler |
+
+"Birim" Güvenlik, Haberleşme, POC, Mobilite, Araç Takip gibi iş kollarıdır;
+kişinin birimleri **Personel** kartında verilir (§11.8, §12.2). Servis
+modülleri önce pilot birimde (Güvenlik) açılır; servis rolü olmayan
+kullanıcının menüsü değişmez.
+
+Bu roller kurulumla gelir; **düzenlenebilir** ve yenisi tanımlanabilir
 (§7). Tek bir kişi için rolün dışına çıkmak gerekirse izin istisnası verilir.
 
 **Maliyet ve alış fiyatı alanları varsayılan olarak gizlidir.** Yetkisiz
@@ -392,7 +412,9 @@ Oran değişikliği **geçmiş belgeleri etkilemez** — her belge kendi oranın
 içinde saklar.
 
 **Denetim İzi**: kim, ne zaman, hangi kaydı, neyden neye değiştirdi. Silme
-işlemleri yumuşaktır (`is_deleted`); kayıt kaybolmaz.
+işlemleri yumuşaktır (`is_deleted`); kayıt kaybolmaz. Denetim satırının
+kendisi **silinemez ve değiştirilemez** — veritabanı da reddeder, yönetici
+dahil (§13.1).
 
 ---
 
@@ -747,3 +769,64 @@ Menü: **Personel**.
 - Mobilite **İş Emirleri** ekranındaki *BAKIM* işlem tipi araç takip
   cihazlarının saha bakımıdır; hak ediş ve mobilite raporlarında eskisi gibi
   sayılır. İkisi ayrı kayıtlardır ve birbirinin sayılarına karışmaz.
+
+## 13. Dalga 4: güvenlik ve canlıya geçiş
+
+### 13.1 Denetim izi değiştirilemez
+
+Denetim kaydı yazıldıktan sonra **silinemez, değiştirilemez**; bunu artık
+yalnız uygulama değil veritabanı da reddeder. Tek istisna KVKK
+anonimleştirmesidir: kişisel veri içeren denetim satırında eski/yeni değer
+"silindi" işaretiyle maskelenir, satırın kendisi (kim, ne zaman, hangi
+kayıt) kalır. Silinen bir kullanıcının denetim satırları da kalır; yalnız
+"kim" alanı boşalır.
+
+### 13.2 Süreli vekâlet
+
+İzinli olmadığınız bir süre için yetkilerinizin bir kısmını başka birine
+**süreli** devredebilirsiniz (`vekalet.ver`; Teknik Servis Müdürü ve sistem
+yöneticisi). Vekâlet, alıcının **Personel** kartındaki "Vekâletler" bölümünden
+verilir ve iptal edilir.
+
+- Vekâletin başlangıcı ve bitişi zorunludur; en çok **30 gün** sürer. Bitiş
+  anında kendiliğinden düşer, ayrıca geri almak gerekmez; erken iptal
+  edilebilir. Kendinize vekâlet veremezsiniz.
+- Yalnız **kendi kalıcı izinlerinizden** devredebilirsiniz; size vekâletle
+  gelmiş bir izni başkasına devredemezsiniz. Bazı izinler (kullanıcı/rol
+  yönetimi, KVKK gibi) vekâlete kapalıdır; denenirse reddedilir ve denetime
+  yazılır.
+- Kişi işten ayrıldığında ona verilen ve onun verdiği vekâletler o anda biter.
+- Vekâlet başlayınca ya da bitince alıcının açık oturumu düşer; yeniden
+  giriş yaptığında yeni yetkisiyle açılır.
+- Kalıcı istisnalar (§7 "Tek bir kişi için istisna") ayrıdır ve aynen
+  çalışır; vekâlet onları silmez.
+
+### 13.3 Parola ve giriş
+
+- Yöneticinin size verdiği ya da sıfırladığı parola **geçicidir**: 72 saat
+  içinde ve yalnız bir kez girişte geçerlidir. Girişte "Parola değiştir"
+  ekranı açılır; kendi parolanızı belirlemeden uygulamaya geçilmez.
+- Yeni parola en az 10 karakter olmalı, kullanıcı adınızı ya da adınızı
+  içermemelidir. Parolanızı sonradan da değiştirebilirsiniz; değiştirince
+  diğer cihazlardaki oturumlarınız kapanır.
+- Art arda hatalı girişte hesap kilitlenir. Giriş ekranı kilitli hesapla
+  yanlış parolayı ayırmaz (aynı mesaj); giremiyorsanız yöneticinize başvurun.
+- Yönetici, **Kullanıcılar → Erişim gözden geçirme** sekmesinden hassas
+  yetkili, rolünden farklı, uzun süredir girmeyen ve kilitli hesapları
+  görür; gözden geçirdiğini işaretler (işaret denetime yazılır).
+
+### 13.4 Sürüm yükseltmesinden sonra ne değişir
+
+- Servis rolü olmayan kullanıcı için ERP **değişmez**: menü, mobilite iş
+  emirleri, hak ediş tutarları ve raporlar aynıdır. Yükseltme öncesi ve
+  sonrası hak ediş toplamı kuruşu kuruşuna denetlenir.
+- Servis modülleri önce **Güvenlik** biriminde açılır; diğer birimler
+  sırayla (Haberleşme/POC, sonra Mobilite/Araç Takip) eski sistemden
+  aktarılarak eklenir. Eski sistemden gelen işlerin numarası korunur; SLA'ları
+  "ölçülemedi" görünür.
+- İlk günlerde otomatik planlı bakım üretimi ve servis e-postası **kapalıdır**;
+  yönetici açtığında başlar (§11.1, §12.1).
+- Bir sorun çıkar da önceki sürüme dönülürse, yükseltmeden sonra girilen
+  servis kayıtları geri alınır. Bu yüzden ilk gün yalnız pilot birim çalışır
+  ve yedek saatlik alınır; o gün girdiğiniz kayıtları kâğıt/e-posta ile de
+  not edin.

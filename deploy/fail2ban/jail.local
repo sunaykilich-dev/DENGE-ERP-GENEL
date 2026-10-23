@@ -15,7 +15,8 @@ maxretry = 5
 [sshd]
 enabled = true
 
-# Uygulama kendi kilidini de uygular (5 hata -> 15 dk, kullanici bazinda);
+# Uygulama kendi kilidini de uygular (5 hata -> hesap kilitlenir ve yonetici
+# acana kadar kapali kalir, kullanici bazinda; sureli kilit yok);
 # bu IP seviyesinde ikinci katman: farkli kullanici adlariyla deneyen bir
 # botu uygulama kilidi durduramaz.
 [denge-erp-login]

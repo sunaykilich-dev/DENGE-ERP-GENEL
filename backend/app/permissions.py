@@ -206,6 +206,9 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Personel kartı, birim üyeliği, saha rolü, girişsiz personel açar/düzenler",
     ),
     "personel.cikis": ("Personel", "İşten çıkış akışını çalıştırır"),
+    # Dalga 4 (TS-213, E13-15): kendi kalıcı izinlerinin alt kümesini en fazla
+    # 30 günlüğüne kapsamındaki personele devreder. Kendisi vekâlete kapalıdır.
+    "vekalet.ver": ("Personel", "Süreli vekâlet verir ve iptal eder"),
     # Sistem
     "sistem.kullanici": ("Sistem", "Kullanıcı ve rol yönetir"),
     "sistem.ayar": ("Sistem", "Parametreleri ve entegrasyon ayarlarını yönetir"),
@@ -257,9 +260,10 @@ AYRILIS_NEDENLERI = ("ISTIFA", "FESIH", "EMEKLILIK", "SOZLESME_BITIMI", "DIGER")
 YUKSEK_YETKILI_IZINLER = frozenset(
     {"sistem.kullanici", "sistem.denetim", "sistem.ayar", "sistem.goc", "kvkk.yonet"}
 )
-# Süreli vekâletle verilemeyecek izinler (Dalga 4, TS-213). `vekalet.ver`
-# kodu kataloğa Dalga 4'te girer ("her izin en az bir rolde" testi yüzünden
-# önce değil); listede şimdiden durması kuralı değiştirmez.
+# Süreli vekâletle verilemeyecek izinler (Dalga 4, TS-213; `api/vekalet.py`
+# 403 + `yetki.ret` denetimi). Yüksek yetki, fiyat/maliyet, hak ediş onay/ödeme,
+# tahsilat ve teklif onayı "birkaç günlüğüne" devredilmez; `vekalet.ver` de
+# zincirleme devri önlemek için kapalıdır.
 VEKALETE_KAPALI = YUKSEK_YETKILI_IZINLER | {
     "maliyet.gor",
     "maliyet.yaz",
@@ -487,6 +491,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "personel.gor",
             "personel.yaz",
             "personel.cikis",
+            "vekalet.ver",
             "servis_rapor.gor",
             "servis_rapor.disaaktar",
             "servis_rapor.personel",

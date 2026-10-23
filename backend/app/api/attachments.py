@@ -26,16 +26,18 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy import text as sa_text
 
-from app.api.deps import ClockDep, DbDep, client_ip, current_user
+from app.api.deps import ClockDep, DbDep, client_ip, current_user, require_permission
 from app.models import Attachment, User
 from app.models.attachment import EK_SAHIPLERI, EK_TURLERI
 from app.services import audit
+from app.services import settings as ayar_svc
 from app.services import storage as depo
 from app.services.teknik_servis import ek_kapsam
 
 router = APIRouter(prefix="/api/ekler", tags=["ekler"])
 
 Kullanici = Annotated[User, Depends(current_user)]
+AyarYoneticisi = Annotated[User, Depends(require_permission("sistem.ayar"))]
 
 # Sahip kayıt türü → o kaydı değiştirmek için gereken izin. Ek yüklemek
 # kaydı değiştirmektir; görmek için okuma izni yeterlidir.
@@ -50,6 +52,10 @@ SAHIP_IZNI: dict[str, tuple[str, str]] = {
     "contracts": ("abonelik.gor", "abonelik.yaz"),
     "settlements": ("hakedis.gor", "hakedis.yaz"),
     "import_files": ("satinalma.gor", "satinalma.yaz"),
+    # RMA (TS-217): arıza fotoğrafı, üretici iade formu. Tablo `_SAHIP_TABLOSU`
+    # içinde vardı ama sahip listesinde yoktu → yükleme 400 "Bilinmeyen kayıt
+    # türü". Kapsam `ek_kapsam._rma_kapsami` (müşteri kapsamı, RMA listesiyle aynı).
+    "rma_cases": ("rma.gor", "rma.yaz"),
     # --- Teknik servis (plan §1.11) ---
     "service_orders": ("servis.gor", "servis.yaz"),
     "service_equipment": ("ekipman.gor", "ekipman.yaz"),
@@ -162,6 +168,37 @@ def _dosya_adi_basligi(ad: str) -> str:
     yedek = unicodedata.normalize("NFKD", ad).encode("ascii", "ignore").decode() or "dosya"
     yedek = yedek.replace('"', "")
     return f"filename=\"{yedek}\"; filename*=UTF-8''{quote(ad)}"
+
+
+@router.get("/icerik-denetimi")
+async def icerik_denetimi(
+    db: DbDep,
+    _: AyarYoneticisi,
+    entity: str | None = None,
+    limit: int = Query(default=500, ge=1, le=5000),
+) -> dict:
+    """KURU KOŞU raporu (TS-218): mevcut eklerden içerik denetimine takılacak
+    olanlar ve kuru koşuda kabul edilmiş yeni yüklemelerin sayısı. Hiçbir
+    şey değiştirmez. `ek_icerik_denetimi_canli_turler` açılmadan önce
+    okunur; `uyusmayan_sayisi` canlı türlerde 0 değilse önce dosyalar
+    düzeltilir ya da kullanıcılara duyurulur."""
+    from sqlalchemy import func
+
+    from app.models import AuditLog
+
+    if entity is not None:
+        _sahip_dogrula(entity)
+    rapor = await ek_kapsam.mevcut_ekleri_denetle(db, entity=entity, limit=limit)
+    rapor["kuru_kosu_kabul_edilen"] = (
+        await db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "ek.icerik_uyusmazligi_kuru")
+        )
+        or 0
+    )
+    rapor["canli_turler_zorunlu"] = bool(await ayar_svc.get(db, "ek_icerik_denetimi_canli_turler"))
+    return rapor
 
 
 @router.get("/dosya/{ek_id}")
@@ -282,8 +319,12 @@ async def yukle(
     try:
         icerik = await depo.sinirli_oku(file)
         mime = depo.mime_coz(file.content_type or "", file.filename or "")
-        # Teknik servis eklerinde içerik beyanla uyuşmalı (magic byte).
-        ek_kapsam.icerik_dogrula(entity, icerik, mime)
+        # İçerik beyanla uyuşmalı (magic byte). Teknik servis türlerinde her
+        # zaman; canlı türlerde ayar açıksa (TS-218, kuru koşu ile başlar).
+        canli_zorunlu = bool(await ayar_svc.get(db, "ek_icerik_denetimi_canli_turler"))
+        icerik_uyusuyor = ek_kapsam.icerik_dogrula(
+            entity, icerik, mime, canli_zorunlu=canli_zorunlu
+        )
         kayit = depo.yaz(icerik, mime_type=mime)
     except ek_kapsam.IcerikUyusmazligi as exc:
         raise HTTPException(exc.durum, str(exc)) from exc
@@ -324,6 +365,18 @@ async def yukle(
         user_id=user.id,
         ip=client_ip(request),
     )
+    if not icerik_uyusuyor:
+        # Kuru koşu: canlı türde içerik beyanla uyuşmadı ama ayar kapalı
+        # olduğu için kabul edildi. Ayar açılmadan önce bu satırlar sayılır.
+        await audit.log(
+            db,
+            entity,
+            "ek.icerik_uyusmazligi_kuru",
+            entity_id=entity_id,
+            new_value={"ek_id": ek.id, "mime": ek.mime_type},
+            user_id=user.id,
+            ip=client_ip(request),
+        )
     if kurali is not None and kurali.yuklendi is not None:
         await kurali.yuklendi(db, user, ek, clock)
     await db.commit()

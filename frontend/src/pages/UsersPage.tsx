@@ -3,17 +3,22 @@ import {
   App,
   Button,
   Card,
+  Col,
   Divider,
   Form,
   Input,
   Modal,
+  Row,
   Select,
   Space,
   Switch,
   Table,
   Tabs,
   Tag,
+  Tooltip,
+  Typography,
 } from "antd";
+import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -22,6 +27,7 @@ import { kapsamEtiketi, kapsamKataloguSorgusu, useAuth } from "../auth/AuthConte
 import IzinIstisnalari from "../components/IzinIstisnalari";
 import RolDuzenle from "../components/RolDuzenle";
 import RolYetkileri from "../components/RolYetkileri";
+import Statistic from "../components/Statistic";
 
 /** Liste satırı: kullanıcı + giriş/birim bilgisi + rolünden sapma (E13-10). */
 type KullaniciSatiri = Kullanici & {
@@ -29,7 +35,233 @@ type KullaniciSatiri = Kullanici & {
   birimler?: string[];
   birincil_birim?: string | null;
   sapma_sayisi?: number;
+  /** Yürürlükteki süreli vekâlet (TS-213); kalıcı sapmadan ayrı sayılır. */
+  vekalet_sayisi?: number;
 };
+
+/** `PATCH /api/kullanicilar/{id}` yanıtı: geçici parola YALNIZ burada, bir kez. */
+type GuncellemeSonucu = Kullanici & {
+  gecici_parola?: string | null;
+  gecici_parola_bitis?: string | null;
+};
+
+// --- Erişim gözden geçirme (TS-214; sunucu: `api/erisim_gozden.py`) --------------
+
+interface ErisimKpi {
+  kod: string;
+  baslik: string;
+  aciklama: string;
+  adet: number;
+}
+
+interface ErisimSatiri {
+  id: number;
+  full_name: string;
+  username: string;
+  rol_adi: string;
+  is_active: boolean;
+  giris_acik: boolean;
+  son_giris_at: string | null;
+  ayrilis_tarihi: string | null;
+  kilitli: boolean;
+  mfa_enabled: boolean;
+  hassas_izinler: string[];
+  sapma_sayisi: number;
+  vekalet_sayisi: number;
+  son_gozden_gecirme_at: string | null;
+  son_gozden_geciren: string | null;
+}
+
+const ERISIM_SAYFA = 25;
+
+function zamanMetni(v: string | null): string {
+  return v ? dayjs(v).format("DD.MM.YYYY HH:mm") : "—";
+}
+
+/**
+ * Erişim gözden geçirme sekmesi. Kutular süzgeçtir: kutudaki sayı, tıklanınca
+ * açılan listenin toplamıyla aynıdır (sunucu iki yerde aynı koşulu kullanır).
+ * "Gözden geçirildi" işareti yalnız denetim kaydıdır.
+ */
+function ErisimGozden() {
+  const { yetkili } = useAuth();
+  const { message } = App.useApp();
+  const qc = useQueryClient();
+  const [kpi, setKpi] = useState<string | undefined>();
+  const [sayfa, setSayfa] = useState(1);
+  const [isaretlenen, setIsaretlenen] = useState<ErisimSatiri | null>(null);
+  const [not, setNot] = useState("");
+
+  const ozet = useQuery({
+    queryKey: ["erisim-gozden-ozet"],
+    queryFn: () =>
+      api.get<{ girissiz_gun: number; kpiler: ErisimKpi[] }>("/api/erisim-gozden/ozet"),
+  });
+  const liste = useQuery({
+    queryKey: ["erisim-gozden", kpi, sayfa],
+    queryFn: () => {
+      const p = new URLSearchParams({
+        limit: String(ERISIM_SAYFA),
+        offset: String((sayfa - 1) * ERISIM_SAYFA),
+      });
+      if (kpi) p.set("kpi", kpi);
+      return api.getSayfa<ErisimSatiri>(`/api/erisim-gozden?${p}`);
+    },
+  });
+  const isaretle = useMutation({
+    mutationFn: (s: ErisimSatiri) =>
+      api.post(`/api/erisim-gozden/${s.id}/gozden-gecirildi`, { not: not.trim() || null }),
+    onSuccess: () => {
+      message.success("Gözden geçirildi olarak işaretlendi (denetim kaydına yazıldı)");
+      setIsaretlenen(null);
+      setNot("");
+      void qc.invalidateQueries({ queryKey: ["erisim-gozden"] });
+    },
+    onError: (e: ApiError) => message.error(e.message),
+  });
+  const kpiSec = (k: string | undefined) => {
+    setKpi(k);
+    setSayfa(1);
+  };
+
+  return (
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
+      <Row gutter={[12, 12]}>
+        {(ozet.data?.kpiler ?? []).map((k) => (
+          <Col key={k.kod} xs={12} sm={8} md={6} lg={4}>
+            <Tooltip title={k.aciklama}>
+              <Card
+                size="small"
+                hoverable
+                onClick={() => kpiSec(kpi === k.kod ? undefined : k.kod)}
+                style={{ height: "100%", borderColor: kpi === k.kod ? "#1677ff" : undefined }}
+              >
+                <Statistic
+                  title={k.kod === "uzun_girissiz" ? `${k.baslik} (${ozet.data?.girissiz_gun}+ gün)` : k.baslik}
+                  value={k.adet}
+                  valueStyle={k.adet > 0 && k.kod !== "hassas_izin" ? { color: "#b42318" } : undefined}
+                />
+              </Card>
+            </Tooltip>
+          </Col>
+        ))}
+      </Row>
+      <Space wrap>
+        {kpi && (
+          <Button onClick={() => kpiSec(undefined)}>
+            Süzgeci kaldır ({ozet.data?.kpiler.find((k) => k.kod === kpi)?.baslik})
+          </Button>
+        )}
+        {yetkili("rapor.disaaktar") && (
+          <Button
+            onClick={() =>
+              window.open(`/api/erisim-gozden/excel${kpi ? `?kpi=${kpi}` : ""}`, "_blank")
+            }
+          >
+            Excel
+          </Button>
+        )}
+      </Space>
+      <Table
+        rowKey="id"
+        size="small"
+        scroll={{ x: 900 }}
+        loading={liste.isLoading}
+        dataSource={liste.data?.kayitlar ?? []}
+        pagination={{
+          current: sayfa,
+          pageSize: ERISIM_SAYFA,
+          total: liste.data?.toplam ?? 0,
+          showSizeChanger: false,
+          onChange: setSayfa,
+          showTotal: (t) => `${t.toLocaleString("tr-TR")} hesap`,
+        }}
+        columns={[
+          { title: "Ad soyad", dataIndex: "full_name", ellipsis: true },
+          { title: "Kullanıcı adı", dataIndex: "username", className: "mono", width: 130 },
+          { title: "Rol", dataIndex: "rol_adi", ellipsis: true },
+          {
+            title: "Durum",
+            width: 190,
+            render: (_, s: ErisimSatiri) => (
+              <Space size={4} wrap>
+                {!s.is_active && <Tag>pasif</Tag>}
+                {s.giris_acik ? <Tag color="green">giriş açık</Tag> : <Tag>giriş kapalı</Tag>}
+                {s.ayrilis_tarihi && <Tag color="red">ayrıldı</Tag>}
+                {s.kilitli && <Tag color="red">kilitli</Tag>}
+                {!s.mfa_enabled && <Tag>MFA yok</Tag>}
+              </Space>
+            ),
+          },
+          {
+            title: "Hassas / sapma",
+            width: 220,
+            render: (_, s: ErisimSatiri) => (
+              <Space size={4} wrap>
+                {s.hassas_izinler.map((i) => (
+                  <Tag key={i} color="gold" className="mono">
+                    {i}
+                  </Tag>
+                ))}
+                {s.sapma_sayisi > 0 && <Tag color="orange">istisna {s.sapma_sayisi}</Tag>}
+                {s.vekalet_sayisi > 0 && <Tag color="purple">vekâlet {s.vekalet_sayisi}</Tag>}
+              </Space>
+            ),
+          },
+          { title: "Son giriş", width: 140, render: (_, s: ErisimSatiri) => zamanMetni(s.son_giris_at) },
+          {
+            title: "Son gözden geçirme",
+            width: 190,
+            render: (_, s: ErisimSatiri) =>
+              s.son_gozden_gecirme_at ? (
+                <span>
+                  {zamanMetni(s.son_gozden_gecirme_at)}
+                  {s.son_gozden_geciren && (
+                    <Typography.Text type="secondary"> · {s.son_gozden_geciren}</Typography.Text>
+                  )}
+                </span>
+              ) : (
+                <Tag>hiç</Tag>
+              ),
+          },
+          {
+            title: "",
+            width: 120,
+            render: (_, s: ErisimSatiri) => (
+              <Button size="small" onClick={() => setIsaretlenen(s)}>
+                Gözden geçirildi
+              </Button>
+            ),
+          },
+        ]}
+      />
+      <Modal
+        title={isaretlenen ? `${isaretlenen.full_name} — erişim gözden geçirildi` : ""}
+        open={isaretlenen !== null}
+        onCancel={() => setIsaretlenen(null)}
+        onOk={() => isaretlenen && isaretle.mutate(isaretlenen)}
+        okText="İşaretle"
+        cancelText="Vazgeç"
+        confirmLoading={isaretle.isPending}
+        destroyOnHidden
+      >
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          <Typography.Text type="secondary">
+            Kişinin o anki rolü ve hassas izinleri denetim kaydına işaretle birlikte yazılır.
+            Yetki değişmez; değiştirmek için kullanıcıyı düzenleyin.
+          </Typography.Text>
+          <Input.TextArea
+            rows={2}
+            maxLength={300}
+            placeholder="Not (isteğe bağlı), ör. 2026 Q1 erişim gözden geçirmesi"
+            value={not}
+            onChange={(e) => setNot(e.target.value)}
+          />
+        </Space>
+      </Modal>
+    </Space>
+  );
+}
 
 /** Rol seçeneğinin etiketi: kısıtlı kapsam adın yanında yazılır. */
 function rolEtiketi(r: Rol): string {
@@ -50,7 +282,7 @@ export default function UsersPage() {
   const [yeniRol, setYeniRol] = useState<string>();
   const [duzenlenenRol, setDuzenlenenRol] = useState<string>();
   const qc = useQueryClient();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [acik, setAcik] = useState(false);
   const [form] = Form.useForm();
   // Düzenlenen kullanıcı; null ise düzenleme penceresi kapalı.
@@ -101,6 +333,7 @@ export default function UsersPage() {
         role_code: duzenlenen.role.code,
         giris_acik: duzenlenen.giris_acik ?? true,
         password: undefined,
+        parola_sifirla: false,
         reset_mfa: false,
       });
     }
@@ -119,8 +352,32 @@ export default function UsersPage() {
 
   const guncelle = useMutation({
     mutationFn: ({ id, ...v }: { id: number } & Record<string, unknown>) =>
-      api.patch<Kullanici>(`/api/kullanicilar/${id}`, v),
-    onSuccess: () => void yenile(),
+      api.patch<GuncellemeSonucu>(`/api/kullanicilar/${id}`, v),
+    onSuccess: (sonuc) => {
+      void yenile();
+      // Geçici parola YALNIZ bu yanıtta ve bir kez gelir (TS-212); kapatılınca
+      // bir daha gösterilemez — yönetici kullanıcıya şimdi iletmeli.
+      if (sonuc?.gecici_parola) {
+        modal.info({
+          title: `${sonuc.full_name} — geçici parola`,
+          width: 460,
+          content: (
+            <Space orientation="vertical">
+              <Typography.Text copyable={{ text: sonuc.gecici_parola }} className="mono" strong>
+                {sonuc.gecici_parola}
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                Bu parola bir daha gösterilmez. Tek girişte ve{" "}
+                {sonuc.gecici_parola_bitis
+                  ? dayjs(sonuc.gecici_parola_bitis).format("DD.MM.YYYY HH:mm")
+                  : "72 saat"}{" "}
+                tarihine kadar geçerlidir; kullanıcı ilk girişte kendi parolasını belirler.
+              </Typography.Text>
+            </Space>
+          ),
+        });
+      }
+    },
     onError: (e: ApiError) => {
       // 409 = iyimser kilitleme çakışması; kullanıcıya sessiz kayıp yerine
       // net mesaj gider ve liste tazelenir.
@@ -137,11 +394,11 @@ export default function UsersPage() {
           <Button type="primary" onClick={() => setAcik(true)}>
             Yeni kullanıcı
           </Button>
-        ) : (
+        ) : sekme === "roller" ? (
           <Button type="primary" onClick={() => setRolDuzenle({ acik: true })}>
             Yeni rol
           </Button>
-        )
+        ) : null
       }
     >
       <Tabs
@@ -150,9 +407,12 @@ export default function UsersPage() {
         items={[
           { key: "kullanicilar", label: "Kullanıcılar" },
           { key: "roller", label: `Roller (${roller.data?.length ?? 0})` },
+          { key: "erisim", label: "Erişim gözden geçirme" },
         ]}
       />
-      {sekme === "roller" ? (
+      {sekme === "erisim" ? (
+        <ErisimGozden />
+      ) : sekme === "roller" ? (
         <Table
           rowKey="code"
           size="small"
@@ -228,6 +488,11 @@ export default function UsersPage() {
                 {(k.sapma_sayisi ?? 0) > 0 && (
                   <Tag color="orange">Rolünden farklı ({k.sapma_sayisi})</Tag>
                 )}
+                {(k.vekalet_sayisi ?? 0) > 0 && (
+                  <Tooltip title="Süreli vekâlet; süresi dolunca kendiliğinden biter (Personel kartı → Vekâletler)">
+                    <Tag color="purple">vekâlet ({k.vekalet_sayisi})</Tag>
+                  </Tooltip>
+                )}
                 {k.sees_cost && <Tag color="gold">maliyet görür</Tag>}
               </Space>
             ),
@@ -253,6 +518,10 @@ export default function UsersPage() {
                     Kilidi aç
                   </Button>
                 </Space>
+              ) : k.parola_degismeli ? (
+                <Tooltip title="Geçici parolayla açıldı; ilk girişte kendi parolasını belirleyecek">
+                  <Tag color="gold">parola değişmeli</Tag>
+                </Tooltip>
               ) : (
                 <Tag color="green">açık</Tag>
               ),
@@ -317,10 +586,11 @@ export default function UsersPage() {
           </Form.Item>
           <Form.Item
             name="password"
-            label="Parola"
+            label="Geçici parola"
             rules={[{ required: true, min: 8, message: "En az 8 karakter" }]}
+            extra="Kullanıcı ilk girişte kendi parolasını belirler; bu parola 72 saat ve tek giriş için geçerlidir."
           >
-            <Input.Password />
+            <Input.Password autoComplete="new-password" />
           </Form.Item>
           <Form.Item name="role_code" label="Rol" rules={[{ required: true }]}>
             <Select
@@ -378,6 +648,7 @@ export default function UsersPage() {
               reset_mfa: v.reset_mfa || undefined,
             };
             if (v.password) gonderilecek.password = v.password;
+            else if (v.parola_sifirla) gonderilecek.parola_sifirla = true;
             guncelle.mutate(gonderilecek as { id: number } & Record<string, unknown>);
             setDuzenlenen(null);
           }}
@@ -424,14 +695,26 @@ export default function UsersPage() {
             />
           )}
           <Divider style={{ margin: "12px 0" }} />
-          <Form.Item
-            name="password"
-            label="Yeni parola"
-            rules={[{ min: 8, message: "En az 8 karakter" }]}
-            extra="Boş bırakırsanız parola değişmez. Değiştirirseniz açık oturumlar düşer."
-          >
-            <Input.Password autoComplete="new-password" placeholder="(değiştirmek için doldurun)" />
-          </Form.Item>
+          {duzenlenen?.id !== kendisi?.id && (
+            <>
+              <Form.Item
+                name="parola_sifirla"
+                label="Geçici parola üret"
+                valuePropName="checked"
+                extra="Sunucu tek seferlik bir parola üretir ve kaydettikten sonra BİR KEZ gösterir. Açık oturumlar düşer; kullanıcı ilk girişte kendi parolasını belirler (72 saat geçerli)."
+              >
+                <Switch />
+              </Form.Item>
+              <Form.Item
+                name="password"
+                label="ya da geçici parolayı siz belirleyin"
+                rules={[{ min: 8, message: "En az 8 karakter" }]}
+                extra="Boş bırakırsanız parola değişmez. Belirlenen parola da geçicidir: ilk girişte değiştirilir."
+              >
+                <Input.Password autoComplete="new-password" placeholder="(değiştirmek için doldurun)" />
+              </Form.Item>
+            </>
+          )}
           <Form.Item
             name="reset_mfa"
             label="İki adımlı doğrulamayı sıfırla"

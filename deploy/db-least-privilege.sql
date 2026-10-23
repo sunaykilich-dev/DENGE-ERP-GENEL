@@ -32,6 +32,28 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- DIKKAT: ERP'de silme YUMUŞAKTIR (`is_deleted`), denetim izi ve kapanmış
 -- dönem satırları hiç silinmez. Yine de DELETE yetkisi veriliyor: içe aktarma
 -- partisi geri alma ve toplu zam geri alma gerçek satır siler.
+
+-- --- Denetim izi değiştirilemez (Dalga 4, TS-211) -----------------------------
+-- Ana önlem veritabanındaki `trg_audit_degistirilemez` tetikleyicisidir
+-- (migration d4a000000001): DELETE her zaman, UPDATE KVKK maskesi dışında
+-- reddedilir — hangi rolle bağlanılırsa bağlanılsın. Aşağıdaki hak kısıtı
+-- ikinci kattır ve YALNIZ uygulama 'dengeerp_app' ile bağlanıyorsa etkilidir
+-- (varsayılan compose şema sahibi 'dengeerp' ile bağlanır; o durumda yalnız
+-- tetikleyici korur).
+--   * DELETE ve TRUNCATE: hiç yok. (TRUNCATE satır tetikleyicisini atlar;
+--     yukarıdaki GRANT onu zaten vermiyor, REVOKE açıkça belgelemek için.)
+--   * UPDATE: yalnız KVKK imhasının maskelediği iki değer kolonu.
+--     (`user_id` → NULL, kullanıcı silinince FK'nin `ON DELETE SET NULL`
+--     eylemidir; referans eylemleri tablo sahibinin haklarıyla koşar.)
+-- MEVCUT kurulumda yalnız bu bloğu çalıştırmak yeterlidir (tekrar
+-- çalıştırılabilir):
+--   docker compose exec -T db psql -U dengeerp -d dengeerp -c "<aşağıdaki 3 satır>"
+REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM dengeerp_app;
+GRANT SELECT, INSERT ON audit_logs TO dengeerp_app;
+GRANT UPDATE (old_value, new_value) ON audit_logs TO dengeerp_app;
+-- Doğrulama (dengeerp_app ile bağlanıp; ikisi de HATA vermeli):
+--   UPDATE audit_logs SET action = 'x' WHERE id = (SELECT min(id) FROM audit_logs);
+--   DELETE FROM audit_logs WHERE id = (SELECT min(id) FROM audit_logs);
 --
 -- Uygulama tarafı (.env):
 --   DATABASE_URL=postgresql+psycopg://dengeerp_app:GUCLU_BIR_PAROLA@db:5432/dengeerp

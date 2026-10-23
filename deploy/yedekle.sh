@@ -7,6 +7,14 @@
 # çalıştırılmalıdır. Denenmemiş yedek, yedek değildir.
 set -euo pipefail
 
+# YEDEK_DIZIN TEK DEĞİŞKENDİR (TS-219): bu betik yazar, dogrula.sh okur.
+# Önceden dogrula.sh başka bir dizine bakıyordu ve
+# yedek alınmış olsa da "yedek bulunamadı" diyordu. Varsayılanı değiştirmek
+# isterseniz İKİ betikte de geçerli olsun diye /etc/default/denge-erp'e
+# `YEDEK_DIZIN=/baska/dizin` yazın; ikisi de bu dosyayı okur.
+# shellcheck disable=SC1091
+[ -r /etc/default/denge-erp ] && . /etc/default/denge-erp
+
 REPO_DIR=${REPO_DIR:-/opt/denge-erp}
 YEDEK_DIZIN=${YEDEK_DIZIN:-/var/backups/denge-erp}
 SAKLAMA_GUN=${SAKLAMA_GUN:-30}

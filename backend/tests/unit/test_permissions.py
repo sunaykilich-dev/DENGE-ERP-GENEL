@@ -180,9 +180,12 @@ def test_yuksek_yetkili_izinler_yalniz_admin_rolunde():
 
 
 def test_vekalete_kapali_liste_katalogda():
-    """`vekalet.ver` kataloğa Dalga 4'te (TS-213) girer; diğerleri şimdiden var."""
+    """`vekalet.ver` kataloğa Dalga 4'te (TS-213) girdi: liste tamamen katalogda,
+    `vekalet.ver` yalnız ADMIN ve SERVIS_YONETICI'de ve kendisi vekâlete kapalı."""
     assert YUKSEK_YETKILI_IZINLER <= VEKALETE_KAPALI
-    assert VEKALETE_KAPALI - {"vekalet.ver"} <= set(PERMISSIONS)
+    assert VEKALETE_KAPALI <= set(PERMISSIONS)
+    assert "vekalet.ver" in VEKALETE_KAPALI
+    assert {r for r in ROLES if "vekalet.ver" in permissions_of(r)} == {"ADMIN", "SERVIS_YONETICI"}
 
 
 def test_birim_ve_personel_sozlukleri_modellerle_ayni():

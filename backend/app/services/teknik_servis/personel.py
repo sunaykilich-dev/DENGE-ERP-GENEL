@@ -1260,6 +1260,12 @@ async def cikis_uygula(
         select(func.count()).select_from(Session).where(Session.user_id == kisi.id)
     )
     await auth_service.revoke_all_sessions(db, kisi.id)
+    # İşten çıkış erişimi (Dalga 4, TS-213): kişiye verilmiş ve kişinin verdiği
+    # süreli vekâletler o anda biter (her biri `vekalet.iptal` denetimiyle);
+    # kaynağı ayrılan yetki başkasında yaşamaya devam etmez.
+    await yetki.kisinin_vekaletlerini_sonlandir(
+        db, kisi.id, an=clock.now(), aktor_id=aktor.id, ip=ip
+    )
 
     bolum = await _acik_bolum(db, kisi.id)
     sayacli_is = bolum.service_order_id if bolum is not None else None

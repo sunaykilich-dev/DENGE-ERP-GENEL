@@ -199,7 +199,7 @@ async def _uygula(
     # Yetkinlik/belge uyarısı yalnız yeni atanan (eklenen + rolü değişen) kişiler için;
     # yalnız okur, atamayı engellemez (E08-22, K11).
     uyarilar = await kancalar.atama_uyarilari(
-        db, so, [a.user_id for a in eklenen] + [a.user_id for a in degisen]
+        db, so, [a.user_id for a in eklenen] + [a.user_id for a in degisen], clock
     )
     ozet = (
         f"Ekip güncellendi: {len(eklenen)} eklendi, {len(cikan)} çıkarıldı, "

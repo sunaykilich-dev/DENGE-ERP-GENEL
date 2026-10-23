@@ -47,12 +47,14 @@ metnini EK A'da arayın.
 | Dosya | Ne işe yarar |
 |---|---|
 | `kur.sh` | **Kurulumu yapan betik.** Adım 3'te bunu çalıştırırsınız |
-| `on-kontrol.sh` | Kaynak ağacını ve `.env`'i mekanik denetler; `kur.sh` içinden de koşar |
-| `dogrula.sh` | Kurulumdan sonra her an durum raporu verir |
+| `on-kontrol.sh` | Kaynak ağacını, migration zincirini (tek head, en az 39 dosya) ve `.env`'i mekanik denetler; `kur.sh` içinden de koşar |
+| `dogrula.sh` | Kurulumdan sonra her an durum raporu verir (göç sürümü, roller, servis tabloları, worker görevleri, son yedek) |
+| `yedekle.sh`, `geri-yukle.sh` | Yedek (Adım 8) ve geri yükleme / geri dönüş (EK G.6) |
+| `cikis-provasi.sh`, `servis_duman.py`, `CIKIS-PROVASI-TUTANAGI.md` | Canlıya çıkış provası — yalnız prova sunucusunda (EK G.7) |
 | `denge-erp-kaynak.tar.gz` | Uygulamanın kendisi (arayüz derlenmiş halde içinde) |
 | `denge-veritabani.sql.gz` | Veritabanı dökümü — 480 hesap, 17.350 cihaz, 12.553 hat, **552.825,00 ₺ hak ediş** |
 | `denge-dosyalar.tar.gz` | Yüklenen belgeler (21 dosya: vergi levhaları vb.) |
-| `SURUM.txt` | Paketin tarihi, commit'i ve göç sürümü — sunucuda hangi sürüm kurulu, buradan okunur |
+| `SURUM.txt` | Paketin tarihi, commit'i, dökümün göç sürümü, **hedef head** ve teknik servis sürümü — sunucuda hangi sürüm kurulu, buradan okunur |
 | `Caddyfile`, `denge-erp.service`, `fail2ban/`, `db-least-privilege.sql` | Adım 5, 7 ve EK E'de kullanılır |
 | `KURULUM.md` | Bu belge |
 
@@ -112,7 +114,7 @@ hosting panelinin dosya yöneticisi ya da `scp`.
 Diyelim `/home/erpadmin/denge-canli` altına koydunuz:
 
 ```bash
-cd ~/denge-canli && chmod +x kur.sh on-kontrol.sh dogrula.sh && ls -lh
+cd ~/denge-canli && chmod +x *.sh && ls -lh
 ```
 
 Doğrulama — bu dört dosya görünmeli:
@@ -494,6 +496,18 @@ ls -lh /var/backups/denge-erp/
 İki dosya oluşmalı (`dengeerp-*.sql.gz.gpg` ve `dosyalar-*.tar.gz.gpg`) ve
 komut "UYARI: UZAK_HEDEF tanimli degil" yazmalı — bu beklenen.
 
+**Yedek dizini tek yerden ayarlanır.** `yedekle.sh` yazar, `dogrula.sh` aynı
+dizinde son yedeği arar; ikisi de varsayılan `/var/backups/denge-erp`'i
+kullanır. Başka bir dizin istiyorsanız betikleri düzenlemeyin, ikisinin de
+okuduğu dosyaya yazın:
+
+```bash
+echo 'YEDEK_DIZIN=/srv/yedek/denge-erp' | sudo tee /etc/default/denge-erp
+```
+
+`dogrula.sh` son yedeğin 26 saatten eski olmamasını ve yanında dosya
+yedeğinin (`dosyalar-*.tar.gz.gpg`) bulunmasını da denetler.
+
 **Sonra uzak hedefi bağlayın.** `UZAK_HEDEF` mutlaka **başka bir makine ya da
 disk** olmalı: ERP ile yedeğin aynı diskte durması yedek sayılmaz. Hedef
 dizin VAR OLMALI, yoksa `rsync` hata verir:
@@ -542,9 +556,11 @@ düşerse veri modeli sessizce bozulurdu.
 `✗` satırlarını EK A'da arayın.
 
 - [ ] `dogrula.sh` → **`SISTEM SAGLIKLI`** (servisler, `/api/health`, TCP
-      bağlantısı, sayılar, hak ediş toplamı, çakışan dönem, son yedek)
+      bağlantısı, sayılar, hak ediş toplamı, çakışan dönem, göç sürümü =
+      beklenen head, roller, teknik servis tabloları, worker görevleri, son yedek)
 - [ ] `https://erp.dengemobil.com.tr` açılıyor, kilit simgesi var
-- [ ] `docker compose logs worker` dört görevin bittiğini yazıyor
+- [ ] `docker compose logs worker` her görevin bittiğini yazıyor (görev
+      listesini ve eksik olanı `dogrula.sh` "Worker görevleri" bölümü verir)
 - [ ] `/api/docs` **404** veriyor (üretimde kapalı olmalı)
 - [ ] Yönetici girişi çalışıyor, ilk girişte MFA kurulumu çıktı
 - [ ] `deneme1234` ile **hiçbir hesaba girilemiyor**
@@ -558,7 +574,7 @@ düşerse veri modeli sessizce bozulurdu.
 - [ ] Yeni montaj girişinde fiyat kendiliğinden geliyor (ATS 350, OBD 150)
 - [ ] Saat dilimi teyidi yapıldı (EK D)
 - [ ] Sunucu yeniden başlatıldı, yığın kendiliğinden kalktı ve
-      `docker compose logs worker` dört görevin **bittiğini** yazıyor
+      `docker compose logs worker` her görevin **bittiğini** yazıyor
       (ilk turda "yeniden denenecek" görmek normal: veritabanı worker'dan
       birkaç saniye sonra hazır olur, worker saniyeler içinde toparlar)
 - [ ] Bir gecelik yedek oluştu ve uzak hedefe kopyalandı
@@ -872,9 +888,15 @@ Yeni bir `denge-canli` paketi aldığınızda **kurulumun aynı komutu** koşar:
 
 ```bash
 sudo UZAK_HEDEF=/mnt/yedek /opt/denge-erp/deploy/yedekle.sh   # önce yedek
-cd ~/denge-canli-yeni && chmod +x kur.sh on-kontrol.sh dogrula.sh
+ls -lh /var/backups/denge-erp | tail -2                       # adı ve boyutu tutanağa
+cd ~/denge-canli-yeni && chmod +x *.sh
+cat SURUM.txt          # "hedef head" ve "teknik servis" satırları
 ./kur.sh
 ```
+
+Teknik servis modüllerini getiren yükseltmede (Dalga 0–4) ek adımlar,
+bayraklar ve geri dönüş kuralı **EK G**'dedir; o yükseltmeden önce canlı döküm
+kopyasında çıkış provası (EK G.7) yapılmış olmalıdır.
 
 `kur.sh` yükseltmede şunları yapar ve **yapmaz**:
 
@@ -886,6 +908,10 @@ cd ~/denge-canli-yeni && chmod +x kur.sh on-kontrol.sh dogrula.sh
 - İmajları yeniden kurar, `api`/`worker`'ı yeni imajla oluşturur, açılışta
   `alembic upgrade head` yeni migration'ları uygular.
 - Sonunda sayıları basar; yükseltme öncesi/sonrası karşılaştırabilirsiniz.
+- Göç sürümünün koddaki head'e ulaştığını denetler; ulaşmadıysa durur
+  (genellikle EK E uygulanmış ve migration sahibiyle koşulmamıştır).
+- **Geri almaz.** `alembic downgrade` canlıda kullanılmaz; geri dönüş yedekten
+  geri yüklemedir (EK G.6).
 
 `--alan` vermeniz gerekmez; `.env` zaten dolu.
 
@@ -974,6 +1000,24 @@ komutundan `alembic upgrade head` ve `python -m app.seeds.dev` adımlarını
 
 SQL enjeksiyonunda kalan asıl kaldıraç budur ve kod değil kurulum işidir.
 
+**Denetim izi ve bu ayrım (Dalga 4):** `audit_logs` satırları veritabanı
+tetikleyicisiyle korunur (`trg_audit_degistirilemez`, migration
+`d4a000000001`): silme her zaman, değiştirme KVKK maskesi dışında reddedilir.
+Tetikleyici `TRUNCATE`'i durdurmaz; bu yüzden uygulamanın bağlandığı
+kullanıcıda `TRUNCATE` yetkisi olmamalıdır. `db-least-privilege.sql` yalnız
+`SELECT, INSERT, UPDATE, DELETE` verir; şema sahibiyle bağlanan varsayılan
+kurulumda bu koruma eksik kalır — EK E'nin önerilme sebeplerinden biri budur.
+
+**EK E uygulandıysa her yükseltmede** (`kur.sh`'ten önce ya da `kur.sh`
+"göç sürümü ... beklenen ..." diye durduğunda):
+
+```bash
+cd /opt/denge-erp
+docker compose run --rm -e DATABASE_URL=postgresql+psycopg://dengeerp:SAHIP_PAROLA@db:5432/dengeerp api alembic upgrade head
+docker compose run --rm -e DATABASE_URL=postgresql+psycopg://dengeerp:SAHIP_PAROLA@db:5432/dengeerp api python -m app.seeds.dev
+docker compose up -d api worker && deploy/dogrula.sh
+```
+
 ---
 
 # EK F — Göçleri sıfırdan koşmak
@@ -992,7 +1036,130 @@ Yine de gerekirse göç betikleri `backend/app/migration/` altında; hepsi
 
 ---
 
-# EK G — Eski .NET DengeERP servis verisinin göçü (Göç-1)
+# EK G — Teknik Servis devreye alma
+
+Teknik servis modülleri (servis işleri, planlama, cihaz kütüğü, planlı bakım,
+atölye, kiralama, yedek parça, servis teklifi/maliyet, eğitim, raporlar) beş
+dalgada geldi. Bu ek sırasıyla: hangi migration'ların uygulanacağı ve
+yükseltme sonrası bayraklar (G.0), eski sistem verisinin göçü (G.1–G.5),
+geri dönüş (G.6), çıkış provası (G.7) ve paketin Windows'ta hazırlanması
+(G.8).
+
+## G.0 Yükseltme: migration'lar, roller, bayraklar
+
+**Sıra:** önce yedek (Adım 8 / EK B) → `./kur.sh` → `dogrula.sh` → bayraklar →
+kullanıcı atama. `kur.sh` başka bir şey istemez; aşağıdaki migration'ları
+`api` açılışındaki `alembic upgrade head` **yalnız ileri** uygular ve
+`python -m app.seeds.dev` yeni izinleri ve rolleri senkronlar (EK E
+uygulandıysa ikisi sahibiyle elle, EK E'nin sonundaki komutlarla).
+
+Canlıda bugünkü göç sürümü `b30e012dd879`'dur (SURUM.txt "goc surumu").
+Yükseltme sonunda `dogrula.sh` "göç sürümü `d4a000000002` = koddaki beklenen
+head" yazmalıdır.
+
+| Dalga | Revizyon | İçerik |
+|---|---|---|
+| 0 | `d0a000000001` | birim üyeliği (`user_units`), personel kolonları, personel ad eşleme |
+| 0 | `d0a000000002` | hesap/lokasyon ana veri kolonları, takma ad, hesap birleştirme |
+| 0 | `d0a000000003` | servis işi çekirdeği: iş, seri, olay, bekleme, sonuç, atama, onay, arıza/bekleme nedeni katalogları |
+| 0 | `d0a000000004` | servis ekipman kütüğü |
+| 0 | `d0a000000005` | planlama, ziyaret, ekip, araç, müsait olmama |
+| 0 | `d0a000000006` | bakım sözleşmesi, dönem, form |
+| 0 | `d0a000000007` | saha zaman kaydı |
+| 2 | `d2a000000001` | SLA politikası, servis uyarıları |
+| 2 | `d2a000000002` | atölye |
+| 2 | `d2a000000003` | depo ayrımı ve kiralama |
+| 2 | `d2a000000004` | yedek parça stok defteri, sayım, parça talebi |
+| 2 | `d2a000000005` | servis teklifi, işçilik tarifesi, iş finansalları |
+| 2 | `d2a000000006` | eğitim, yetkinlik, belge |
+| 2 | `d2a000000007` | servis işi ↔ kiralama/atölye bağı |
+| 3 | `d3a000000001` | kiralama sayımı |
+| 3 | `d3a000000002` | servis e-posta bildirimi ve e-posta kutusu |
+| 3 | `d3a000000004` | eğitim–yetkinlik eşlemesi |
+| 4 | `d4a000000001` | denetim kaydının değiştirilemezliği (`trg_audit_degistirilemez`) |
+| 4 | `d4a000000002` | süreli vekâlet (`user_permissions` başlangıç/bitiş) |
+
+`d3a000000003` (mesai takvimi) **bilerek yoktur**: mesai takvimli SLA kararı
+verilmedi, revizyon atlandı ve zincir `d3a000000002 → d3a000000004` devam
+eder. Dalga 1'in kendi migration'ı yoktur (şeması Dalga 0'da kuruldu). Toplam
+39 migration dosyası; `on-kontrol.sh` daha azını kabul etmez.
+
+Hiçbiri mobilite tablolarındaki veriyi değiştirmez; yalnız yeni tablo, yeni
+nullable kolon ve kısıt ekler. Hak ediş toplamı yükseltme öncesi ve sonrası
+kuruşu kuruşuna aynı kalır (çıkış provasında denetlenir, G.7).
+
+**Yeni roller** (seed açar; `dogrula.sh` kodda tanımlı her rolün varlığını
+denetler): Teknik Servis Müdürü (`SERVIS_YONETICI`), Teknik Servis Şefi
+(`SERVIS_SEF`), Operasyon Uzmanı (`SERVIS_OPERASYON`), Servis Teknisyeni
+(`SERVIS_TEKNISYEN`), Atölye (`ATOLYE`), Servis Deposu (`SERVIS_DEPO`),
+Kiralama Deposu (`KIRALAMA_DEPO`), İnsan Kaynakları (`IK`). Mevcut dokuz rol
+aynen kalır; **özelleştirilmiş** bir role yeni izin inmez, `api` log'u "elle
+eklenecek" listesini yazar.
+
+**Yeni worker görevleri** (`dogrula.sh` son 25 saatte her birinin bittiğini
+denetler): `pb-uretimi`, `bakim-donem-uzlastirma`, `servis-sla-uyarilari`,
+`servis-uyari-temizligi`, `servis-eposta` (mevcut dördüne ek).
+
+**Devreye alma bayrakları** (Parametreler ekranı; `dogrula.sh` değerlerini
+listeler). Yükseltme bunları kapalı/boş getirir; sırası:
+
+| Bayrak | İlk değer | Ne zaman değişir |
+|---|---|---|
+| `bakim_otomatik_uretim` | `false` | bakım sözleşmesi eşleştirmesi %100 olunca (Planlı Bakım ekranı) |
+| `servis_sla_yururluk_at` | boş | ilk birimin (GUVENLIK) göçü bitince **bir kez** şimdiki zaman (G.3) |
+| `servis_eposta_acik` | `false` | SMTP tanımlı ve pilot birim ilk haftayı bitirince (Operasyon Merkezi → E-posta kutusu) |
+
+**Kullanıcı atama:** servis rolleri ve birim üyeliği önce pilot birime
+(GUVENLIK) verilir. Menü yalnız izinli kullanıcıya görünür; diğer
+kullanıcılar için ERP değişmemiş görünür. İlk gün "yalnız pilot birim +
+saatlik yedek" uygulanır (G.6):
+
+```bash
+sudo crontab -e   # ilk gün: 0 * * * * UZAK_HEDEF=/mnt/yedek /opt/denge-erp/deploy/yedekle.sh ...
+```
+
+**Caddy / fail2ban:** değişiklik gerekmez; yeni uçlar `/api/*` altında,
+aynı kimlik doğrulama ve CSRF ile çalışır.
+
+### G.0.1 Dalga 4 güvenlik değişiklikleri (yükseltmede bir kez)
+
+1. **Gerçek istemci IP'si (TS-211).** `.env`'e Docker ağ geçidini yazın;
+   yazılmazsa denetim kaydına her giriş için ağ geçidi IP'si düşer:
+
+   ```bash
+   docker network inspect denge-erp_default -f '{{(index .IPAM.Config 0).Gateway}}'
+   echo 'FORWARDED_ALLOW_IPS=172.18.0.1' >> /opt/denge-erp/.env   # yukarıdaki değer
+   docker compose up -d api
+   ```
+
+   Doğrulama: kendi makinenizden bir kez giriş yapın; Denetim Kaydı'ndaki son
+   `auth.login` satırının IP'si sizin genel/iç IP'niz olmalı, `172.x` değil.
+2. **Denetim izi yetkileri (EK E uygulandıysa).** `db-least-privilege.sql`'in
+   "Denetim izi değiştirilemez (Dalga 4)" bloğundaki üç satırı şema sahibiyle
+   çalıştırın; bloktaki iki doğrulama sorgusu `dengeerp_app` ile HATA vermeli.
+3. **Ek içerik denetimi (TS-218).** Canlı ek türlerinde (hesap, cihaz, ürün,
+   RMA...) magic-byte denetimi **kuru koşuda** gelir: uyuşmayan dosya kabul
+   edilir ve denetime yazılır. Bir hafta sonra yönetici
+   `GET /api/ekler/icerik-denetimi` raporunu okur; rapor temizse (ya da
+   uyuşmazlıklar incelenip kabul edildiyse) Parametreler → 
+   `ek_icerik_denetimi_canli_turler = true`. Açıldıktan sonra uyuşmayan yükleme
+   422 alır.
+4. **Sürüm notu — kullanıcıya duyurun:**
+   - Kilitli hesap artık 423 değil, yanlış parolayla **aynı 401** ve aynı metni
+     alır (hesabın varlığı sızmasın). Giriş ekranı "kilitlendiyse yöneticinize
+     başvurun" der; kilidi yönetici açar (`python -m app.yonetim kilit-ac`).
+   - Yöneticinin belirlediği/sıfırladığı parola **geçicidir**: 72 saat ve tek
+     giriş geçerli, ilk girişte değiştirilmesi zorunlu. `canliya-hazirla`'nın
+     ürettiği yönetici parolası ve yeni kurulumun ilk yöneticisi de böyledir.
+   - Süreli vekâlet (en çok 30 gün) Personel kartından verilir; süresi dolunca
+     gece görevi `vekalet-sona-erme` kapatır.
+   - Satış temsilcisi genel aramada ve cihaz/RMA eklerinde yalnız kendi
+     portföyünü görür (liste ekranlarıyla aynı kural).
+   - Teklif e-postası kullanıcı başına dakikada en çok 10 (ayar
+     `teklif_gonderim_dakika_limiti`); aşımda 429.
+   - RMA listesi artık sunucu tarafında sayfalı; RMA kaydına ek yüklenebilir.
+
+## G.1–G.4 Eski .NET DengeERP servis verisinin göçü (Göç-1)
 
 Teknik servis verisi (cihaz kütüğü, bakım sözleşmeleri, servis işleri, planlar,
 zaman kayıtları) eski .NET DengeERP V1.20.1'den (SQL Server) **bir kez ve
@@ -1085,3 +1252,119 @@ göç kapsamı dışındadır.
 Canlı döküm kopyası (`paket-uret.sh`) → `alembic upgrade head` → G.2/G.3 →
 altın kayıt ve mobilite testleri (`make test-goc`) → uzlaşma raporu tutanağa →
 canlı.
+
+## G.5 Göç-2: atölye, kiralama, eğitim, SLA geri doldurma, ana veri Faz 2
+
+Göç-1 tamamlandıktan **sonra** ve her yazan adımdan önce yedekle. Atölye ve
+kiralama adımları yalnız rapor üretir (pilot gerçek veri üretmediyse göç
+yoktur); eğitim ve SLA önizleme → onay → uygulama sırasıyla koşar.
+
+| Sıra | Ne | Sunucuda (`$GOC` = G.1'deki kısaltma) | Geliştirmede | Yazar mı |
+|---|---|---|---|---|
+| 1 | Atölye pilot sağlık raporu (7 bölüm) | `$GOC.atolye_saglik --kaynak /tmp/goc_v1 --cikti /tmp/atolye_saglik.xlsx` | `make goc-atolye-saglik` | hayır |
+| 2 | Kiralama pilot uzlaştırma (4 tür) | `$GOC.kiralama_uzlastirma --kaynak /tmp/goc_v1 --cikti /tmp/kiralama_uzlastirma.xlsx` | `make goc-kiralama-uzlastirma` | hayır |
+| 3 | Eğitim göçü | `$GOC.egitim onizleme\|uygula\|rapor --kaynak /tmp/goc_v1 --cikti /tmp/goc_egitim.xlsx` | `make goc-egitim-onizleme` … | `uygula` yazar |
+| 4 | SLA geri doldurma | `$GOC.servis_sla_geri_doldur rapor` → onay → `uygula` (`--kaynak` isteğe bağlı) | `make goc-servis-sla-rapor` … | `uygula` yazar |
+| 5 | Ana veri eşleştirme Faz 2 adayları | `$GOC.ana_veri_faz2 --kaynak servis_isi\|ekipman_diger --cikti /tmp/faz2.xlsx` | `make goc-ana-veri-faz2 FAZ2=…` | hayır (onay İçe Aktarma'dan) |
+
+Kurallar:
+
+- Eğitim göçünde eşleşmeyen kişi **karantinada** kalır; otomatik kullanıcı
+  açılmaz. İkinci `uygula` 0 yeni satır yazmalıdır.
+- SLA geri doldurma `servis_sla_yururluk_at` ayarlandıktan sonra koşar:
+  kapalı göç işleri `OLCULEMEDI`, açık işler yürürlük anından damgalanır;
+  geriye dönük ölçüm yalnız rapordur.
+- Eski serbest metin parça kayıtları not olarak taşınmıştır (Göç-1);
+  parça hareketi göçü yoktur, açılış stoğu fiziksel sayımladır.
+
+## G.6 Geri dönüş
+
+**Canlıda `alembic downgrade` KULLANILMAZ.** Downgrade'ler testte zorunludur
+ama canlıda veri kaybı ve yarım şema riski taşır. Önceki sürüme dönmenin tek
+yolu:
+
+1. **Önce yedeği geri yükle** — yükseltmeden hemen önce alınan yedek:
+
+   ```bash
+   cd /opt/denge-erp
+   sudo HEDEF_DB=dengeerp ZORLA=1 deploy/geri-yukle.sh /var/backups/denge-erp/dengeerp-<damga>.sql.gz.gpg
+   ```
+
+   Betik `api` ve `worker`'ı durdurur, veritabanını **silip yeniden yaratır**
+   (dump'ı var olanın üstüne yüklemek yeni tabloları bırakırdı ve sonraki
+   yükseltme "relation already exists" ile düşerdi), dosyaları da geri açar.
+   Bitince `api`/`worker` durmuş kalır.
+
+2. **Sonra önceki paketle `kur.sh`:**
+
+   ```bash
+   cd ~/denge-canli-onceki && ./kur.sh
+   /opt/denge-erp/deploy/dogrula.sh     # göç sürümü önceki head'i göstermeli
+   ```
+
+Sıra önemlidir: önce `kur.sh` koşarsa `rsync --delete` yeni migration
+dosyalarını siler ama `alembic_version` yeni head'i gösterdiği için eski kod
+açılışta `Can't locate revision` ile düşer. Yeni paketle `api`'yi açmak da
+yanlıştır: açılıştaki `alembic upgrade head` yedeği yeniden yükseltir.
+
+Yükseltmeden sonra servis verisi girildiyse geri dönüş **o verinin kaybı**
+demektir. Bu yüzden her sürümün ilk günü yalnız pilot birim çalışır ve yedek
+saatlik alınır (G.0).
+
+## G.7 Çıkış provası (her R sürümünden önce)
+
+Prova, canlıyla aynı paketin kurulu ve **canlı dökümün kopyasının** yüklü
+olduğu ayrı bir sunucuda koşar; canlı sunucuya dokunmaz. Hazırlık:
+
+1. Prova sunucusuna şu an canlıda olan paketi `./kur.sh` ile kurun (boş
+   veritabanına o paketin dökümünü yükler), Adım 8'deki yedek parolasını
+   oluşturun.
+2. Yeni paketi ayrı klasöre açın ve oradan:
+
+   ```bash
+   PROVA_ONAY=evet ./cikis-provasi.sh --geri-donus ~/denge-canli-onceki
+   ```
+
+Betik sırasıyla: mobilite parmak izi (önce) → `yedekle.sh` → `kur.sh` →
+`dogrula.sh` → **altın kayıt** (hesap/cihaz/araç/hat/iş emri sayıları, hak
+ediş dökümü ve dönem bazında tutarlar önce = sonra) → **servis duman testi**
+(`servis_duman.py`: her servis modülünün uçları kayıtlı; bir arıza işi açılır,
+okunur, olay geçmişi yazılır ve transaction geri alınır) → `geri-yukle.sh`
+provası (geçici veritabanı) → `--geri-donus` verildiyse G.6'nın tamamı ve
+parmak izi yine önce = sonra.
+
+Her adımın başlangıç/bitiş saati ve sonucu `CIKIS-PROVASI-<damga>.md`
+tutanağına, çıktının tamamı yanındaki `.log`'a yazılır. Tutanağın biçimi ve
+imza bölümü pakette `CIKIS-PROVASI-TUTANAGI.md`'dedir. **PROVA BAŞARISIZ**
+yazan tutanakla canlıya çıkılmaz. Geliştirmede ayrıca `make test`
+(altın kayıt `test_altin_kayit.py` dahil) ve `make test-goc` yeşil olmalıdır.
+
+## G.8 Paketi hazırlamak (Windows dışı komutlar)
+
+`deploy/paket-uret.sh` (`make paket`) bash, git, docker compose, node/npm ve
+python3 ister; **macOS ya da Linux'ta** çalışır. Geliştirme makinesi
+Windows ise:
+
+- **WSL (önerilen)** ya da **Git Bash + Docker Desktop** içinde, depo kökünde:
+
+  ```bash
+  deploy/paket-uret.sh ~/denge-canli          # make paket ile aynı
+  ```
+
+- PowerShell'den doğrudan çalışmaz (`.sh`, `tar`, `$(…)`). Windows'ta
+  yalnız testler ve derleme koşar (`araclar\test.ps1`).
+- Betikler sunucuda **LF** satır sonuyla çalışır; Windows'ta düzenlenen bir
+  `.sh` CRLF'ye dönerse sunucuda `$'\r': command not found` verir.
+  `tests/unit/test_deploy_betikleri.py` bunu ve `bash -n` sözdizimini denetler.
+
+Betik şunları yapar: arayüzü derler ve `backend/app/static`'e kopyalar
+(derlenmiş arayüzde "Görevler" ve "Operasyon Merkezi" ekranlarını arar),
+`git ls-files` ile kaynak arşivi çıkarır (**commit edilmemiş dosya pakete
+girmez**), geliştirme veritabanının dökümünü ve yüklenen belgeleri alır,
+betikleri ve bu belgeyi pakete kopyalar, `SURUM.txt`'e commit, dökümün göç
+sürümü, **hedef head** ve teknik servis sürümünü yazar ve arşive ön kontrolü
+koşturur (tek head, en az 39 migration, SURUM.txt ile aynı head).
+
+Sunucu tarafındaki her komut (Adım 1–8, EK B, EK G) Linux'ta, `bash` ile
+çalışır; Windows'tan SSH (PowerShell `ssh`, PuTTY) ile bağlanıp sunucuda
+koşulur.

@@ -1,8 +1,23 @@
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, Index, String, text
+from datetime import datetime
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.models.mixins import ActorMixin, PkMixin, TimestampMixin
+
+# Süreli vekâletin azami süresi (gün) — `ck_user_permissions_vekalet`'in ve
+# API doğrulamasının tek kaynağı (M13-04: "en fazla 30 gün").
+VEKALET_AZAMI_GUN = 30
 
 # Teknik servis birim KODLARI — CHECK kısıtlarının tek kaynağı.
 #
@@ -63,6 +78,23 @@ class UserPermission(Base):
     """
 
     __tablename__ = "user_permissions"
+    __table_args__ = (
+        # Süreli vekâlet (TS-210/213, E13-15): ya kalıcı istisna (iki uç da
+        # boş) ya en fazla 30 günlük, yalnız İZİN VEREN aralık. Vekâlete
+        # kapalı izinler ve "verenin alt kümesi" kuralı API'dedir (D4-A).
+        CheckConstraint(
+            "(baslangic_at IS NULL AND bitis_at IS NULL) OR ("
+            "baslangic_at IS NOT NULL AND bitis_at IS NOT NULL AND allow "
+            "AND bitis_at > baslangic_at "
+            f"AND bitis_at <= baslangic_at + interval '{VEKALET_AZAMI_GUN} days')",
+            name="ck_user_permissions_vekalet",
+        ),
+        Index(
+            "ix_user_permissions_bitis",
+            "bitis_at",
+            postgresql_where=text("bitis_at IS NOT NULL"),
+        ),
+    )
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
@@ -72,6 +104,33 @@ class UserPermission(Base):
     )
     allow: Mapped[bool] = mapped_column(Boolean)
     gerekce: Mapped[str | None] = mapped_column(String(300))
+    # --- Süreli vekâlet (Dalga 4) ---
+    # Boşsa satır KALICI istisnadır (eski davranış birebir). Doluysa izin
+    # yalnız `[baslangic_at, bitis_at)` aralığında geçerlidir; süresi dolan
+    # satır silinmez (denetim için kalır), yalnız sayılmaz.
+    baslangic_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    bitis_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    veren_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_user_permissions_veren"),
+    )
+
+    @property
+    def sureli_mi(self) -> bool:
+        return self.bitis_at is not None
+
+    def gecerli_mi(self, an: datetime | None) -> bool:
+        """Bu istisna `an` anında yürürlükte mi.
+
+        Kalıcı istisna her zaman yürürlüktedir. Süreli satır için an
+        bilinmiyorsa (`None`: istek `Clock`'tan anı atamadıysa) satır
+        SAYILMAZ — fail-closed; vekâlet sessizce süresiz izne dönüşmesin.
+        """
+        if self.bitis_at is None:
+            return True
+        if an is None or self.baslangic_at is None:
+            return False
+        return self.baslangic_at <= an < self.bitis_at
 
 
 class Role(Base, PkMixin, TimestampMixin):

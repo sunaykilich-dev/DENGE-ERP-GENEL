@@ -1,16 +1,27 @@
-"""RMA / garanti / teknik servis."""
+"""RMA / garanti / teknik servis.
+
+**Kapsam (TS-217):** liste ve tek kayıt uçları müşteri kapsamına tabidir.
+Canlıda `rma.gor` izni olan satış temsilcisi (KENDI_MUSTERILERI) bütün RMA
+kayıtlarını — başka temsilcilerin müşterilerine ait cihaz, araç plakası ve
+arıza metniyle — listeleyebiliyor, kimlik numarasıyla tek tek açabiliyordu.
+Kural cihaz/araç listeleriyle aynıdır (`accounts.kapsam_musteri`): müşterisi
+portföyde olmayan kayıt görünmez ve yazılamaz (404, yazmadan ÖNCE);
+müşterisiz kayıt (Denge stoğu) görünür. TUMU kapsamlı rollerde davranış
+değişmez.
+"""
 
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import ClockDep, DbDep, client_ip, require_permission
+from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala
 from app.models import Account, Device, RmaCase, User, Vehicle
 from app.models.service import COZUM_TIPLERI
+from app.services import accounts as hesap_svc
 from app.services import audit
 from app.services import rma as svc
 from app.services.statemachine import RMA, IzinsizGecis
@@ -104,7 +115,20 @@ async def _cikti(db: DbDep, k: RmaCase) -> RmaOut:
     return out
 
 
-async def _cihaz_bul(db: DbDep, device_id: int | None, kimlik: str | None) -> Device:
+async def _rma_al(db: DbDep, rma_id: int, user: User) -> RmaCase:
+    """Tek kayıt: yok, silinmiş ya da müşteri kapsamı dışında → aynı 404.
+
+    Kapsam yazmadan ÖNCE sorulur; "var ama göremezsin" ayrımı yapılmaz ki
+    sıralı kimliklerle kayıt taranamasın (KD-05)."""
+    k = await db.get(RmaCase, rma_id)
+    if k is None or k.is_deleted or await hesap_svc.kapsam_disinda_mi(db, user, k.customer_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis kaydı bulunamadı")
+    return k
+
+
+async def _cihaz_bul(db: DbDep, device_id: int | None, kimlik: str | None, user: User) -> Device:
+    """Cihaz kimlik/IMEI ile; müşteri kapsamı dışındaki cihaz yokmuş gibi 404
+    (cihaz kartıyla aynı kural, `api/devices.kart`)."""
     if device_id:
         cihaz = await db.get(Device, device_id)
     elif kimlik:
@@ -113,7 +137,11 @@ async def _cihaz_bul(db: DbDep, device_id: int | None, kimlik: str | None) -> De
         )
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cihaz seçilmedi (IMEI ya da seri no)")
-    if cihaz is None or cihaz.is_deleted:
+    if (
+        cihaz is None
+        or cihaz.is_deleted
+        or await hesap_svc.kapsam_disinda_mi(db, user, cihaz.current_customer_id)
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cihaz bulunamadı")
     return cihaz
 
@@ -126,20 +154,23 @@ async def listele(
     cihaz_id: int | None = None,
     musteri_id: int | None = None,
     limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    response: Response = None,  # type: ignore[assignment]
 ) -> list[RmaOut]:
-    stmt = (
-        select(RmaCase)
-        .where(RmaCase.is_deleted.is_(False))
-        .order_by(RmaCase.id.desc())
-        .limit(limit)
-    )
+    """Müşteri kapsamlı ve sayfalı liste; toplam `X-Toplam-Kayit` başlığında.
+
+    Canlıda yalnız `limit` vardı: 50'den eski kayıtlar hiçbir sayfada
+    görünmüyordu (sessiz kesme). Dönüş şekli (düz dizi) değişmez."""
+    stmt = select(RmaCase).where(RmaCase.is_deleted.is_(False)).order_by(RmaCase.id.desc())
+    stmt = hesap_svc.kapsam_musteri(stmt, user, RmaCase.customer_id)
     if durum:
         stmt = stmt.where(RmaCase.status == durum)
     if cihaz_id:
         stmt = stmt.where(RmaCase.device_id == cihaz_id)
     if musteri_id:
         stmt = stmt.where(RmaCase.customer_id == musteri_id)
-    return [await _cikti(db, k) for k in (await db.scalars(stmt)).all()]
+    satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
+    return [await _cikti(db, k) for (k,) in satirlar]
 
 
 @router.get("/ariza-orani")
@@ -152,16 +183,16 @@ async def ariza_orani(
 
 @router.get("/{rma_id}", response_model=RmaOut)
 async def getir(rma_id: int, db: DbDep, user: Okuyucu) -> RmaOut:
-    k = await db.get(RmaCase, rma_id)
-    if k is None or k.is_deleted:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis kaydı bulunamadı")
+    k = await _rma_al(db, rma_id, user)
     return await _cikti(db, k)
 
 
 @router.post("", response_model=RmaOut, status_code=status.HTTP_201_CREATED)
 async def ac(payload: RmaIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici) -> RmaOut:
     """Servis kaydı açar; garanti durumu OTOMATİK hesaplanıp dondurulur."""
-    cihaz = await _cihaz_bul(db, payload.device_id, payload.kimlik)
+    cihaz = await _cihaz_bul(db, payload.device_id, payload.kimlik, user)
+    if await hesap_svc.kapsam_disinda_mi(db, user, payload.customer_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Müşteri bulunamadı")
     try:
         kayit = await svc.ac(
             db,
@@ -203,9 +234,7 @@ async def durum_degistir(
     clock: ClockDep,
     user: Yazici,
 ) -> RmaOut:
-    k = await db.get(RmaCase, rma_id)
-    if k is None or k.is_deleted:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis kaydı bulunamadı")
+    k = await _rma_al(db, rma_id, user)
     onceki = k.status
     try:
         RMA.dogrula(onceki, payload.durum)
@@ -242,15 +271,20 @@ async def coz(
     user: Yazici,
 ) -> RmaOut:
     """Çözümü işler. DEĞİŞİMDE araç/hat/müşteri bağı yeni cihaza taşınır."""
-    k = await db.get(RmaCase, rma_id)
-    if k is None or k.is_deleted:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis kaydı bulunamadı")
+    k = await _rma_al(db, rma_id, user)
     if payload.resolution not in COZUM_TIPLERI:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Çözüm {COZUM_TIPLERI} içinden olmalı")
 
     yeni_id = payload.replacement_device_id
     if yeni_id is None and payload.replacement_kimlik:
-        yeni_id = (await _cihaz_bul(db, None, payload.replacement_kimlik)).id
+        yeni_id = (await _cihaz_bul(db, None, payload.replacement_kimlik, user)).id
+    elif yeni_id is not None:
+        # Varlık/uygunluk kuralı serviste (değişmedi); burada yalnız kapsam.
+        yeni = await db.get(Device, yeni_id)
+        if yeni is not None and await hesap_svc.kapsam_disinda_mi(
+            db, user, yeni.current_customer_id
+        ):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Cihaz bulunamadı")
 
     try:
         await svc.coz(
@@ -292,9 +326,7 @@ async def tedarikci_bilgisi(
     user: Yazici,
 ) -> RmaOut:
     """Üreticiye garanti iadesi takibi (brief §4.12)."""
-    k = await db.get(RmaCase, rma_id)
-    if k is None or k.is_deleted:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis kaydı bulunamadı")
+    k = await _rma_al(db, rma_id, user)
     # İSTEMCİNİN version DEĞERİ KAYDA ATANMAZ. Atandığında SQLAlchemy'nin
     # `WHERE version = :eski` koşulu her zaman tutuyor, iyimser kilitleme
     # tamamen devre dışı kalıyordu: bayat bir sürümle gelen istek 200 dönüp

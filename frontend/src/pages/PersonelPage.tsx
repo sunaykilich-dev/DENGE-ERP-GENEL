@@ -14,6 +14,10 @@
  * Açık sayaç kapatılmaz; uyarı ve görev kartıyla yöneticiye düşer. Ayrılmış
  * personelin KVKK anonimleştirmesi yalnız `kvkk.yonet` ile ve elle yapılır.
  *
+ * Süreli vekâlet (TS-213): `vekalet.ver` sahibi kart üzerinden kendi kalıcı
+ * izinlerinin bir kısmını en fazla 30 günlüğüne devreder; işten çıkışta kişiye
+ * verilen ve kişinin verdiği vekâletler sunucuda kendiliğinden biter.
+ *
  * "Ekibim" (TS-199, E13-17): doğrudan bağlı çalışan personel; kapsam
  * süzgecinden SONRA uygulanır, yetki genişletmez. Yönetici `personel.yaz` ile
  * kartta seçilir; kapsamınız dışındaki yönetici "Kapsam dışı kişi" görünür.
@@ -194,6 +198,215 @@ function YoneticiAlani({ p, yazabilir, bitti }: { p: Personel; yazabilir: boolea
       options={secenekler}
       notFoundContent={adaylar.isFetching ? "Aranıyor…" : "Kişi bulunamadı"}
     />
+  );
+}
+
+// --- Süreli vekâlet (TS-213; sunucu: `api/vekalet.py`) ----------------------------
+
+interface Vekalet {
+  personel_id: number;
+  izin: string;
+  izin_aciklama: string;
+  baslangic_at: string;
+  bitis_at: string;
+  gerekce: string | null;
+  veren_id: number | null;
+  veren_adi: string | null;
+  durum: "BASLAMADI" | "YURURLUKTE" | "SONA_ERDI";
+}
+
+interface VekaletFormu {
+  izinler: string[];
+  aralik: [Dayjs, Dayjs];
+  gerekce: string;
+}
+
+const VEKALET_AZAMI_GUN = 30;
+const VEKALET_DURUM_RENGI: Record<Vekalet["durum"], string> = {
+  YURURLUKTE: "green",
+  BASLAMADI: "blue",
+  SONA_ERDI: "default",
+};
+const VEKALET_DURUM_ADI: Record<Vekalet["durum"], string> = {
+  YURURLUKTE: "yürürlükte",
+  BASLAMADI: "başlamadı",
+  SONA_ERDI: "sona erdi",
+};
+
+/**
+ * Personel kartındaki "Vekâletler" bloğu (`vekalet.ver`). Veren yalnız kendi
+ * kalıcı izinlerinden, vekâlete kapalı olmayanları (maliyet, hak ediş, sistem
+ * ...) en fazla 30 günlüğüne verebilir; seçenek listesi sunucudan gelir.
+ * Verme ve iptalde alıcının açık oturumları düşer. İptal: veren ya da yönetici.
+ */
+function VekaletAlani({ p, verebilir }: { p: Personel; verebilir: boolean }) {
+  const { message } = App.useApp();
+  const { kullanici } = useAuth();
+  const qc = useQueryClient();
+  const [acik, setAcik] = useState(false);
+  const [form] = Form.useForm<VekaletFormu>();
+
+  const liste = useQuery({
+    queryKey: ["vekalet", p.id],
+    queryFn: () => api.get<Vekalet[]>(`/api/vekalet/${p.id}`),
+  });
+  const secenekler = useQuery({
+    queryKey: ["vekalet-verilebilir"],
+    queryFn: () => api.get<{ kod: string; aciklama: string }[]>("/api/vekalet/verilebilir"),
+    enabled: acik,
+    staleTime: 60_000,
+  });
+  const tazele = () => void qc.invalidateQueries({ queryKey: ["vekalet", p.id] });
+
+  const ver = useMutation({
+    mutationFn: (v: VekaletFormu) =>
+      api.post<Vekalet[]>(`/api/vekalet/${p.id}`, {
+        izinler: v.izinler,
+        baslangic_at: v.aralik[0].toISOString(),
+        bitis_at: v.aralik[1].toISOString(),
+        gerekce: v.gerekce,
+      }),
+    onSuccess: () => {
+      message.success("Vekâlet verildi; kişinin açık oturumları sonlandı.");
+      setAcik(false);
+      form.resetFields();
+      tazele();
+    },
+    onError: (e: ApiError) => message.error(hataMesaji(e)),
+  });
+  const iptal = useMutation({
+    mutationFn: (izin: string) => api.post<Vekalet[]>(`/api/vekalet/${p.id}/iptal`, { izin }),
+    onSuccess: () => {
+      message.success("Vekâlet iptal edildi");
+      tazele();
+    },
+    onError: (e: ApiError) => message.error(hataMesaji(e)),
+  });
+
+  return (
+    <Card
+      size="small"
+      title="Vekâletler"
+      extra={
+        verebilir && (
+          <Button size="small" onClick={() => setAcik(true)}>
+            Vekâlet ver
+          </Button>
+        )
+      }
+    >
+      <Table
+        rowKey={(v) => `${v.izin}-${v.bitis_at}`}
+        size="small"
+        pagination={false}
+        loading={liste.isLoading}
+        dataSource={liste.data ?? []}
+        locale={{ emptyText: "Vekâlet yok" }}
+        scroll={{ x: 520 }}
+        columns={[
+          {
+            title: "İzin",
+            render: (_, v: Vekalet) => (
+              <Tooltip title={v.izin_aciklama}>
+                <span className="mono">{v.izin}</span>
+              </Tooltip>
+            ),
+          },
+          {
+            title: "Süre",
+            render: (_, v: Vekalet) =>
+              `${dayjs(v.baslangic_at).format("DD.MM.YYYY HH:mm")} – ${dayjs(v.bitis_at).format("DD.MM.YYYY HH:mm")}`,
+          },
+          {
+            title: "Durum",
+            width: 110,
+            render: (_, v: Vekalet) => (
+              <Tag color={VEKALET_DURUM_RENGI[v.durum]}>{VEKALET_DURUM_ADI[v.durum]}</Tag>
+            ),
+          },
+          { title: "Veren", dataIndex: "veren_adi", width: 130, ellipsis: true },
+          {
+            title: "",
+            width: 80,
+            render: (_, v: Vekalet) =>
+              v.durum !== "SONA_ERDI" &&
+              (v.veren_id === kullanici?.id || kullanici?.role.code === "ADMIN") ? (
+                <Button
+                  size="small"
+                  danger
+                  loading={iptal.isPending}
+                  onClick={() => iptal.mutate(v.izin)}
+                >
+                  İptal
+                </Button>
+              ) : null,
+          },
+        ]}
+      />
+      <Modal
+        title={`Vekâlet ver: ${p.full_name}`}
+        open={acik}
+        onCancel={() => setAcik(false)}
+        onOk={() => form.submit()}
+        okText="Vekâlet ver"
+        cancelText="Vazgeç"
+        confirmLoading={ver.isPending}
+        destroyOnHidden
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{ aralik: [dayjs(), dayjs().add(7, "day").endOf("day")] }}
+          onFinish={(v) => ver.mutate(v)}
+        >
+          <Form.Item
+            name="izinler"
+            label="Devredilecek izinler"
+            rules={[{ required: true, message: "En az bir izin seçin" }]}
+            extra="Yalnız sizde kalıcı olarak bulunan ve vekâlete açık izinler listelenir."
+          >
+            <Select
+              mode="multiple"
+              loading={secenekler.isLoading}
+              optionFilterProp="label"
+              options={(secenekler.data ?? []).map((s) => ({
+                value: s.kod,
+                label: `${s.kod} — ${s.aciklama}`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="aralik"
+            label="Başlangıç – bitiş"
+            rules={[
+              { required: true, message: "Süre seçin" },
+              {
+                validator: (_, d?: [Dayjs, Dayjs]) =>
+                  !d || d[1].diff(d[0], "day", true) <= VEKALET_AZAMI_GUN
+                    ? Promise.resolve()
+                    : Promise.reject(new Error(`En fazla ${VEKALET_AZAMI_GUN} gün`)),
+              },
+            ]}
+          >
+            <DatePicker.RangePicker
+              showTime={{ format: "HH:mm" }}
+              format="DD.MM.YYYY HH:mm"
+              style={{ width: "100%" }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="gerekce"
+            label="Gerekçe"
+            rules={[{ required: true, min: 5, max: 300, message: "5–300 karakter" }]}
+          >
+            <Input placeholder="ör. Yıllık izin süresince planlama vekâleti" maxLength={300} />
+          </Form.Item>
+          <Typography.Text type="secondary">
+            Vekâlet verilince kişinin açık oturumları sonlanır; süre dolunca izin kendiliğinden düşer.
+          </Typography.Text>
+        </Form>
+      </Modal>
+    </Card>
   );
 }
 
@@ -663,6 +876,10 @@ export default function PersonelPage() {
                 )}
               </Space>
             ) : null}
+
+            {yetkili("vekalet.ver") && (
+              <VekaletAlani p={p} verebilir={p.calisiyor && p.giris_acik} />
+            )}
 
             {yazabilir ? (
               <Form

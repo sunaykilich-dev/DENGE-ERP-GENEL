@@ -147,6 +147,8 @@ async def _cihaz_ara(db: AsyncSession, user: User, terim: str, limit: int) -> li
         )
         .limit(limit)
     )
+    # Kapsam (TS-217): cihaz listesi ve kartıyla aynı kural; arama yan yoldu.
+    stmt = hesap_svc.kapsam_musteri(stmt, user, Device.current_customer_id)
     return [
         AramaSonucu(
             tur="CIHAZ",
@@ -174,6 +176,8 @@ async def _arac_ara(db: AsyncSession, user: User, terim: str, limit: int) -> lis
         )
         .limit(limit)
     )
+    # Kapsam (TS-217): araç listesiyle aynı kural (`/api/araclar`).
+    stmt = hesap_svc.kapsam_musteri(stmt, user, Vehicle.customer_id)
     return [
         AramaSonucu(
             tur="ARAC",

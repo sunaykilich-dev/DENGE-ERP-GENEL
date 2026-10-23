@@ -828,15 +828,54 @@ async def _gonderim_izni(db: DbDep, t: Quote, v: QuoteVersion, *, yeniden_serbes
     return t.status not in ("GONDERILDI", "GORUNTULENDI")
 
 
+async def _gonderim_hizi_denetle(db: DbDep, user: User, clock: ClockDep) -> None:
+    """Kullanıcı başına dakikada en çok `teklif_gonderim_dakika_limiti` (10)
+    e-posta gönderimi (TS-215, E07-25); aşılırsa 429 ve HİÇBİR ŞEY yazılmaz.
+
+    Sayım `quote_sends` üzerinden (başarısız deneme de SMTP'ye gitmiştir,
+    sayılır). Tek API kopyası ve tek worker olduğu için DB sayımı yeterli;
+    pencere Clock ile ölçülür (`_gonderim_kaydet` satırın zamanını
+    Clock'tan yazar), böylece FakeClock testinde de aynı kural geçerlidir.
+    """
+    from datetime import timedelta
+
+    sinir = int(await ayar_svc.get(db, "teklif_gonderim_dakika_limiti"))
+    sayi = await db.scalar(
+        select(func.count())
+        .select_from(QuoteSend)
+        .where(
+            QuoteSend.created_by == user.id,
+            QuoteSend.kanal == "EPOSTA",
+            QuoteSend.created_at > clock.now() - timedelta(seconds=60),
+        )
+    )
+    if (sayi or 0) >= sinir:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Çok fazla gönderim; bir dakika sonra tekrar deneyin",
+        )
+
+
+async def _gonderim_kaydet(db: DbDep, clock: ClockDep, *args, **kw) -> QuoteSend:
+    """`svc.gonderim_kaydet` + satır zamanı Clock'tan (hız sınırı penceresi;
+    elle gönderim de aynı yoldan yazılır ki günlük sırası tek saatten gelsin)."""
+    kayit = await svc.gonderim_kaydet(db, *args, **kw)
+    kayit.created_at = clock.now()
+    return kayit
+
+
 @router.post("/{teklif_id}/gonder", response_model=TeklifOut)
 async def gonder(
     teklif_id: int, payload: GonderIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
 ) -> TeklifOut:
     """Teklifi PDF ekiyle e-postalar ve versiyonu kilitler (en çok 3 alıcı,
     gönderene CC). Her deneme `quote_sends`'e yazılır — başarısız deneme de
-    (durum değişmeden) commit edilir; hata ayrıntısı yalnız sunucu logunda."""
+    (durum değişmeden) commit edilir; hata ayrıntısı yalnız sunucu logunda.
+    Dakikada 10 gönderimden fazlası 429 (TS-215); e-postadaki PDF'in
+    SHA-256'sı gönderim satırında (`pdf_sha256`, E07-09)."""
     t = await _al(db, teklif_id, user, yazma=True)
     v = await _guncel_versiyon(db, t)
+    await _gonderim_hizi_denetle(db, user, clock)
 
     if (
         not svc.birimli_mi(t)
@@ -901,8 +940,9 @@ async def gonder(
     except mail.MailKapali as exc:
         # Başarısız deneme görünür olsun: günlük satırı commit edilir, teklif
         # durumu değişmez. Kullanıcı genel mesaj alır (ayrıntı logda).
-        await svc.gonderim_kaydet(
+        await _gonderim_kaydet(
             db,
+            clock,
             t,
             v,
             kanal="EPOSTA",
@@ -917,8 +957,9 @@ async def gonder(
         mesaj = str(exc) if exc.sinif == "SMTP_KAPALI" else mail.GENEL_HATA_MESAJI
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, mesaj) from exc
 
-    await svc.gonderim_kaydet(
+    await _gonderim_kaydet(
         db,
+        clock,
         t,
         v,
         kanal="EPOSTA",
@@ -989,8 +1030,10 @@ async def elle_gonderildi(
         pdf: bytes | None = await svc.teklif_pdf(db, t, v)
     except PdfUretilemedi:
         pdf = None  # özet yazılamaz; gönderim kaydı yine düşer
-    await svc.gonderim_kaydet(
+    # Zaman Clock'tan: gönderim günlüğünün sırası e-posta satırlarıyla tutarlı kalsın.
+    await _gonderim_kaydet(
         db,
+        clock,
         t,
         v,
         kanal=payload.kanal,

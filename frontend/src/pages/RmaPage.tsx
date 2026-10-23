@@ -24,6 +24,7 @@ import { useState } from "react";
 
 import { api, type ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import EkYukleyici from "../components/EkYukleyici";
 
 interface Rma {
   id: number;
@@ -71,6 +72,8 @@ interface Hesap {
 const tl = (v: number | null | undefined) =>
   v == null ? "—" : `${Number(v).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ₺`;
 
+const SAYFA_BOYU = 20;
+
 const DURUM_RENGI: Record<string, string> = {
   ACIK: "gold",
   INCELEMEDE: "blue",
@@ -106,9 +109,19 @@ export default function RmaPage() {
   const [yeniForm] = Form.useForm();
   const [cozumForm] = Form.useForm();
 
+  // Sunucu sayfalaması (TS-217): liste `limit/offset` alır, toplam
+  // `X-Toplam-Kayit` başlığında. Önceden yalnız ilk 50 kayıt görünüyordu.
+  const [sayfa, setSayfa] = useState(1);
   const kayitlar = useQuery({
-    queryKey: ["rma", durum],
-    queryFn: () => api.get<Rma[]>(`/api/rma${durum ? `?durum=${durum}` : ""}`),
+    queryKey: ["rma", durum, sayfa],
+    queryFn: () => {
+      const p = new URLSearchParams({
+        limit: String(SAYFA_BOYU),
+        offset: String((sayfa - 1) * SAYFA_BOYU),
+      });
+      if (durum) p.set("durum", durum);
+      return api.getSayfa<Rma>(`/api/rma?${p}`);
+    },
   });
 
   const detay = useQuery({
@@ -238,7 +251,10 @@ export default function RmaPage() {
                       placeholder="Durum"
                       style={{ width: 160 }}
                       value={durum}
-                      onChange={setDurum}
+                      onChange={(d) => {
+                        setDurum(d);
+                        setSayfa(1);
+                      }}
                       options={Object.keys(DURUM_RENGI).map((d) => ({
                         value: d,
                         label: d.replaceAll("_", " ").toLowerCase(),
@@ -256,8 +272,14 @@ export default function RmaPage() {
                   rowKey="id"
                   size="small"
                   loading={kayitlar.isLoading}
-                  dataSource={kayitlar.data ?? []}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
+                  dataSource={kayitlar.data?.kayitlar ?? []}
+                  pagination={{
+                    current: sayfa,
+                    pageSize: SAYFA_BOYU,
+                    total: kayitlar.data?.toplam ?? 0,
+                    showSizeChanger: false,
+                    onChange: setSayfa,
+                  }}
                   scroll={{ x: 1060 }}
                   onRow={(r) => ({
                     onClick: () => setSecili(r.id),
@@ -494,6 +516,18 @@ export default function RmaPage() {
                 </Descriptions.Item>
               </Descriptions>
             </Card>
+
+            {/* TS-217: arıza fotoğrafı ve üretici iade evrakı. Kapsam RMA
+                listesiyle aynı (`ek_kapsam._rma_kapsami`). */}
+            <EkYukleyici
+              entity="rma_cases"
+              entityId={k.id}
+              kind="DIGER"
+              baslik="Ekler"
+              aciklama="Arıza fotoğrafı, üretici iade formu, kargo evrakı"
+              yazabilir={yetkili("rma.yaz")}
+              yalnizTur={false}
+            />
           </Space>
         )}
       </Drawer>

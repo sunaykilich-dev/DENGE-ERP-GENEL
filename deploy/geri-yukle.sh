@@ -32,8 +32,19 @@ fi
 
 psql() { docker compose exec -T db psql -U dengeerp -v ON_ERROR_STOP=1 "$@"; }
 
+if [ "$HEDEF_DB" = "dengeerp" ]; then
+  # Gercek kurtarma / geri donus (KURULUM.md EK G.6): veritabani SILINIP
+  # yeniden yaratilir. Dump'i var olan veritabaninin USTUNE yuklemek yetmez:
+  # `--clean` yalniz dump'ta bulunan nesneleri siler, yeni surumun
+  # migration'larinin actigi tablolar (servis tablolari gibi) kalir ve bir
+  # sonraki yukseltme "relation already exists" ile duser. Bagli api/worker
+  # varken DROP DATABASE da reddedilir; once durdurulur.
+  echo "0/5 api ve worker durduruluyor (canli veritabani yeniden yaratilacak)"
+  docker compose stop api worker
+fi
+
 echo "1/5 Gecici veritabani hazirlaniyor: $HEDEF_DB"
-psql -d postgres -c "DROP DATABASE IF EXISTS $HEDEF_DB;"
+psql -d postgres -c "DROP DATABASE IF EXISTS $HEDEF_DB WITH (FORCE);"
 psql -d postgres -c "CREATE DATABASE $HEDEF_DB OWNER dengeerp;"
 
 echo "2/5 Yedek cozuluyor ve yukleniyor"
@@ -54,6 +65,7 @@ psql -d "$HEDEF_DB" -P pager=off -c "
   UNION ALL SELECT 'is_emri',  count(*) FROM work_orders
   UNION ALL SELECT 'dokum',    count(*) FROM partner_settlements
   UNION ALL SELECT 'kullanici',count(*) FROM users;"
+psql -d "$HEDEF_DB" -tAc "SELECT 'goc_surumu: '||version_num FROM alembic_version;"
 
 echo "--- Hak edis genel toplami (canli uygulamayla karsilastirilacak sayi) ---"
 psql -d "$HEDEF_DB" -P pager=off -c "
@@ -72,9 +84,11 @@ if [ ! -f "$DOSYA_ARSIV" ]; then
   echo "       Ekler geri gelmeyecek; yedekleme dosyalari da aliyor mu kontrol edin."
 elif [ "$HEDEF_DB" = "dengeerp" ]; then
   echo "Arsiv aciliyor: $DOSYA_ARSIV"
+  # api durduruldu (adim 0); dosya birimine tek seferlik konteynerle yazilir.
   gpg --batch --quiet --decrypt --passphrase-file "$GPG_PAROLA_DOSYASI" "$DOSYA_ARSIV" \
-    | docker compose exec -T api tar -xz -C /app/var
-  ADET=$(docker compose exec -T api sh -c 'find /app/var/files -type f | wc -l' | tr -d '\r ')
+    | docker compose run --rm -T --no-deps --entrypoint sh api -c 'tar -xz -C /app/var'
+  ADET=$(docker compose run --rm -T --no-deps --entrypoint sh api \
+    -c 'find /app/var/files -type f | wc -l' | tr -d '\r ')
   echo "Dosya sayisi: $ADET"
 else
   # Prova canli dosyalarin uzerine YAZMAZ; arsivin acilabildigini dogrular.
@@ -88,5 +102,8 @@ if [ "$HEDEF_DB" != "dengeerp" ]; then
   psql -d postgres -c "DROP DATABASE $HEDEF_DB;"
   echo "Prova veritabani silindi. PROVA BASARILI."
 else
-  echo "Canli veritabanina yuklendi. 'docker compose restart api worker' calistirin."
+  echo "Canli veritabanina yuklendi; api ve worker DURDURULMUS durumda."
+  echo "  - Ayni surume kurtarma : docker compose up -d api worker"
+  echo "  - Onceki surume donus  : onceki paketin klasorunden ./kur.sh (KURULUM.md EK G.6)"
+  echo "    Yeni surumle api'yi ACMAYIN: acilista 'alembic upgrade head' yedegi yeniden yukseltir."
 fi

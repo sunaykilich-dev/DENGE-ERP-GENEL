@@ -7,17 +7,19 @@ ayrışması demekti.
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from app.api.deps import (
     ClockDep,
     CurrentUser,
     DbDep,
+    client_ip,
     donem_dogrula,
     require_permission,
     sees_cost,
 )
 from app.models import User
+from app.services import audit
 from app.services import export as export_svc
 from app.services import reports as svc
 from app.services import rma as rma_svc
@@ -30,7 +32,30 @@ Okuyucu = Annotated[User, Depends(require_permission("rapor.gor"))]
 Aktarici = Annotated[User, Depends(require_permission("rapor.disaaktar"))]
 
 
-async def _xlsx(basliklar: list[str], satirlar: list[list[Any]], ad: str) -> Response:
+async def _xlsx(
+    basliklar: list[str],
+    satirlar: list[list[Any]],
+    ad: str,
+    *,
+    db: DbDep,
+    user: User,
+    request: Request,
+) -> Response:
+    """xlsx yanıtı + denetim satırı (TS-218, E12 K9).
+
+    Mobilite raporlarının Excel'i (müşteri geliri, hak ediş tutarları,
+    stok maliyeti) toplu veri çıkışıdır; teknik servis Excel'leri gibi kim,
+    ne zaman, kaç satır indirdi denetimde görünmeli. Satır yanıttan ÖNCE
+    commit edilir: dosya üretildi ama iz yok durumu oluşmasın."""
+    await audit.log(
+        db,
+        "raporlar",
+        "disa_aktar",
+        new_value={"rapor": ad, "satir": len(satirlar)},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
     return Response(
         content=await export_svc.satirlari_xlsx_async(basliklar, satirlar, ad[:31]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -92,7 +117,9 @@ async def montaj_noktasi(db: DbDep, user: Okuyucu, donem: str | None = None) -> 
 
 
 @router.get("/montaj-noktasi.xlsx")
-async def montaj_noktasi_xlsx(db: DbDep, user: Aktarici, donem: str | None = None) -> Response:
+async def montaj_noktasi_xlsx(
+    request: Request, db: DbDep, user: Aktarici, donem: str | None = None
+) -> Response:
     donem_dogrula(donem)
     if not _hakedis_gorunur(user):
         raise HTTPException(
@@ -113,6 +140,9 @@ async def montaj_noktasi_xlsx(db: DbDep, user: Aktarici, donem: str | None = Non
             for s in satirlar
         ],
         f"Montaj Noktasi {donem or 'Tumu'}",
+        db=db,
+        user=user,
+        request=request,
     )
 
 
@@ -124,7 +154,9 @@ async def musteri_geliri(
 
 
 @router.get("/musteri-geliri.xlsx")
-async def musteri_geliri_xlsx(db: DbDep, clock: ClockDep, user: Aktarici) -> Response:
+async def musteri_geliri_xlsx(
+    request: Request, db: DbDep, clock: ClockDep, user: Aktarici
+) -> Response:
     satirlar = await svc.musteri_geliri(db, clock, limit=500)
     return await _xlsx(
         ["Müşteri", "Abonelik Geliri", "Sipariş Geliri", "Toplam Gelir", "Cihaz"],
@@ -139,6 +171,9 @@ async def musteri_geliri_xlsx(db: DbDep, clock: ClockDep, user: Aktarici) -> Res
             for s in satirlar
         ],
         "Musteri Geliri",
+        db=db,
+        user=user,
+        request=request,
     )
 
 
@@ -172,7 +207,11 @@ async def hareketsiz_stok(
 
 @router.get("/hareketsiz-stok.xlsx")
 async def hareketsiz_stok_xlsx(
-    db: DbDep, clock: ClockDep, user: Aktarici, gun: int = Query(default=180, ge=1, le=3650)
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Aktarici,
+    gun: int = Query(default=180, ge=1, le=3650),
 ) -> Response:
     satirlar = _maliyet_gizle(
         await svc.hareketsiz_stok(db, clock, gun=gun), ("landed_cost_try",), user
@@ -184,6 +223,9 @@ async def hareketsiz_stok_xlsx(
             for s in satirlar
         ],
         f"Hareketsiz Stok {gun}g",
+        db=db,
+        user=user,
+        request=request,
     )
 
 

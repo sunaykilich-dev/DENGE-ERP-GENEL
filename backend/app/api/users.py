@@ -5,15 +5,21 @@ Yetki yükseltme önlemi (TS-006, E13-01) burada uygulanır, kuralları
 rolünü yalnız ADMIN atar, ADMIN rolü katalogdan yönetilir (409), son aktif
 ADMIN korunur (409), üst yetkili hedefe yalnız ADMIN dokunur (403). Her ret
 `yetki.ret` eylemiyle denetime yazılır — ret de bir güvenlik olayıdır.
+
+Dalga 4 (D4-A): yöneticinin belirlediği/ürettiği parola geçicidir (TS-212:
+zorunlu değişim, 72 sa, tek giriş; üretilen parola yanıtta BİR KEZ döner);
+kullanıcı düzenleme denetimi kişisel veri işaretlidir (E13-D03); istisna
+uçları yalnız KALICI istisnaları yazar, süreli vekâlet `/api/vekalet`'tedir
+(TS-213); erişim gözden geçirme `/api/erisim-gozden` (TS-214).
 """
 
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 
-from app.api.deps import DbDep, client_ip, require_permission
+from app.api.deps import ClockDep, DbDep, client_ip, require_permission
 from app.models import Role, RolePermission, User, UserPermission, UserUnit
 from app.permissions import (
     BIRIM_KAPSAMLARI,
@@ -25,7 +31,13 @@ from app.permissions import (
     SCOPE_OWN_UNITS,
     SCOPES,
 )
-from app.schemas.auth import RoleOut, UserCreate, UserOut, UserPatch
+from app.schemas.auth import (
+    KullaniciGuncellemeSonucu,
+    RoleOut,
+    UserCreate,
+    UserOut,
+    UserPatch,
+)
 from app.services import audit, yetki
 from app.services import auth as auth_service
 
@@ -238,20 +250,23 @@ def _yetki_gorunumu(rol: Role, kodlar: set[str], istisna: list[str] | None = Non
 
 
 @router.get("/kullanicilar/{user_id}/yetkiler", response_model=RolYetkisi)
-async def kullanici_yetkileri(user_id: int, db: DbDep, _: AdminDep) -> RolYetkisi:
+async def kullanici_yetkileri(user_id: int, db: DbDep, clock: ClockDep, _: AdminDep) -> RolYetkisi:
     """Bu KİŞİNİN gerçekten açabildiği ekranlar ve yapabildiği işler.
 
     Rolün ham listesini göstermek yanıltıcıydı: istisnayla verilen yetki
     listede görünmez, geri alınan yetki hâlâ görünürdü. Kaynak `etkin_izinler`
-    — yetki kontrolünün kullandığı kuralın ta kendisi.
+    — yetki kontrolünün kullandığı kuralın ta kendisi. Yürürlükteki süreli
+    vekâlet de (TS-213) "rolünden farklı" sayılır.
     """
     kisi = await db.get(User, user_id)
     if kisi is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kullanıcı bulunamadı")
+    an = clock.now()
+    kisi.izin_anini_ata(an)
     return _yetki_gorunumu(
         kisi.role,
         set(kisi.etkin_izinler()),
-        [u.permission_code for u in kisi.izin_istisnalari if u.allow],
+        [u.permission_code for u in kisi.izin_istisnalari if u.allow and u.gecerli_mi(an)],
     )
 
 
@@ -527,13 +542,27 @@ async def istisnalari_yaz(
             ayrinti={"islem": "izin.istisna", "izinler": verilemez},
         )
 
-    eski = [
-        {"kod": u.permission_code, "allow": u.allow}
-        for u in (
-            await db.scalars(select(UserPermission).where(UserPermission.user_id == user_id))
-        ).all()
-    ]
-    await db.execute(delete(UserPermission).where(UserPermission.user_id == user_id))
+    # Yalnız KALICI istisnalar bu ucun konusudur. Süreli vekâlet satırları
+    # (`bitis_at` dolu, TS-213) `/api/vekalet` ile yönetilir; toptan silme
+    # onları da götürüyordu. Aynı izin için kalıcı istisna yazılırsa o izindeki
+    # vekâlet satırı kalıcı karara yer açmak için kaldırılır ve denetime girer.
+    istenen_kodlar = {i.permission_code for i in payload}
+    mevcut = (
+        await db.scalars(select(UserPermission).where(UserPermission.user_id == user_id))
+    ).all()
+    eski = [{"kod": u.permission_code, "allow": u.allow} for u in mevcut if not u.sureli_mi]
+    ezilen_vekalet = sorted(
+        u.permission_code for u in mevcut if u.sureli_mi and u.permission_code in istenen_kodlar
+    )
+    await db.execute(
+        delete(UserPermission).where(
+            UserPermission.user_id == user_id,
+            or_(
+                UserPermission.bitis_at.is_(None),
+                UserPermission.permission_code.in_(istenen_kodlar),
+            ),
+        )
+    )
     for i in payload:
         db.add(
             UserPermission(
@@ -551,7 +580,10 @@ async def istisnalari_yaz(
         "izin.istisna",
         entity_id=user_id,
         old_value={"istisnalar": eski},
-        new_value={"istisnalar": [{"kod": i.permission_code, "allow": i.allow} for i in payload]},
+        new_value={
+            "istisnalar": [{"kod": i.permission_code, "allow": i.allow} for i in payload],
+            **({"kaldirilan_vekalet": ezilen_vekalet} if ezilen_vekalet else {}),
+        },
         user_id=user.id,
         ip=client_ip(request),
     )
@@ -561,8 +593,13 @@ async def istisnalari_yaz(
 
 @router.get("/kullanicilar/{user_id}/izinler", response_model=list[IstisnaIn])
 async def istisnalari_getir(user_id: int, db: DbDep, _: AdminDep) -> list[IstisnaIn]:
+    """Kalıcı istisnalar (süreli vekâletler `/api/vekalet/{personel_id}`)."""
     kayitlar = (
-        await db.scalars(select(UserPermission).where(UserPermission.user_id == user_id))
+        await db.scalars(
+            select(UserPermission).where(
+                UserPermission.user_id == user_id, UserPermission.bitis_at.is_(None)
+            )
+        )
     ).all()
     return [
         IstisnaIn(permission_code=u.permission_code, allow=u.allow, gerekce=u.gerekce or "—")
@@ -579,20 +616,32 @@ class KullaniciSatiri(UserOut):
     """
 
     sapma_sayisi: int = 0
+    # Yürürlükteki süreli vekâlet sayısı (TS-213); kalıcı sapmadan ayrı
+    # gösterilir: biri yönetici kararı, öteki süresi dolunca kendiliğinden biter.
+    vekalet_sayisi: int = 0
     rol_ozellestirildi: bool = False
+    version: int | None = None
 
 
 @router.get("/kullanicilar", response_model=list[KullaniciSatiri])
-async def list_users(db: DbDep, _: AdminDep) -> list[KullaniciSatiri]:
+async def list_users(db: DbDep, clock: ClockDep, _: AdminDep) -> list[KullaniciSatiri]:
+    an = clock.now()
     users = (await db.scalars(select(User).order_by(User.username))).all()
-    return [
-        KullaniciSatiri(
-            **UserOut.of(u).model_dump(),
-            sapma_sayisi=len(u.izin_istisnalari),
-            rol_ozellestirildi=bool(u.role.ozellestirildi),
+    satirlar = []
+    for u in users:
+        u.izin_anini_ata(an)
+        satirlar.append(
+            KullaniciSatiri(
+                **UserOut.of(u).model_dump(),
+                sapma_sayisi=sum(1 for i in u.izin_istisnalari if not i.sureli_mi),
+                vekalet_sayisi=sum(
+                    1 for i in u.izin_istisnalari if i.sureli_mi and i.gecerli_mi(an)
+                ),
+                rol_ozellestirildi=bool(u.role.ozellestirildi),
+                version=u.version,
+            )
         )
-        for u in users
-    ]
+    return satirlar
 
 
 def _birimleri_dogrula(
@@ -618,7 +667,11 @@ def _birimleri_dogrula(
 
 
 @router.post("/kullanicilar", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-async def create_user(payload: UserCreate, request: Request, db: DbDep, admin: AdminDep) -> UserOut:
+async def create_user(
+    payload: UserCreate, request: Request, db: DbDep, clock: ClockDep, admin: AdminDep
+) -> UserOut:
+    """Yeni kullanıcı. Yöneticinin verdiği parola GEÇİCİDİR (TS-212): kullanıcı
+    ilk girişte değiştirir; 72 saat içinde ve tek girişte geçerlidir."""
     if await db.scalar(select(User).where(User.username == payload.username)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Bu kullanıcı adı zaten var")
     role = await db.scalar(select(Role).where(Role.code == payload.role_code))
@@ -641,9 +694,9 @@ async def create_user(payload: UserCreate, request: Request, db: DbDep, admin: A
         full_name=payload.full_name,
         username=payload.username,
         email=payload.email,
-        password_hash=auth_service.hash_password(payload.password),
         role_id=role.id,
     )
+    auth_service.gecici_parola_ata(user, payload.password, clock)
     user.birimler = [
         UserUnit(birim=b, is_primary=(b == birincil), created_by=admin.id) for b in birimler
     ]
@@ -666,10 +719,15 @@ async def create_user(payload: UserCreate, request: Request, db: DbDep, admin: A
     return UserOut.of(user)
 
 
-@router.patch("/kullanicilar/{user_id}", response_model=UserOut)
+@router.patch("/kullanicilar/{user_id}", response_model=KullaniciGuncellemeSonucu)
 async def patch_user(
-    user_id: int, payload: UserPatch, request: Request, db: DbDep, admin: AdminDep
-) -> UserOut:
+    user_id: int,
+    payload: UserPatch,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    admin: AdminDep,
+) -> KullaniciGuncellemeSonucu:
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kullanıcı bulunamadı")
@@ -690,6 +748,18 @@ async def patch_user(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kendi girişinizi kapatamazsınız")
         if payload.role_code is not None and payload.role_code != user.role.code:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kendi rolünüzü değiştiremezsiniz")
+        if payload.password is not None or payload.parola_sifirla:
+            # Kendi parolası `POST /api/auth/parola` ile (mevcut parola ister);
+            # burada geçici parola üretmek kendini "zorunlu değişime" kilitlerdi.
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Kendi parolanızı Parola Değiştir ekranından değiştirin.",
+            )
+    if payload.password is not None and payload.parola_sifirla:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Parola belirleme ve geçici parola üretme birlikte istenemez.",
+        )
 
     # --- Yetki yükseltme önlemi: HİÇBİR şey yazılmadan önce ------------------
     role = None
@@ -752,14 +822,25 @@ async def patch_user(
         user.giris_acik = payload.giris_acik
     if role is not None:
         user.role_id = role.id
+    # Yönetici parolası GEÇİCİDİR (TS-212): zorunlu değişim + 72 sa + tek giriş.
+    gecici: str | None = None
     if payload.password is not None:
-        user.password_hash = auth_service.hash_password(payload.password)
+        auth_service.gecici_parola_ata(user, payload.password, clock)
+    elif payload.parola_sifirla:
+        gecici = auth_service.gecici_parola_uret()
+        auth_service.gecici_parola_ata(user, gecici, clock)
     if payload.reset_mfa:
         user.mfa_enabled = False
         user.totp_secret = None
 
-    # Değişiklik ne olursa olsun eski/yeni değerleriyle loglanır.
-    await audit.log_change(db, user, "guncelle", user_id=admin.id, ip=client_ip(request))
+    # Değişiklik ne olursa olsun eski/yeni değerleriyle loglanır. Kişisel veri
+    # (ad, e-posta) taşıdığı için `is_personal_data=True` (E13-D03): denetim
+    # tetikleyicisi (`trg_audit_degistirilemez`) yalnız bu satırları KVKK
+    # anonimleştirmesinde maskelemeye izin verir; bayraksız satır bir daha
+    # maskelenemezdi. Parola özeti ve geçici parola ZATEN yazılmaz (`***`).
+    await audit.log_change(
+        db, user, "guncelle", user_id=admin.id, ip=client_ip(request), is_personal_data=True
+    )
 
     # Yetki, parola, aktiflik veya giriş değiştiyse açık oturumları düşür: eski
     # yetkiyle açılmış bir oturum yeni kısıtı görmezdi; girişi kapatılan kişinin
@@ -767,6 +848,7 @@ async def patch_user(
     if (
         payload.role_code is not None
         or payload.password is not None
+        or payload.parola_sifirla
         or payload.is_active is False
         or payload.giris_acik is False
         or payload.reset_mfa
@@ -775,7 +857,12 @@ async def patch_user(
 
     await db.commit()
     await db.refresh(user)
-    return UserOut.of(user)
+    user.izin_anini_ata(clock.now())
+    return KullaniciGuncellemeSonucu(
+        **UserOut.of(user).model_dump(),
+        gecici_parola=gecici,
+        gecici_parola_bitis=user.gecici_parola_bitis if gecici else None,
+    )
 
 
 @router.get("/kullanicilar/kilitli", response_model=list[str])
@@ -803,3 +890,14 @@ async def kilidi_ac(username: str, request: Request, db: DbDep, admin: AdminDep)
     )
     await db.commit()
     return {"acildi": True}
+
+
+# --- Dalga 4 alt router'ları (TS-213, TS-214) -------------------------------------
+# `main.py` Dalga 4'te D4-S'te donmuş olduğu için yeni kimlik güvenliği uçları
+# bu router'a bağlanır; yollar yine `/api/vekalet` ve `/api/erisim-gozden`.
+# İçe aktarma dosya SONUNDA: alt modüller bu dosyaya bağımlı değildir.
+from app.api import erisim_gozden as _erisim_gozden  # noqa: E402
+from app.api import vekalet as _vekalet  # noqa: E402
+
+router.include_router(_vekalet.router)
+router.include_router(_erisim_gozden.router)

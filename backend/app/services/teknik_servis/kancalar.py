@@ -22,7 +22,7 @@ tamamı geri alınır.
 | `ekip_degisti(db, so, yeni_ekip, clock)` | `atama.ata/toplu_ata` |
 | `oncelik_birim_degisti(db, so, clock)` | `is_emirleri.guncelle` |
 | `zaman_bolumu_acildi(db, bolum)` | `zaman.baslat/gecis` |
-| `atama_uyarilari(db, so, user_ids) -> list[str]` | atama/plan yanıtı (Dalga 3) |
+| `atama_uyarilari(db, so, user_ids, clock=None) -> list[str]` | atama/plan yanıtı (D3; clock D4) |
 
 **Toplayan kanca (Dalga 3):** `atama_uyarilari` diğerlerinden farklı olarak
 DEĞER döndürür — kayıtlı fonksiyonların döndürdüğü uyarı metinleri kayıt
@@ -140,16 +140,26 @@ async def zaman_bolumu_acildi(db: AsyncSession, bolum: ServiceTimeEntry) -> None
     await cagir("zaman_bolumu_acildi", db, bolum)
 
 
-async def atama_uyarilari(db: AsyncSession, so: ServiceOrder, user_ids: Iterable[int]) -> list[str]:
+async def atama_uyarilari(
+    db: AsyncSession,
+    so: ServiceOrder,
+    user_ids: Iterable[int],
+    clock: Clock | None = None,
+) -> list[str]:
     """Dalga 3: atanan kişiler için uyarı metinleri (yetkinlik/belge, E08-22).
 
-    Kayıtlı fonksiyon `(db, so, user_ids: tuple[int, ...]) -> list[str]`
-    imzasındadır; `None` dönerse uyarı yok sayılır. Kayıt yoksa boş liste.
-    Kanca çağıranın transaction'ında koşar; uyarı fonksiyonu yalnız okuduğu
-    için içindeki istisna programlama hatasıdır ve sessizce yutulmaz.
+    Kayıtlı fonksiyon `(db, so, user_ids: tuple[int, ...], *, clock=None)
+    -> list[str]` imzasındadır; `None` dönerse uyarı yok sayılır. Kayıt yoksa
+    boş liste. Kanca çağıranın transaction'ında koşar; uyarı fonksiyonu yalnız
+    okuduğu için içindeki istisna programlama hatasıdır ve sessizce yutulmaz.
+
+    Dalga 4 (devreden açık): imza `clock` taşır — belge geçerliliği iş
+    saatine göre değerlendirilsin (`ekip_degisti` ile aynı ilke). Saat
+    verilmezse kayıtlı fonksiyona `clock` geçilmez (geri uyumlu çağrı).
     """
     kimlikler = tuple(user_ids)
+    ek: dict[str, Any] = {} if clock is None else {"clock": clock}
     sonuc: list[str] = []
     for fn in kayitlilar("atama_uyarilari"):
-        sonuc.extend(await fn(db, so, kimlikler) or ())
+        sonuc.extend(await fn(db, so, kimlikler, **ek) or ())
     return sonuc

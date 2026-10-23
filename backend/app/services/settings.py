@@ -143,6 +143,20 @@ DEFAULTS: dict[str, Any] = {
     "teklif_oz_onay_yasak": True,
     "teklif_takip_uyari_gun": 3,
     "teklif_sunulacak_uyari_is_gunu": 2,
+    # Kullanıcı başına dakikada en çok e-posta teklif gönderimi (TS-215, E07-25).
+    "teklif_gonderim_dakika_limiti": 10,
+    # --- Ekler (TS-218) -------------------------------------------------------
+    # Canlı türlerde (hesap, cihaz, ürün, RMA...) içerik/magic-byte denetimi.
+    # Kapalı = KURU KOŞU: uyuşmazlık reddedilmez, denetim satırı yazılır;
+    # `GET /api/ekler/icerik-denetimi` raporu temizse açılır.
+    "ek_icerik_denetimi_canli_turler": False,
+    # --- Erişim gözden geçirme / raporlar (TS-214, E12) -------------------------
+    # "Uzun süredir girişsiz" eşiği (gün); güvenlik sabiti değil (E13-16).
+    "erisim_girissiz_gun": 60,
+    # Servis/bakım Excel'lerinin satır üst sınırı. Aralık sınırı (24 ay) kod
+    # sabitidir (`panel.RAPOR_AZAMI_AY`, E12-08): eşzamanlı süzgeç doğrulaması
+    # ayar okuyamaz ve sınırın gevşetilmesi sorgu maliyetini büyütür.
+    "servis_rapor_excel_azami_satir": 50_000,
     # --- Eğitim ---------------------------------------------------------------
     "egitim_gozlem_basari_esigi_yuzde": 85,
     "egitim_rozet_sari_esigi_yuzde": 65,
@@ -208,6 +222,10 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "teklif_oz_onay_yasak": ("bool", None, None),
     "teklif_takip_uyari_gun": ("tam", 1, 90),
     "teklif_sunulacak_uyari_is_gunu": ("tam", 1, 30),
+    "teklif_gonderim_dakika_limiti": ("tam", 1, 100),
+    "ek_icerik_denetimi_canli_turler": ("bool", None, None),
+    "erisim_girissiz_gun": ("tam", 7, 365),
+    "servis_rapor_excel_azami_satir": ("tam", 1_000, 100_000),
     "egitim_gozlem_basari_esigi_yuzde": ("tam", 1, 100),
     "egitim_rozet_sari_esigi_yuzde": ("tam", 1, 100),
     "egitim_duzeltici_termin_gun": ("tam", 1, 365),

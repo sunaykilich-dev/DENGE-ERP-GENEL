@@ -129,8 +129,12 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
     )
     # İstisnalar kullanıcıyla BİRLİKTE yüklenir: yetki kontrolü her istekte
     # koşuyor, ayrı sorgu N+1 üretirdi.
+    # `user_permissions.veren_id` de users'a gittiği için (süreli vekâlet,
+    # Dalga 4) yabancı anahtar açıkça belirtilir.
     izin_istisnalari: Mapped[list["UserPermission"]] = relationship(
-        cascade="all, delete-orphan", lazy="selectin"
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        foreign_keys="UserPermission.user_id",
     )
     sessions: Mapped[list["Session"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -174,10 +178,23 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
         üstünde olması bilinçli: bir kişinin yetkisini kısmak, ona rol
         değiştirmekten daha sık ve daha acil bir ihtiyaç.
         """
-        for ui in self.izin_istisnalari:
+        for ui in self._yururlukteki_istisnalar():
             if ui.permission_code == permission_code:
                 return ui.allow
         return any(rp.permission_code == permission_code for rp in self.role.permissions)
+
+    # Süreli vekâlet (Dalga 4): istisnanın yürürlükte olup olmadığı İSTEK
+    # anına göre belirlenir. An `Clock`'tan gelir (`api/deps.py`
+    # `izin_anini_ata(clock.now())`); model saat okumaz. Atanmamışsa süreli
+    # satırlar sayılmaz (fail-closed), kalıcı istisnalar eskisi gibi çalışır.
+    _izin_ani = None
+
+    def izin_anini_ata(self, an: datetime | None) -> None:
+        """Süreli istisnaların değerlendirileceği anı bağlar (istek başına)."""
+        self._izin_ani = an
+
+    def _yururlukteki_istisnalar(self) -> list["UserPermission"]:
+        return [ui for ui in self.izin_istisnalari if ui.gecerli_mi(self._izin_ani)]
 
     def etkin_izinler(self) -> list[str]:
         """Bu kullanıcının GERÇEKTEN sahip olduğu izinler, sıralı.
@@ -188,7 +205,7 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
         403 vermesine yol açardı.
         """
         kodlar = {rp.permission_code for rp in self.role.permissions}
-        for ui in self.izin_istisnalari:
+        for ui in self._yururlukteki_istisnalar():
             if ui.allow:
                 kodlar.add(ui.permission_code)
             else:
