@@ -7,22 +7,36 @@
  * tıklamak o listeyi açar. Bloklar kullanıcının izni ve birim kapsamıyla
  * gelir; tutar yalnız `maliyet.gor` sahibinde vardır.
  */
-import { useQuery } from "@tanstack/react-query";
-import { Alert, Card, Col, Empty, Row, Space, Table, Tag, Typography } from "antd";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Alert, App, Card, Col, Empty, Row, Select, Space, Table, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 
-import { anaVeriApi } from "../api/anaVeri";
+import { anaVeriApi, SLA_TAKVIM_SECENEKLERI, type SlaTakvimTuru } from "../api/anaVeri";
 import { TIP_ETIKETLERI } from "../api/servisEkipman";
+import { useAuth } from "../auth/AuthContext";
 import Statistic from "./Statistic";
 
 const tarih = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY") : "—");
+const takvimEtiketi = (t: SlaTakvimTuru | null) =>
+  SLA_TAKVIM_SECENEKLERI.find((s) => s.value === t)?.label ?? null;
 
 export default function HesapServisKarti({ hesapId }: { hesapId: number }) {
   const git = useNavigate();
+  const qc = useQueryClient();
+  const { message } = App.useApp();
+  const { yetkili } = useAuth();
   const kart = useQuery({
     queryKey: ["hesap-servis-karti", hesapId],
     queryFn: () => anaVeriApi.servisKarti(hesapId),
+  });
+  // Müşteri sözleşmesinin SLA takvimi (Faz A, TS-200); `version` ile iyimser kilit.
+  const takvimYaz = useMutation({
+    mutationFn: (tur: SlaTakvimTuru | null) =>
+      anaVeriApi.musteriSlaTakvimi(hesapId, tur, kart.data!.version),
+    onSuccess: () => message.success("SLA takvimi kaydedildi; yeni açılan işlere uygulanır"),
+    onError: (e: Error) => message.error(e.message),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ["hesap-servis-karti", hesapId] }),
   });
   const k = kart.data;
   if (kart.isError) return <Alert type="error" showIcon title={(kart.error as Error).message} />;
@@ -31,6 +45,23 @@ export default function HesapServisKarti({ hesapId }: { hesapId: number }) {
   return (
     <Space orientation="vertical" size={12} style={{ width: "100%" }}>
       {k.aciklama && <Alert type="info" showIcon title={k.aciklama} />}
+      <Space wrap align="center">
+        <Typography.Text strong>SLA takvimi</Typography.Text>
+        <Select<SlaTakvimTuru>
+          style={{ minWidth: 260 }}
+          size="small"
+          allowClear
+          placeholder="SLA politikasından devral"
+          value={k.sla_takvim_turu ?? undefined}
+          options={SLA_TAKVIM_SECENEKLERI}
+          disabled={!yetkili("lokasyon.yaz")}
+          loading={takvimYaz.isPending}
+          onChange={(v) => takvimYaz.mutate(v ?? null)}
+        />
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Lokasyonun kendi takvimi bunu ezer; açık işlerin hedefi değişmez.
+        </Typography.Text>
+      </Space>
       <Row gutter={[8, 8]}>
         <Col xs={12} sm={8}>
           <Card
@@ -77,6 +108,12 @@ export default function HesapServisKarti({ hesapId }: { hesapId: number }) {
             ),
           },
           { title: "İl", dataIndex: "il", width: 110, render: (v) => v ?? "—" },
+          {
+            title: "SLA takvimi",
+            dataIndex: "sla_takvim_turu",
+            width: 150,
+            render: (t: SlaTakvimTuru | null) => takvimEtiketi(t) ?? <Typography.Text type="secondary">Müşteriden</Typography.Text>,
+          },
           {
             title: "Açık iş",
             dataIndex: "acik_is",

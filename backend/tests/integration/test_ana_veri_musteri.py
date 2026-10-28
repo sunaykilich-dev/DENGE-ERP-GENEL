@@ -321,6 +321,7 @@ class TestServisMusteriDuzenleme:
             "phone",
             "email",
             "dis_referans",
+            "sla_takvim_turu",  # Faz A (TS-200): müşteri sözleşmesinin SLA takvimi
             "is_verified",
             "version",
         }

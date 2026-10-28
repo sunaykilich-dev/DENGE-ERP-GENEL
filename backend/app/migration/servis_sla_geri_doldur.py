@@ -112,6 +112,8 @@ class Plan:
     politika: ServiceSlaPolicy | None = None
     geriye_donuk: str | None = None  # yalnız rapor: ZAMANINDA / ASILDI / OLCULEMEDI
     geriye_donuk_hedef: datetime | None = None
+    # Faz A: lokasyon → müşteri → politika → 7/24 (canlı damgayla aynı zincir).
+    takvim_turu: str = "7_24"
 
 
 @dataclass
@@ -186,9 +188,11 @@ async def _politika(
     return onbellek[anahtar]
 
 
-def _hedef(bas: datetime, politika: ServiceSlaPolicy) -> datetime:
+def _hedef(
+    bas: datetime, politika: ServiceSlaPolicy, tur: str, mesai: sla_takvim.MesaiTakvimi
+) -> datetime:
     dk = int(round(float(politika.cozum_saat) * 60))
-    return sla_takvim.is_saati_ekle(bas, dk, politika.takvim_turu or sla_takvim.TAKVIM_7_24)
+    return sla_takvim.is_saati_ekle(bas, dk, tur, mesai=mesai)
 
 
 async def hazirla(db: AsyncSession) -> GeriDoldurma:
@@ -197,6 +201,7 @@ async def hazirla(db: AsyncSession) -> GeriDoldurma:
     isler = (await db.scalars(_adaylar_sorgusu())).all()
     mudahaleler = await _ilk_mudahaleler(db, [s.id for s in isler])
     politikalar: dict[tuple[str, str], Any] = {}
+    mesai = await sla.mesai_takvimi(db)
     for so in isler:
         p = Plan(so.id, so.so_no, SLA_DISI, ilk_mudahale_at=mudahaleler.get(so.id))
         sonuc.planlar.append(p)
@@ -212,12 +217,13 @@ async def hazirla(db: AsyncSession) -> GeriDoldurma:
             p.sinif = IPTAL
             continue
         politika = await _politika(db, politikalar, so.oncelik, so.birim)
+        p.takvim_turu = (await sla.takvim_turu_bul(db, so, politika))[0]
         kapali = so.status in ("TAMAMLANDI", "KAPATILDI") or so.first_completed_at is not None
         if kapali:
             p.sinif = OLCULEMEDI
             bitis = so.first_completed_at or so.completed_at or so.closed_at
             if politika is not None and so.created_at is not None and bitis is not None:
-                p.geriye_donuk_hedef = _hedef(so.created_at, politika)
+                p.geriye_donuk_hedef = _hedef(so.created_at, politika, p.takvim_turu, mesai)
                 p.geriye_donuk = "ASILDI" if bitis > p.geriye_donuk_hedef else "ZAMANINDA"
             else:
                 p.geriye_donuk = "OLCULEMEDI"
@@ -230,7 +236,7 @@ async def hazirla(db: AsyncSession) -> GeriDoldurma:
             continue
         p.sinif = GECIS
         p.politika = politika
-        p.hedef_at = _hedef(sonuc.yururluk, politika)
+        p.hedef_at = _hedef(sonuc.yururluk, politika, p.takvim_turu, mesai)
     return sonuc
 
 
@@ -280,7 +286,7 @@ async def uygula(
                 if politika.mudahale_saat is not None
                 else None
             )
-            tur = politika.takvim_turu or sla_takvim.TAKVIM_7_24
+            tur = p.takvim_turu
             so.sla_policy_id = politika.id
             so.sla_baslangic_at = sonuc.yururluk
             so.sla_takvim_turu = tur
@@ -288,7 +294,9 @@ async def uygula(
             so.mudahale_hedef_dk = mudahale_dk
             so.cozum_hedef_ilk_at = so.cozum_hedef_at = p.hedef_at
             so.mudahale_hedef_at = (
-                sla_takvim.is_saati_ekle(sonuc.yururluk, mudahale_dk, tur)
+                sla_takvim.is_saati_ekle(
+                    sonuc.yururluk, mudahale_dk, tur, mesai=await sla.mesai_takvimi(db)
+                )
                 if mudahale_dk is not None and so.ilk_mudahale_at is None
                 else None
             )

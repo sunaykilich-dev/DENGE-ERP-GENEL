@@ -36,6 +36,10 @@ export interface SlaBlogu {
   gecikme_nedeni: string | null;
   vade: string | null;
   vade_ay: string | null;
+  /** İşe açılışta dondurulan takvim (Faz A): "7_24" | "MESAI" | null (damgasız). */
+  takvim_turu?: string | null;
+  /** Sunucunun metni: "7/24" ya da "Mesai (hafta içi 08:30–18:00)". */
+  takvim_adi?: string | null;
 }
 
 export interface OperasyonSayaci {
@@ -151,8 +155,17 @@ export interface SlaSozlugu {
   yururluk_at: string | null;
   sla_yururlukte: boolean;
   risk_yuzde: number;
+  /** Faz A (TS-200): "7/24" ve "Mesai (hafta içi …)" adları ile mesai penceresi. */
+  takvim_turleri: KodAd[];
+  mesai: MesaiPenceresi;
   tekrar_ariza_gun: number;
   operasyon_sayaclari: string[];
+}
+
+export interface MesaiPenceresi {
+  baslangic: string;
+  bitis: string;
+  metin: string;
 }
 
 export interface SlaPolitikasi {
@@ -254,6 +267,8 @@ export const operasyonApi = {
   sozluk: () => api.get<SlaSozlugu>(`${SLA_TANIM}/sozluk`),
   politikalar: () => api.get<SlaPolitikasi[]>(`${SLA_TANIM}/politikalar`),
   politikaKaydet: (g: PolitikaGirdisi) => api.put<SlaPolitikasi>(`${SLA_TANIM}/politikalar`, g),
+  mesaiYaz: (g: { baslangic?: string; bitis?: string }) =>
+    api.put<MesaiPenceresi>(`${SLA_TANIM}/mesai`, g),
   tercihim: () => api.get<BildirimTercihi>(`${TS_ONEK}/bildirim-tercihlerim`),
   tercihimYaz: (g: { anlik_eposta: boolean; gunluk_ozet: boolean }) =>
     api.put<BildirimTercihi>(`${TS_ONEK}/bildirim-tercihlerim`, g),

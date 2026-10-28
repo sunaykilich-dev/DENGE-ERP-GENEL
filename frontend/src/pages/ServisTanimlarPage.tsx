@@ -323,7 +323,10 @@ function BeklemeNedenleri() {
 /**
  * SLA politikaları (TS-081). Okuma `servis.gor`, yazma `operasyon.yonet`.
  * Hedef işe açılışta DAMGALANIR: burada yapılan değişiklik açık işleri
- * etkilemez. Takvim bu sürümde yalnız 7/24. Öncelik ve birim kimliktir.
+ * etkilemez. Takvim 7/24 ya da Mesai (Faz A, TS-200): politikanın takvimi
+ * VARSAYILANDIR; müşteri ve lokasyon kartındaki SLA takvimi onu ezer. Mesai
+ * penceresi (hafta içi, tatiller fark etmez) burada düzenlenir. Öncelik ve
+ * birim kimliktir.
  */
 function SlaPolitikalari() {
   const { yetkili } = useAuth();
@@ -331,7 +334,18 @@ function SlaPolitikalari() {
   const qc = useQueryClient();
   const [pencere, setPencere] = useState<{ acik: boolean; kayit?: SlaPolitikasi }>({ acik: false });
   const [form] = Form.useForm();
+  const [mesaiForm] = Form.useForm();
   const sozluk = useQuery({ queryKey: ["sla-sozluk"], queryFn: operasyonApi.sozluk });
+  const mesaiKaydet = useMutation({
+    mutationFn: (g: { baslangic: string; bitis: string }) => operasyonApi.mesaiYaz(g),
+    onSuccess: (m) => {
+      message.success(`Mesai penceresi: ${m.metin}`);
+      qc.invalidateQueries({ queryKey: ["sla-sozluk"] });
+    },
+    onError: (e) => message.error(hataMesaji(e)),
+  });
+  const takvimAdi = (t: string) =>
+    sozluk.data?.takvim_turleri.find((x) => x.kod === t)?.ad ?? (t === "7_24" ? "7/24" : t);
   const liste = useQuery({ queryKey: ["sla-politikalari"], queryFn: operasyonApi.politikalar });
   const kaydet = useMutation({
     mutationFn: (g: PolitikaGirdisi) => operasyonApi.politikaKaydet(g),
@@ -347,7 +361,7 @@ function SlaPolitikalari() {
   });
   const ac = (kayit?: SlaPolitikasi) => {
     form.resetFields();
-    form.setFieldsValue(kayit ?? { oncelik: "NORMAL", is_active: true });
+    form.setFieldsValue(kayit ?? { oncelik: "NORMAL", is_active: true, takvim_turu: "7_24" });
     setPencere({ acik: true, kayit });
   };
   const s = sozluk.data;
@@ -359,8 +373,29 @@ function SlaPolitikalari() {
             ? `SLA yürürlük anı: ${dayjs(s.yururluk_at).format("DD.MM.YYYY HH:mm")}. `
             : "SLA henüz yürürlükte değil (Ayarlar → servis_sla_yururluk_at); işlere hedef damgalanmaz. "}
           Hedef iş açılırken damgalanır; politika değişikliği açık işleri etkilemez. Planlı bakım (PB) ve
-          atölye işleri SLA dışıdır. "Riskte" eşiği: hedefin %{s.risk_yuzde}'i.
+          atölye işleri SLA dışıdır. "Riskte" eşiği: hedefin %{s.risk_yuzde}'i. Takvim önceliği:
+          lokasyon → müşteri → politika; Mesai takviminde yalnız {s.mesai.metin} sayılır (resmî tatiller
+          fark etmez).
         </Typography.Paragraph>
+      )}
+      {s && duzenleyebilir && (
+        <Form
+          form={mesaiForm}
+          layout="inline"
+          style={{ marginBottom: 12, rowGap: 8 }}
+          initialValues={{ baslangic: s.mesai.baslangic, bitis: s.mesai.bitis }}
+          onFinish={(v) => mesaiKaydet.mutate(v)}
+        >
+          <Form.Item label="Mesai başlangıcı" name="baslangic" rules={[{ pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: "SS:DD" }]}>
+            <Input style={{ width: 80 }} placeholder="08:30" />
+          </Form.Item>
+          <Form.Item label="Mesai bitişi" name="bitis" rules={[{ pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: "SS:DD" }]}>
+            <Input style={{ width: 80 }} placeholder="18:00" />
+          </Form.Item>
+          <Button htmlType="submit" loading={mesaiKaydet.isPending}>
+            Mesai penceresini kaydet
+          </Button>
+        </Form>
       )}
       {duzenleyebilir && (
         <Button type="primary" icon={<PlusOutlined />} onClick={() => ac()} style={{ marginBottom: 12 }}>
@@ -384,7 +419,7 @@ function SlaPolitikalari() {
             align: "right",
             render: (v: number | null) => v ?? "—",
           },
-          { title: "Takvim", dataIndex: "takvim_turu", render: (t: string) => (t === "7_24" ? "7/24" : t) },
+          { title: "Takvim (varsayılan)", dataIndex: "takvim_turu", render: takvimAdi },
           {
             title: "Durum",
             dataIndex: "is_active",
@@ -425,7 +460,7 @@ function SlaPolitikalari() {
               birim: v.birim ?? null,
               cozum_saat: v.cozum_saat,
               mudahale_saat: v.mudahale_saat ?? null,
-              takvim_turu: "7_24",
+              takvim_turu: v.takvim_turu ?? "7_24",
               is_active: v.is_active,
             })
           }
@@ -457,6 +492,18 @@ function SlaPolitikalari() {
           </Form.Item>
           <Form.Item name="mudahale_saat" label="Müdahale hedefi (saat, isteğe bağlı)">
             <InputNumber min={0.25} max={9999} step={1} style={{ width: 160 }} />
+          </Form.Item>
+          <Form.Item
+            name="takvim_turu"
+            label="Takvim"
+            extra="Varsayılandır: müşteri veya lokasyon kartında SLA takvimi seçiliyse o geçerli olur."
+          >
+            <Select
+              options={(s?.takvim_turleri ?? [{ kod: "7_24", ad: "7/24" }]).map((t) => ({
+                value: t.kod,
+                label: t.ad,
+              }))}
+            />
           </Form.Item>
           <Form.Item name="is_active" label="Aktif" valuePropName="checked">
             <Switch disabled={!!pencere.kayit && !pencere.kayit.birim && pencere.kayit.is_active} />

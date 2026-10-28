@@ -201,6 +201,8 @@ VARSAYILAN_ARIZA_NEDENLERI = (
 # --- SLA / operasyon sözlükleri (Dalga 2, E10; plan §1.7) -------------------
 # SLA yalnız GUNLUK_SERVIS kategorisinde ölçülür (`ck_so_pb_sla`); PB'nin vadesi
 # bakım döneminden, atölyenin çevrim süresi atölye kaydından gelir.
+# 7_24 = duvar saati; MESAI = hafta içi mesai penceresi (ayar, tatiller fark etmez;
+# Faz A TS-200, `services/teknik_servis/sla_takvim.py`).
 SLA_TAKVIM_TURLERI = ("7_24", "MESAI")
 # İşte DONDURULAN sonuç (ilk TAMAMLANDI'da yazılır, yeniden açılışta silinmez).
 SLA_SONUCLARI = ("ZAMANINDA", "ASILDI", "OLCULEMEDI")
@@ -240,7 +242,8 @@ SLA_UYARI_KODLARI = (
 )
 SLA_UYARI_ONEMLERI = ("BILGI", "UYARI", "KRITIK")
 # Tohum (migration `bulk_insert`): (oncelik, cozum_saat). Müdahale hedefi
-# tanımsız, takvim 7/24, birim NULL = tüm birimler (KD-23).
+# tanımsız, takvim 7/24 (politika varsayılanı; müşteri/lokasyon ezebilir, Faz A TS-200),
+# birim NULL = tüm birimler.
 VARSAYILAN_SLA_POLITIKALARI = (("KRITIK", 12), ("YUKSEK", 24), ("NORMAL", 72))
 
 # --- E-posta bildirimi (Dalga 3, E10-06 / TS-200) ----------------------------

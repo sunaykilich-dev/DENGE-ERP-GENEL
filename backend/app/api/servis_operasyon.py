@@ -9,7 +9,8 @@ Doldurdu: D2-G. `main.py` kaydı D2-S'tedir.
 - `/operasyon/isler/{so_id}/sla`: `servis.gor` (servis işi detayının SLA kartı).
 - `/operasyon/isler/{so_id}/kapanis-bilgisi`: `servis.kapat` VEYA `servis.tamamla`
   (gecikme nedeni / tekrar arıza teyidi; kapalı işte yalnız `servis.kapat`).
-- `/sla-tanimlari/...`: okuma `servis.gor`, politika yazma `operasyon.yonet`.
+- `/sla-tanimlari/...`: okuma `servis.gor`, politika ve mesai penceresi yazma
+  `operasyon.yonet` (Faz A, TS-200: MESAI takvimi).
 - `/bildirim-tercihlerim` (GET/PUT): `servis.gor`; YALNIZ oturumdaki kişinin
   satırı (yolda kimlik yok → başkasının tercihine erişim yolu yok). TS-200.
 - `/bildirimler/eposta-kutusu`, `/bildirimler/eposta-ayarlari`: `operasyon.yonet`
@@ -54,6 +55,7 @@ from app.models.teknik_servis import (
     GECIKME_NEDENLERI,
     ONCELIKLER,
     SLA_SONUCLARI,
+    SLA_TAKVIM_TURLERI,
     SLA_UYARI_KODLARI,
     TEKRAR_ARIZA_TEYITLERI,
 )
@@ -127,8 +129,10 @@ class KapanisBilgisiIn(BaseModel):
 class PolitikaIn(BaseModel):
     """SLA politikası ekle (`id` yok) / güncelle (`id` + `version`).
 
-    Öncelik ve birim kimliktir, güncellemede değiştirilemez. Takvim türü bu
-    sürümde yalnız 7/24 (KD-23; MESAI → 400).
+    Öncelik ve birim kimliktir, güncellemede değiştirilemez. Takvim türü
+    7/24 ya da MESAI (hafta içi mesai penceresi; Faz A, TS-200). Politikanın
+    takvimi VARSAYILANDIR: müşteri (`accounts.sla_takvim_turu`) ve lokasyon
+    (`addresses.sla_takvim_turu`) değeri onu ezer.
     """
 
     id: int | None = None
@@ -667,10 +671,65 @@ async def eposta_ayarlari_yaz(
 # --- SLA tanımları ------------------------------------------------------------------------
 
 
+class MesaiIn(BaseModel):
+    """MESAI takvimli SLA'nın mesai penceresi (Faz A, TS-200). Günler hafta içidir
+    (karar; tatiller fark etmez). Gönderilmeyen alan değişmez."""
+
+    baslangic: str | None = Field(default=None, max_length=5)
+    bitis: str | None = Field(default=None, max_length=5)
+
+    model_config = {"json_schema_extra": {"examples": [{"baslangic": "08:30", "bitis": "18:00"}]}}
+
+
+@router.put("/sla-tanimlari/mesai", response_model=None)
+async def mesai_yaz(
+    payload: MesaiIn, request: Request, db: DbDep, user: Yonetici
+) -> dict[str, Any]:
+    """Mesai penceresini yazar (`operasyon.yonet`; aynı anahtarlar Parametreler'de de var).
+
+    Açık işlerin damgalı hedef anı DEĞİŞMEZ; yeni açılan işler, bekleme kaymaları
+    ve "riskte" oranı yeni pencereyle hesaplanır. Bitiş ≤ başlangıç → 400.
+    """
+    istenen = {
+        anahtar: deger
+        for anahtar, deger in (
+            ("servis_mesai_baslangic", payload.baslangic),
+            ("servis_mesai_bitis", payload.bitis),
+        )
+        if deger is not None
+    }
+    if not istenen:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Değiştirilecek ayar yok")
+    onceki = {a: await ayarlar.get(db, a) for a in istenen}
+    degisen = {a: v for a, v in istenen.items() if onceki[a] != v}
+    if degisen:
+        try:
+            await ayarlar.set_many(db, degisen, user.id)
+        except KeyError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        await audit.log(
+            db,
+            "settings",
+            "sla.mesai.degistir",
+            old_value={a: onceki[a] for a in degisen},
+            new_value=degisen,
+            user_id=user.id,
+            ip=client_ip(request),
+        )
+        await db.commit()
+    mesai = await sla.mesai_takvimi(db)
+    return {
+        "baslangic": await ayarlar.get(db, "servis_mesai_baslangic"),
+        "bitis": await ayarlar.get(db, "servis_mesai_bitis"),
+        "metin": mesai.metin(),
+    }
+
+
 @router.get("/sla-tanimlari/sozluk", response_model=None)
 async def sozluk(db: DbDep, user: Okuyucu) -> dict[str, Any]:
     """Ekran sözlükleri ve SLA ayarlarının özeti (tek kaynak: model tuple'ları)."""
     yururluk = await sla.yururluk_ani(db)
+    mesai = await sla.mesai_takvimi(db)
     return {
         "sla_durumlari": [{"kod": k, "ad": v} for k, v in sla.SLA_DURUM_ADLARI.items()],
         "mudahale_durumlari": [{"kod": k, "ad": v} for k, v in sla.MUDAHALE_DURUM_ADLARI.items()],
@@ -684,6 +743,13 @@ async def sozluk(db: DbDep, user: Okuyucu) -> dict[str, Any]:
         "yururluk_at": yururluk,
         "sla_yururlukte": yururluk is not None,
         "risk_yuzde": await sla.risk_yuzdesi(db),
+        # Faz A (TS-200): takvim türleri ve MESAI penceresi (ayar; tatiller fark etmez).
+        "takvim_turleri": [{"kod": k, "ad": sla.takvim_adi(k, mesai)} for k in SLA_TAKVIM_TURLERI],
+        "mesai": {
+            "baslangic": await ayarlar.get(db, "servis_mesai_baslangic"),
+            "bitis": await ayarlar.get(db, "servis_mesai_bitis"),
+            "metin": mesai.metin(),
+        },
         "tekrar_ariza_gun": int(await ayarlar.get(db, "servis_tekrar_ariza_gun") or 30),
         "operasyon_sayaclari": list(operasyon.OPERASYON_SAYACLARI),
     }
@@ -706,11 +772,6 @@ async def politika_kaydet(
 ) -> dict[str, Any]:
     """Politika ekle/güncelle. Değişiklik AÇIK işlerin hedefini DEĞİŞTİRMEZ (hedef işe
     damgalıdır); yalnız sonra açılan / önceliği düzeltilen işleri etkiler."""
-    if payload.takvim_turu != "7_24":
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Mesai takvimli SLA bu sürümde desteklenmiyor; takvim 7/24 olmalı",
-        )
     birim = (payload.birim or "").strip().upper() or None
     if birim is not None and birim not in BIRIMLER:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {payload.birim}")

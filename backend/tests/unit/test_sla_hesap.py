@@ -15,7 +15,6 @@ from app.models.teknik_servis import (
     TEKRAR_ARIZA_TEYITLERI,
 )
 from app.services.teknik_servis import sla, sla_takvim
-from app.services.teknik_servis.kancalar import ServisHatasi
 
 AN = datetime(2026, 10, 20, 9, 0, tzinfo=UTC)
 
@@ -46,12 +45,14 @@ def test_takvim_7_24_ekle_ve_dakika() -> None:
         sla_takvim.is_saati_ekle(datetime(2026, 1, 1), 10)  # saat dilimsiz
 
 
-def test_mesai_takvimi_bu_dalgada_yok() -> None:
-    """KD-23: MESAI sessizce 7/24 sayılmaz → 409 (ServisHatasi)."""
-    with pytest.raises(ServisHatasi):
-        sla_takvim.is_saati_ekle(AN, 60, "MESAI")
-    with pytest.raises(ServisHatasi):
-        sla_takvim.takvim_dakika(AN, AN + timedelta(hours=1), "MESAI")
+def test_bilinmeyen_takvim_reddedilir() -> None:
+    """MESAI artık desteklenir (Faz A, TS-200; ayrıntı `test_sla_takvim_mesai.py`);
+    sözlük dışı tür sessizce 7/24 sayılmaz."""
+    assert sla_takvim.is_saati_ekle(AN, 60, "MESAI") == AN + timedelta(hours=1)  # Sal 12:00
+    with pytest.raises(ValueError):
+        sla_takvim.is_saati_ekle(AN, 60, "5_8")
+    with pytest.raises(ValueError):
+        sla_takvim.takvim_dakika(AN, AN + timedelta(hours=1), "5_8")
 
 
 @pytest.mark.parametrize(

@@ -167,13 +167,14 @@ async def test_politika_tanim_kurallari(client, db, mudur, kullanici_ac) -> None
             ServiceSlaPolicy.oncelik == "NORMAL", ServiceSlaPolicy.birim.is_(None)
         )
     )
-    # Mesai takvimi bu dalgada yok → 400; ikinci aktif genel politika → 409;
-    # genel politikayı pasifleştirmek → 409; eski sürüm → 409.
+    # MESAI artık geçerli (Faz A, TS-200): 400 değil, çakışma kuralına takılır (409);
+    # ikinci aktif genel politika → 409; genel politikayı pasifleştirmek → 409;
+    # eski sürüm → 409.
     r = await client.put(
         f"{TS}/sla-tanimlari/politikalar",
         json={"oncelik": "NORMAL", "cozum_saat": "5", "takvim_turu": "MESAI"},
     )
-    assert r.status_code == 400
+    assert r.status_code == 409
     r = await client.put(
         f"{TS}/sla-tanimlari/politikalar", json={"oncelik": "NORMAL", "cozum_saat": "5"}
     )

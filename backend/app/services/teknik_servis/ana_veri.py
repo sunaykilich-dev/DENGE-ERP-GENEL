@@ -870,7 +870,14 @@ async def servis_karti(
     from app.services.teknik_servis import is_emirleri, kapsam
     from app.services.teknik_servis.yerel_zaman import yerel_bugun
 
-    sonuc: dict[str, Any] = {"hesap_id": hesap.id, "unvan": hesap.title}
+    sonuc: dict[str, Any] = {
+        "hesap_id": hesap.id,
+        "unvan": hesap.title,
+        # Faz A (TS-200): müşteri sözleşmesinin SLA takvimi + iyimser kilit sürümü
+        # (`PATCH /musteriler/{id}` ile yazılır; null = SLA politikasının takvimi).
+        "sla_takvim_turu": hesap.sla_takvim_turu,
+        "version": hesap.version,
+    }
 
     acik_f = is_emirleri.ListeFiltresi(musteri_id=hesap.id, durum_grubu="ACIK")
     acik_stmt = is_emirleri.liste_sorgusu(user, acik_f, clock).order_by(None)
@@ -896,6 +903,7 @@ async def servis_karti(
             "il": a.city,
             "aktif": a.is_active,
             "acik_is": int(lokasyon_acik.get(a.id, 0)),
+            "sla_takvim_turu": a.sla_takvim_turu,
         }
         for a in tesisler
     ]

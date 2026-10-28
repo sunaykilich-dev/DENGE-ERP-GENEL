@@ -37,8 +37,19 @@ from app.models.mixins import (
     TimestampMixin,
     VersionedMixin,
 )
+from app.models.teknik_servis import SLA_TAKVIM_TURLERI
 from app.services import normalize as _normalize
 from app.services.normalize import tr_normkey
+
+
+def _sla_takvim_check(tablo: str) -> CheckConstraint:
+    """Faz A (TS-200): NULL = üst düzeyden (hesap → SLA politikası) devral."""
+    degerler = ", ".join(f"'{t}'" for t in SLA_TAKVIM_TURLERI)
+    return CheckConstraint(
+        f"sla_takvim_turu IS NULL OR sla_takvim_turu IN ({degerler})",
+        name=f"ck_{tablo}_sla_takvim",
+    )
+
 
 # Belge tipi — hak edişte kesintileri belirler (brief §4.7 madde 6).
 BELGE_TIPLERI = ("FATURA", "SERBEST_MESLEK_MAKBUZU", "GIDER_PUSULASI", "BELIRSIZ")
@@ -78,6 +89,7 @@ class Account(
             "merged_into_id IS NULL OR is_deleted", name="ck_accounts_birlesen_silinmis"
         ),
         CheckConstraint("merged_into_id <> id", name="ck_accounts_kendine_birlesemez"),
+        _sla_takvim_check("accounts"),
     )
 
     title: Mapped[str] = mapped_column(String(200))
@@ -133,6 +145,13 @@ class Account(
     merged_into_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("accounts.id", ondelete="SET NULL", name="fk_accounts_birlesti")
     )
+    # --- SLA takvimi (Faz A, TS-200, M5.1/M5.4) --------------------------------
+    # Müşteri sözleşmesinin SLA sayımı: '7_24' ya da 'MESAI' (hafta içi
+    # 08:30–18:00). NULL = SLA politikasının takvimi. Lokasyon (tesis) kendi
+    # değeriyle bunu ezer (M12.2); iş açılışta sonucu DONDURUR
+    # (`service_orders.sla_takvim_turu`, `sla.takvim_turu_bul`). Sözleşme
+    # düzeyi hesaptır: bakım sözleşmesi PB içindir, PB ise SLA dışıdır.
+    sla_takvim_turu: Mapped[str | None] = mapped_column(String(10))
 
     parent_dealer: Mapped["Account | None"] = relationship(
         remote_side="Account.id", foreign_keys=[parent_dealer_id]
@@ -251,6 +270,7 @@ class Address(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin, SourceM
             postgresql_where=text("kind = 'TESIS' AND is_active"),
         ),
         UniqueConstraint("source_system", "source_ref", name="uq_addresses_kaynak"),
+        _sla_takvim_check("addresses"),
     )
 
     account_id: Mapped[int] = mapped_column(
@@ -287,6 +307,8 @@ class Address(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin, SourceM
     is_verified: Mapped[bool] = mapped_column(
         Boolean, server_default=text("true"), default=True, nullable=False
     )
+    # Lokasyona özel SLA takvimi (M12.2): NULL = hesabın / politikanın takvimi.
+    sla_takvim_turu: Mapped[str | None] = mapped_column(String(10))
 
 
 TAKMA_AD_KAYNAKLARI = ("ELLE", "ESLESTIRME", "BIRLESTIRME", "GOC")

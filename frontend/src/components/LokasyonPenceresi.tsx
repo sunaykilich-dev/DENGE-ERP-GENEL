@@ -23,6 +23,7 @@ import {
   anaVeriApi,
   AnaVeriHatasi,
   type Irtibat,
+  SLA_TAKVIM_SECENEKLERI,
 } from "../api/anaVeri";
 import { useAuth } from "../auth/AuthContext";
 
@@ -78,6 +79,7 @@ export default function LokasyonPenceresi({
         city: l.city,
         access_note: l.access_note,
         primary_contact_id: l.primary_contact_id,
+        sla_takvim_turu: l.sla_takvim_turu ?? undefined,
       });
     }
   }, [acik, yeni, l, form]);
@@ -214,6 +216,7 @@ export default function LokasyonPenceresi({
             city: v.city || null,
             access_note: v.access_note || null,
             primary_contact_id: v.primary_contact_id ?? null,
+            sla_takvim_turu: v.sla_takvim_turu ?? null,
           };
           if (yeni) govde.kind = v.kind;
           kaydet.mutate(govde);
@@ -266,6 +269,15 @@ export default function LokasyonPenceresi({
         >
           <Input.TextArea rows={2} />
         </Form.Item>
+        {tur === "TESIS" && (
+          <Form.Item
+            name="sla_takvim_turu"
+            label="SLA takvimi"
+            extra="Boşsa müşterinin (yoksa SLA politikasının) takvimi geçerli. Değişiklik yalnız yeni açılan işlere uygulanır."
+          >
+            <Select allowClear placeholder="Müşteriden devral" options={SLA_TAKVIM_SECENEKLERI} />
+          </Form.Item>
+        )}
         {!yeni && (
           <Form.Item name="primary_contact_id" label="Birincil irtibat">
             <Select
