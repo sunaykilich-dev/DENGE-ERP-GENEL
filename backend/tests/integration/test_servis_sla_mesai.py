@@ -79,6 +79,22 @@ async def mudur(client, db, kullanici_ac):
 
 
 async def is_ac(client, hesap_id: int, **kw) -> int:
+    if "address_id" not in kw:
+        # M1.2 (Faz A): lokasyon zorunlu; takvimi boş bir tesis öncelik zincirini değiştirmez.
+        r = await client.post(
+            "/api/lokasyonlar",
+            json={
+                "hesap_id": hesap_id,
+                "kind": "TESIS",
+                "site_name": "Varsayılan Tesis",
+                "city": "İzmir",
+            },
+        )
+        if r.status_code == 409:  # aynı hesapta ikinci iş: var olan tesis
+            kw["address_id"] = r.json()["detail"]["mevcut"]["id"]
+        else:
+            assert r.status_code == 201, r.text
+            kw["address_id"] = r.json()["id"]
     r = await client.post(f"{TS}/isler", json=acilis(hesap_id, **kw))
     assert r.status_code == 201, r.text
     return r.json()["id"]

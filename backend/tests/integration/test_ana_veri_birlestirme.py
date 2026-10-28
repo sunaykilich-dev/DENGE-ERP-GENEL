@@ -282,6 +282,9 @@ async def test_kapsam_bilgisi_tutar_yok_tarihsiz_bilinmiyor(
 
 async def test_acilista_kapsam_damgasi_bir_kez(yonetici, db) -> None:
     h = await _hesap(db, "Damga Müşterisi")
+    tesis = Address(account_id=h.id, kind="TESIS", label="Tesis", site_name="Damga Tesisi")
+    db.add(tesis)
+    await db.commit()
     r = await yonetici.post(
         "/api/teknik-servis/isler",
         json={
@@ -291,6 +294,8 @@ async def test_acilista_kapsam_damgasi_bir_kez(yonetici, db) -> None:
             "customer_id": h.id,
             "talep_kanali": "TELEFON",
             "iletisim_ad": "Saha Yetkilisi",
+            "iletisim_telefon": "+905321112233",
+            "address_id": tesis.id,
         },
     )
     assert r.status_code in (200, 201), r.text

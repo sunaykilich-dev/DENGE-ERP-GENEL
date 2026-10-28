@@ -139,11 +139,9 @@ _DALGA4_EKLERI = {
     "erisim_girissiz_gun",
     "servis_rapor_excel_azami_satir",
 }
-# Faz A (KARARLAR 2026-10-28 G3.8): ofis ağı CIDR listesi (boş = kısıt yok).
-_FAZ_A_EKLERI = {"ofis_ag_listesi"}
-
-# Faz A (TS-200, M5.1/M5.4): MESAI takvimli SLA'nın mesai penceresi.
-_FAZ_A_EKLERI = {"servis_mesai_baslangic", "servis_mesai_bitis"}
+# Faz A: ofis ağı CIDR listesi (KARARLAR 2026-10-28 G3.8, boş = kısıt yok) ve
+# MESAI takvimli SLA'nın mesai penceresi (TS-200, M5.1/M5.4).
+_FAZ_A_EKLERI = {"ofis_ag_listesi", "servis_mesai_baslangic", "servis_mesai_bitis"}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
