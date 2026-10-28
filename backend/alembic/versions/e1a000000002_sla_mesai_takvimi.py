@@ -28,7 +28,7 @@ fonksiyonu düşürür; MESAI damgalı açık işlerin hedefi işte durduğu iç
 bozulmaz, ancak politika MESAI ise eski kod 409 verir (eski davranış).
 
 Revision ID: e1a000000002
-Revises: d4a000000002
+Revises: e1a000000001
 Create Date: 2026-10-28
 
 """
@@ -40,7 +40,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "e1a000000002"
-down_revision: str | None = "d4a000000002"
+down_revision: str | None = "e1a000000001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
