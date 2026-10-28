@@ -10,8 +10,11 @@ seri takipli kiralık cihaz yalnız `SERI_NO` kimlik tipindedir, bileşik FK
 **Müşteri = hesap, lokasyon = adres** (plan §1.5); ürün = `products`; depo =
 `warehouses(kiralama_deposu=true)`. Kalem ≠ tahsis: kalem "kaç adet istendi",
 tahsis "hangi depodan hangi cihaz / kaç adet, hangi tarihlerde" (E06-04).
-Aynı seri cihaz çakışan tarihlerde iki AKTİF tahsiste olamaz
-(`ex_rtahsis_cihaz_cakisma`, `daterange '[)'`).
+Aynı seri cihazın çakışan tarihlerde ikinci AKTİF tahsisi M10.1 (KARARLAR
+2026-10-28) ile engel değil UYARIDIR: servis 409 + çakışma listesi döner,
+gerekçeli onayla kaydedilir. Eski `ex_rtahsis_cihaz_cakisma` kısıtı
+`e1a000000003` ile kalktı; çakışma sorgusu aynı ifadeli GiST indeksini
+(`ix_rtahsis_cihaz_aralik`, `daterange '[)'`) kullanır.
 
 **Toplu bakiye saklanmaz**, hareket defterinden hesaplanır
 (`rental_inventory_movements`, ekleme-yalnız; `trg_rhareket_degismez`).
@@ -44,7 +47,7 @@ from sqlalchemy import (
     literal_column,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, ExcludeConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -311,12 +314,14 @@ class RentalAllocation(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin
         ),
         CheckConstraint(_in("durum", TAHSIS_DURUMLARI), name="ck_rtahsis_durum"),
         CheckConstraint("bitis > baslangic", name="ck_rtahsis_tarih"),
-        ExcludeConstraint(
-            ("asset_id", "="),
-            (_TAHSIS_ARALIGI, "&&"),
-            name="ex_rtahsis_cihaz_cakisma",
-            using="gist",
-            where=text("asset_id IS NOT NULL AND durum = 'AKTIF'"),
+        # M10.1: çifte rezervasyon uyarı + gerekçe ile serbest; EXCLUDE kısıtı
+        # yerine çakışma sorgusuna hizmet eden aynı ifadeli GiST indeksi.
+        Index(
+            "ix_rtahsis_cihaz_aralik",
+            "asset_id",
+            _TAHSIS_ARALIGI,
+            postgresql_using="gist",
+            postgresql_where=text("asset_id IS NOT NULL AND durum = 'AKTIF'"),
         ),
         Index("ix_rtahsis_urun_depo", "product_id", "from_warehouse_id", "durum"),
         Index("ix_rtahsis_kiralama", "rental_id"),

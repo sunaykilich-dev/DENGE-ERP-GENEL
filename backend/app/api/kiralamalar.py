@@ -84,6 +84,10 @@ _KILIT_MESAJI = (
 
 def _hata(exc: Exception) -> HTTPException:
     """Servis hatasını HTTP'ye çevirir: 400 girdi, 403 katalog, 404 kapsam/yok, 409 kural."""
+    if isinstance(exc, tahsis_svc.CakismaUyarisi):
+        # M10.1: yapılandırılmış uyarı — arayüz çakışan kiralamaları listeler,
+        # gerekçe ister ve `cakisma_onay` + `cakisma_gerekcesi` ile yeniden yollar.
+        return HTTPException(status.HTTP_409_CONFLICT, {"mesaj": exc.mesaj, **exc.veri})
     if isinstance(exc, KiralamaHatasi):
         return HTTPException(_HATA_KODU.get(exc.kod, 409), exc.mesaj)
     if isinstance(exc, ServisGirdiHatasi):
@@ -92,6 +96,56 @@ def _hata(exc: Exception) -> HTTPException:
 
 
 _HATALAR = (KiralamaHatasi, IzinsizGecis, ServisHatasi, ServisGirdiHatasi)
+
+
+class CakismaOnayiIn(BaseModel):
+    """M10.1 (KARARLAR 2026-10-28 §7 Faz A/4): seri cihazın tarih çakışması
+    (çifte rezervasyon) engel değil UYARIDIR. İlk istek 409 +
+    `kod=KIRALAMA_CAKISMA` + `cakismalar` alır; kullanıcı `cakisma_onay=true`
+    ve boş olmayan `cakisma_gerekcesi` ile yeniden yollarsa kayıt yapılır ve
+    gerekçe denetim izine (`kiralama.cakisma_onay`) yazılır."""
+
+    cakisma_onay: bool = False
+    cakisma_gerekcesi: str | None = Field(default=None, max_length=500)
+
+
+def _cakisma_onayi(payload: CakismaOnayiIn) -> tahsis_svc.CakismaOnayi | None:
+    if not payload.cakisma_onay:
+        return None
+    gerekce = (payload.cakisma_gerekcesi or "").strip()
+    if not gerekce:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Çakışmayı onaylamak için gerekçe yazılmalı"
+        )
+    return tahsis_svc.CakismaOnayi(gerekce=gerekce)
+
+
+async def _cakisma_denetimi(
+    db: AsyncSession,
+    k: Rental,
+    onay: tahsis_svc.CakismaOnayi | None,
+    *,
+    islem: str,
+    user: User,
+    request: Request,
+) -> None:
+    """Gerçekten geçilen çakışma varsa gerekçesiyle denetim izine (commit'ten önce)."""
+    if onay is None or not onay.gecilenler:
+        return
+    await audit.log(
+        db,
+        svc.ENTITY,
+        "kiralama.cakisma_onay",
+        entity_id=k.id,
+        new_value={
+            "islem": islem,
+            "kiralama_no": k.rental_no,
+            "gerekce": onay.gerekce,
+            "cakismalar": onay.gecilenler,
+        },
+        user_id=user.id,
+        ip=client_ip(request),
+    )
 
 
 # --- Şemalar ------------------------------------------------------------------------
@@ -143,8 +197,9 @@ class KiralamaIn(BaseModel):
     }
 
 
-class KiralamaPut(BaseModel):
-    """Başlık + kalem + irtibat tek işlem. `status/durum/birim` doluysa 400."""
+class KiralamaPut(CakismaOnayiIn):
+    """Başlık + kalem + irtibat tek işlem. `status/durum/birim` doluysa 400.
+    Tarih değişikliği seri cihazı başka kiralamayla çakıştırırsa M10.1 uyarısı."""
 
     version: int
     customer_id: int | None = None
@@ -172,7 +227,7 @@ class TahsisSatirIn(BaseModel):
     adet: int | None = None
 
 
-class TahsisIn(BaseModel):
+class TahsisIn(CakismaOnayiIn):
     satirlar: list[TahsisSatirIn] = Field(min_length=1, max_length=200)
 
     model_config = {
@@ -527,9 +582,9 @@ class KatalogOut(BaseModel):
     version: int
 
 
-class DegisimIn(BaseModel):
+class DegisimIn(CakismaOnayiIn):
     """Sahada cihaz değişimi (E06-20): eski tahsis → yeni seri cihaz; eski cihaz
-    iade deposuna KONTROLDE döner."""
+    iade deposuna KONTROLDE döner. Yeni cihaz tarih çakışırsa M10.1 uyarısı."""
 
     eski_tahsis_id: int
     yeni_kiralik_id: int
@@ -1837,15 +1892,21 @@ async def guncelle(
     k = await _kiralama(db, user, kiralama_id, kilit=True)
     if payload.version != k.version:
         raise HTTPException(status.HTTP_409_CONFLICT, _KILIT_MESAJI)
-    alanlar = payload.model_dump(exclude_unset=True, exclude={"version"})
+    onay = _cakisma_onayi(payload)
+    alanlar = payload.model_dump(
+        exclude_unset=True, exclude={"version", "cakisma_onay", "cakisma_gerekcesi"}
+    )
     if payload.kalemler is not None:
         alanlar["kalemler"] = [_kalem_girdisi(x) for x in payload.kalemler]
     if payload.irtibatlar is not None:
         alanlar["irtibatlar"] = [_irtibat_girdisi(x) for x in payload.irtibatlar]
     try:
-        await svc.guncelle(db, k, alanlar, user=user, clock=clock, ip=client_ip(request))
+        await svc.guncelle(
+            db, k, alanlar, user=user, clock=clock, ip=client_ip(request), cakisma_onayi=onay
+        )
     except _HATALAR as exc:
         raise _hata(exc) from exc
+    await _cakisma_denetimi(db, k, onay, islem="tarih", user=user, request=request)
     await db.commit()
     return await _kart_yanit(db, k, user, clock)
 
@@ -1868,14 +1929,24 @@ async def planla(kiralama_id: int, db: DbDep, clock: ClockDep, user: Yazici) -> 
 
 @router.post("/{kiralama_id}/tahsis", response_model=KiralamaKarti)
 async def tahsis(
-    kiralama_id: int, payload: TahsisIn, db: DbDep, clock: ClockDep, user: Envanterci
+    kiralama_id: int,
+    payload: TahsisIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Envanterci,
 ) -> KiralamaKarti:
-    """Kalem → depo/cihaz tahsisi; kalem toplamı aşılamaz, çift tahsis 409."""
+    """Kalem → depo/cihaz tahsisi; kalem toplamı aşılamaz. Seri cihazın başka
+    kiralamayla tarih çakışması 409 UYARI (M10.1): onay + gerekçeyle geçilir."""
     k = await _kiralama(db, user, kiralama_id, kilit=True)
+    onay = _cakisma_onayi(payload)
     satirlar = [tahsis_svc.TahsisSatiri(**s.model_dump()) for s in payload.satirlar]
-    return await _islem(
-        db, k, user, clock, lambda: tahsis_svc.tahsis_et(db, k, satirlar, user=user, clock=clock)
-    )
+
+    async def _tahsis() -> None:
+        await tahsis_svc.tahsis_et(db, k, satirlar, user=user, clock=clock, cakisma_onayi=onay)
+        await _cakisma_denetimi(db, k, onay, islem="tahsis", user=user, request=request)
+
+    return await _islem(db, k, user, clock, _tahsis)
 
 
 @router.post("/{kiralama_id}/tahsis/{tahsis_id}/coz", response_model=KiralamaKarti)
@@ -1916,17 +1987,21 @@ async def sevk(
 
 @router.post("/{kiralama_id}/degisim", response_model=KiralamaKarti)
 async def degisim(
-    kiralama_id: int, payload: DegisimIn, db: DbDep, clock: ClockDep, user: Asamaci
+    kiralama_id: int,
+    payload: DegisimIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Asamaci,
 ) -> KiralamaKarti:
     """Sahada seri cihaz değişimi: yeni tahsis + sevk + eski cihazın iadesi (tek işlem).
-    Başka kiralamaya tarih çakışan ya da hazır olmayan yeni cihaz 409."""
+    Hazır olmayan yeni cihaz 409; başka kiralamaya tarih çakışırsa 409 UYARI
+    (M10.1, onay + gerekçeyle geçilir)."""
     k = await _kiralama(db, user, kiralama_id, kilit=True)
-    return await _islem(
-        db,
-        k,
-        user,
-        clock,
-        lambda: tahsis_svc.degisim(
+    onay = _cakisma_onayi(payload)
+
+    async def _degisim() -> None:
+        await tahsis_svc.degisim(
             db,
             k,
             eski_tahsis_id=payload.eski_tahsis_id,
@@ -1935,8 +2010,11 @@ async def degisim(
             user=user,
             clock=clock,
             note=payload.not_,
-        ),
-    )
+            cakisma_onayi=onay,
+        )
+        await _cakisma_denetimi(db, k, onay, islem="degisim", user=user, request=request)
+
+    return await _islem(db, k, user, clock, _degisim)
 
 
 @router.post("/{kiralama_id}/asama", response_model=KiralamaKarti)

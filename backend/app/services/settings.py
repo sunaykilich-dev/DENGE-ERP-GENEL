@@ -13,6 +13,7 @@ kullanılan oran satırın içine dondurulur (plan §3.3/2), böylece oran sonra
 değişse bile geçmiş dökümler değişmez.
 """
 
+import ipaddress
 import re
 from datetime import datetime
 from typing import Any
@@ -161,6 +162,13 @@ DEFAULTS: dict[str, Any] = {
     # sabitidir (`panel.RAPOR_AZAMI_AY`, E12-08): eşzamanlı süzgeç doğrulaması
     # ayar okuyamaz ve sınırın gevşetilmesi sorgu maliyetini büyütür.
     "servis_rapor_excel_azami_satir": 50_000,
+    # --- Erişim yeri (G3.8, KARARLAR 2026-10-28 §7 Faz A/8) -------------------
+    # Ofis ağı CIDR listesi (ör. ["10.10.0.0/16", "88.255.1.20/32"]). `yalniz_ofis`
+    # işaretli roller (varsayılan muhasebe) yalnız bu ağlardan girer ve istek
+    # atar. BOŞ = kısıt yok (kurulum günü kimse kilitlenmesin). İstemci IP'si
+    # uvicorn'un `--proxy-headers --forwarded-allow-ips` ayarıyla çözülür;
+    # uygulama X-Forwarded-For'a kendisi bakmaz (güvenilmeyen başlık).
+    "ofis_ag_listesi": [],
     # --- Eğitim ---------------------------------------------------------------
     "egitim_gozlem_basari_esigi_yuzde": 85,
     "egitim_rozet_sari_esigi_yuzde": 65,
@@ -184,6 +192,8 @@ DEFAULTS: dict[str, Any] = {
 #   "liste" → metin listesi; `alt` izinli değerler kümesi (None: serbest)
 #   "saat"  → "SS:DD" metni
 #   "zaman" → ISO 8601 saat dilimli zaman ya da None/boş (kapalı)
+#   "cidr_liste" → IPv4/IPv6 ağ listesi ("10.0.0.0/8", tek adres "1.2.3.4");
+#                  kanonik biçime çevrilir, tekrarlar atılır
 # Süre sınırları (15–1440 dk plan, 18 saat zaman bölümü, 62 gün takvim)
 # ayar değil kod sabitidir; burada yer almaz.
 AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
@@ -232,6 +242,7 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "ek_icerik_denetimi_canli_turler": ("bool", None, None),
     "erisim_girissiz_gun": ("tam", 7, 365),
     "servis_rapor_excel_azami_satir": ("tam", 1_000, 100_000),
+    "ofis_ag_listesi": ("cidr_liste", None, None),
     "egitim_gozlem_basari_esigi_yuzde": ("tam", 1, 100),
     "egitim_rozet_sari_esigi_yuzde": ("tam", 1, 100),
     "egitim_duzeltici_termin_gun": ("tam", 1, 365),
@@ -305,6 +316,16 @@ def ayar_dogrula(key: str, value: Any) -> Any:
             # 3 saat kayardı.
             raise AyarHatasi(f"{key}: saat dilimi belirtilmeli (ör. +03:00)")
         return an.isoformat()
+    if tip == "cidr_liste":
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise AyarHatasi(f"{key}: ağ (CIDR) listesi olmalı")
+        aglar: list[str] = []
+        for v in value:
+            try:
+                aglar.append(str(ipaddress.ip_network(v.strip(), strict=False)))
+            except ValueError as exc:
+                raise AyarHatasi(f"{key}: geçersiz ağ '{v}' (ör. 10.10.0.0/16)") from exc
+        return list(dict.fromkeys(aglar))
     raise AyarHatasi(f"{key}: tanımsız ayar tipi {tip}")  # pragma: no cover - tablo hatası
 
 

@@ -1,4 +1,8 @@
-"""Adet bazlı kısmi tahsis, eşzamanlılık, seri cihaz çift tahsis engeli (TS-112, E06-04)."""
+"""Adet bazlı kısmi tahsis, eşzamanlılık, seri cihaz çift tahsis (TS-112, E06-04).
+
+Seri cihazın başka kiralamayla tarih çakışması M10.1 ile uyarıdır; ayrıntı
+`test_kiralama_cakisma_uyarisi.py`.
+"""
 
 import asyncio
 from datetime import date
@@ -182,23 +186,9 @@ async def test_seri_cihaz_cift_tahsis_engeli(ist, db) -> None:
     with pytest.raises(IntegrityError):
         await db.commit()
     await db.rollback()
-    # EXCLUDE: aynı cihaza çakışan ikinci AKTİF tahsis DB'de de reddedilir.
-    db.add(
-        RentalAllocation(
-            rental_id=k4["id"],
-            rental_item_id=k4_kalem,
-            product_id=urun_id,
-            asset_id=cihaz,
-            from_warehouse_id=depo_id,
-            qty=1,
-            baslangic=date(2026, 11, 2),
-            bitis=date(2026, 11, 3),
-        )
-    )
-    with pytest.raises(IntegrityError) as hata:
-        await db.commit()
-    assert "ex_rtahsis_cihaz_cakisma" in str(hata.value)
-    await db.rollback()
+    # M10.1 (KARARLAR 2026-10-28): çakışan ikinci AKTİF tahsis artık DB'de
+    # engellenmez (EXCLUDE kaldırıldı); kural servis katmanında uyarı +
+    # gerekçe (`test_kiralama_cakisma_uyarisi.py`).
 
 
 async def test_tahsis_coz(ist, db) -> None:

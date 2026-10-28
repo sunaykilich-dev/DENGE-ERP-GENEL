@@ -14,6 +14,7 @@ from app.permissions import (
     SCOPES,
     SERVIS_ROLLERI,
     VEKALETE_KAPALI,
+    YALNIZ_OFIS_ROLLERI,
     YUKSEK_YETKILI_IZINLER,
     permissions_of,
 )
@@ -211,3 +212,47 @@ def test_rol_onizleme_sayfalari_katalogdaki_izinlere_bagli():
     adlar = {ad for ad, _ in _SAYFA_IZINLERI}
     assert {"Servis Paneli", "Servis İşleri", "Benim İşlerim", "Personel"} <= adlar
     assert set(_KAPSAM_ACIKLAMA) == set(SCOPES)
+
+
+# --------------------------------------------------------------------------
+# KARARLAR 2026-10-28 §7 Faz A — onaylanan rol kararları
+# --------------------------------------------------------------------------
+
+
+def test_atolye_hesap_goremez_m6_4():
+    """M6.4: ATOLYE rolüne `hesap.gor` VERİLMEZ (mevcut durum onaylandı).
+    Müşteri bilgisi atölye kaydında gömülü gelir; izin verilseydi usta canlı
+    Hesaplar ekranında bütün cari listesini görürdü."""
+    assert "hesap.gor" not in permissions_of("ATOLYE")
+
+
+def test_muhasebe_destek_servis_excel_alamaz_m13_4():
+    """M13.4: MUHASEBE_DESTEK rolüne `servis_rapor.disaaktar` VERİLMEZ
+    (mevcut durum onaylandı; G4.15 dışa aktarma ayrı yetki, varsayılan kapalı)."""
+    assert "servis_rapor.disaaktar" not in permissions_of("MUHASEBE_DESTEK")
+
+
+def test_musteri_karti_yalniz_yetkili_rollerde_g10_2():
+    """G10.2: müşteri kartını TS'den açma/düzeltme (`hesap.kart_yaz`) yalnız
+    yöneticilerde. TS saha/operasyon rolleri müşteriyi seçer, kart açmaz.
+    Mobilite kart yetkisi (`hesap.yaz`) değişmedi ve hiçbir servis rolünde yok."""
+    assert {r for r in ROLES if "hesap.kart_yaz" in permissions_of(r)} == {
+        "ADMIN",
+        "SERVIS_YONETICI",
+    }
+    for rol in ("SERVIS_OPERASYON", "SERVIS_TEKNISYEN", "SERVIS_SEF", "ATOLYE"):
+        assert {"hesap.kart_yaz", "hesap.yaz"} & set(permissions_of(rol)) == set(), rol
+    assert {r for r in ROLES if "hesap.yaz" in permissions_of(r)} == {
+        "ADMIN",
+        "SATIS",
+        "SATIS_MUDURU",
+        "MONTAJ_KOORD",
+    }
+
+
+def test_yalniz_ofis_rolleri_g3_8():
+    """G3.8: muhasebe rolü yalnız ofis ağından; saha ve yönetim her yerden."""
+    assert YALNIZ_OFIS_ROLLERI == {"MUHASEBE_DESTEK"}
+    assert YALNIZ_OFIS_ROLLERI <= set(ROLES)
+    assert "ADMIN" not in YALNIZ_OFIS_ROLLERI
+    assert set(SERVIS_ROLLERI) & YALNIZ_OFIS_ROLLERI == set()

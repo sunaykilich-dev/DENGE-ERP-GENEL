@@ -15,6 +15,7 @@ interface Yetki {
   code: string;
   name: string;
   scope: string;
+  yalniz_ofis?: boolean;
   izinler: Izin[];
 }
 
@@ -62,7 +63,11 @@ export default function RolDuzenle({
   useEffect(() => {
     if (!acik) return;
     if (rolKodu && mevcut.data) {
-      form.setFieldsValue({ name: mevcut.data.name, scope: mevcut.data.scope });
+      form.setFieldsValue({
+        name: mevcut.data.name,
+        scope: mevcut.data.scope,
+        yalniz_ofis: mevcut.data.yalniz_ofis ?? false,
+      });
       setSecili(mevcut.data.izinler.map((i) => i.kod));
     } else if (!rolKodu) {
       form.resetFields();
@@ -100,8 +105,14 @@ export default function RolDuzenle({
         form.validateFields().then((v) =>
           kaydet.mutate(
             rolKodu
-              ? { name: v.name, scope: v.scope, izinler: secili }
-              : { code: v.code, name: v.name, scope: v.scope, izinler: secili },
+              ? { name: v.name, scope: v.scope, yalniz_ofis: !!v.yalniz_ofis, izinler: secili }
+              : {
+                  code: v.code,
+                  name: v.name,
+                  scope: v.scope,
+                  yalniz_ofis: !!v.yalniz_ofis,
+                  izinler: secili,
+                },
           ),
         )
       }
@@ -135,6 +146,13 @@ export default function RolDuzenle({
         )}
         <Form.Item name="name" label="Rol adı" rules={[{ required: true }]}>
           <Input placeholder="Bölge Müdürü" />
+        </Form.Item>
+        <Form.Item
+          name="yalniz_ofis"
+          valuePropName="checked"
+          extra="İşaretliyse bu roldeki kullanıcılar yalnız Parametreler'deki ofis ağından girer ve işlem yapar (liste boşsa kısıt yok)."
+        >
+          <Checkbox>Yalnız ofis ağından erişim</Checkbox>
         </Form.Item>
         <Form.Item
           name="scope"

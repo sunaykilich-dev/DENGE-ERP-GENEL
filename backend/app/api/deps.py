@@ -13,6 +13,7 @@ from app.db import get_session
 from app.models import User
 from app.permissions import SCOPE_OWN_CUSTOMERS
 from app.services import auth as auth_service
+from app.services import erisim_yeri
 
 SESSION_COOKIE = "dngerp_session"
 _real_clock = RealClock()
@@ -76,6 +77,15 @@ async def current_user(request: Request, db: DbDep, clock: ClockDep) -> User:
     user = await auth_service.resolve_session(db, token, clock)
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Oturum geçersiz veya süresi dolmuş")
+    # G3.8: ofise bağlı rol dışarıdan istek atamaz (oturum ofiste açılmış olsa da).
+    # Oturum düşürülmez: kullanıcı ofise dönünce aynı oturumla devam eder.
+    # Çıkış her yerden yapılabilir (oturumu kapatmak kısıtı gevşetmez).
+    if request.url.path != "/api/auth/logout" and await erisim_yeri.ofis_disinda_mi(
+        db, user, client_ip(request)
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, {"kod": erisim_yeri.KOD, "mesaj": erisim_yeri.MESAJ}
+        )
     if mfa_kurulumu_gerekli(user) and request.url.path not in MFA_MUAF_YOLLAR:
         # 403 + makine okunur kod: arayüz bunu görünce kurulum ekranına geçer.
         raise HTTPException(

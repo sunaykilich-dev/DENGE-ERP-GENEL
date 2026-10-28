@@ -45,6 +45,21 @@ export function kapsamEtiketi(scope: string | undefined): string {
   return KAPSAM_ETIKETLERI[scope] ?? scope.replaceAll("_", " ").toLocaleLowerCase("tr");
 }
 
+/**
+ * Oturum süresi için istemci ipucu (G3.7, KARARLAR 2026-10-28): dar ekran ya
+ * da mobil tarayıcı "mobil" sayılır (sahada telefon). Süreyi SUNUCU seçer
+ * (mobil 12 sa hareketsizlik / 24 sa mutlak; masaüstü 4 sa / 12 sa).
+ */
+function istemciTuru(): "mobil" | "masaustu" {
+  try {
+    const dar = window.matchMedia?.("(max-width: 767px)").matches ?? false;
+    const mobilUa = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    return dar || mobilUa ? "mobil" : "masaustu";
+  } catch {
+    return "masaustu";
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [kullanici, setKullanici] = useState<Kullanici | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -58,13 +73,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const girisYap = useCallback(async (username: string, password: string) => {
-    const sonuc = await api.post<GirisSonucu>("/api/auth/login", { username, password });
+    const sonuc = await api.post<GirisSonucu>("/api/auth/login", {
+      username,
+      password,
+      istemci: istemciTuru(),
+    });
     if (sonuc.user) setKullanici(sonuc.user);
     return sonuc;
   }, []);
 
   const mfaDogrula = useCallback(async (pending_token: string, code: string) => {
-    const sonuc = await api.post<GirisSonucu>("/api/auth/login/mfa", { pending_token, code });
+    const sonuc = await api.post<GirisSonucu>("/api/auth/login/mfa", {
+      pending_token,
+      code,
+      istemci: istemciTuru(),
+    });
     if (sonuc.user) setKullanici(sonuc.user);
     return sonuc;
   }, []);

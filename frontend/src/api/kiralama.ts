@@ -396,7 +396,30 @@ export interface KiralamaGirdisi {
   irtibatlar: IrtibatGirdisi[];
 }
 
-export type KiralamaGuncelleme = Partial<Omit<KiralamaGirdisi, "birim">> & { version: number };
+/**
+ * M10.1 (KARARLAR 2026-10-28): seri cihazın başka kiralamayla tarih çakışması
+ * engel değil uyarıdır. İlk istek 409 + `kod: "KIRALAMA_CAKISMA"` alır;
+ * kullanıcı gerekçe yazınca istek bu alanlarla yeniden gönderilir.
+ */
+export interface CakismaOnayi {
+  cakisma_onay: true;
+  cakisma_gerekcesi: string;
+}
+
+export interface KiralamaCakismasi {
+  seri_no: string;
+  kiralik_id: number;
+  tahsis_id: number;
+  kiralama_id: number;
+  kiralama_no: string | null;
+  kiralama_durumu: string | null;
+  baslangic: string;
+  bitis: string;
+}
+
+export type KiralamaGuncelleme = Partial<Omit<KiralamaGirdisi, "birim">> & {
+  version: number;
+} & Partial<CakismaOnayi>;
 
 export interface KiralamaSuzgeci {
   q?: string;
@@ -490,8 +513,8 @@ export const kiralamaApi = {
   olustur: (g: KiralamaGirdisi) => api.post<KiralamaKarti>(URL_, g),
   guncelle: (id: number, g: KiralamaGuncelleme) => api.put<KiralamaKarti>(`${URL_}/${id}`, g),
   planla: (id: number) => api.post<KiralamaKarti>(`${URL_}/${id}/planla`),
-  tahsis: (id: number, satirlar: TahsisSatiri[]) =>
-    api.post<KiralamaKarti>(`${URL_}/${id}/tahsis`, { satirlar }),
+  tahsis: (id: number, satirlar: TahsisSatiri[], onay?: CakismaOnayi) =>
+    api.post<KiralamaKarti>(`${URL_}/${id}/tahsis`, { satirlar, ...onay }),
   tahsisCoz: (id: number, tahsisId: number) =>
     api.post<KiralamaKarti>(`${URL_}/${id}/tahsis/${tahsisId}/coz`),
   sevk: (id: number, g: { at?: string | null; satirlar?: { tahsis_id: number; adet?: number }[] | null; not?: string }) =>
@@ -571,8 +594,11 @@ export const kiralamaApi = {
     dosyaGonder<TopluSonuc>(`${URL_}/envanter/toplu/onayla`, dosya, { sha256 }),
 
   // Sahada cihaz değişimi (TS-195, E06-20) — `kiralama.asama`
-  degisim: (id: number, g: { eski_tahsis_id: number; yeni_kiralik_id: number; iade_depo_id: number; not?: string }) =>
-    api.post<KiralamaKarti>(`${URL_}/${id}/degisim`, g),
+  degisim: (
+    id: number,
+    g: { eski_tahsis_id: number; yeni_kiralik_id: number; iade_depo_id: number; not?: string },
+    onay?: CakismaOnayi,
+  ) => api.post<KiralamaKarti>(`${URL_}/${id}/degisim`, { ...g, ...onay }),
 
   // Raporlar (TS-195, E06-21) — `kiralama.gor + servis_rapor.gor`; Excel + `servis_rapor.disaaktar`
   raporDepoDurumu: () => api.get<DepoDurumu>(`${URL_}/raporlar/depo-durumu`),

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Button, Card, Form, Input, InputNumber, Space, Switch } from "antd";
+import { Alert, App, Button, Card, Form, Input, InputNumber, Select, Space, Switch } from "antd";
 import { useEffect } from "react";
 
 import { api, type ApiError } from "../api/client";
@@ -58,6 +58,14 @@ const GRUPLAR: { baslik: string; aciklama?: string; anahtarlar: string[] }[] = [
       "karar insana bırakılır.",
     anahtarlar: ["kvkk_saklama_yili"],
   },
+  {
+    baslik: "Erişim yeri",
+    aciklama:
+      "\"Yalnız ofis ağından\" işaretli roller (varsayılan muhasebe) yalnız bu ağlardan giriş " +
+      "yapar ve işlem yapar; saha rolleri her yerden çalışır. Liste boşsa kısıt uygulanmaz. " +
+      "Ağları CIDR biçiminde girin (ör. 10.10.0.0/16 ya da tek adres 88.255.1.20).",
+    anahtarlar: ["ofis_ag_listesi"],
+  },
 ];
 
 const ETIKET: Record<string, string> = {
@@ -88,6 +96,7 @@ const ETIKET: Record<string, string> = {
   smtp_from: "Gönderen adresi",
   muhasebe_sablonu: "Muhasebe dışa aktarım şablonu",
   kvkk_saklama_yili: "Kişisel veri saklama süresi (yıl)",
+  ofis_ag_listesi: "Ofis ağları (CIDR)",
 };
 
 const GIZLI = new Set([
@@ -139,6 +148,13 @@ export default function SettingsPage() {
           extra="Kayıtlı değer maskelenir; boş bırakmak yerine maskeyi olduğu gibi bırakırsanız değişmez."
         >
           <Input.Password className="mono" />
+        </Form.Item>
+      );
+    }
+    if (Array.isArray(deger)) {
+      return (
+        <Form.Item key={anahtar} name={anahtar} label={ETIKET[anahtar] ?? anahtar}>
+          <Select mode="tags" tokenSeparators={[",", " "]} placeholder="10.10.0.0/16" open={false} />
         </Form.Item>
       );
     }

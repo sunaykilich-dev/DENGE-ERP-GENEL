@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session_factory
 from app.models import Permission, Role, RolePermission, User, UserUnit
-from app.permissions import BIRIM_KAPSAMLARI, PERMISSIONS, ROLES
+from app.permissions import BIRIM_KAPSAMLARI, PERMISSIONS, ROLES, YALNIZ_OFIS_ROLLERI
 from app.services import auth as auth_service
 
 
@@ -63,12 +63,21 @@ async def sync_roles(db: AsyncSession) -> None:
     for code, (name, perms, scope) in ROLES.items():
         role = await db.scalar(select(Role).where(Role.code == code))
         if role is None:
-            role = Role(code=code, name=name, scope=scope, is_system=True)
+            role = Role(
+                code=code,
+                name=name,
+                scope=scope,
+                is_system=True,
+                yalniz_ofis=code in YALNIZ_OFIS_ROLLERI,
+            )
             db.add(role)
             await db.flush()
         elif code == "ADMIN":
             role.name, role.scope = name, scope
             role.ozellestirildi = False
+            # Yönetici her yerden girer: ADMIN'i ofise kilitlemek (yanlış CIDR
+            # girilince) sistemi yönetecek kimseyi bırakmazdı.
+            role.yalniz_ofis = False
         elif role.ozellestirildi:
             # Ad ve kapsam da elle değiştirilmiş olabilir; ikisine de dokunma.
             eksik = set(perms) - {
@@ -86,6 +95,8 @@ async def sync_roles(db: AsyncSession) -> None:
             continue
         else:
             role.name, role.scope = name, scope
+            # G3.8: erişim yeri kısıtı da katalogdan (özelleştirilmiş role dokunulmaz).
+            role.yalniz_ofis = code in YALNIZ_OFIS_ROLLERI
 
         istenen = set(perms)
         # İlişkiye (role.permissions) DOKUNMUYORUZ: yeni eklenmiş bir nesnede

@@ -93,6 +93,8 @@ class RolYetkisi(BaseModel):
     name: str
     scope: str
     scope_aciklama: str
+    # G3.8: rol yalnız ofis ağından kullanılır.
+    yalniz_ofis: bool = False
     sayfalar: list[str]
     izinler: list[IzinSatiri]
     # Kullanıcı görünümünde doldurulur: bu izinlerin hangileri rolden değil,
@@ -239,6 +241,7 @@ def _yetki_gorunumu(rol: Role, kodlar: set[str], istisna: list[str] | None = Non
         name=rol.name,
         scope=rol.scope,
         scope_aciklama=_KAPSAM_ACIKLAMA.get(rol.scope, rol.scope),
+        yalniz_ofis=bool(rol.yalniz_ofis),
         sayfalar=[ad for ad, izin in _SAYFA_IZINLERI if _sayfa_acik(izin, kodlar)],
         izinler=[
             IzinSatiri(kod=k, modul=PERMISSIONS[k][0], aciklama=PERMISSIONS[k][1])
@@ -281,12 +284,15 @@ class RolIn(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     scope: str = SCOPE_ALL
     izinler: list[str] = []
+    # G3.8: rol yalnız ofis ağından (`ofis_ag_listesi`) kullanılır.
+    yalniz_ofis: bool = False
 
 
 class RolPatch(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=80)
     scope: str | None = None
     izinler: list[str] | None = None
+    yalniz_ofis: bool | None = None
 
 
 async def _rol_izinlerini_yaz(db, rol: Role, kodlar: list[str]) -> None:
@@ -360,6 +366,7 @@ async def rol_olustur(payload: RolIn, request: Request, db: DbDep, user: AdminDe
         scope=payload.scope,
         is_system=False,
         ozellestirildi=True,
+        yalniz_ofis=payload.yalniz_ofis,
     )
     db.add(rol)
     await db.flush()
@@ -369,7 +376,12 @@ async def rol_olustur(payload: RolIn, request: Request, db: DbDep, user: AdminDe
         "roles",
         "olustur",
         entity_id=rol.id,
-        new_value={"kod": rol.code, "ad": rol.name, "izin": len(payload.izinler)},
+        new_value={
+            "kod": rol.code,
+            "ad": rol.name,
+            "izin": len(payload.izinler),
+            "yalniz_ofis": rol.yalniz_ofis,
+        },
         user_id=user.id,
         ip=client_ip(request),
     )
@@ -414,11 +426,13 @@ async def rol_guncelle(
             db, request, user, payload.izinler, entity="roles", entity_id=rol.id
         )
 
-    eski = {"ad": rol.name, "kapsam": rol.scope}
+    eski = {"ad": rol.name, "kapsam": rol.scope, "yalniz_ofis": rol.yalniz_ofis}
     if payload.name is not None:
         rol.name = payload.name
     if payload.scope is not None:
         rol.scope = payload.scope
+    if payload.yalniz_ofis is not None:
+        rol.yalniz_ofis = payload.yalniz_ofis
     if payload.izinler is not None:
         await _rol_izinlerini_yaz(db, rol, payload.izinler)
     else:
@@ -437,6 +451,7 @@ async def rol_guncelle(
         new_value={
             "ad": rol.name,
             "kapsam": rol.scope,
+            "yalniz_ofis": rol.yalniz_ofis,
             "izin": len(payload.izinler) if payload.izinler is not None else None,
             "etkilenen_kullanici": len(etkilenen),
         },

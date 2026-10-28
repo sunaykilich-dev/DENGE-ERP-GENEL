@@ -13,7 +13,7 @@ from app.schemas.auth import (
     ParolaDegistirRequest,
     UserOut,
 )
-from app.services import audit
+from app.services import audit, erisim_yeri
 from app.services import auth as auth_service
 from app.services import mfa as mfa_service
 
@@ -23,15 +23,45 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 PENDING_MFA_TTL_SEC = 300
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
+def _set_session_cookie(response: Response, token: str, istemci: str) -> None:
+    # Masaüstünde çerez ömrü eskisi gibi hareketsizlik süresi; mobilde mutlak
+    # üst sınır (G3.7) — sunucu yine hareketsizliği ve mutlak süreyi denetler.
+    omur = (
+        auth_service.SESSION_MAX_MOBIL
+        if istemci == auth_service.ISTEMCI_MOBIL
+        else auth_service.SESSION_TTL
+    )
     response.set_cookie(
         SESSION_COOKIE,
         token,
         httponly=True,
         samesite="lax",
         secure=not get_config().is_dev,
-        max_age=int(auth_service.SESSION_TTL.total_seconds()),
+        max_age=int(omur.total_seconds()),
         path="/",
+    )
+
+
+async def _ofis_disi_reddet(db, request: Request, user: User, adim: str) -> None:
+    """G3.8: ofise bağlı rol ofis dışından GİRİŞ yapamaz (oturum açılmaz).
+
+    Parola doğru olduğu için başarısız giriş sayacına YAZILMAZ; denetime
+    `giris.ofis_disi` düşer (yönetici "neden giremiyor" sorusunu buradan görür).
+    """
+    if not await erisim_yeri.ofis_disinda_mi(db, user, client_ip(request)):
+        return
+    await audit.log(
+        db,
+        "users",
+        "giris.ofis_disi",
+        entity_id=user.id,
+        new_value={"adim": adim},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN, {"kod": erisim_yeri.KOD, "mesaj": erisim_yeri.MESAJ}
     )
 
 
@@ -45,9 +75,9 @@ def _set_session_cookie(response: Response, token: str) -> None:
 GIRIS_HATASI = "Kullanıcı adı veya parola hatalı"
 
 
-def _oturum_ac(response: Response, token: str, user: User, clock) -> LoginResult:
+def _oturum_ac(response: Response, token: str, user: User, clock, istemci: str) -> LoginResult:
     user.izin_anini_ata(clock.now())
-    _set_session_cookie(response, token)
+    _set_session_cookie(response, token, istemci)
     return LoginResult(user=UserOut.of(user))
 
 
@@ -78,6 +108,8 @@ async def login(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, GIRIS_HATASI)
 
     await auth_service.reset_login_attempts(db, user.username)
+    # 2b) Erişim yeri (G3.8): MFA'dan ÖNCE — dışarıdan kod adımına da geçilmez.
+    await _ofis_disi_reddet(db, request, user, "parola")
 
     # 3) MFA açıksa oturumu HENÜZ açma; kodu iste
     if user.mfa_enabled:
@@ -85,12 +117,21 @@ async def login(
         await db.commit()
         return LoginResult(mfa_required=True, pending_token=pending)
 
-    # 4) MFA yok → oturumu aç
-    token = await auth_service.create_session(db, user, clock)
+    # 4) MFA yok → oturumu aç (süre istemci türüne göre, G3.7)
+    istemci = auth_service.istemci_turu(payload.istemci)
+    token = await auth_service.create_session(db, user, clock, istemci)
     await auth_service.giris_tamamlandi(db, user, clock)
-    await audit.log(db, "users", "giris", entity_id=user.id, user_id=user.id, ip=client_ip(request))
+    await audit.log(
+        db,
+        "users",
+        "giris",
+        entity_id=user.id,
+        new_value={"istemci": istemci},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
     await db.commit()
-    return _oturum_ac(response, token, user, clock)
+    return _oturum_ac(response, token, user, clock, istemci)
 
 
 @router.post("/login/mfa", response_model=LoginResult)
@@ -128,19 +169,21 @@ async def login_mfa(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Doğrulama kodu hatalı")
 
     await auth_service.reset_login_attempts(db, user.username)
-    token = await auth_service.create_session(db, user, clock)
+    await _ofis_disi_reddet(db, request, user, "mfa")
+    istemci = auth_service.istemci_turu(payload.istemci)
+    token = await auth_service.create_session(db, user, clock, istemci)
     await auth_service.giris_tamamlandi(db, user, clock)
     await audit.log(
         db,
         "users",
         "giris",
         entity_id=user.id,
-        new_value={"mfa": True},
+        new_value={"mfa": True, "istemci": istemci},
         user_id=user.id,
         ip=client_ip(request),
     )
     await db.commit()
-    return _oturum_ac(response, token, user, clock)
+    return _oturum_ac(response, token, user, clock, istemci)
 
 
 @router.post("/logout")

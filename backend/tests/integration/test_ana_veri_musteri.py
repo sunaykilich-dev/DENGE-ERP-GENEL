@@ -51,7 +51,7 @@ async def _denetim(db, eylem: str) -> list[AuditLog]:
 
 class TestHizliEkleme:
     async def test_dogrulanmamis_musteri_ve_tesis_acar(self, client, kullanici_ac, db):
-        await _giris(client, kullanici_ac, "operasyon", "SERVIS_OPERASYON")
+        await _giris(client, kullanici_ac, "tsmudur", "SERVIS_YONETICI")
         r = await client.post(
             f"{ANA}/hizli-musteri",
             json={
@@ -75,15 +75,37 @@ class TestHizliEkleme:
         assert tesis.kind == "TESIS" and tesis.line is None and tesis.account_id == hesap.id
         assert await _denetim(db, "hesap.hizli_olustur")
 
-    async def test_teknisyen_hizli_ekleyemez(self, client, kullanici_ac):
-        """`lokasyon.yaz` yok → 403 (form "Hızlı ekle"yi de göstermez)."""
-        await _giris(client, kullanici_ac, "teknisyen", "SERVIS_TEKNISYEN")
+    @pytest.mark.parametrize(
+        "rol", ["SERVIS_TEKNISYEN", "SERVIS_OPERASYON", "SERVIS_SEF", "ATOLYE"]
+    )
+    async def test_ts_saha_ve_operasyon_rolleri_hizli_ekleyemez(
+        self, client, kullanici_ac, db, rol
+    ):
+        """G10.2 (KARARLAR 2026-10-28): müşteri kartını yalnız Mİ / satış destek /
+        muhasebe / yöneticiler açar. `hesap.kart_yaz` ve `hesap.yaz` yok → 403
+        (form "Hızlı ekle"yi de göstermez), kayıt AÇILMAZ."""
+        await _giris(client, kullanici_ac, "tskisi", rol)
         r = await client.post(f"{ANA}/hizli-musteri", json={"unvan": "Yeni Firma", "il": "Ankara"})
         assert r.status_code == 403
+        assert (await db.scalar(select(Account).where(Account.title == "Yeni Firma"))) is None
+
+    async def test_hesap_yazan_mobilite_kullanicisi_de_kart_acar(self, client, kullanici_ac, db):
+        """`hesap.yaz` (Hesaplar ekranının kart yetkisi) TS kapısını da açar;
+        servis işi açmak için yine `servis.yaz` gerekir."""
+        satis = await _giris(client, kullanici_ac, "satismud", "SATIS_MUDURU")
+        r = await client.post(
+            f"{ANA}/hizli-musteri", json={"unvan": "Satış Firması", "il": "Ankara"}
+        )
+        assert r.status_code == 403  # servis.yaz yok
+        await _izin_ver(db, satis, "servis.yaz")
+        r = await client.post(
+            f"{ANA}/hizli-musteri", json={"unvan": "Satış Firması", "il": "Ankara"}
+        )
+        assert r.status_code == 201, r.text
 
     async def test_benzer_unvan_409_onayla_201(self, client, kullanici_ac, db):
         mevcut = await _hesap(db, "G4S ELEKTRONİK SİSTEMLERİ A.Ş.")
-        await _giris(client, kullanici_ac, "operasyon", "SERVIS_OPERASYON")
+        await _giris(client, kullanici_ac, "tsmudur", "SERVIS_YONETICI")
         govde = {"unvan": "G4S Elektronik Sistemleri Anonim Şirketi", "il": "İstanbul"}
 
         r = await client.post(f"{ANA}/hizli-musteri", json=govde)
@@ -103,7 +125,7 @@ class TestHizliEkleme:
         hedef = await _hesap(db, "MERKEZ GÜVENLİK HİZMETLERİ")
         db.add(AccountAlias(account_id=hedef.id, alias_text="Akyaka Park AVM", kaynak="ELLE"))
         await db.commit()
-        await _giris(client, kullanici_ac, "operasyon", "SERVIS_OPERASYON")
+        await _giris(client, kullanici_ac, "tsmudur", "SERVIS_YONETICI")
         r = await client.post(
             f"{ANA}/hizli-musteri", json={"unvan": "AKYAKA PARK AVM", "il": "Muğla"}
         )
@@ -112,12 +134,12 @@ class TestHizliEkleme:
 
     @pytest.mark.parametrize("unvan", ["", "   ", "x" * 201])
     async def test_gecersiz_unvan_422(self, client, kullanici_ac, unvan):
-        await _giris(client, kullanici_ac, "operasyon", "SERVIS_OPERASYON")
+        await _giris(client, kullanici_ac, "tsmudur", "SERVIS_YONETICI")
         r = await client.post(f"{ANA}/hizli-musteri", json={"unvan": unvan, "il": "Ankara"})
         assert r.status_code == 422
 
     async def test_bilinmeyen_il_400(self, client, kullanici_ac, db):
-        await _giris(client, kullanici_ac, "operasyon", "SERVIS_OPERASYON")
+        await _giris(client, kullanici_ac, "tsmudur", "SERVIS_YONETICI")
         r = await client.post(
             f"{ANA}/hizli-musteri", json={"unvan": "Yok İl Firması", "il": "Atlantis"}
         )
@@ -297,7 +319,7 @@ class TestDogrulama:
 class TestServisMusteriDuzenleme:
     async def test_mobilite_hesabi_409_ve_yazmaz(self, client, kullanici_ac, db):
         nokta = await _hesap(db, "MONTAJ NOKTASI X", is_montaj_noktasi=True)
-        await _giris(client, kullanici_ac, "operasyon", "SERVIS_OPERASYON")
+        await _giris(client, kullanici_ac, "tsmudur", "SERVIS_YONETICI")
         r = await client.patch(
             f"{ANA}/musteriler/{nokta.id}", json={"title": "DEĞİŞTİ", "version": nokta.version}
         )
@@ -307,7 +329,7 @@ class TestServisMusteriDuzenleme:
 
     async def test_musteri_duzeltilir(self, client, kullanici_ac, db):
         h = await _hesap(db, "YAZIM HATALI")
-        await _giris(client, kullanici_ac, "operasyon", "SERVIS_OPERASYON")
+        await _giris(client, kullanici_ac, "tsmudur", "SERVIS_YONETICI")
         r = await client.patch(
             f"{ANA}/musteriler/{h.id}",
             json={"title": "Yazım Düzeltildi", "region": "izmir", "version": h.version},
@@ -327,11 +349,15 @@ class TestServisMusteriDuzenleme:
         }
         assert await _denetim(db, "servis.musteri.guncelle")
 
-    async def test_teknisyen_403(self, client, kullanici_ac, db):
+    @pytest.mark.parametrize("rol", ["SERVIS_TEKNISYEN", "SERVIS_OPERASYON", "SERVIS_SEF"])
+    async def test_ts_rolleri_kart_duzeltemez_403(self, client, kullanici_ac, db, rol):
+        """G10.2: kart künyesi düzeltmesi de müşteri kartı değişikliğidir."""
         h = await _hesap(db, "TEKNİSYEN DÜZENLEYEMEZ")
-        await _giris(client, kullanici_ac, "teknisyen", "SERVIS_TEKNISYEN")
+        await _giris(client, kullanici_ac, "tskisi", rol)
         r = await client.patch(f"{ANA}/musteriler/{h.id}", json={"title": "X Y", "version": 1})
         assert r.status_code == 403
+        await db.refresh(h)
+        assert h.title == "TEKNİSYEN DÜZENLEYEMEZ"
 
     async def test_kapsam_disi_404_ve_yazmaz(self, client, kullanici_ac, db):
         satis = await _giris(client, kullanici_ac, "satis", "SATIS")
@@ -345,7 +371,7 @@ class TestServisMusteriDuzenleme:
 
     async def test_eski_surum_409(self, client, kullanici_ac, db):
         h = await _hesap(db, "SÜRÜMLÜ")
-        await _giris(client, kullanici_ac, "operasyon", "SERVIS_OPERASYON")
+        await _giris(client, kullanici_ac, "tsmudur", "SERVIS_YONETICI")
         r = await client.patch(f"{ANA}/musteriler/{h.id}", json={"title": "YENİ", "version": 99})
         assert r.status_code == 409
 

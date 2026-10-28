@@ -4,7 +4,8 @@
  * - Müşteri → lokasyon seçimi `MusteriLokasyonSecici` ile SUNUCUDA aranır
  *   (300 ms gecikmeli); seçilen lokasyonun birincil irtibatı forma önerilir,
  *   kullanıcı değiştirebilir. Kart IBAN/VKN göstermez. Hızlı müşteri ekleme
- *   `servis.yaz + lokasyon.yaz` olana görünür (seçicinin kendi kuralı).
+ *   `servis.yaz + hesap.kart_yaz|hesap.yaz` olana görünür (G10.2; seçicinin
+ *   kendi kuralı), diğerlerine "Müşteri İlişkileri'nden kart isteyin" notu.
  * - Seri girildikçe açık işte aynı seri sorulur (yalnız uyarı); kayıtta
  *   sunucu 409 `MUKERRER` dönerse kullanıcı listeyi görüp "yine de aç" der.
  * - "Telefonla/uzaktan çözüldü" (`servis.uzaktan_coz`): açılış + sonuç tek

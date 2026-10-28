@@ -8,6 +8,13 @@ Kural cihaz/araç listeleriyle aynıdır (`accounts.kapsam_musteri`): müşteris
 portföyde olmayan kayıt görünmez ve yazılamaz (404, yazmadan ÖNCE);
 müşterisiz kayıt (Denge stoğu) görünür. TUMU kapsamlı rollerde davranış
 değişmez.
+
+**Maliyet (M6.5, KARARLAR 2026-10-28 §7 Faz A/3):** `cost` alanı `maliyet.gor`
+olmayan kullanıcıya hiçbir uçta (liste, tek kayıt, açılış/durum/çözüm/tedarikçi
+yanıtı) dolu dönmez — `null` gelir (`api/sims._detay` kalıbı). Bu kullanıcı
+çözümde dolu bir `cost` gönderirse 403 (sessizce yok saymak, "kaydettim"
+sanılan bedeli kaybettirirdi; `api/bakim._ucret_yetkisi` kalıbı). Denetim
+kaydındaki maliyet yalnız denetim izni olanlara açıktır.
 """
 
 from datetime import date, datetime
@@ -18,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala
+from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala, sees_cost
 from app.models import Account, Device, RmaCase, User, Vehicle
 from app.models.service import COZUM_TIPLERI
 from app.services import accounts as hesap_svc
@@ -101,8 +108,11 @@ async def _kimlik(db: DbDep, device_id: int | None) -> str | None:
     return (c.imei or c.serial_no) if c else None
 
 
-async def _cikti(db: DbDep, k: RmaCase) -> RmaOut:
+async def _cikti(db: DbDep, k: RmaCase, user: User) -> RmaOut:
     out = RmaOut.model_validate(k)
+    if not sees_cost(user):
+        # Maliyet varsayılan gizli (M6.5): alan yanıtta boş döner, 0 yazılmaz.
+        out.cost = None
     out.device_kimlik = await _kimlik(db, k.device_id)
     out.replacement_kimlik = await _kimlik(db, k.replacement_device_id)
     if k.customer_id:
@@ -170,7 +180,7 @@ async def listele(
     if musteri_id:
         stmt = stmt.where(RmaCase.customer_id == musteri_id)
     satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
-    return [await _cikti(db, k) for (k,) in satirlar]
+    return [await _cikti(db, k, user) for (k,) in satirlar]
 
 
 @router.get("/ariza-orani")
@@ -184,7 +194,7 @@ async def ariza_orani(
 @router.get("/{rma_id}", response_model=RmaOut)
 async def getir(rma_id: int, db: DbDep, user: Okuyucu) -> RmaOut:
     k = await _rma_al(db, rma_id, user)
-    return await _cikti(db, k)
+    return await _cikti(db, k, user)
 
 
 @router.post("", response_model=RmaOut, status_code=status.HTTP_201_CREATED)
@@ -222,7 +232,7 @@ async def ac(payload: RmaIn, request: Request, db: DbDep, clock: ClockDep, user:
         ip=client_ip(request),
     )
     await db.commit()
-    return await _cikti(db, kayit)
+    return await _cikti(db, kayit, user)
 
 
 @router.post("/{rma_id}/durum", response_model=RmaOut)
@@ -258,7 +268,7 @@ async def durum_degistir(
         ip=client_ip(request),
     )
     await db.commit()
-    return await _cikti(db, k)
+    return await _cikti(db, k, user)
 
 
 @router.post("/{rma_id}/coz", response_model=RmaOut)
@@ -272,6 +282,10 @@ async def coz(
 ) -> RmaOut:
     """Çözümü işler. DEĞİŞİMDE araç/hat/müşteri bağı yeni cihaza taşınır."""
     k = await _rma_al(db, rma_id, user)
+    if payload.cost is not None and not sees_cost(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Maliyet alanı için yetkiniz yok (maliyet.gor)"
+        )
     if payload.resolution not in COZUM_TIPLERI:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Çözüm {COZUM_TIPLERI} içinden olmalı")
 
@@ -293,7 +307,9 @@ async def coz(
             cozum=payload.resolution,
             clock=clock,
             not_=payload.resolution_note,
-            maliyet=payload.cost,
+            # Maliyet görmeyen kullanıcının çözümü, başkasının girdiği bedeli
+            # sessizce silmesin: mevcut değer korunur.
+            maliyet=payload.cost if sees_cost(user) else k.cost,
             yeni_cihaz_id=yeni_id,
             user_id=user.id,
         )
@@ -314,7 +330,7 @@ async def coz(
         ip=client_ip(request),
     )
     await db.commit()
-    return await _cikti(db, k)
+    return await _cikti(db, k, user)
 
 
 @router.patch("/{rma_id}/tedarikci", response_model=RmaOut)
@@ -343,4 +359,4 @@ async def tedarikci_bilgisi(
     k.updated_by = user.id
     await audit.log_change(db, k, "tedarikci", user_id=user.id, ip=client_ip(request))
     await db.commit()
-    return await _cikti(db, k)
+    return await _cikti(db, k, user)

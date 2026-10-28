@@ -60,6 +60,7 @@ import {
 } from "../api/kiralama";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
+import { CakismaVazgecildi, useCakismaOnayi } from "../components/KiralamaCakismaOnayi";
 import KiralamaDegisimPenceresi from "../components/KiralamaDegisimPenceresi";
 import {
   KIRALAMA_DURUM_ETIKETLERI,
@@ -512,6 +513,7 @@ function KiralamaFormu({
     }
   }, [kayit, form, kullanici]);
 
+  const cakismaOnayiyla = useCakismaOnayi();
   const kaydet = useMutation({
     mutationFn: async (v: FormDegerleri) => {
       const ortak = {
@@ -531,11 +533,16 @@ function KiralamaFormu({
         note: k.note?.trim() || null,
       }));
       if (kayit) {
-        return kiralamaApi.guncelle(kayit.id, {
-          version: kayit.version,
-          ...ortak,
-          ...(kalemDegisebilir ? { kalemler: kalemGirdisi } : {}),
-        });
+        // Tarih değişikliği seri cihazı başka kiralamayla çakıştırırsa (M10.1)
+        // sunucu uyarır; gerekçe alınıp istek onayla yeniden gönderilir.
+        return cakismaOnayiyla((onay) =>
+          kiralamaApi.guncelle(kayit.id, {
+            version: kayit.version,
+            ...ortak,
+            ...(kalemDegisebilir ? { kalemler: kalemGirdisi } : {}),
+            ...onay,
+          }),
+        );
       }
       return kiralamaApi.olustur({ birim: v.birim, ...ortak, kalemler: kalemGirdisi });
     },
@@ -543,7 +550,8 @@ function KiralamaFormu({
       message.success(kayit ? "Kiralama güncellendi" : `${k.rental_no} açıldı`);
       onKaydedildi(k);
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) =>
+      e instanceof CakismaVazgecildi ? message.info(e.message) : message.error(hataMesaji(e)),
   });
 
   const urunSecenekleri = (katalog.data ?? []).map((p) => ({
@@ -1076,13 +1084,15 @@ function useIslem(onBitti: () => void, onKapat: () => void) {
       onBitti();
       onKapat();
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) =>
+      e instanceof CakismaVazgecildi ? message.info(e.message) : message.error(hataMesaji(e)),
   });
 }
 
 /** Kalem başına tahsis: seri ürün → HAZIR cihazlar; toplu ürün → depo + adet. */
 function TahsisPenceresi({ k, onKapat, onBitti }: { k: KiralamaKarti; onKapat: () => void; onBitti: () => void }) {
   const islem = useIslem(onBitti, onKapat);
+  const cakismaOnayiyla = useCakismaOnayi();
   const depolar = useQuery({ queryKey: ["kiralama-depolar"], queryFn: kiralamaApi.depolar });
   const [secim, setSecim] = useState<Record<number, { cihazlar?: number[]; depo_id?: number; adet?: number }>>({});
   const eksikKalemler = k.kalemler.filter((x) => x.tahsisli < x.qty);
@@ -1097,14 +1107,14 @@ function TahsisPenceresi({ k, onKapat, onBitti }: { k: KiralamaKarti; onKapat: (
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
     if (!satirlar.length) return;
-    islem.mutate(() => kiralamaApi.tahsis(k.id, satirlar));
+    islem.mutate(() => cakismaOnayiyla((onay) => kiralamaApi.tahsis(k.id, satirlar, onay)));
   };
 
   return (
     <Modal open width={760} title="Tahsis" onCancel={onKapat} onOk={gonder} okText="Tahsis et" cancelText="Vazgeç" confirmLoading={islem.isPending} destroyOnHidden>
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Kalem adedi aşılamaz; aynı cihaz çakışan tarihli başka kiralamaya tahsis edilemez. Kısmi tahsis yapılabilir,
-        sevkten önce her kalem tamamlanmalıdır.
+        Kalem adedi aşılamaz. Cihaz çakışan tarihli başka kiralamada tahsisliyse uyarı gelir; gerekçe yazarak
+        devam edilebilir. Kısmi tahsis yapılabilir, sevkten önce her kalem tamamlanmalıdır.
       </Typography.Paragraph>
       {eksikKalemler.length === 0 && <Empty description="Bütün kalemler tahsisli" />}
       <Space orientation="vertical" style={{ width: "100%" }}>

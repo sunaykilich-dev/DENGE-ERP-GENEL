@@ -104,7 +104,19 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     # --- Ana veri (hesap genişletmesi) ------------------------------------------
     "lokasyon.yaz": (
         "Hesaplar",
-        "Tesis/lokasyon ve lokasyon irtibatı açar, düzenler; hızlı müşteri ekler",
+        "Var olan müşteriye tesis/lokasyon ve lokasyon irtibatı açar, düzenler",
+    ),
+    # G10.2 (KARARLAR 2026-10-28 §5, Faz A/5): müşteri KARTINI yalnız Müşteri
+    # İlişkileri / satış destek / muhasebe / yöneticiler açar-değiştirir. TS
+    # operasyon kayıt açarken müşteriyi SEÇER; listede yoksa kart talebi
+    # bırakır. Eskiden hızlı müşteri `lokasyon.yaz` ile açılıyordu ve bu izin
+    # bütün saha/operasyon rollerinde vardı. Mobilite tarafı Hesaplar ekranında
+    # `hesap.yaz` ile kart açar (değişmedi); TS uçları ikisinden birini kabul
+    # eder (`api/teknik_servis_ana_veri.py`).
+    "hesap.kart_yaz": (
+        "Hesaplar",
+        "Teknik servisten hızlı müşteri kartı açar ve kart künyesini (unvan, il, "
+        "telefon, e-posta, cari kodu) düzeltir",
     ),
     "hesap.birlestir": (
         "Hesaplar",
@@ -466,6 +478,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis.irtibat_gor",
             "hesap.gor",
             "lokasyon.yaz",
+            "hesap.kart_yaz",
             "hesap.birlestir",
             "urun.gor",
             "cihaz.gor",
@@ -676,6 +689,17 @@ SERVIS_ROLLERI = (
     "KIRALAMA_DEPO",
     "IK",
 )
+
+
+# --- Erişim yeri kısıtı (G3.8, KARARLAR 2026-10-28 §7 Faz A/8) ------------------
+# Bu rollerin kullanıcıları yalnız ofis ağından (ayar `ofis_ag_listesi`, CIDR
+# listesi) giriş yapar ve istek atar; liste BOŞSA kısıt uygulanmaz (kurulum
+# günü kimse kilitlenmesin). İzin değil ROL NİTELİĞİDİR (`roles.yalniz_ofis`):
+# izin olsaydı ADMIN (bütün izinler) ve YONETIM (bütün `.gor`) de kendiliğinden
+# kısıtlanır, kişiye istisnayla "kaldırılabilir" bir yetki gibi görünürdü.
+# Seed yalnız özelleştirilmemiş sistem rollerinde eşitler; yönetici rol
+# ekranından istediği role açıp kapatabilir. Saha rolleri her yerden girer.
+YALNIZ_OFIS_ROLLERI = frozenset({"MUHASEBE_DESTEK"})
 
 
 def permissions_of(role_code: str) -> tuple[str, ...]:

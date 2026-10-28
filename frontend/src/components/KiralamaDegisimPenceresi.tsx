@@ -3,14 +3,16 @@
  *
  * Sunucu tek transaction'da: yeni seri cihaza tahsis + sevk, eski cihazın
  * seçilen depoya KONTROLDE iadesi; iki cihaza da `DEGISIM` hareketi. Kiralama
- * durumu değişmez. Başka kiralamaya tarih çakışan ya da hazır olmayan cihaz
- * 409 döner (mesaj gösterilir). Yetki `kiralama.asama`.
+ * durumu değişmez. Hazır olmayan cihaz 409 döner (mesaj gösterilir); yeni
+ * cihaz başka kiralamaya tarih çakışıyorsa (M10.1) uyarı + gerekçe ile
+ * devam edilir. Yetki `kiralama.asama`.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Alert, App, Form, Input, Modal, Select } from "antd";
 import { useState } from "react";
 
 import { kiralamaApi, type KiralamaKarti } from "../api/kiralama";
+import { CakismaVazgecildi, useCakismaOnayi } from "./KiralamaCakismaOnayi";
 
 export default function KiralamaDegisimPenceresi({
   k,
@@ -35,20 +37,29 @@ export default function KiralamaDegisimPenceresi({
   });
   const depolar = useQuery({ queryKey: ["kiralama-depolar"], queryFn: kiralamaApi.depolar });
 
+  const cakismaOnayiyla = useCakismaOnayi();
+
   const gonder = useMutation({
     mutationFn: () =>
-      kiralamaApi.degisim(k.id, {
-        eski_tahsis_id: eski!,
-        yeni_kiralik_id: yeni!,
-        iade_depo_id: depo!,
-        not: not.trim() || undefined,
-      }),
+      cakismaOnayiyla((onay) =>
+        kiralamaApi.degisim(
+          k.id,
+          {
+            eski_tahsis_id: eski!,
+            yeni_kiralik_id: yeni!,
+            iade_depo_id: depo!,
+            not: not.trim() || undefined,
+          },
+          onay,
+        ),
+      ),
     onSuccess: () => {
       message.success("Cihaz değiştirildi; eski cihaz kontrole alındı");
       onBitti();
       onKapat();
     },
-    onError: (e) => message.error((e as Error).message),
+    onError: (e) =>
+      e instanceof CakismaVazgecildi ? message.info(e.message) : message.error((e as Error).message),
   });
 
   return (

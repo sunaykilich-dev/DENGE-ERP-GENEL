@@ -56,7 +56,10 @@ function useGecikmeli(deger: string, ms = 300) {
  *
  * Arama SUNUCUDA (`/musteri-ara`, `servis.gor`): yanıt yalnız ad + il +
  * doğrulama rozeti taşır, VKN/IBAN/telefon göstermez. "Hızlı ekle" yalnız
- * `servis.yaz` + `lokasyon.yaz` olanda görünür; benzer kayıt varsa sunucu
+ * `servis.yaz` + (`hesap.kart_yaz` | `hesap.yaz`) olanda görünür (G10.2: müşteri
+ * kartını Mİ / satış destek / muhasebe / yönetici açar); yetkisi olmayana
+ * "Müşteri İlişkileri'nden kart açmasını isteyin" yönlendirmesi gösterilir.
+ * Benzer kayıt varsa sunucu
  * 409 + aday listesi döner ve kullanıcıya "Bunu mu demek istediniz?" sorulur.
  */
 export default function MusteriLokasyonSecici({
@@ -77,7 +80,8 @@ export default function MusteriLokasyonSecici({
 }) {
   const { message } = App.useApp();
   const { yetkili } = useAuth();
-  const hizliEkleyebilir = yetkili("servis.yaz") && yetkili("lokasyon.yaz");
+  const hizliEkleyebilir =
+    yetkili("servis.yaz") && (yetkili("hesap.kart_yaz") || yetkili("hesap.yaz"));
   // Lokasyon kartını görebilen izin (sunucu da aynısını ister; teknisyen kimlik
   // tarayarak tesis irtibatı okuyamasın).
   const kartGorur = yetkili("hesap.gor") || yetkili("lokasyon.yaz");
@@ -191,6 +195,11 @@ export default function MusteriLokasyonSecici({
           </Button>
         )}
       </Space.Compact>
+      {!hizliEkleyebilir && !disabled && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Müşteri listede yoksa Müşteri İlişkileri'nden kart açmasını isteyin.
+        </Typography.Text>
+      )}
 
       <Select<number>
         style={{ width: "100%" }}

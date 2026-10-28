@@ -139,6 +139,8 @@ _DALGA4_EKLERI = {
     "erisim_girissiz_gun",
     "servis_rapor_excel_azami_satir",
 }
+# Faz A (KARARLAR 2026-10-28 G3.8): ofis ağı CIDR listesi (boş = kısıt yok).
+_FAZ_A_EKLERI = {"ofis_ag_listesi"}
 
 # Faz A (TS-200, M5.1/M5.4): MESAI takvimli SLA'nın mesai penceresi.
 _FAZ_A_EKLERI = {"servis_mesai_baslangic", "servis_mesai_bitis"}
@@ -203,3 +205,17 @@ def test_ek_turleri() -> None:
     assert "MUSTERI_IMZASI" not in turler  # canlı IMZA kullanılır
     assert len(ek_model.EK_TURLERI) == len(turler)
     assert all(len(t) <= 30 for t in turler)  # attachments.kind String(30)
+
+
+def test_ofis_ag_listesi_dogrulamasi() -> None:
+    """G3.8: CIDR listesi kanonikleşir; geçersiz ağ 400'e giden `AyarHatasi`."""
+    import pytest
+
+    assert ayar.DEFAULTS["ofis_ag_listesi"] == []
+    assert ayar.ayar_dogrula("ofis_ag_listesi", [" 10.10.1.7/16", "88.1.2.3", "10.10.0.0/16"]) == [
+        "10.10.0.0/16",
+        "88.1.2.3/32",
+    ]
+    for kotu in (["10.0.0.0/33"], ["ofis"], "10.0.0.0/8", [1]):
+        with pytest.raises(ayar.AyarHatasi):
+            ayar.ayar_dogrula("ofis_ag_listesi", kotu)
