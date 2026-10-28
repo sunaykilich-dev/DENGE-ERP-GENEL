@@ -139,10 +139,12 @@ _DALGA4_EKLERI = {
     "erisim_girissiz_gun",
     "servis_rapor_excel_azami_satir",
 }
+# Faz A (KARARLAR 2026-10-28 G3.8): ofis ağı CIDR listesi (boş = kısıt yok).
+_FAZ_A_EKLERI = {"ofis_ag_listesi"}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
-    beklenen = _PLAN_1_9 | _DALGA1_EKLERI | _DALGA4_EKLERI
+    beklenen = _PLAN_1_9 | _DALGA1_EKLERI | _DALGA4_EKLERI | _FAZ_A_EKLERI
     assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.
     assert set(ayar.AYAR_SINIRLARI) == beklenen
@@ -200,3 +202,17 @@ def test_ek_turleri() -> None:
     assert "MUSTERI_IMZASI" not in turler  # canlı IMZA kullanılır
     assert len(ek_model.EK_TURLERI) == len(turler)
     assert all(len(t) <= 30 for t in turler)  # attachments.kind String(30)
+
+
+def test_ofis_ag_listesi_dogrulamasi() -> None:
+    """G3.8: CIDR listesi kanonikleşir; geçersiz ağ 400'e giden `AyarHatasi`."""
+    import pytest
+
+    assert ayar.DEFAULTS["ofis_ag_listesi"] == []
+    assert ayar.ayar_dogrula("ofis_ag_listesi", [" 10.10.1.7/16", "88.1.2.3", "10.10.0.0/16"]) == [
+        "10.10.0.0/16",
+        "88.1.2.3/32",
+    ]
+    for kotu in (["10.0.0.0/33"], ["ofis"], "10.0.0.0/8", [1]):
+        with pytest.raises(ayar.AyarHatasi):
+            ayar.ayar_dogrula("ofis_ag_listesi", kotu)

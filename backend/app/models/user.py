@@ -213,13 +213,24 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
         return sorted(kodlar)
 
 
+# Oturumu açan istemci türü (G3.7): süreyi SUNUCU seçer (`services/auth.py`
+# `OTURUM_SURELERI`); istemci yalnız ipucu verir.
+ISTEMCI_TURLERI = ("MASAUSTU", "MOBIL")
+
+
 class Session(Base):
     __tablename__ = "sessions"
+    __table_args__ = (
+        CheckConstraint("istemci IN ('MASAUSTU', 'MOBIL')", name="ck_sessions_istemci"),
+    )
 
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    istemci: Mapped[str] = mapped_column(
+        String(10), server_default=text("'MASAUSTU'"), default="MASAUSTU"
+    )
 
     user: Mapped[User] = relationship(back_populates="sessions")

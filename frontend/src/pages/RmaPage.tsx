@@ -101,7 +101,10 @@ const COZUMLER = [
 export default function RmaPage() {
   const qc = useQueryClient();
   const { message, modal } = App.useApp();
-  const { yetkili } = useAuth();
+  const { yetkili, kullanici } = useAuth();
+  // M6.5: maliyet (müşteri bedeli) yalnız `maliyet.gor` sahibine görünür;
+  // sunucu zaten boş döner ve görmeyenin bedel yazmasını 403 ile reddeder.
+  const bedelGorur = !!kullanici?.sees_cost;
   const [durum, setDurum] = useState<string | undefined>();
   const [secili, setSecili] = useState<number | null>(null);
   const [yeniAcik, setYeniAcik] = useState(false);
@@ -472,9 +475,11 @@ export default function RmaPage() {
                   <Descriptions.Item label="Çözüm">
                     {COZUMLER.find((c) => c.value === k.resolution)?.label ?? k.resolution}
                   </Descriptions.Item>
-                  <Descriptions.Item label="Müşteri bedeli" className="tutar">
-                    {tl(k.cost)}
-                  </Descriptions.Item>
+                  {bedelGorur && (
+                    <Descriptions.Item label="Müşteri bedeli" className="tutar">
+                      {tl(k.cost)}
+                    </Descriptions.Item>
+                  )}
                   {k.replacement_kimlik && (
                     <Descriptions.Item label="Yerine geçen cihaz" span={2}>
                       <Tooltip title="Araç, hat ve müşteri bağı bu cihaza taşındı">
@@ -629,7 +634,7 @@ export default function RmaPage() {
                 ) : null
               }
             </Form.Item>
-            {k?.warranty_status !== "GARANTI_ICI" && (
+            {bedelGorur && k?.warranty_status !== "GARANTI_ICI" && (
               <Form.Item name="cost" label="Müşteri bedeli">
                 <InputNumber min={0} style={{ width: "100%" }} addonAfter="₺" />
               </Form.Item>

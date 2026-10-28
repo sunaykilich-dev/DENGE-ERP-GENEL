@@ -201,7 +201,8 @@ class TestCozum:
         assert c.status == "YENIDEN_STOKTA"
 
     async def test_garanti_ici_kayda_ucret_yazilamaz(self, client, kullanici_ac, urun_ac, cihaz_ac):
-        await _giris(client, kullanici_ac)
+        # Bedel yazmak `maliyet.gor` ister (M6.5); TEKNIK_SERVIS rolünde yok.
+        await _giris(client, kullanici_ac, "yonetici", "ADMIN")
         u = await urun_ac("L300", "IMEI", warranty_months=24)
         await cihaz_ac(
             imei="860000000000021",
@@ -225,7 +226,8 @@ class TestCozum:
         assert "Garanti içi" in cevap.json()["detail"]
 
     async def test_garanti_disi_ucret_yazilir(self, client, kullanici_ac, urun_ac, cihaz_ac):
-        await _giris(client, kullanici_ac)
+        # Bedel yazmak `maliyet.gor` ister (M6.5); TEKNIK_SERVIS rolünde yok.
+        await _giris(client, kullanici_ac, "yonetici", "ADMIN")
         u = await urun_ac("L300", "IMEI", warranty_months=12)
         await cihaz_ac(
             imei="860000000000022",

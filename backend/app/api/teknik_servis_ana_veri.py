@@ -5,10 +5,14 @@ Servis personeli müşteriyi canlı Hesaplar ekranından değil buradan seçer:
 - **Hafif arama** (`servis.gor`): yalnız ad + il + doğrulama rozeti. VKN,
   IBAN, telefon, e-posta ve irtibat DÖNMEZ — teknisyende `hesap.gor` yok
   (KD-09) ve olmamalı; müşteri bilgisi ona iş detayında gömülü gelir.
-- **Hızlı ekleme** (`servis.yaz` + `lokasyon.yaz`): yalnız ad + il (+ tesis);
-  kayıt doğrulanmamış doğar, mali alanlar hiç açılmaz (KD-07).
-- **Servis tarafı müşteri düzenleme** (`lokasyon.yaz`): servis rollerinde
-  `hesap.yaz` yok; unvan/il/telefon/e-posta/cari kodu düzeltmesi buradan,
+- **Hızlı ekleme** (`servis.yaz` + `hesap.kart_yaz`|`hesap.yaz`): yalnız ad +
+  il (+ tesis); kayıt doğrulanmamış doğar, mali alanlar hiç açılmaz (KD-07).
+  G10.2 (KARARLAR 2026-10-28): müşteri KARTINI yalnız Müşteri İlişkileri /
+  satış destek / muhasebe / yöneticiler açar; eskiden kapı `lokasyon.yaz`
+  idi ve bütün TS saha/operasyon rollerinde vardı. TS operasyon müşteriyi
+  listeden seçer, yoksa kart talebi bırakır.
+- **Servis tarafı müşteri düzenleme** (`hesap.kart_yaz`|`hesap.yaz`): servis
+  rollerinde `hesap.yaz` yok; unvan/il/telefon/e-posta/cari kodu düzeltmesi buradan,
   mobilite rolü taşıyan hesapta 409 (montaj noktası künyesi hak edişindir,
   E14-D01).
 - **Takma ad** (`hesap.birlestir`): eski yazımların tek hedefe bağlanması.
@@ -25,7 +29,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
-from app.api.deps import ClockDep, DbDep, client_ip, require_permission
+from app.api.deps import (
+    ClockDep,
+    DbDep,
+    client_ip,
+    require_any_permission,
+    require_permission,
+)
 from app.models import AccountAlias, User
 from app.services import audit, kvkk
 from app.services.teknik_servis import ana_veri
@@ -34,7 +44,10 @@ from app.services.teknik_servis.ana_veri import AnaVeriHatasi
 router = APIRouter(prefix="/api/teknik-servis/ana-veri", tags=["teknik-servis-ana-veri"])
 
 Arayici = Annotated[User, Depends(require_permission("servis.gor"))]
-HizliEkleyici = Annotated[User, Depends(require_permission("servis.yaz", "lokasyon.yaz"))]
+HizliEkleyici = Annotated[User, Depends(require_permission("servis.yaz"))]
+# Müşteri kartı açma/düzeltme (G10.2): TS'ye özel `hesap.kart_yaz` ya da
+# mobilite Hesaplar ekranının `hesap.yaz`'ı — biri yeter.
+KartYazici = Annotated[User, Depends(require_any_permission("hesap.kart_yaz", "hesap.yaz"))]
 LokasyonYazici = Annotated[User, Depends(require_permission("lokasyon.yaz"))]
 Birlestirici = Annotated[User, Depends(require_permission("hesap.birlestir"))]
 
@@ -130,7 +143,12 @@ class HizliMusteriOut(BaseModel):
 
 @router.post("/hizli-musteri", response_model=HizliMusteriOut, status_code=201)
 async def hizli_musteri(
-    payload: HizliMusteriIn, request: Request, db: DbDep, clock: ClockDep, user: HizliEkleyici
+    payload: HizliMusteriIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: HizliEkleyici,
+    _kart: KartYazici,
 ) -> HizliMusteriOut:
     """Servis ekranından müşteri (+ tesis) açar; benzer kayıt varsa 409 + adaylar."""
     try:
@@ -220,7 +238,7 @@ class MusteriOut(BaseModel):
 
 @router.patch("/musteriler/{hesap_id}", response_model=MusteriOut)
 async def musteri_guncelle(
-    hesap_id: int, payload: MusteriPatch, request: Request, db: DbDep, user: LokasyonYazici
+    hesap_id: int, payload: MusteriPatch, request: Request, db: DbDep, user: KartYazici
 ) -> MusteriOut:
     """Servis personelinin müşteri düzeltmesi (E14-D01 madde 3).
 

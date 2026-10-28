@@ -5,9 +5,14 @@ Maddeler: TS-112, TS-113, TS-116. D2-C.
 **Kalem ≠ tahsis:** kalem "kaç adet istendi", tahsis "hangi depodan hangi
 cihaz / kaç adet". Tahsis cihazı bağlar ama depodan ÇIKARMAZ (durum HAZIR
 kalır); sevk cihazı KIRADA yapar. Bir kalemin AKTİF tahsis toplamı kalem
-adedini aşamaz; seri cihaz çakışan tarihlerde iki AKTİF tahsiste olamaz
-(`ex_rtahsis_cihaz_cakisma` — servis önce açık mesajla 409 verir, kısıt
-yarış durumundaki ikinci savunmadır). Toplu üründe serbest adet:
+adedini aşamaz. Seri cihazın tarihleri çakışan İKİNCİ AKTİF tahsisi (çifte
+rezervasyon) M10.1 (KARARLAR 2026-10-28 §7 Faz A/4) ile ENGEL DEĞİL UYARIDIR:
+servis çakışan kiralamaları `CakismaUyarisi` (409 + liste) ile bildirir;
+çağıran `CakismaOnayi(gerekce)` verirse kayıt yapılır, geçilen çakışmalar
+onay nesnesine yazılır ve API denetim izine gerekçeyle düşer. Eski
+`ex_rtahsis_cihaz_cakisma` kısıtı `e1a000000003` ile kaldırıldı (yerine aynı
+ifadeli GiST indeksi `ix_rtahsis_cihaz_aralik`). Aynı kiralamada aynı cihaz
+iki kez tahsis EDİLEMEZ (bu bir uyarı değil, veri hatası). Toplu üründe serbest adet:
 `bakiye(depo, HAZIR) − Σ(qty − sevk)[AKTİF, aynı depo, tarih çakışan]`.
 
 **Rezervasyon (K3):** PLANLANDI…TOPLANDI durumundaki kiralamanın kalemleri
@@ -28,7 +33,7 @@ sayaç değişikliklerinin kimliklerini taşır ki aşama geri alma
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -348,17 +353,100 @@ class TahsisSatiri:
     adet: int | None = None
 
 
-async def _seri_cakisma(
-    db: AsyncSession, cihaz_id: int, baslangic: date, bitis: date
-) -> RentalAllocation | None:
-    return await db.scalar(
-        select(RentalAllocation).where(
-            RentalAllocation.asset_id == cihaz_id,
-            RentalAllocation.durum == "AKTIF",
-            RentalAllocation.baslangic < bitis,
-            RentalAllocation.bitis > baslangic,
+@dataclass
+class CakismaOnayi:
+    """M10.1: tarih çakışmasını bilerek geçme beyanı (gerekçe zorunlu, API'de
+    boş olamaz). Servis geçilen çakışmaları `gecilenler`e yazar; API bunları
+    gerekçeyle birlikte denetim izine düşer."""
+
+    gerekce: str
+    gecilenler: list[dict[str, Any]] = field(default_factory=list)
+
+
+class CakismaUyarisi(KiralamaHatasi):
+    """Seri cihaz başka kiralamada aynı tarihlere tahsisli (M10.1) — 409 +
+    `kod=KIRALAMA_CAKISMA` + çakışan kiralama listesi. Onay + gerekçeyle
+    tekrar gönderilirse kayıt yapılır."""
+
+    def __init__(self, cakismalar: list[dict[str, Any]]):
+        ozet = ", ".join(
+            f"{c['seri_no']} → {c['kiralama_no']} ({c['baslangic']} – {c['bitis']})"
+            for c in cakismalar[:5]
         )
+        if len(cakismalar) > 5:
+            ozet += f" ve {len(cakismalar) - 5} çakışma daha"
+        super().__init__(
+            f"Tarih çakışması: {ozet}. Yine de kaydetmek için gerekçe girin.",
+            veri={"kod": "KIRALAMA_CAKISMA", "cakismalar": cakismalar},
+        )
+
+
+async def _seri_cakismalari(
+    db: AsyncSession,
+    cihaz: RentalAsset,
+    baslangic: date,
+    bitis: date,
+    *,
+    haric_tahsis_id: int | None = None,
+) -> list[RentalAllocation]:
+    """Cihazın tarihleri kesişen (yarı açık `[)`) AKTİF tahsisleri."""
+    stmt = select(RentalAllocation).where(
+        RentalAllocation.asset_id == cihaz.id,
+        RentalAllocation.durum == "AKTIF",
+        RentalAllocation.baslangic < bitis,
+        RentalAllocation.bitis > baslangic,
     )
+    if haric_tahsis_id is not None:
+        stmt = stmt.where(RentalAllocation.id != haric_tahsis_id)
+    return list((await db.scalars(stmt.order_by(RentalAllocation.id))).all())
+
+
+async def _cakisma_satirlari(
+    db: AsyncSession, cihaz: RentalAsset, tahsisler_: list[RentalAllocation]
+) -> list[dict[str, Any]]:
+    """Uyarı satırı: yalnız kiralama no/tarih/durum (müşteri adı yok — çakışan
+    kiralama kullanıcının kapsamı dışında olabilir)."""
+    satirlar = []
+    for t in tahsisler_:
+        baska = await db.get(Rental, t.rental_id)
+        satirlar.append(
+            {
+                "seri_no": cihaz.serial_no,
+                "kiralik_id": cihaz.id,
+                "tahsis_id": t.id,
+                "kiralama_id": t.rental_id,
+                "kiralama_no": baska.rental_no if baska else None,
+                "kiralama_durumu": baska.status if baska else None,
+                "baslangic": t.baslangic.isoformat(),
+                "bitis": t.bitis.isoformat(),
+            }
+        )
+    return satirlar
+
+
+async def cakisma_denetle(
+    db: AsyncSession,
+    kiralama: Rental,
+    istekler: list[tuple[RentalAsset, date, date, int | None]],
+    onay: CakismaOnayi | None,
+) -> None:
+    """Seri cihaz çakışmalarını TOPLU denetler (yazmadan ÖNCE çağrılır).
+
+    `istekler` = (cihaz, başlangıç, bitiş, hariç tutulacak tahsis). Aynı
+    kiralamadaki AKTİF tahsisle çakışma her zaman hatadır; başka kiralamayla
+    çakışma onaysızsa `CakismaUyarisi`, onaylıysa `onay.gecilenler`e eklenir.
+    """
+    bulunan: list[dict[str, Any]] = []
+    for cihaz, bas, bit, haric in istekler:
+        cakisan = await _seri_cakismalari(db, cihaz, bas, bit, haric_tahsis_id=haric)
+        if any(t.rental_id == kiralama.id for t in cakisan):
+            raise KiralamaHatasi(f"'{cihaz.serial_no}' bu kiralamada zaten tahsisli")
+        bulunan.extend(await _cakisma_satirlari(db, cihaz, cakisan))
+    if not bulunan:
+        return
+    if onay is None:
+        raise CakismaUyarisi(bulunan)
+    onay.gecilenler.extend(bulunan)
 
 
 async def tahsis_et(
@@ -369,12 +457,14 @@ async def tahsis_et(
     user: User,
     clock: Clock,
     replaced_allocation_id: int | None = None,
+    cakisma_onayi: CakismaOnayi | None = None,
 ) -> list[RentalAllocation]:
     """Kalemleri depodaki cihaz/adetle karşılar (`kind=TAHSIS`, durum değişmez).
 
     Katalog satırları `product_id` sıralı FOR UPDATE; seri cihaz satırları da
     kilitlenir. İlk tahsiste PLANLANDI → HAZIRLANIYOR. Kalem toplamını aşan,
-    müsait olmayan ya da başka kiralamaya tarih çakışan istek 409.
+    müsait olmayan istek 409. Başka kiralamaya tarih çakışan seri cihaz
+    `CakismaUyarisi` (409) — `cakisma_onayi` verilirse kaydedilir (M10.1).
     """
     if kiralama.status not in TAHSIS_DURUMLARI_IZINLI:
         if kiralama.status == "TALEP":
@@ -391,6 +481,14 @@ async def tahsis_et(
     if len(seri_idler) != len(set(seri_idler)):
         raise girdi("Aynı cihaz iki kez seçildi")
     cihazlar = await cihazlari_kilitle(db, seri_idler)
+    # Çakışma uyarısı yazmadan ÖNCE ve TOPLU: kullanıcı bütün çakışmaları tek
+    # pencerede görür, onayladığında hepsi birlikte geçilir (M10.1).
+    await cakisma_denetle(
+        db,
+        kiralama,
+        [(c, kiralama.baslangic, kiralama.bitis, None) for c in cihazlar.values()],
+        cakisma_onayi,
+    )
     mevcut = await tahsisler(db, kiralama.id)
     eklenen_kalem: dict[int, int] = {}
     eklenen_depo: dict[tuple[int, int], int] = {}
@@ -431,13 +529,6 @@ async def tahsis_et(
                     raise KiralamaHatasi(
                         f"'{cihaz.serial_no}' {DURUM_ETIKETLERI[cihaz.durum]}; yalnız hazır cihaz "
                         "tahsis edilir"
-                    )
-                cakisan = await _seri_cakisma(db, cihaz.id, kiralama.baslangic, kiralama.bitis)
-                if cakisan is not None:
-                    baska = await db.get(Rental, cakisan.rental_id)
-                    raise KiralamaHatasi(
-                        f"'{cihaz.serial_no}' bu tarihlerde "
-                        f"{baska.rental_no if baska else 'başka bir kiralama'} için tahsisli"
                     )
                 await kiralama_deposu(db, cihaz.warehouse_id, kiralama.birim)
                 tahsis = RentalAllocation(
@@ -902,6 +993,7 @@ async def degisim(
     user: User,
     clock: Clock,
     note: str | None = None,
+    cakisma_onayi: CakismaOnayi | None = None,
 ) -> RentalEvent:
     """Sahadaki seri cihazı başka bir cihazla TEK transaction'da değiştirir.
 
@@ -911,8 +1003,8 @@ async def degisim(
     tahsis KAPANDI olur. Ayrı veri modeli yoktur (E06-20).
 
     Kiralama durumu DEĞİŞMEZ (müşterideki adet aynı kalır). Yeni cihaz HAZIR
-    değilse, başka birimdeyse ya da tarihler çakışan başka bir AKTİF tahsisi
-    varsa 409 — yarışta `ex_rtahsis_cihaz_cakisma` aynı kuralı korur. Yalnız
+    değilse ya da başka birimdeyse 409; tarihleri çakışan başka bir AKTİF
+    tahsisi varsa `CakismaUyarisi` (onay + gerekçeyle geçilir, M10.1). Yalnız
     seri takipli cihaz değiştirilir; toplu üründe iade + ek tahsis kullanılır
     (400).
     """
@@ -955,13 +1047,7 @@ async def degisim(
     # gecikmiş kiralamada en az bir günlük aralık korunur (`bitis > baslangic`).
     baslangic = max(kiralama.baslangic, min(bugun_, kiralama.bitis - timedelta(days=1)))
     bitis = max(kiralama.bitis, baslangic + timedelta(days=1))
-    cakisan = await _seri_cakisma(db, yeni_cihaz.id, baslangic, bitis)
-    if cakisan is not None:
-        baska = await db.get(Rental, cakisan.rental_id)
-        raise KiralamaHatasi(
-            f"'{yeni_cihaz.serial_no}' bu tarihlerde "
-            f"{baska.rental_no if baska else 'başka bir kiralama'} için tahsisli"
-        )
+    await cakisma_denetle(db, kiralama, [(yeni_cihaz, baslangic, bitis, None)], cakisma_onayi)
     metin = (note or "").strip()
     an = clock.now()
     yeni = RentalAllocation(
@@ -1050,32 +1136,37 @@ async def ozet_seriler(db: AsyncSession, tahsis_listesi: list[RentalAllocation])
 
 
 async def tarihleri_uygula(
-    db: AsyncSession, kiralama: Rental, baslangic: date, bitis: date, *, user: User
+    db: AsyncSession,
+    kiralama: Rental,
+    baslangic: date,
+    bitis: date,
+    *,
+    user: User,
+    cakisma_onayi: CakismaOnayi | None = None,
 ) -> None:
     """AKTİF tahsislerin tarihlerini kiralamayla eşitler (uzatma, K15).
 
-    Seri cihaz başka kiralamaya çakışırsa önce açık mesaj (409); yarışta
-    `ex_rtahsis_cihaz_cakisma` yakalar.
+    Seri cihaz yeni tarihlerde başka kiralamaya çakışırsa `CakismaUyarisi`
+    (409 + liste); `cakisma_onayi` verilirse uygulanır (M10.1).
     """
-    for t in await tahsisler(db, kiralama.id, kilit=True):
-        if t.durum != "AKTIF":
-            continue
-        if t.asset_id is not None:
-            cakisan = await db.scalar(
-                select(RentalAllocation).where(
-                    RentalAllocation.asset_id == t.asset_id,
-                    RentalAllocation.durum == "AKTIF",
-                    RentalAllocation.id != t.id,
-                    RentalAllocation.baslangic < bitis,
-                    RentalAllocation.bitis > baslangic,
+    aktifler = [t for t in await tahsisler(db, kiralama.id, kilit=True) if t.durum == "AKTIF"]
+    seri = [t for t in aktifler if t.asset_id is not None]
+    if seri:
+        cihazlar = {
+            c.id: c
+            for c in (
+                await db.scalars(
+                    select(RentalAsset).where(RentalAsset.id.in_([t.asset_id for t in seri]))
                 )
-            )
-            if cakisan is not None:
-                cihaz = await db.get(RentalAsset, t.asset_id)
-                raise KiralamaHatasi(
-                    f"'{cihaz.serial_no if cihaz else t.asset_id}' yeni tarihlerde başka bir "
-                    "kiralamaya tahsisli"
-                )
+            ).all()
+        }
+        await cakisma_denetle(
+            db,
+            kiralama,
+            [(cihazlar[t.asset_id], baslangic, bitis, t.id) for t in seri],
+            cakisma_onayi,
+        )
+    for t in aktifler:
         t.baslangic = baslangic
         t.bitis = bitis
         t.updated_by = user.id

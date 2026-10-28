@@ -30,6 +30,18 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Yapısal `detail` (`{kod, mesaj, ...}` — ör. `OFIS_DISI_ERISIM`,
+ * `KIRALAMA_CAKISMA`) taşıyan hatada kullanıcıya gösterilecek metin.
+ */
+function yapisalMesaj(detail: unknown): string | undefined {
+  if (detail && typeof detail === "object" && "mesaj" in detail) {
+    const m = (detail as { mesaj?: unknown }).mesaj;
+    if (typeof m === "string") return m;
+  }
+  return undefined;
+}
+
 async function istek<T>(yol: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(yol, {
     ...init,
@@ -49,6 +61,7 @@ async function istek<T>(yol: string, init: RequestInit = {}): Promise<T> {
       const g = govde as { detail?: unknown } | null;
       if (typeof g?.detail === "string") mesaj = g.detail;
       else if (Array.isArray(g?.detail)) mesaj = g.detail[0]?.msg ?? mesaj;
+      else mesaj = yapisalMesaj(g?.detail) ?? mesaj;
     } catch {
       /* gövde JSON değil — varsayılan mesaj kalsın */
     }
@@ -111,6 +124,7 @@ async function putBaslikli<T>(
       g = await res.json();
       const d = (g as { detail?: unknown } | null)?.detail;
       if (typeof d === "string") mesaj = d;
+      else mesaj = yapisalMesaj(d) ?? mesaj;
     } catch {
       /* gövde JSON değil */
     }

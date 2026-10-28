@@ -2,7 +2,7 @@
 
 Bu kısıtlar iş kurallarının SON savunmasıdır: aynı cihaza ikinci açık atölye
 kaydı (`uq_atolye_acik_ekipman`), aynı kiralık cihazın çakışan tahsisi
-(`ex_rtahsis_cihaz_cakisma`), çakışan işçilik tarifesi
+(`ex_rtahsis_cihaz_cakisma` — M10.1 ile kaldırıldı, uyarıya döndü), çakışan işçilik tarifesi
 (`ex_iscilik_tarife_cakisma`), servis stok defterinin değiştirilemezliği
 (`trg_stok_hareket_degismez`), PB/atölye işine SLA damgası (`ck_so_pb_sla`).
 Biri bir migration düzenlemesinde sessizce düşerse servis katmanındaki kontrol
@@ -39,6 +39,8 @@ async def test_kritik_indeks_ve_kisitlar_var(db) -> None:
         "uq_so_kiralama_tur_acik",
         "ix_so_sla_hedef",
         "ix_quote_birim_durum_tarih",
+        # M10.1: EXCLUDE yerine aynı ifadeli GiST indeksi (e1a000000003).
+        "ix_rtahsis_cihaz_aralik",
     ):
         assert ad in indeksler, f"{ad} indeksi yok"
 
@@ -49,7 +51,6 @@ async def test_kritik_indeks_ve_kisitlar_var(db) -> None:
         "uq_so_id_ekipman",
         "fk_atolye_servis_ekipman",
         "uq_atolye_servis_isi",
-        "ex_rtahsis_cihaz_cakisma",
         "fk_rasset_urun_kimlik",
         "ck_rasset_seri_takipli",
         "ck_warehouse_tur_tekil",

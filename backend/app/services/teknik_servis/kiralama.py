@@ -368,6 +368,7 @@ async def guncelle(
     user: User,
     clock: Clock,
     ip: str | None = None,
+    cakisma_onayi: tahsis_svc.CakismaOnayi | None = None,
 ) -> Rental:
     """Başlık + kalem + irtibat TEK transaction (PUT). Durum ve birim kabul edilmez.
 
@@ -572,7 +573,9 @@ async def guncelle(
             )
     if tarih_degisti:
         if kiralama.status in REZERV_DURUMLARI:
-            await tahsis_svc.tarihleri_uygula(db, kiralama, yeni_bas, yeni_bit, user=user)
+            await tahsis_svc.tarihleri_uygula(
+                db, kiralama, yeni_bas, yeni_bit, user=user, cakisma_onayi=cakisma_onayi
+            )
         await olay_yaz(
             db,
             kiralama,

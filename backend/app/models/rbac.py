@@ -148,6 +148,11 @@ class Role(Base, PkMixin, TimestampMixin):
     # eklendiğinde özelleştirilmiş rollere kendiliğinden inmez — seed bunu
     # log'a UYARI olarak yazar (KVKK menüsü tam böyle sessizce kaybolmuştu).
     ozellestirildi: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # G3.8 (KARARLAR 2026-10-28 §7 Faz A/8): bu roldeki kullanıcılar yalnız ofis
+    # ağından (ayar `ofis_ag_listesi`) giriş yapar ve istek atar; liste boşsa
+    # kısıt yok. İzin değil rol niteliği: izin olsaydı ADMIN/YONETIM bütün
+    # izinleri aldığı için kendiliğinden kısıtlanırdı (`permissions.YALNIZ_OFIS_ROLLERI`).
+    yalniz_ofis: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), default=False)
 
     permissions: Mapped[list[RolePermission]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"

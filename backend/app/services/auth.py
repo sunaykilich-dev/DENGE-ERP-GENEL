@@ -19,6 +19,34 @@ SESSION_TTL = timedelta(hours=4)
 # Açılıştan 12 saat sonra oturum ne olursa olsun düşer; kullanıcı yeniden
 # girer (MFA dahil). KOD SABİTİDİR, ayar değil: arayüzden gevşetilemesin (K-05).
 SESSION_MAX = timedelta(hours=12)
+# --- İstemci türüne göre süre (G3.7, KARARLAR 2026-10-28 §7 Faz A/8) -----------
+# "Masaüstünde kısa, mobilde uzun oturum": sahadaki teknisyen telefonda gün
+# boyu (öğle arası, yolda) ekranı uzun süre kullanmadan durur ve her girişte
+# MFA ister. Masaüstü değerleri yukarıdaki sabitlerdir (değişmedi). İstemci
+# giriş isteğinde yalnız İPUCU verir (`istemci: "mobil"`); SÜREYİ SUNUCU seçer
+# ve bilinmeyen ipucu masaüstü sayılır. Kod sabitidir (K-05 gerekçesi: güvenlik
+# süresi arayüzden gevşetilmesin). Mobilde de mutlak sınır vardır: açılıştan
+# 24 saat sonra oturum düşer (çalınan telefonda süresiz oturum olmasın).
+SESSION_TTL_MOBIL = timedelta(hours=12)
+SESSION_MAX_MOBIL = timedelta(hours=24)
+ISTEMCI_MASAUSTU = "MASAUSTU"
+ISTEMCI_MOBIL = "MOBIL"
+# istemci -> (hareketsizlik, mutlak üst sınır)
+OTURUM_SURELERI: dict[str, tuple[timedelta, timedelta]] = {
+    ISTEMCI_MASAUSTU: (SESSION_TTL, SESSION_MAX),
+    ISTEMCI_MOBIL: (SESSION_TTL_MOBIL, SESSION_MAX_MOBIL),
+}
+
+
+def istemci_turu(ipucu: str | None) -> str:
+    """İstemci ipucunu oturum türüne çevirir; bilinmeyen/boş → masaüstü (kısa)."""
+    return ISTEMCI_MOBIL if (ipucu or "").strip().casefold() == "mobil" else ISTEMCI_MASAUSTU
+
+
+def oturum_sureleri(istemci: str | None) -> tuple[timedelta, timedelta]:
+    return OTURUM_SURELERI.get(istemci or ISTEMCI_MASAUSTU, OTURUM_SURELERI[ISTEMCI_MASAUSTU])
+
+
 # Oturum bu süreden eskiyse expires_at ileri kaydırılır (kayan pencere,
 # her istekte UPDATE atmamak için eşikli).
 SLIDE_THRESHOLD = timedelta(minutes=30)
@@ -260,7 +288,9 @@ async def reset_login_attempts(db: AsyncSession, username: str) -> None:
     await db.execute(delete(LoginAttempt).where(LoginAttempt.username == username))
 
 
-async def create_session(db: AsyncSession, user: User, clock: Clock) -> str:
+async def create_session(
+    db: AsyncSession, user: User, clock: Clock, istemci: str = ISTEMCI_MASAUSTU
+) -> str:
     token = secrets.token_hex(32)
     now = clock.now()
     db.add(
@@ -268,37 +298,43 @@ async def create_session(db: AsyncSession, user: User, clock: Clock) -> str:
             token=token,
             user_id=user.id,
             created_at=now,
-            expires_at=_bitis(now, now),
+            expires_at=_bitis(now, now, istemci),
             last_seen_at=now,
+            istemci=istemci,
         )
     )
     await db.flush()
     return token
 
 
-def _bitis(acilis: datetime, now: datetime) -> datetime:
-    """Kayan bitiş, mutlak üst sınırı (`acilis + SESSION_MAX`) aşamaz."""
-    return min(now + SESSION_TTL, acilis + SESSION_MAX)
+def _bitis(acilis: datetime, now: datetime, istemci: str | None = ISTEMCI_MASAUSTU) -> datetime:
+    """Kayan bitiş, mutlak üst sınırı (`acilis + mutlak`) aşamaz (istemci türüne göre)."""
+    ttl, azami = oturum_sureleri(istemci)
+    return min(now + ttl, acilis + azami)
 
 
 async def resolve_session(db: AsyncSession, token: str, clock: Clock) -> User | None:
     """Oturum jetonunu kullanıcıya çözer; geçersizse None (→ 401).
 
     Üç bağımsız düşürme koşulu: hareketsizlik (`expires_at`), mutlak süre
-    (`SESSION_MAX`, kaydırma bunu aşamaz) ve giriş kuralı
+    (`SESSION_MAX`; mobil oturumda `SESSION_MAX_MOBIL`, kaydırma bunu aşamaz)
+    ve giriş kuralı
     (`giris_yapabilir_mi`: pasifleştirilen ya da girişi kapatılan kişinin
     açık oturumu da bir sonraki istekte düşer).
     """
     now = clock.now()
     sess = await db.get(Session, token)
-    if sess is None or sess.expires_at <= now or now - sess.created_at >= SESSION_MAX:
+    if sess is None:
+        return None
+    _, azami = oturum_sureleri(sess.istemci)
+    if sess.expires_at <= now or now - sess.created_at >= azami:
         return None
     user = await db.get(User, sess.user_id)
     if user is None or not user.giris_yapabilir_mi():
         return None
     if now - sess.last_seen_at > SLIDE_THRESHOLD:
         sess.last_seen_at = now
-        sess.expires_at = _bitis(sess.created_at, now)
+        sess.expires_at = _bitis(sess.created_at, now, sess.istemci)
         # COMMIT burada bilinçli (servis katmanında istisna): kaydırma eskiden
         # yalnız flush ediliyordu ve yazma yapmayan uçlarda (GET) istek
         # sonunda geri alınıyordu — salt okuyan kullanıcının oturumu girişten

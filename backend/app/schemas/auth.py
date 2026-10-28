@@ -6,12 +6,17 @@ from pydantic import BaseModel, Field
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=50)
     password: str = Field(min_length=1, max_length=200)
+    # G3.7: istemci ipucu ("masaustu" | "mobil"). Süreyi sunucu seçer
+    # (`services/auth.OTURUM_SURELERI`); bilinmeyen değer masaüstü sayılır.
+    istemci: str | None = Field(default=None, max_length=20)
 
 
 class RoleOut(BaseModel):
     code: str
     name: str
     scope: str
+    # G3.8: rol yalnız ofis ağından girer (ayar `ofis_ag_listesi`).
+    yalniz_ofis: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -83,6 +88,8 @@ class LoginResult(BaseModel):
 class MfaVerifyRequest(BaseModel):
     pending_token: str
     code: str = Field(min_length=6, max_length=10)
+    # G3.7: oturum MFA adımında açıldığı için istemci ipucu burada da gelir.
+    istemci: str | None = Field(default=None, max_length=20)
 
 
 class MfaCodeRequest(BaseModel):
