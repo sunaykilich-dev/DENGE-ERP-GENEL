@@ -30,7 +30,7 @@ kısıtı ve mobil oturum süresi kalkar (açık mobil oturumlar masaüstü sür
 döner, bir sonraki istekte süresi geçmişse düşer).
 
 Revision ID: e1a000000003
-Revises: d4a000000002
+Revises: e1a000000002
 Create Date: 2026-10-28
 
 """
@@ -42,7 +42,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "e1a000000003"
-down_revision: str | None = "d4a000000002"
+down_revision: str | None = "e1a000000002"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
