@@ -49,6 +49,19 @@ export const ADRES_TURU_ETIKET: Record<AdresTuru, string> = {
   SEVK: "Sevk",
 };
 
+/**
+ * SLA takvimi (Faz A, TS-200; M5.1/M5.4/M12.2). Müşteri sözleşmesine göre 7/24
+ * ya da mesai; lokasyon değeri müşteriyi, müşteri değeri SLA politikasını ezer.
+ * Takvim iş AÇILIRKEN işe dondurulur — değişiklik açık işlerin hedefini oynatmaz.
+ * Mesai saatleri ayardır (varsayılan 08:30–18:00); tatiller fark etmez.
+ */
+export type SlaTakvimTuru = "7_24" | "MESAI";
+
+export const SLA_TAKVIM_SECENEKLERI: { value: SlaTakvimTuru; label: string }[] = [
+  { value: "7_24", label: "7/24" },
+  { value: "MESAI", label: "Mesai (hafta içi 08:30–18:00)" },
+];
+
 export interface Lokasyon {
   id: number;
   account_id: number;
@@ -64,8 +77,17 @@ export interface Lokasyon {
   is_primary: boolean;
   is_active: boolean;
   is_verified: boolean;
+  /** null = müşterinin / SLA politikasının takvimi. */
+  sla_takvim_turu: SlaTakvimTuru | null;
   version: number;
   irtibatlar: Irtibat[] | null;
+}
+
+export interface ServisMusterisi {
+  id: number;
+  title: string;
+  sla_takvim_turu: SlaTakvimTuru | null;
+  version: number;
 }
 
 export interface HizliMusteriSonucu {
@@ -147,6 +169,9 @@ export const anaVeriApi = {
 
   // --- TS-192: servis kartı, kapsam bilgisi, birleştirme ---
   servisKarti: (hesapId: number) => api.get<ServisKarti>(`${ANA}/musteriler/${hesapId}/servis-karti`),
+  /** Servis tarafı müşteri düzeltmesi; burada yalnız SLA takvimi (iyimser kilit `version`). */
+  musteriSlaTakvimi: (hesapId: number, sla_takvim_turu: SlaTakvimTuru | null, version: number) =>
+    api.patch<ServisMusterisi>(`${ANA}/musteriler/${hesapId}`, { sla_takvim_turu, version }),
   kapsamBilgisi: (p: { hesap_id?: number; lokasyon_id?: number; ekipman_id?: number }) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(p)) if (v != null) q.set(k, String(v));
@@ -164,9 +189,19 @@ export const anaVeriApi = {
 export interface ServisKarti {
   hesap_id: number;
   unvan: string;
+  /** Müşteri sözleşmesinin SLA takvimi; null = SLA politikasının takvimi. */
+  sla_takvim_turu: SlaTakvimTuru | null;
+  version: number;
   acik_is_sayisi: number;
   lokasyonsuz_acik_is: number;
-  lokasyonlar: { id: number; tesis_adi: string | null; il: string | null; aktif: boolean; acik_is: number }[];
+  lokasyonlar: {
+    id: number;
+    tesis_adi: string | null;
+    il: string | null;
+    aktif: boolean;
+    acik_is: number;
+    sla_takvim_turu: SlaTakvimTuru | null;
+  }[];
   servis_isleri: {
     id: number;
     so_no: string;

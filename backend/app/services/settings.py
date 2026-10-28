@@ -135,6 +135,10 @@ DEFAULTS: dict[str, Any] = {
     "servis_eposta_acik": False,
     "servis_eposta_deneme": 3,
     "servis_gunluk_ozet_saati": "07:30",
+    # Faz A (TS-200, M5.1/M5.4): MESAI takvimli SLA'nın mesai penceresi (yerel
+    # saat, hafta içi; tatiller fark etmez). Bitiş başlangıçtan sonra olmalı.
+    "servis_mesai_baslangic": "08:30",
+    "servis_mesai_bitis": "18:00",
     # --- Atölye / kiralama ----------------------------------------------------
     "atolye_tekrar_gelis_gun": 90,
     "atolye_teslim_alinmayan_uyari_gun": 30,
@@ -216,6 +220,8 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "servis_eposta_acik": ("bool", None, None),
     "servis_eposta_deneme": ("tam", 1, 10),
     "servis_gunluk_ozet_saati": ("saat", None, None),
+    "servis_mesai_baslangic": ("saat", None, None),
+    "servis_mesai_bitis": ("saat", None, None),
     "atolye_tekrar_gelis_gun": ("tam", 1, 730),
     "atolye_teslim_alinmayan_uyari_gun": ("tam", 1, 365),
     "kiralama_kontrol_uyari_gun": ("tam", 1, 365),
@@ -322,6 +328,25 @@ async def get(db: AsyncSession, key: str) -> Any:
     return _decode(key, row.value) if row is not None else DEFAULTS[key]
 
 
+_MESAI_ANAHTARLARI = ("servis_mesai_baslangic", "servis_mesai_bitis")
+
+
+async def _mesai_penceresi_dogrula(db: AsyncSession, degerler: dict[str, Any]) -> None:
+    """İki anahtarlı kural: mesai bitişi başlangıçtan SONRA olmalı.
+
+    Tek anahtar gönderildiğinde diğerinin geçerli değeri DB'den okunur; aksi
+    halde "18:00 → 07:00" tek tek kaydedilip ters pencere oluşabilirdi.
+    """
+    if not any(k in degerler for k in _MESAI_ANAHTARLARI):
+        return
+    bas = degerler.get(_MESAI_ANAHTARLARI[0]) or await get(db, _MESAI_ANAHTARLARI[0])
+    bit = degerler.get(_MESAI_ANAHTARLARI[1]) or await get(db, _MESAI_ANAHTARLARI[1])
+    b_s, b_d = (int(x) for x in str(bas).split(":"))
+    t_s, t_d = (int(x) for x in str(bit).split(":"))
+    if b_s * 60 + b_d >= t_s * 60 + t_d:
+        raise AyarHatasi("servis_mesai_bitis: mesai bitişi başlangıçtan sonra olmalı")
+
+
 async def set_many(db: AsyncSession, values: dict[str, Any], user_id: int | None) -> None:
     # Önce HEPSİ doğrulanır, sonra yazılır: üçüncü anahtar hatalıyken ilk
     # ikisinin oturuma yazılmış kalması yarım güncelleme demekti.
@@ -330,6 +355,7 @@ async def set_many(db: AsyncSession, values: dict[str, Any], user_id: int | None
         if key not in DEFAULTS:
             raise KeyError(f"Bilinmeyen ayar: {key}")
         dogrulanmis[key] = ayar_dogrula(key, value)
+    await _mesai_penceresi_dogrula(db, dogrulanmis)
     for key, value in dogrulanmis.items():
         stored = (
             crypto.encrypt(value) if key in SENSITIVE_KEYS and isinstance(value, str) else value

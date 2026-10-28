@@ -19,7 +19,7 @@ kuralı gereken tek uçta gövdede `_herhangi` ile kontrol edilir.
 """
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
@@ -190,6 +190,8 @@ class MusteriPatch(BaseModel):
     phone: str | None = None
     email: str | None = Field(default=None, max_length=160)
     dis_referans: str | None = Field(default=None, max_length=40)
+    # Faz A (TS-200, M5.1): müşteri sözleşmesinin SLA takvimi; null = politikanın.
+    sla_takvim_turu: Literal["7_24", "MESAI"] | None = None
     version: int
 
     @field_validator("title", mode="before")
@@ -212,10 +214,15 @@ class MusteriOut(BaseModel):
     phone: str | None
     email: str | None
     dis_referans: str | None
+    sla_takvim_turu: str | None = None
     is_verified: bool
     version: int
 
     model_config = {"from_attributes": True}
+
+
+# Mobilite hesabında yalnız bu alan servis tarafından yazılabilir (künye değil).
+_SERVIS_SOZLESME_ALANLARI = frozenset({"sla_takvim_turu"})
 
 
 @router.patch("/musteriler/{hesap_id}", response_model=MusteriOut)
@@ -228,6 +235,12 @@ async def musteri_guncelle(
     uçta YOK. Hesap mobilite rolü (bayi/montaj noktası/tedarikçi) taşıyorsa
     409: montaj noktasının unvanı ve telefonu hak ediş dökümünün künyesidir,
     Hesaplar ekranından (`hesap.yaz`) düzenlenir.
+
+    `sla_takvim_turu` (Faz A, TS-200): müşteri sözleşmesinin SLA takvimi
+    (`7_24` / `MESAI` / null = politikanın). Künye değil, servis sözleşmesi
+    alanıdır; bu yüzden yalnız bu alanı değiştiren istek mobilite rolü taşıyan
+    MÜŞTERİDE de kabul edilir (ör. kendi montajını yapan filo). Açık işlerin
+    hedefi değişmez (takvim açılışta işe dondurulur).
     """
     try:
         hesap = await ana_veri.kapsamli_hesap(db, user, hesap_id)
@@ -238,7 +251,10 @@ async def musteri_guncelle(
             status.HTTP_409_CONFLICT,
             "Bu kaydı siz görüntülerken başka biri değiştirdi. Sayfayı yenileyip tekrar deneyin.",
         )
-    if any(getattr(hesap, r) for r in ana_veri.MOBILITE_ROLLERI):
+    veri: dict[str, Any] = payload.model_dump(exclude_unset=True, exclude={"version"})
+    if set(veri) - _SERVIS_SOZLESME_ALANLARI and any(
+        getattr(hesap, r) for r in ana_veri.MOBILITE_ROLLERI
+    ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Bu hesap mobilite hesabı (bayi / montaj noktası / tedarikçi); "
@@ -247,7 +263,6 @@ async def musteri_guncelle(
     if not hesap.is_musteri:
         raise HTTPException(status.HTTP_409_CONFLICT, "Hesap müşteri değil.")
 
-    veri: dict[str, Any] = payload.model_dump(exclude_unset=True, exclude={"version"})
     if "title" in veri and not veri["title"]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unvan boş olamaz")
     if "region" in veri:

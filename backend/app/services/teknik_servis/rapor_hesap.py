@@ -13,7 +13,10 @@ hiçbir hesapta gerçek süre yerine kullanılmaz. Göçten gelen ve kullanıcı
 eşleşmemiş kayıtlar "Eşleşmemiş: <ad>" satırındadır (E12-D03).
 
 **SLA** yalnız GUNLUK_SERVIS; E10 alanları okunur, hesaplanmaz (`sla_sonuc`,
-`gecikme_nedeni`, `sla_durdurulan_dk`, `cozum_hedef_at`). Ölçülemedi ve
+`gecikme_nedeni`, `sla_durdurulan_dk`, `cozum_hedef_at`). Çözüm süresi işin
+DONMUŞ takvimiyle ölçülür (Faz A, TS-200): MESAI işinde yalnız mesai
+dakikaları sayılır — `sla_durdurulan_dk` de mesai dakikasıdır, duvar saatinden
+düşülseydi birimler karışırdı. Ölçülemedi ve
 damgasız paydada yok, ayrı satır. "Geciken açık" Operasyon Merkezi'nin
 `sla_asildi` KPI'sının AYNISIDIR (anlık). CSV açılmaz.
 
@@ -26,7 +29,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Select, distinct, func, select
+from sqlalchemy import Select, case, distinct, func, select
 
 from app.models import (
     Account,
@@ -43,7 +46,7 @@ from app.models.teknik_servis import GECIKME_NEDENLERI, KISI_SAATE_DAHIL, ZAMAN_
 from app.permissions import BIRIMLER
 from app.services import settings as ayarlar
 from app.services.normalize import il_normalize
-from app.services.teknik_servis import kapsam, panel
+from app.services.teknik_servis import kapsam, panel, sla, sla_takvim
 from app.services.teknik_servis import rapor_motoru as rm
 from app.services.teknik_servis import rapor_tanimlari as rt
 
@@ -315,14 +318,20 @@ async def cozum_suresi(
     db: AsyncSession, user: User, clock: Clock, f: rm.RaporFiltresi
 ) -> dict[str, Any]:
     """Günlük servis çözüm süresi (saat): bildirim (yoksa SLA başlangıcı, yoksa
-    açılış) → ilk çözüm, SLA'yı durduran bekleme düşülür. İş yoksa None."""
+    açılış) → ilk çözüm, SLA'yı durduran bekleme düşülür. İş yoksa None.
+
+    MESAI takvimli işte süre mesai saatidir (`servis_mesai_dk`)."""
     baslangic = func.coalesce(
         ServiceOrder.reported_at, ServiceOrder.sla_baslangic_at, ServiceOrder.created_at
     )
-    sure = (
-        func.extract("epoch", ServiceOrder.first_completed_at - baslangic) / 3600.0
-        - func.coalesce(ServiceOrder.sla_durdurulan_dk, 0) / 60.0
+    brut_saat = case(
+        (
+            ServiceOrder.sla_takvim_turu == sla_takvim.TAKVIM_MESAI,
+            sla.mesai_dk_sql(baslangic, ServiceOrder.first_completed_at) / 60.0,
+        ),
+        else_=func.extract("epoch", ServiceOrder.first_completed_at - baslangic) / 3600.0,
     )
+    sure = brut_saat - func.coalesce(ServiceOrder.sla_durdurulan_dk, 0) / 60.0
     ort, medyan, adet = (
         await db.execute(
             select(

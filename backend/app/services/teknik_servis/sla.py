@@ -22,8 +22,20 @@ verdiği karışık veri setiyle test edilir (`test_servis_sla_tutarlilik`).
   değişmez; yalnız öncelik/tür/kategori düzeltmesi yeniden damgalar.
 - SLA durduran İŞ BEKLEMESİ (`service_holds.sla_durdurur`) bitince hedef,
   beklenen süre kadar İLERİ alınır (`sla_kayma_dk`); hedef geriye alınmaz.
+  Kayma işin DONMUŞ takvimiyle ölçülür: MESAI işinde hafta sonuna düşen
+  bekleme 0 dk kaydırır (zaten sayılmayan süre).
   "Personel Bekleme Süresi" (zaman kaydındaki BEKLEME faaliyeti) SLA'yı
   durdurmaz ve ilk müdahale sayılmaz (E10-17).
+- **Takvim (Faz A, TS-200; M5.1/M5.4/M12.2):** 7/24 ya da MESAI (hafta içi
+  08:30–18:00, ayar `servis_mesai_baslangic/bitis`; tatiller fark etmez).
+  Öncelik: lokasyon (`addresses.sla_takvim_turu`) → müşteri
+  (`accounts.sla_takvim_turu`) → politika (`takvim_turu`) → 7/24. Sonuç
+  açılışta `service_orders.sla_takvim_turu`'na DONDURULUR; öncelik/birim
+  düzeltmesi hedefi yeniden hesaplar ama donmuş takvimi KORUR (sözleşme
+  sonradan değişse de açık işin kuralı değişmez). Mesai saati ayarı değişirse
+  damgalı hedef anı oynamaz; sonraki kayma/risk hesapları yeni saati kullanır.
+  "Riskte" oranı MESAI işinde çalışılan dakikayla ölçülür (Python
+  `_risk_mi` ve SQL `servis_mesai_dk` aynı kural).
 - `sla_sonuc` İLK TAMAMLANDI'da donar; yeniden açılış silmez (E10 kontrol
   B3). Hedefi olmayan GUNLUK_SERVIS işi OLCULEMEDI'dir (uyum paydasına girmez).
 - Hedefi aşılmış (CANLI damgalı) iş gecikme nedeni girilmeden KAPATILAMAZ (409).
@@ -51,6 +63,8 @@ from sqlalchemy import (
 )
 
 from app.models import (
+    Account,
+    Address,
     ServiceHold,
     ServiceOrder,
     ServiceOrderEvent,
@@ -211,6 +225,30 @@ def ayar_tam_ifadesi(anahtar: str) -> Any:
     return func.coalesce(alt, varsayilan)
 
 
+async def mesai_takvimi(db: AsyncSession) -> sla_takvim.MesaiTakvimi:
+    """Mesai penceresi ayarları (bir kez okunur, saf fonksiyonlara DEĞER olarak geçer)."""
+    return sla_takvim.MesaiTakvimi.metinden(
+        await ayarlar.get(db, "servis_mesai_baslangic"),
+        await ayarlar.get(db, "servis_mesai_bitis"),
+    )
+
+
+def ayar_saat_dk_ifadesi(anahtar: str) -> Any:
+    """ "SS:DD" ayarının gün içi dakika SQL ifadesi (yoksa `DEFAULTS`)."""
+    varsayilan = sla_takvim.saat_dk(ayarlar.DEFAULTS[anahtar])
+    metin = literal_column("settings.value #>> '{}'")
+    alt = (
+        select(
+            cast(func.split_part(metin, ":", 1), Integer) * 60
+            + cast(func.split_part(metin, ":", 2), Integer)
+        )
+        .select_from(Setting.__table__)
+        .where(Setting.key == anahtar)
+        .scalar_subquery()
+    )
+    return func.coalesce(alt, varsayilan)
+
+
 async def _acilis_ani(db: AsyncSession, so: ServiceOrder) -> datetime | None:
     """İşin Clock'la yazılmış açılış anı (OLUSTUR olayı; `created_at` DB saatidir)."""
     return await db.scalar(
@@ -271,6 +309,32 @@ async def politika_bul(db: AsyncSession, oncelik: str, birim: str) -> ServiceSla
     return politika
 
 
+# Takvim kaynağı (olay metni / denetim için).
+TAKVIM_KAYNAK_ADLARI: dict[str, str] = {
+    "LOKASYON": "lokasyon",
+    "MUSTERI": "müşteri sözleşmesi",
+    "POLITIKA": "SLA politikası",
+    "VARSAYILAN": "varsayılan",
+}
+
+
+async def takvim_turu_bul(
+    db: AsyncSession, so: ServiceOrder, politika: ServiceSlaPolicy | None
+) -> tuple[str, str]:
+    """(takvim türü, kaynak): lokasyon → müşteri → politika → 7/24 (M12.2, M5.1)."""
+    if so.address_id is not None:
+        tur = await db.scalar(select(Address.sla_takvim_turu).where(Address.id == so.address_id))
+        if tur:
+            return tur, "LOKASYON"
+    if so.customer_id is not None:
+        tur = await db.scalar(select(Account.sla_takvim_turu).where(Account.id == so.customer_id))
+        if tur:
+            return tur, "MUSTERI"
+    if politika is not None and politika.takvim_turu:
+        return politika.takvim_turu, "POLITIKA"
+    return sla_takvim.TAKVIM_7_24, "VARSAYILAN"
+
+
 def _hedefleri_yaz(
     so: ServiceOrder,
     politika: ServiceSlaPolicy,
@@ -278,8 +342,9 @@ def _hedefleri_yaz(
     *,
     cozum_kayma: int,
     mudahale_kayma: int,
+    tur: str,
+    mesai: sla_takvim.MesaiTakvimi,
 ) -> None:
-    tur = politika.takvim_turu or sla_takvim.TAKVIM_7_24
     cozum_dk = _saat_dk(politika.cozum_saat) or 0
     mudahale_dk = _saat_dk(politika.mudahale_saat)
     so.sla_policy_id = politika.id
@@ -287,9 +352,9 @@ def _hedefleri_yaz(
     so.sla_takvim_turu = tur
     so.cozum_hedef_dk = cozum_dk
     so.mudahale_hedef_dk = mudahale_dk
-    so.cozum_hedef_at = sla_takvim.is_saati_ekle(bas, cozum_dk + cozum_kayma, tur)
+    so.cozum_hedef_at = sla_takvim.is_saati_ekle(bas, cozum_dk + cozum_kayma, tur, mesai=mesai)
     so.mudahale_hedef_at = (
-        sla_takvim.is_saati_ekle(bas, mudahale_dk + mudahale_kayma, tur)
+        sla_takvim.is_saati_ekle(bas, mudahale_dk + mudahale_kayma, tur, mesai=mesai)
         if mudahale_dk is not None
         else None
     )
@@ -301,6 +366,7 @@ def _damga_ozeti(so: ServiceOrder) -> dict[str, Any]:
         "oncelik": so.oncelik,
         "cozum_hedef_at": _iso(so.cozum_hedef_at),
         "mudahale_hedef_at": _iso(so.mudahale_hedef_at),
+        "takvim_turu": so.sla_takvim_turu,
     }
 
 
@@ -317,7 +383,16 @@ async def damgala(db: AsyncSession, so: ServiceOrder, clock: Clock) -> None:
     if yururluk is None or simdi < yururluk:
         return
     politika = await politika_bul(db, so.oncelik, so.birim)
-    _hedefleri_yaz(so, politika, simdi, cozum_kayma=0, mudahale_kayma=0)
+    tur, kaynak = await takvim_turu_bul(db, so, politika)
+    _hedefleri_yaz(
+        so,
+        politika,
+        simdi,
+        cozum_kayma=0,
+        mudahale_kayma=0,
+        tur=tur,
+        mesai=await mesai_takvimi(db),
+    )
     so.cozum_hedef_ilk_at = so.cozum_hedef_at
     so.sla_kaynak = "CANLI"
     await db.flush()
@@ -325,10 +400,11 @@ async def damgala(db: AsyncSession, so: ServiceOrder, clock: Clock) -> None:
         db,
         so,
         "SLA",
-        f"SLA hedefi damgalandı: {_yerel_metin(so.cozum_hedef_at)} ({so.oncelik})",
+        f"SLA hedefi damgalandı: {_yerel_metin(so.cozum_hedef_at)} ({so.oncelik}, "
+        f"{sla_takvim.TAKVIM_ADLARI[tur]} — {TAKVIM_KAYNAK_ADLARI[kaynak]})",
         user=None,
         clock=clock,
-        veri=_damga_ozeti(so),
+        veri={**_damga_ozeti(so), "takvim_kaynagi": kaynak},
     )
 
 
@@ -389,9 +465,20 @@ async def yeniden_damgala(db: AsyncSession, so: ServiceOrder, clock: Clock) -> N
     else:
         bas = so.sla_baslangic_at or await _acilis_ani(db, so) or clock.now()
     politika = await politika_bul(db, so.oncelik, so.birim)
+    # Donmuş takvim korunur (sözleşme sonradan değişse de açık işin kuralı aynı);
+    # hiç damgalanmamış işte öncelik zinciri burada çözülür.
+    tur = so.sla_takvim_turu or (await takvim_turu_bul(db, so, politika))[0]
     eski_hedef = so.cozum_hedef_at
     cozum_kayma, mudahale_kayma = await _kaymalar(db, so)
-    _hedefleri_yaz(so, politika, bas, cozum_kayma=cozum_kayma, mudahale_kayma=mudahale_kayma)
+    _hedefleri_yaz(
+        so,
+        politika,
+        bas,
+        cozum_kayma=cozum_kayma,
+        mudahale_kayma=mudahale_kayma,
+        tur=tur,
+        mesai=await mesai_takvimi(db),
+    )
     if so.cozum_hedef_ilk_at is None:
         so.cozum_hedef_ilk_at = so.cozum_hedef_at
     if so.sla_kaynak is None:
@@ -436,8 +523,9 @@ async def _bekleme_kaymasi_isle(db: AsyncSession, so: ServiceOrder, clock: Clock
     if bekleme is None:
         return
     tur = so.sla_takvim_turu or sla_takvim.TAKVIM_7_24
+    mesai = await mesai_takvimi(db)
     kayma = (
-        sla_takvim.takvim_dakika(bekleme.started_at, bekleme.released_at, tur)
+        sla_takvim.takvim_dakika(bekleme.started_at, bekleme.released_at, tur, mesai=mesai)
         if bekleme.sla_durdurur
         else 0
     )
@@ -446,9 +534,11 @@ async def _bekleme_kaymasi_isle(db: AsyncSession, so: ServiceOrder, clock: Clock
         await db.flush()
         return
     eski = so.cozum_hedef_at
-    so.cozum_hedef_at = sla_takvim.is_saati_ekle(eski, kayma, tur)
+    so.cozum_hedef_at = sla_takvim.is_saati_ekle(eski, kayma, tur, mesai=mesai)
     if so.mudahale_hedef_at is not None and so.ilk_mudahale_at is None:
-        so.mudahale_hedef_at = sla_takvim.is_saati_ekle(so.mudahale_hedef_at, kayma, tur)
+        so.mudahale_hedef_at = sla_takvim.is_saati_ekle(
+            so.mudahale_hedef_at, kayma, tur, mesai=mesai
+        )
     await db.flush()
     await gecmis.olay_yaz(
         db,
@@ -550,9 +640,21 @@ async def kapanis_dogrula(db: AsyncSession, so: ServiceOrder, hedef: str, kaynak
 # --- Hesap: Python tarafı --------------------------------------------------------------
 
 
-def _risk_mi(so: ServiceOrder, simdi: datetime, risk_yuzde: int) -> bool:
+def _risk_mi(
+    so: ServiceOrder,
+    simdi: datetime,
+    risk_yuzde: int,
+    mesai: sla_takvim.MesaiTakvimi | None = None,
+) -> bool:
     if so.sla_baslangic_at is None or so.cozum_hedef_at is None:
         return False
+    if getattr(so, "sla_takvim_turu", None) == sla_takvim.TAKVIM_MESAI:
+        # Çalışılan dakika oranı (SQL `servis_mesai_dk` ile aynı, tam dakika).
+        gecen_dk = sla_takvim.takvim_dakika(so.sla_baslangic_at, simdi, "MESAI", mesai=mesai)
+        toplam_dk = sla_takvim.takvim_dakika(
+            so.sla_baslangic_at, so.cozum_hedef_at, "MESAI", mesai=mesai
+        )
+        return gecen_dk * 100 >= toplam_dk * risk_yuzde
     gecen = (simdi - so.sla_baslangic_at).total_seconds()
     toplam = (so.cozum_hedef_at - so.sla_baslangic_at).total_seconds()
     return gecen * 100 >= toplam * risk_yuzde
@@ -568,10 +670,19 @@ def mudahale_durumu(so: ServiceOrder, simdi: datetime) -> str | None:
     return "ASILDI" if so.mudahale_hedef_at <= simdi else "BEKLENIYOR"
 
 
-def sla_durumu(so: Any, aktif_bekleme: Any, simdi: datetime, risk_yuzde: int) -> SlaDurumu:
+def sla_durumu(
+    so: Any,
+    aktif_bekleme: Any,
+    simdi: datetime,
+    risk_yuzde: int,
+    *,
+    mesai: sla_takvim.MesaiTakvimi | None = None,
+) -> SlaDurumu:
     """Python tarafı tek hesap (SQL `sla_ifadeleri` ile AYNI sonucu verir).
 
-    `aktif_bekleme`: işin açık `service_holds` satırı (yoksa None).
+    `aktif_bekleme`: işin açık `service_holds` satırı (yoksa None). `mesai`:
+    MESAI takvimli işte risk oranının penceresi (yoksa varsayılan 08:30–18:00).
+    `kalan_dk` takvimden bağımsız olarak hedef ANINA kalan duvar saatidir.
     """
     olculur = sla_olculur_mu(so)
     mud = mudahale_durumu(so, simdi)
@@ -598,7 +709,7 @@ def sla_durumu(so: Any, aktif_bekleme: Any, simdi: datetime, risk_yuzde: int) ->
     kalan = _dk((so.cozum_hedef_at - simdi).total_seconds())
     if so.cozum_hedef_at <= simdi:
         return _sonuc("ASILDI", kalan)
-    if _risk_mi(so, simdi, risk_yuzde):
+    if _risk_mi(so, simdi, risk_yuzde, mesai):
         return _sonuc("RISKTE", kalan)
     return _sonuc("ZAMANINDA", kalan)
 
@@ -627,6 +738,16 @@ def _epoch(ifade):
     return func.extract("epoch", ifade)
 
 
+def mesai_dk_sql(bas: Any, bit: Any) -> Any:
+    """SQL `servis_mesai_dk` (e1a000000002) — pencere ayarları sorgunun içinde okunur."""
+    return func.servis_mesai_dk(
+        bas,
+        bit,
+        ayar_saat_dk_ifadesi("servis_mesai_baslangic"),
+        ayar_saat_dk_ifadesi("servis_mesai_bitis"),
+    )
+
+
 def sla_ifadeleri(simdi: datetime, risk_yuzde: Any) -> dict[str, Any]:
     """SQL tarafı: durum/kalan/sıralama ifadeleri (liste, sayaç, Excel, uyarı aynı ifadeyi
     kullanır). `risk_yuzde` tam sayı ya da SQL ifadesi (`ayar_tam_ifadesi`) olabilir.
@@ -645,9 +766,17 @@ def sla_ifadeleri(simdi: datetime, risk_yuzde: Any) -> dict[str, Any]:
         ServiceOrder.cozum_hedef_at.is_not(None),
         ServiceOrder.status.in_(_ACIK),
     )
-    risk = (
+    risk_7_24 = (
         _epoch(an - ServiceOrder.sla_baslangic_at) * 100
         >= _epoch(ServiceOrder.cozum_hedef_at - ServiceOrder.sla_baslangic_at) * risk_yuzde
+    )
+    risk_mesai = (
+        mesai_dk_sql(ServiceOrder.sla_baslangic_at, an) * 100
+        >= mesai_dk_sql(ServiceOrder.sla_baslangic_at, ServiceOrder.cozum_hedef_at) * risk_yuzde
+    )
+    risk = case(
+        (ServiceOrder.sla_takvim_turu == sla_takvim.TAKVIM_MESAI, risk_mesai),
+        else_=risk_7_24,
     )
     durum = case(
         (ServiceOrder.tur == "PB", "SLA_DISI_PB"),
@@ -694,9 +823,10 @@ def sla_blogu(
     risk_yuzde: int,
     *,
     vade: date | None = None,
+    mesai: sla_takvim.MesaiTakvimi | None = None,
 ) -> dict[str, Any]:
     """API'nin `sla` bloğu (detay, liste, Benim İşlerim). Fiyat/maliyet YOK."""
-    d = sla_durumu(so, aktif_bekleme, simdi, risk_yuzde)
+    d = sla_durumu(so, aktif_bekleme, simdi, risk_yuzde, mesai=mesai)
     return {
         "durum": d.durum,
         "ad": d.ad,
@@ -713,7 +843,17 @@ def sla_blogu(
         "gecikme_nedeni": so.gecikme_nedeni,
         "vade": vade,
         "vade_ay": vade_ay_metni(vade),
+        # Donmuş takvim (Faz A): ekranda "Mesai (hafta içi 08:30–18:00)" gösterilir.
+        "takvim_turu": so.sla_takvim_turu,
+        "takvim_adi": takvim_adi(so.sla_takvim_turu, mesai),
     }
+
+
+def takvim_adi(tur: str | None, mesai: sla_takvim.MesaiTakvimi | None = None) -> str | None:
+    """ "7/24" ya da "Mesai (hafta içi 08:30–18:00)"; takvim yoksa None."""
+    if tur == sla_takvim.TAKVIM_MESAI:
+        return f"Mesai ({(mesai or sla_takvim.VARSAYILAN_MESAI).metin()})"
+    return sla_takvim.TAKVIM_ADLARI.get(tur) if tur else None
 
 
 async def sla_bloklari(
@@ -754,6 +894,7 @@ async def sla_bloklari(
                 vadeler[donem_id] = hedef + timedelta(days=tolerans)
     simdi = clock.now()
     risk = await risk_yuzdesi(db)
+    mesai = await mesai_takvimi(db)
     return {
         s.id: sla_blogu(
             s,
@@ -761,6 +902,7 @@ async def sla_bloklari(
             simdi,
             risk,
             vade=vadeler.get(s.maintenance_period_id) if s.tur == "PB" else None,
+            mesai=mesai,
         )
         for s in sos
     }

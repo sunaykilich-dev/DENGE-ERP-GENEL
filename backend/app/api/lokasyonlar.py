@@ -19,7 +19,7 @@ yer; MERKEZ/FATURA/SEVK carinin diğer adresleri). Kurallar:
   anonimleştirmesi bu satırları maskeler (TS-016).
 """
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
@@ -61,6 +61,8 @@ class LokasyonIn(BaseModel):
     access_note: str | None = Field(default=None, max_length=2000)
     primary_contact_id: int | None = None
     is_primary: bool = False
+    # Lokasyona özel SLA takvimi (M12.2, Faz A); null = müşterinin / politikanın.
+    sla_takvim_turu: Literal["7_24", "MESAI"] | None = None
 
     @field_validator("kind")
     @classmethod
@@ -86,6 +88,8 @@ class LokasyonPatch(BaseModel):
     access_note: str | None = Field(default=None, max_length=2000)
     primary_contact_id: int | None = None
     is_primary: bool | None = None
+    # Açık işlerin hedefi değişmez: takvim iş açılışında dondurulur.
+    sla_takvim_turu: Literal["7_24", "MESAI"] | None = None
     version: int
 
     @field_validator("site_name", "line", "district", "access_note", "label")
@@ -119,6 +123,7 @@ class LokasyonOut(BaseModel):
     is_primary: bool
     is_active: bool
     is_verified: bool
+    sla_takvim_turu: str | None = None
     version: int
     irtibatlar: list[IrtibatOut] | None = None
 
@@ -319,6 +324,7 @@ async def olustur(payload: LokasyonIn, request: Request, db: DbDep, user: Yazici
         access_note=payload.access_note,
         primary_contact_id=payload.primary_contact_id,
         is_primary=payload.is_primary,
+        sla_takvim_turu=payload.sla_takvim_turu,
         created_by=user.id,
     )
     db.add(adres)
@@ -334,6 +340,7 @@ async def olustur(payload: LokasyonIn, request: Request, db: DbDep, user: Yazici
             "tesis_adi": adres.site_name,
             "adres": adres.line,
             "il": adres.city,
+            "sla_takvim_turu": adres.sla_takvim_turu,
         },
         user_id=user.id,
         ip=client_ip(request),

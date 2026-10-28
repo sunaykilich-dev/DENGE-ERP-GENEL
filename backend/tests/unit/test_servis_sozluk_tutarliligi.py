@@ -140,9 +140,12 @@ _DALGA4_EKLERI = {
     "servis_rapor_excel_azami_satir",
 }
 
+# Faz A (TS-200, M5.1/M5.4): MESAI takvimli SLA'nın mesai penceresi.
+_FAZ_A_EKLERI = {"servis_mesai_baslangic", "servis_mesai_bitis"}
+
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
-    beklenen = _PLAN_1_9 | _DALGA1_EKLERI | _DALGA4_EKLERI
+    beklenen = _PLAN_1_9 | _DALGA1_EKLERI | _DALGA4_EKLERI | _FAZ_A_EKLERI
     assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.
     assert set(ayar.AYAR_SINIRLARI) == beklenen
