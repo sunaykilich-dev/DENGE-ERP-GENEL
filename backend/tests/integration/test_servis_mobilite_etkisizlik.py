@@ -69,12 +69,12 @@ async def test_servis_akisi_mobiliteye_dokunmaz(
     await giris(client, "mud_mb")
     yol = "/api/teknik-servis/isler"
     # Mobilite birimi + cihazın IMEI'siyle açılan servis işi de devices'a yazmaz.
-    r = await client.post(yol, json=acilis(hesap.id, birim="MOBILITE", seriler=[cihaz.imei]))
+    r = await client.post(yol, json=acilis(hesap, birim="MOBILITE", seriler=[cihaz.imei]))
     assert r.status_code == 201, r.text
     mob = r.json()["id"]
-    r = await client.post(yol, json=acilis(hesap.id, seriler=["SN-MB-1"]))
+    r = await client.post(yol, json=acilis(hesap, seriler=["SN-MB-1"]))
     so = r.json()["id"]
-    r = await client.post(yol, json=acilis(hesap.id, konu="İkinci"))
+    r = await client.post(yol, json=acilis(hesap, konu="İkinci"))
     ikinci = r.json()["id"]
     ekip = {"atamalar": [{"user_id": t1.id, "is_lead": True}, {"user_id": t2.id}]}
     assert (await client.put(f"{yol}/{so}/atama", json=ekip)).status_code == 200
@@ -90,7 +90,10 @@ async def test_servis_akisi_mobiliteye_dokunmaz(
     assert (await client.post(f"{yol}/{so}/sonuc", json=sonuc)).status_code == 200
     assert (await client.post(f"{yol}/{so}/kapat", json={})).status_code == 200
     r = await client.post(f"{yol}/{so}/yeniden-ac", json={"gerekce": "Tekrarladı"})
-    assert r.status_code == 200
+    assert r.status_code == 409  # M1.7: kapanmış iş yeniden açılmaz
+    r = await client.post(f"{yol}/{so}/bagli-yeni-is", json={"konu": "Tekrarladı"})
+    assert r.status_code == 201, r.text
+    so = r.json()["id"]
     r = await client.patch(f"{yol}/{so}", json={"version": r.json()["version"], "konu": "Düz."})
     assert r.status_code == 200
     assert (

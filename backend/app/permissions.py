@@ -84,7 +84,13 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "servis.tamamla": ("Teknik Servis", "Sonuç girer ve işi TAMAMLANDI yapar"),
     "servis.kapat": (
         "Teknik Servis",
-        "Kapatır, iptal eder, yeniden açar; kapalı işte gerekçeli düzeltme yapar",
+        "Kapatır, iptal eder; kapalı işte gerekçeli düzeltme yapar",
+    ),
+    # Faz A (D3.4, G4.6): tamamlanan işin kalite onayı. İşte tayinli ya da
+    # süre kaydı olan kişi onaylayamaz (görevler ayrılığı, servis katmanında).
+    "servis.kalite_onay": (
+        "Teknik Servis",
+        "Tamamlanan işe kalite onayı verir (kendi çalıştığı işe veremez)",
     ),
     "servis.uzaktan_coz": ("Teknik Servis", "Açılışta telefonla/uzaktan çözüldü kaydı açar"),
     "servis.tanim": ("Teknik Servis", "Arıza nedeni kataloğunu düzenler"),
@@ -453,6 +459,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis.planla",
             "servis.tamamla",
             "servis.kapat",
+            "servis.kalite_onay",
             "servis.uzaktan_coz",
             "servis.tanim",
             "servis.arac_yaz",
@@ -509,6 +516,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis.planla",
             "servis.tamamla",
             "servis.kapat",
+            "servis.kalite_onay",
             "servis.uzaktan_coz",
             "servis.irtibat_gor",
             "hesap.gor",

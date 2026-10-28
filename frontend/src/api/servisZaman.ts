@@ -112,6 +112,69 @@ export interface Bolum {
   iptal_eden_id: number | null;
   iptal_at: string | null;
   iptal: boolean;
+  /** G7.8: iş başlat/bitir konumu; koordinat yalnız sahibi/planlayıcıya gelir. */
+  bas_konum?: KonumBilgisi | null;
+  bit_konum?: KonumBilgisi | null;
+}
+
+export interface KonumBilgisi {
+  durum: "ALINDI" | "ALINAMADI";
+  /** "Konum alındı" / "Konum bilgisi alınamadı" (sunucu metni). */
+  metin: string;
+  enlem?: number | null;
+  boylam?: number | null;
+  dogruluk_m?: number | null;
+}
+
+/** Sunucuya giden konum okuması; koordinatsız = "alınamadı". */
+export interface KonumOkumasi {
+  enlem?: number;
+  boylam?: number;
+  dogruluk_m?: number;
+  hata?: string;
+}
+
+/**
+ * İş başlat/bitir anında konumu okur (G7.8). Kısa zaman aşımı; izin reddi,
+ * zaman aşımı ya da tarayıcı desteği yoksa `{hata}` döner — işlem ASLA
+ * engellenmez, sunucu "Konum bilgisi alınamadı" yazar. Sürekli izleme yok.
+ */
+export function konumAl(zamanAsimiMs = 5000): Promise<KonumOkumasi> {
+  return new Promise((coz) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      coz({ hata: "DESTEK_YOK" });
+      return;
+    }
+    let bitti = false;
+    // Tarayıcı izin penceresinde beklerse de işlem bekletilmez.
+    const yedek = window.setTimeout(() => {
+      if (!bitti) {
+        bitti = true;
+        coz({ hata: "ZAMAN_ASIMI" });
+      }
+    }, zamanAsimiMs + 500);
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (p) => {
+          if (bitti) return;
+          bitti = true;
+          window.clearTimeout(yedek);
+          coz({ enlem: p.coords.latitude, boylam: p.coords.longitude, dogruluk_m: p.coords.accuracy });
+        },
+        (e) => {
+          if (bitti) return;
+          bitti = true;
+          window.clearTimeout(yedek);
+          coz({ hata: e.code === 1 ? "IZIN_YOK" : e.code === 3 ? "ZAMAN_ASIMI" : "ALINAMADI" });
+        },
+        { enableHighAccuracy: true, timeout: zamanAsimiMs, maximumAge: 60_000 },
+      );
+    } catch {
+      bitti = true;
+      window.clearTimeout(yedek);
+      coz({ hata: "ALINAMADI" });
+    }
+  });
 }
 
 export interface BolumSonucu {
@@ -301,27 +364,42 @@ export const servisZaman = {
     faaliyet?: Faaliyet;
     bekleme_nedeni?: string;
     konum_notu?: string;
-  }) => zamanli(api.post<BolumSonucu>(`${TS}/zaman/baslat`, govde)),
+  }) =>
+    konumAl().then((konum) => zamanli(api.post<BolumSonucu>(`${TS}/zaman/baslat`, { ...govde, konum }))),
   gecis: (
     b: AcikBolum,
     govde: { faaliyet: Faaliyet; bekleme_nedeni?: string; hedef_is_id?: number },
   ) =>
-    zamanli(
-      api.post<BolumSonucu>(bolumYolu(b.service_order_id, b.id, "gecis"), {
-        version: b.version,
-        ...govde,
-      }),
+    konumAl().then((konum) =>
+      zamanli(
+        api.post<BolumSonucu>(bolumYolu(b.service_order_id, b.id, "gecis"), {
+          version: b.version,
+          ...govde,
+          konum,
+        }),
+      ),
     ),
   mola: (b: AcikBolum) =>
-    zamanli(api.post<BolumSonucu>(bolumYolu(b.service_order_id, b.id, "mola"), { version: b.version })),
+    konumAl().then((konum) =>
+      zamanli(
+        api.post<BolumSonucu>(bolumYolu(b.service_order_id, b.id, "mola"), { version: b.version, konum }),
+      ),
+    ),
   devam: (b: AcikBolum) =>
-    zamanli(api.post<BolumSonucu>(bolumYolu(b.service_order_id, b.id, "devam"), { version: b.version })),
+    konumAl().then((konum) =>
+      zamanli(
+        api.post<BolumSonucu>(bolumYolu(b.service_order_id, b.id, "devam"), { version: b.version, konum }),
+      ),
+    ),
   bitir: (b: AcikBolum, aciklama?: string) =>
-    zamanli(
-      api.post<BolumSonucu>(bolumYolu(b.service_order_id, b.id, "bitir"), {
-        version: b.version,
-        aciklama,
-      }),
+    konumAl().then((konum) =>
+      zamanli(
+        api.post<BolumSonucu>(bolumYolu(b.service_order_id, b.id, "bitir"), {
+          version: b.version,
+          aciklama,
+          konum,
+        }),
+      ),
     ),
   geriAl: (b: AcikBolum) =>
     zamanli(

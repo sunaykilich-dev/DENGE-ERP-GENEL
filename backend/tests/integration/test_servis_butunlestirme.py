@@ -130,12 +130,14 @@ async def test_kutukten_toplu_servis_isi_ac(client, db, kisiler, lokasyon_ac, ek
     assert (await client.post(yol, json=govde)).status_code == 404
     await giris(client, "sef_bt")
     assert (await client.post(yol, json=govde)).status_code == 400  # irtibat yok
-    r = await client.post(yol, json={**govde, "ekipman_idler": [e1.id, sahipsiz.id],
-                                     "iletisim_ad": "Saha Yetkilisi"})  # fmt: skip
+    irtibat = {"iletisim_ad": "Saha Yetkilisi", "iletisim_telefon": "+905321112233"}
+    r = await client.post(yol, json={**govde, "ekipman_idler": [e1.id, sahipsiz.id], **irtibat})
     assert r.status_code == 409 and "KT-003" in r.text
     assert await is_sayisi() == 0
 
-    r = await client.post(yol, json={**govde, "iletisim_ad": "Saha Yetkilisi"})
+    r = await client.post(
+        yol, json={**govde, "iletisim_ad": "Saha Yetkilisi", "iletisim_telefon": "+905321112233"}
+    )
     assert r.status_code == 201, r.text
     assert r.json()["acilan"] == 2
     isler = (await db.scalars(select(ServiceOrder).order_by(ServiceOrder.id))).all()
@@ -146,11 +148,19 @@ async def test_kutukten_toplu_servis_isi_ac(client, db, kisiler, lokasyon_ac, ek
     assert [s.seri_no for s in isler[0].seriler] == ["KT-001"]
 
     # Açık işte aynı seri: 409 MUKERRER, geçilirse açılır.
-    r = await client.post(yol, json={**govde, "iletisim_ad": "Saha Yetkilisi"})
+    r = await client.post(
+        yol, json={**govde, "iletisim_ad": "Saha Yetkilisi", "iletisim_telefon": "+905321112233"}
+    )
     assert r.status_code == 409 and r.json()["detail"]["kod"] == "MUKERRER"
     assert await is_sayisi() == 2
     r = await client.post(
-        yol, json={**govde, "iletisim_ad": "Saha Yetkilisi", "mukerrer_gec": True}
+        yol,
+        json={
+            **govde,
+            "iletisim_ad": "Saha Yetkilisi",
+            "iletisim_telefon": "+905321112233",
+            "mukerrer_gec": True,
+        },
     )
     assert r.status_code == 201
     assert await is_sayisi() == 4

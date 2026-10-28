@@ -83,7 +83,7 @@ async def _tohum_politikalari(db):
 async def mudur(client, db, kullanici_ac):
     await kullanici_ac("mudur", "SERVIS_YONETICI")
     await giris(client, "mudur")
-    return (await musteri(db)).id
+    return await musteri(db)
 
 
 async def test_yururluk_bosken_damga_yok(client, db, mudur) -> None:
@@ -309,8 +309,10 @@ async def test_durduran_bekleme_hedefi_ileri_alir(client, db, mudur) -> None:
     assert kaymalar == {a["id"]: 180, b["id"]: 0}
 
 
-async def test_sonuc_ilk_tamamlandida_donar_yeniden_acilis_silmez(client, db, mudur) -> None:
-    """Kabul (7) + B3: TAMAMLANDI'da sonuç donar; TEKRAR_ACILDI silmez, ilk hedef değişmez."""
+async def test_sonuc_ilk_tamamlandida_donar_bagli_is_silmez(client, db, mudur) -> None:
+    """Kabul (7) + B3: TAMAMLANDI'da sonuç donar. M1.7 (Faz A): yeniden açma
+    yok (409); bağlı yeni iş açılınca öncekinin SLA sonucu ve ilk hedefi
+    DEĞİŞMEZ, yeni iş kendi SLA'sıyla doğar."""
     await sla_yururlukte(db)
     so = await is_ac(client, mudur, oncelik="KRITIK")
     await ileri(client, hours=2)
@@ -320,9 +322,12 @@ async def test_sonuc_ilk_tamamlandida_donar_yeniden_acilis_silmez(client, db, mu
     assert k.ilk_mudahale_at == k.completed_at  # telefonla çözüm = ilk müdahale
     ilk_hedef = k.cozum_hedef_ilk_at
     r = await client.post(f"{TS}/isler/{so['id']}/yeniden-ac", json={"gerekce": "Arıza sürüyor"})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 409, r.text
     await ileri(client, hours=20)  # hedef çoktan geçti
-    await tamamla(client, so["id"])
+    r = await client.post(f"{TS}/isler/{so['id']}/bagli-yeni-is", json={"konu": "Arıza sürüyor"})
+    assert r.status_code == 201, r.text
+    yeni = await kayit(db, r.json()["id"])
+    assert yeni.sla_policy_id is not None and yeni.cozum_hedef_ilk_at > ilk_hedef
     k = await kayit(db, so["id"])
     assert k.sla_sonuc == "ZAMANINDA" and k.cozum_hedef_ilk_at == ilk_hedef
     assert (await sla_karti(client, so["id"]))["sla"]["durum"] == "KARSILANDI"

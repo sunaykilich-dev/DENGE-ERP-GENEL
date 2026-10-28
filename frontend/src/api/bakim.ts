@@ -501,9 +501,8 @@ export const bakimApi = {
     istek<BakimFormu>(`${ONEK}/formlar/${soId}/uygunsuzluklar/${id}/ariza-isi`, "POST"),
   uygunsuzlukKapat: (soId: number, id: number, not: string) =>
     istek<BakimFormu>(`${ONEK}/formlar/${soId}/uygunsuzluklar/${id}/kapat`, "POST", { not }),
-  /** E01 yeniden açma ucu (`servis.kapat`); bakım tarafı kancayla tepki verir. */
-  yenidenAc: (soId: number, gerekce: string) =>
-    istek<unknown>(`/api/teknik-servis/isler/${soId}/yeniden-ac`, "POST", { gerekce }),
+  // M1.7 (Faz A): yeniden açma ucu kaldırıldı; kapanmış PB işine bağlı yeni
+  // iş `teknikServisApi.bagliYeniIs` ile açılır.
 
   // --- Raporlar (TS-185) ------------------------------------------------------
   donemTamamlama: (p: RaporSuzgeci) =>

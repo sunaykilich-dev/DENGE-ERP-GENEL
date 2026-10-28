@@ -1,7 +1,9 @@
 """Servis işleri, panel, tanımlar (arıza/bekleme nedenleri) uçları (TS-020…037).
 
-- Okuma `servis.gor`; açılış, not, saha durumu, bekleme, seri `servis.yaz`;
-  sonuç `servis.tamamla`; kapat/iptal/yeniden aç `servis.kapat`; atama ve
+- Okuma `servis.gor`; açılış, not, saha durumu, bekleme, seri, bağlı yeni
+  iş `servis.yaz`; sonuç `servis.tamamla`; kapat/iptal `servis.kapat`;
+  kalite onayı `servis.kalite_onay`. Kapanmış iş YENİDEN AÇILMAZ (M1.7):
+  eski `yeniden-ac` ucu 409 ile "bağlı yeni iş"e yönlendirir. Atama ve
   toplu atama `servis.planla`; açılışta çözüldü `servis.yaz` +
   `servis.uzaktan_coz`; arıza nedeni kataloğu `servis.tanim`; bekleme nedeni
   kataloğu `operasyon.yonet`; Excel `servis.gor` + `servis_rapor.disaaktar`
@@ -28,7 +30,7 @@ from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, select
 
 from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala
@@ -74,6 +76,7 @@ Yazici = Annotated[User, Depends(require_permission("servis.yaz"))]
 Tamamlayici = Annotated[User, Depends(require_permission("servis.tamamla"))]
 Kapatici = Annotated[User, Depends(require_permission("servis.kapat"))]
 Planlayici = Annotated[User, Depends(require_permission("servis.planla"))]
+KaliteOnaylayici = Annotated[User, Depends(require_permission("servis.gor", "servis.kalite_onay"))]
 UzaktanCozucu = Annotated[User, Depends(require_permission("servis.yaz", "servis.uzaktan_coz"))]
 Aktarici = Annotated[User, Depends(require_permission("servis.gor", "servis_rapor.disaaktar"))]
 Tanimci = Annotated[User, Depends(require_permission("servis.tanim"))]
@@ -182,6 +185,37 @@ class SerilerIn(BaseModel):
     model_config = {"json_schema_extra": {"examples": [{"seriler": ["SN-1"]}]}}
 
 
+class BagliIsIn(BaseModel):
+    """Kapanmış işe bağlı yeni iş (M1.7). Verilmeyen alan önceki işten
+    kopyalanır (müşteri, lokasyon, irtibat, cihaz, konu); açılış kuralları
+    (talep eden kişi + telefon, lokasyon, tek cihaz) aynen uygulanır."""
+
+    konu: str | None = Field(default=None, max_length=200)
+    aciklama: str | None = Field(default=None, max_length=4000)
+    tur: str | None = Field(default=None, max_length=20)
+    oncelik: str | None = Field(default=None, max_length=10)
+    talep_kanali: str | None = Field(default=None, max_length=20)
+    reported_at: datetime | None = None
+    iletisim_ad: str | None = Field(default=None, max_length=120)
+    iletisim_telefon: str | None = Field(default=None, max_length=20)
+    address_id: int | None = None
+    contact_id: int | None = None
+    # None = önceki işin aktif serileri; [] = cihazsız.
+    seriler: list[str] | None = Field(default=None, max_length=50)
+    mukerrer_gec: bool = False
+
+    model_config = {
+        "json_schema_extra": {"examples": [{"konu": "Arıza tekrarladı", "talep_kanali": "TELEFON"}]}
+    }
+
+
+class KaliteOnayIn(BaseModel):
+    version: int
+    not_: str | None = Field(default=None, max_length=500, alias="not")
+
+    model_config = {"populate_by_name": True, "json_schema_extra": {"examples": [{"version": 1}]}}
+
+
 class IliskiIn(BaseModel):
     iliskili_is_id: int | None = None
     iliski_turu: Literal["MUKERRER", "TEKRAR_ARIZA", "DEVAM"] | None = None
@@ -193,7 +227,8 @@ class DurumIn(BaseModel):
     """Genel saha durumu (PLANLAMADA/YOLA_CIKILDI/SAHADA/ISLEMDE/ATOLYEDE).
 
     Diğer hedefler kendi uçlarındadır: PLANLANDI planlama, BEKLEMEDE bekleme,
-    TAMAMLANDI sonuç, KAPATILDI/IPTAL/TEKRAR_ACILDI kapat/iptal/yeniden-aç (400).
+    TAMAMLANDI sonuç, KAPATILDI/IPTAL kapat/iptal (400). TEKRAR_ACILDI'ya
+    hiçbir uçtan geçilmez (M1.7).
     """
 
     hedef: Literal[SERVIS_DURUMLARI]  # type: ignore[valid-type]
@@ -461,6 +496,8 @@ async def _satirlar(db, sos: list[ServiceOrder], user: User) -> list[dict[str, A
                 "iletisim_telefon": _telefon(user, s.iletisim_telefon),
                 "aktif_bekleme": beklemeler.get(s.id),
                 "reopen_count": s.reopen_count,
+                "onceki_is_id": s.onceki_is_id,
+                "kalite_onay_at": s.kalite_onay_at,
                 "version": s.version,
             }
         )
@@ -557,12 +594,22 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "cancel_reason": so.cancel_reason,
             "equipment_id": so.equipment_id,
             "iliskili_isler": await is_emirleri.bagli_isler(db, user, so),
+            "kalite": await is_emirleri.kalite_durumu(db, so, user),
+            "sure_durumu": await _sure_durumu(db, so),
             "sonraki_durumlar": is_emirleri.sonraki_durumlar(so),
             "gecisler": is_emirleri.gecis_secenekleri(so, user),
             "updated_at": so.updated_at,
         }
     )
     return satir
+
+
+async def _sure_durumu(db, so: ServiceOrder) -> str:
+    """Süre özeti durumu (TAM/KISMI/EKSIK/BEKLENMIYOR) — kapanmış işte
+    "süre eksik" işareti için (M1.10/M9.4: kayıt yoksa EKSIK, 0 değil)."""
+    from app.services.teknik_servis import zaman
+
+    return (await zaman.sure_ozeti(db, so.id)).sure_durumu
 
 
 def _girdi(payload: IsAcIn) -> is_emirleri.ServisIsiGirdisi:
@@ -587,6 +634,33 @@ def _girdi(payload: IsAcIn) -> is_emirleri.ServisIsiGirdisi:
     )
 
 
+async def _talep_bilgisi_dogrula(
+    db,
+    address_id: int | None,
+    contact_id: int | None,
+    iletisim_ad: str | None,
+    iletisim_telefon: str | None,
+) -> None:
+    """M1.2 (Faz A): ekrandan açılan işte lokasyon ve talep eden kişinin adı
+    + telefonu zorunlu. Ad/telefon elle girilir ya da seçilen irtibat
+    kişisinin kaydından gelir. PB ve sistem açılışları (bakım üretimi,
+    atölye kabulü, kiralama, bakım bulgusu) bu kapıdan geçmez."""
+    from app.models import Contact
+
+    eksik = []
+    if address_id is None:
+        eksik.append("lokasyon")
+    kisi = await db.get(Contact, contact_id) if contact_id is not None else None
+    ad = (iletisim_ad or "").strip() or (kisi.full_name if kisi is not None else "")
+    telefon = (iletisim_telefon or "").strip() or ((kisi.phone or "") if kisi is not None else "")
+    if not (ad or "").strip():
+        eksik.append("talep eden kişinin adı")
+    if not telefon.strip():
+        eksik.append("talep eden kişinin telefonu")
+    if eksik:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Zorunlu alan eksik: " + ", ".join(eksik))
+
+
 async def _acilis_on_kontrol(db, payload: IsAcIn, user: User) -> list[dict[str, Any]]:
     """Ekran açılışının ortak kuralları (TS-020/029). Uyarı listesini döner.
 
@@ -608,19 +682,15 @@ async def _acilis_on_kontrol(db, payload: IsAcIn, user: User) -> list[dict[str, 
         )
     if payload.talep_kanali is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Talep kanalı zorunlu")
-    if payload.talep_kanali not in TALEP_KANALLARI:
+    if payload.talep_kanali not in TALEP_KANALLARI or payload.talep_kanali == "BAKIM_OTOMATIK":
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, f"Bilinmeyen talep kanalı: {payload.talep_kanali}"
-        )
-    irtibat_var = payload.contact_id is not None or any(
-        (x or "").strip() for x in (payload.iletisim_ad, payload.iletisim_telefon)
-    )
-    if not irtibat_var and payload.talep_kanali != "BAKIM_OTOMATIK":
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "İrtibat kişisi ya da ad/telefon bilgisi zorunlu"
+            status.HTTP_400_BAD_REQUEST, f"Geçersiz talep kanalı: {payload.talep_kanali}"
         )
     if await hesap_kapsam_disinda_mi(db, user, payload.customer_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Müşteri bulunamadı")
+    await _talep_bilgisi_dogrula(
+        db, payload.address_id, payload.contact_id, payload.iletisim_ad, payload.iletisim_telefon
+    )
     if (
         payload.iliski_turu is not None
         and payload.iliski_turu not in is_emirleri.EKRAN_ILISKI_TURLERI
@@ -738,7 +808,7 @@ async def mukerrer_kontrol(
 
 def _filtre(
     birim, kategori, tur, durum, durum_grubu_, oncelik, musteri_id, adres_id, teknisyen_id,
-    atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama,
+    atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite=None,
 ) -> is_emirleri.ListeFiltresi:  # fmt: skip
     return is_emirleri.ListeFiltresi(
         birim=birim,
@@ -758,6 +828,7 @@ def _filtre(
         kpi=kpi,
         donem=donem,
         siralama=siralama,
+        kalite=kalite,
     )
 
 
@@ -795,17 +866,19 @@ async def listele(
     kpi: str | None = Query(default=None, max_length=40),
     donem: str | None = Query(default=None, max_length=20),
     siralama: str = "yeni",
+    kalite: str | None = Query(default=None, max_length=10),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict[str, Any]]:
     """Servis işleri (sunucu süzgeci, SQL'de kapsam, sayfalı; `X-Toplam-Kayit`).
 
     Parametresiz: açık işler + son 90 günde kapananlar. `kpi=<kod>` panel
-    kutusunun AYNI süzgecidir (sayı = liste).
+    kutusunun AYNI süzgecidir (sayı = liste). `kalite=BEKLEYEN` kalite onayı
+    bekleyen tamamlanmış işler (Faz A).
     """
     f = _filtre(
         birim, kategori, tur, durum, durum_grubu, oncelik, musteri_id, adres_id, teknisyen_id,
-        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama,
+        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite,
     )  # fmt: skip
     stmt = _sorgu(user, f, clock)
     satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
@@ -866,6 +939,7 @@ async def disa_aktar(
     kpi: str | None = Query(default=None, max_length=40),
     donem: str | None = Query(default=None, max_length=20),
     siralama: str = "yeni",
+    kalite: str | None = Query(default=None, max_length=10),
 ) -> Response:
     """Ekrandaki süzgecin AYNISIYLA Excel (Servis İşleri + Durum Özeti).
 
@@ -875,7 +949,7 @@ async def disa_aktar(
     """
     f = _filtre(
         birim, kategori, tur, durum, durum_grubu, oncelik, musteri_id, adres_id, teknisyen_id,
-        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama,
+        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite,
     )  # fmt: skip
     stmt = _sorgu(user, f, clock)
     toplam = await db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
@@ -1117,12 +1191,30 @@ async def ekipmandan_ac(
             "Pasif ya da müşterisi olmayan ekipmana servis işi açılamaz: " + ", ".join(sorunlu),
         )
     irtibat_var = any((x or "").strip() for x in (payload.iletisim_ad, payload.iletisim_telefon))
-    irtibatsiz = [_etiket(e) for e in ekipmanlar if e.contact_id is None and not irtibat_var]
+    # M1.2 (Faz A): her işte lokasyon + talep eden kişinin adı ve telefonu.
+    lokasyonsuz = [_etiket(e) for e in ekipmanlar if e.address_id is None]
+    if lokasyonsuz:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Lokasyonu kayıtlı olmayan ekipmana servis işi açılamaz: " + ", ".join(lokasyonsuz),
+        )
+    irtibatsiz = []
+    for e in ekipmanlar:
+        try:
+            await _talep_bilgisi_dogrula(
+                db,
+                e.address_id,
+                e.contact_id,
+                payload.iletisim_ad if e.contact_id is None else None,
+                payload.iletisim_telefon if e.contact_id is None else None,
+            )
+        except HTTPException:
+            irtibatsiz.append(_etiket(e))
     if irtibatsiz:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "İrtibat kişisi kayıtlı olmayan ekipmanlar için ad/telefon girin: "
-            + ", ".join(irtibatsiz),
+            "Talep eden kişinin adı ve telefonu eksik (ekipmanın irtibatında telefon yoksa "
+            "ad/telefon girin): " + ", ".join(irtibatsiz),
         )
     seriler = [e.serial_no for e in ekipmanlar if e.serial_no]
     mukerrer: list[dict[str, Any]] = []
@@ -1383,6 +1475,117 @@ async def seriler(
     return await _detay(db, so, user, clock)
 
 
+@router.post(
+    "/isler/{so_id}/bagli-yeni-is", status_code=status.HTTP_201_CREATED, response_model=None
+)
+async def bagli_yeni_is(
+    so_id: int, payload: BagliIsIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
+) -> dict[str, Any]:
+    """Kapanmış işe bağlı YENİ iş (M1.7; yeniden açmanın yerine). Açık işte
+    409; açılış kuralları ekran açılışıyla aynıdır (birim/müşteri kapsamı,
+    talep eden kişi + telefon, lokasyon, tek cihaz, mükerrer seri 409)."""
+    onceki = await _kapsamli_is(db, so_id, user)
+    if onceki.status not in is_emirleri.BAGLI_IS_KAYNAK_DURUMLARI:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "İş henüz kapanmadı; bağlı yeni iş yalnız kapanmış işten açılır",
+        )
+    if onceki.customer_id is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Müşterisi eşleşmemiş (göç) işe bağlı iş açılamaz"
+        )
+    varsayilan = is_emirleri.bagli_is_girdisi(
+        onceki, [s.seri_no for s in await is_emirleri.aktif_seriler(db, onceki)]
+    )
+    degerler = payload.model_dump(exclude_unset=True, by_alias=False)
+    degerler.pop("mukerrer_gec", None)
+    try:
+        acilis = _bagli_acilis(varsayilan, degerler, payload)
+    except ValidationError as exc:
+        hata = exc.errors()[0]
+        alan = ".".join(str(x) for x in hata.get("loc", ()))
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"Geçersiz alan ({alan}): {hata.get('msg')}"
+        ) from exc
+    uyarilar = await _acilis_on_kontrol(db, acilis, user)
+    girdi = _girdi(acilis)
+    girdi.equipment_id = varsayilan.equipment_id
+    try:
+        so = await is_emirleri.bagli_yeni_is(db, onceki, girdi, user=user, clock=clock)
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await _acilis_denetimi(db, so, user, request, "bagli_yeni_is")
+    await audit.log(
+        db,
+        "service_orders",
+        "bagli_is_acildi",
+        entity_id=onceki.id,
+        new_value={"sonraki_is_id": so.id, "so_no": so.so_no},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    cikti = await _detay(db, so, user, clock)
+    cikti["uyarilar"] = uyarilar
+    return cikti
+
+
+def _bagli_acilis(
+    varsayilan: is_emirleri.ServisIsiGirdisi, degerler: dict[str, Any], payload: BagliIsIn
+) -> IsAcIn:
+    """Önceki işin kopyası + gövdede verilen alanlar → ekran açılış gövdesi."""
+    return IsAcIn(
+        birim=varsayilan.birim,
+        tur=degerler.get("tur") or varsayilan.tur,
+        konu=degerler.get("konu") or varsayilan.konu,
+        customer_id=varsayilan.customer_id,
+        address_id=degerler.get("address_id", varsayilan.address_id),
+        contact_id=degerler.get("contact_id", varsayilan.contact_id),
+        oncelik=degerler.get("oncelik") or varsayilan.oncelik,
+        talep_kanali=degerler.get("talep_kanali") or varsayilan.talep_kanali,
+        reported_at=degerler.get("reported_at"),
+        iletisim_ad=degerler.get("iletisim_ad", varsayilan.iletisim_ad),
+        iletisim_telefon=degerler.get("iletisim_telefon", varsayilan.iletisim_telefon),
+        proje=varsayilan.proje,
+        sistem=varsayilan.sistem,
+        aciklama=degerler.get("aciklama"),
+        seriler=varsayilan.seriler if payload.seriler is None else list(payload.seriler),
+        mukerrer_gec=payload.mukerrer_gec,
+    )
+
+
+@router.post("/isler/{so_id}/kalite-onayi", response_model=None)
+async def kalite_onayi(
+    so_id: int,
+    payload: KaliteOnayIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: KaliteOnaylayici,
+) -> dict[str, Any]:
+    """Tamamlanan işe kalite onayı (D3.4, G4.6). İşte tayinli/süre kaydı
+    olan ya da sonucu giren kişi 403 (görevler ayrılığı); tamamlanmamış iş,
+    verilmiş onay ya da eski `version` 409."""
+    so = await _kapsamli_is(db, so_id, user)
+    try:
+        await is_emirleri.kalite_onayla(
+            db, so, user=user, clock=clock, version=payload.version, notu=payload.not_
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await audit.log(
+        db,
+        "service_orders",
+        "kalite_onayi",
+        entity_id=so.id,
+        new_value={"kalite_onay_at": so.kalite_onay_at.isoformat(), "not": so.kalite_notu},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return await _detay(db, so, user, clock)
+
+
 @router.put("/isler/{so_id}/iliski", response_model=None)
 async def iliski(
     so_id: int, payload: IliskiIn, db: DbDep, clock: ClockDep, user: Yazici
@@ -1420,7 +1623,7 @@ async def _durum_ucu(
         )
     except _HATALAR as exc:
         raise _hata(exc) from exc
-    if kaynak in ("kapat", "iptal", "yeniden_ac"):
+    if kaynak in ("kapat", "iptal"):
         await audit.log(
             db,
             "service_orders",
@@ -1441,6 +1644,8 @@ async def durum(
 ) -> dict[str, Any]:
     """Genel saha ilerlemesi. Bu uçtan PLANLANDI/BEKLEMEDE/TAMAMLANDI/KAPATILDI/
     IPTAL/TEKRAR_ACILDI istenirse 400 ("ilgili ucu kullanın")."""
+    if payload.hedef == "TEKRAR_ACILDI":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, is_emirleri.YENIDEN_ACMA_YOK)
     if payload.hedef not in is_emirleri.UC_HEDEFLERI["genel"]:
         uc = is_emirleri._HEDEF_UCU.get(payload.hedef, ("", ""))[0]
         raise HTTPException(
@@ -1477,15 +1682,12 @@ async def iptal(
 
 
 @router.post("/isler/{so_id}/yeniden-ac", response_model=None)
-async def yeniden_ac(
-    so_id: int, payload: GerekceIn, request: Request, db: DbDep, clock: ClockDep, user: Kapatici
-) -> dict[str, Any]:
-    """TAMAMLANDI/KAPATILDI → TEKRAR_ACILDI (gerekçe zorunlu; `first_completed_at`
-    korunur, önceki sonuç geçersiz kılınır)."""
-    return await _durum_ucu(
-        db, clock, user, so_id, "TEKRAR_ACILDI", "yeniden_ac", payload.beklenen_durum,
-        payload.gerekce, request,
-    )  # fmt: skip
+async def yeniden_ac(so_id: int, payload: GerekceIn, db: DbDep, user: Kapatici) -> dict[str, Any]:
+    """KALDIRILDI (M1.7, Faz A): kapanmış iş yeniden açılmaz. Eski istemci
+    için uç 409 döner ve `bagli-yeni-is` ucuna yönlendirir; kapsam dışı iş
+    yine 404 (varlık sızdırılmaz). Hiçbir şey yazılmaz."""
+    await _kapsamli_is(db, so_id, user)
+    raise HTTPException(status.HTTP_409_CONFLICT, is_emirleri.YENIDEN_ACMA_YOK)
 
 
 # --- Bekleme (TS-023) -----------------------------------------------------------------------

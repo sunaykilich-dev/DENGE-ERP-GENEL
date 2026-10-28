@@ -234,8 +234,12 @@ SERVIS_IS_EMRI = StateMachine(
             "TEKRAR_ACILDI",
             "IPTAL",
         ),
-        TAMAMLANDI=("KAPATILDI", "TEKRAR_ACILDI"),
-        KAPATILDI=("TEKRAR_ACILDI",),
+        # M1.7 (Faz A): kapanmış iş YENİDEN AÇILMAZ; kapanmış işe bağlı yeni
+        # iş açılır (`is_emirleri.bagli_yeni_is`). TEKRAR_ACILDI eski kayıtlar
+        # için katalogda kalır: eski yeniden açılmış işler ilerleyebilir ve
+        # beklemeden o duruma geri dönebilir.
+        TAMAMLANDI=("KAPATILDI",),
+        KAPATILDI=(),
         TEKRAR_ACILDI=(
             "PLANLAMADA",
             "PLANLANDI",

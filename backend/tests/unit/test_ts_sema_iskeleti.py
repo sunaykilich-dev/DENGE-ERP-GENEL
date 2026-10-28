@@ -36,10 +36,11 @@ def test_kargoda_ve_test_kontrol_servis_isi_durumu_degil() -> None:
     assert "TEST_KONTROL" not in SERVIS_DURUMLARI
 
 
-def test_iptal_terminal_tamamlanan_yeniden_acilabilir() -> None:
+def test_iptal_terminal_kapanmis_is_yeniden_acilmaz() -> None:
+    """M1.7 (Faz A): kapanmış iş yeniden açılmaz; bağlı yeni iş açılır."""
     assert SERVIS_IS_EMRI.sonraki("IPTAL") == frozenset()
-    assert "TEKRAR_ACILDI" in SERVIS_IS_EMRI.sonraki("TAMAMLANDI")
-    assert "TEKRAR_ACILDI" in SERVIS_IS_EMRI.sonraki("KAPATILDI")
+    assert "TEKRAR_ACILDI" not in SERVIS_IS_EMRI.sonraki("TAMAMLANDI")
+    assert SERVIS_IS_EMRI.sonraki("KAPATILDI") == frozenset()
 
 
 def test_durum_gruplari() -> None:

@@ -96,7 +96,38 @@ export interface IsSatiri {
   iletisim_telefon: string | null;
   aktif_bekleme: string | null;
   reopen_count: number;
+  /** M1.7: kapanmış işin devamı olarak açıldıysa önceki iş. */
+  onceki_is_id: number | null;
+  /** Faz A kalite onayı anı (null = verilmedi). */
+  kalite_onay_at: string | null;
   version: number;
+}
+
+/** Bağlı iş satırı; kapsam dışı işin numarası maskelidir (`id` null). */
+export interface BagliIsSatiri {
+  id: number | null;
+  so_no: string;
+  iliski_turu: string | null;
+  status: string | null;
+  kapsam_disi: boolean;
+}
+
+export interface BagliIsler {
+  ust: BagliIsSatiri | null;
+  alt: BagliIsSatiri[];
+  onceki: BagliIsSatiri | null;
+  sonrakiler: BagliIsSatiri[];
+}
+
+export interface KaliteDurumu {
+  onay_at: string | null;
+  onaylayan: { id: number; ad: string | null } | null;
+  notu: string | null;
+  /** İş tamamlanmış ve onay verilmemiş. */
+  bekliyor: boolean;
+  /** Bu kullanıcı şimdi onay verebilir mi (izin + görevler ayrılığı). */
+  verebilir: boolean;
+  engel: string | null;
 }
 
 export interface EkipUyesi {
@@ -152,7 +183,10 @@ export interface IsDetayi extends Omit<IsSatiri, "seriler"> {
   cancelled_at: string | null;
   cancel_reason: string | null;
   equipment_id: number | null;
-  iliskili_isler: Record<string, unknown>;
+  iliskili_isler: BagliIsler;
+  kalite: KaliteDurumu;
+  /** TAM / KISMI / EKSIK / BEKLENMIYOR — kayıt yoksa EKSIK (0 değil). */
+  sure_durumu: string;
   sonraki_durumlar: string[];
   gecisler: Gecis[];
   updated_at: string;
@@ -177,6 +211,8 @@ export interface IsSuzgeci {
   kpi?: string;
   donem?: string;
   siralama?: string;
+  /** Faz A: "BEKLEYEN" = kalite onayı bekleyenler, "ONAYLI". */
+  kalite?: string;
 }
 
 export function suzgecParametreleri(s: IsSuzgeci): URLSearchParams {
@@ -207,6 +243,21 @@ export interface IsGirdisi {
   seriler?: string[];
   iliskili_is_id?: number | null;
   iliski_turu?: string | null;
+  mukerrer_gec?: boolean;
+}
+
+/** Kapanmış işe bağlı yeni iş (M1.7); verilmeyen alan önceki işten gelir. */
+export interface BagliIsGirdisi {
+  konu?: string;
+  aciklama?: string | null;
+  tur?: string;
+  oncelik?: string;
+  talep_kanali?: string;
+  iletisim_ad?: string | null;
+  iletisim_telefon?: string | null;
+  address_id?: number | null;
+  contact_id?: number | null;
+  seriler?: string[];
   mukerrer_gec?: boolean;
 }
 
@@ -440,8 +491,12 @@ export const teknikServisApi = {
     api.post<IsDetayi>(`${isYolu(id)}/kapat`, { beklenen_durum, gerekce }),
   iptal: (id: number, gerekce: string, beklenen_durum?: string) =>
     api.post<IsDetayi>(`${isYolu(id)}/iptal`, { gerekce, beklenen_durum }),
-  yenidenAc: (id: number, gerekce: string, beklenen_durum?: string) =>
-    api.post<IsDetayi>(`${isYolu(id)}/yeniden-ac`, { gerekce, beklenen_durum }),
+  /** M1.7: kapanmış iş yeniden açılmaz; bu işe bağlı YENİ iş açılır. */
+  bagliYeniIs: (id: number, g: BagliIsGirdisi) =>
+    api.post<IsDetayi>(`${isYolu(id)}/bagli-yeni-is`, g),
+  /** D3.4/G4.6: tamamlanan işe kalite onayı (kendi çalıştığı işe verilemez). */
+  kaliteOnayi: (id: number, version: number, not?: string) =>
+    api.post<IsDetayi>(`${isYolu(id)}/kalite-onayi`, { version, not }),
   beklet: (id: number, g: { neden: string; aciklama?: string; beklenen_bitis_at?: string | null }) =>
     api.post<IsDetayi>(`${isYolu(id)}/bekleme`, g),
   beklemeyiBitir: (id: number, not?: string) =>

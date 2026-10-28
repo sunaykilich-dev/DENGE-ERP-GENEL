@@ -60,6 +60,7 @@ OLAY_ADLARI: dict[str, str] = {
     "ATOLYE": "Atölye",
     "TEKLIF": "Teklif",
     "SLA": "SLA",
+    "KALITE": "Kalite onayı",
 }
 
 

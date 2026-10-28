@@ -23,6 +23,12 @@ Başkasının bölümü 403.
 **Worker sayacı asla kapatmaz** (K16): uydurma bitiş saati yazılmaz; uzun
 sayaç yalnız uyarı üretir (`zaman_uyarilari`).
 
+**İş başlat/bitir konumu (G7.8, Faz A):** canlı bölüm açılırken (`baslat`,
+`gecis` yeni bölümü) ve kapanırken (`bitir`, `gecis` eski bölümü) istemcinin
+okuduğu konum `bas_*` / `bit_*` kolonlarına yazılır. Konum gelmezse durum
+`ALINAMADI` olur ("Konum bilgisi alınamadı"); işlem ASLA engellenmez.
+Sürekli konum takibi yoktur (G10.3).
+
 Servis katmanı commit yapmaz; commit API'dedir. Denetim izi ve olay geçmişi
 aynı transaction'da, commit'ten önce yazılır.
 """
@@ -33,6 +39,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Select, and_, exists, func, not_, or_, select
@@ -130,6 +137,63 @@ class ManuelKayitGirdisi:
     gerekce: str | None = None
     konum_notu: str | None = None
     aciklama: str | None = None
+
+
+KONUM_ALINAMADI_METNI = "Konum bilgisi alınamadı"
+
+
+@dataclass(frozen=True)
+class KonumOkuma:
+    """İstemcinin `getCurrentPosition` okuması (G7.8). Koordinat yoksa
+    (izin reddi, zaman aşımı, GPS yok) durum ALINAMADI'dır."""
+
+    enlem: float | None = None
+    boylam: float | None = None
+    dogruluk_m: float | None = None
+
+    @property
+    def alindi(self) -> bool:
+        """Koordinat var ve geçerli aralıkta mı (NaN/aralık dışı = alınamadı;
+        konum hatası işlemi ASLA engellemez)."""
+        if self.enlem is None or self.boylam is None:
+            return False
+        return -90 <= self.enlem <= 90 and -180 <= self.boylam <= 180
+
+
+def _konum_yaz(bolum: ServiceTimeEntry, on: str, konum: KonumOkuma | None) -> None:
+    """`bas`/`bit` konumunu yazar; konum yoksa ya da geçersizse ALINAMADI."""
+    if konum is not None and konum.alindi:
+        dogruluk = konum.dogruluk_m
+        if dogruluk is not None and not (0 <= dogruluk <= 1_000_000):
+            dogruluk = None  # NaN/uydurma doğruluk yazılmaz
+        setattr(bolum, f"{on}_enlem", Decimal(str(round(konum.enlem, 6))))  # type: ignore[arg-type]
+        setattr(bolum, f"{on}_boylam", Decimal(str(round(konum.boylam, 6))))  # type: ignore[arg-type]
+        setattr(bolum, f"{on}_dogruluk_m", round(dogruluk) if dogruluk is not None else None)
+        setattr(bolum, f"{on}_konum_durumu", "ALINDI")
+    else:
+        setattr(bolum, f"{on}_enlem", None)
+        setattr(bolum, f"{on}_boylam", None)
+        setattr(bolum, f"{on}_dogruluk_m", None)
+        setattr(bolum, f"{on}_konum_durumu", "ALINAMADI")
+
+
+def konum_ozeti(bolum: ServiceTimeEntry, on: str, *, koordinat: bool) -> dict[str, Any] | None:
+    """Ekran için konum: durum + metin; koordinat yalnız yetkili görene."""
+    durum = getattr(bolum, f"{on}_konum_durumu")
+    if durum is None:
+        return None
+    if durum != "ALINDI":
+        return {"durum": durum, "metin": KONUM_ALINAMADI_METNI}
+    sonuc: dict[str, Any] = {"durum": durum, "metin": "Konum alındı"}
+    if koordinat:
+        sonuc.update(
+            {
+                "enlem": float(getattr(bolum, f"{on}_enlem")),
+                "boylam": float(getattr(bolum, f"{on}_boylam")),
+                "dogruluk_m": getattr(bolum, f"{on}_dogruluk_m"),
+            }
+        )
+    return sonuc
 
 
 @dataclass(frozen=True)
@@ -418,8 +482,10 @@ async def _denetle(
         old_value=eski,
         new_value=_denetim_degeri(bolum),
         user_id=user.id,
-        # Konum notu kişinin nerede olduğunu söyler (KVKK, E09 kontrol E09-01).
-        is_personal_data=bool(bolum.konum_notu),
+        # Konum notu ve başlat/bitir konumu kişinin nerede olduğunu söyler
+        # (KVKK, E09 kontrol E09-01; G7.8).
+        is_personal_data=bool(bolum.konum_notu)
+        or "ALINDI" in (bolum.bas_konum_durumu, bolum.bit_konum_durumu),
     )
 
 
@@ -435,6 +501,7 @@ async def baslat(
     clock: Clock,
     konum_notu: str | None = None,
     bekleme_nedeni: str | None = None,
+    konum: KonumOkuma | None = None,
 ) -> ServiceTimeEntry:
     """Yeni canlı bölüm açar. İş erişimi (404) API'de çözülmüştür.
 
@@ -461,6 +528,8 @@ async def baslat(
         bekleme_nedeni=bekleme_nedeni,
         konum_notu=konum_notu,
     )
+    _konum_yaz(bolum, "bas", konum)
+    await db.flush()
     await _durum_isle(db, so, faaliyet, user, clock)
     await kancalar.zaman_bolumu_acildi(db, bolum)
     return bolum
@@ -473,6 +542,7 @@ async def bitir(
     user: User,
     clock: Clock,
     aciklama: str | None = None,
+    konum: KonumOkuma | None = None,
 ) -> ServiceTimeEntry:
     """Sahibi açık bölümünü kapatır (atama/erişim aranmaz; iş IPTAL olsa bile)."""
     _sahibi_mi(bolum, user)
@@ -482,6 +552,7 @@ async def bitir(
     bolum.ended_at = an
     bolum.kapanis_turu = "BITIR"
     bolum.updated_by = user.id
+    _konum_yaz(bolum, "bit", konum)
     if aciklama:
         bolum.aciklama = aciklama
     await db.flush()
@@ -497,8 +568,12 @@ async def gecis(
     clock: Clock,
     hedef_is: ServiceOrder | None = None,
     bekleme_nedeni: str | None = None,
+    konum: KonumOkuma | None = None,
 ) -> ServiceTimeEntry:
     """Faaliyet değiştir / mola / devam / sonraki işe taşı (kapat → flush → ekle).
+
+    Aynı konum okuması eski bölümün bitişine ve yeni bölümün başlangıcına
+    yazılır (G7.8).
 
     `hedef_is` verilirse (TS-074) bölüm o işte aynı anda devam eder: hedef
     `SAYAC_ACILABILIR` ve kişiye aktif atanmış olmalı (değilse 409); hedef
@@ -527,6 +602,7 @@ async def gecis(
     bolum.ended_at = an
     bolum.kapanis_turu = "GECIS"
     bolum.updated_by = user.id
+    _konum_yaz(bolum, "bit", konum)
     await db.flush()  # kapat → flush → ekle (uq_ste_acik_kisi / EXCLUDE sırası)
     yeni = await _yeni_bolum(
         db,
@@ -538,17 +614,24 @@ async def gecis(
         bekleme_nedeni=bekleme_nedeni,
         konum_notu=bolum.konum_notu if hedef_is is None else None,
     )
+    _konum_yaz(yeni, "bas", konum)
+    await db.flush()
     await _durum_isle(db, hedef, yeni_faaliyet, user, clock)
     await kancalar.zaman_bolumu_acildi(db, yeni)
     return yeni
 
 
 async def mola(
-    db: AsyncSession, bolum: ServiceTimeEntry, *, user: User, clock: Clock
+    db: AsyncSession,
+    bolum: ServiceTimeEntry,
+    *,
+    user: User,
+    clock: Clock,
+    konum: KonumOkuma | None = None,
 ) -> ServiceTimeEntry:
     if bolum.faaliyet == "MOLA":
         raise ZamanGirdiHatasi("Zaten moladasınız")
-    return await gecis(db, bolum, "MOLA", user=user, clock=clock)
+    return await gecis(db, bolum, "MOLA", user=user, clock=clock, konum=konum)
 
 
 async def devam_faaliyeti(db: AsyncSession, bolum: ServiceTimeEntry) -> str:
@@ -569,13 +652,18 @@ async def devam_faaliyeti(db: AsyncSession, bolum: ServiceTimeEntry) -> str:
 
 
 async def devam(
-    db: AsyncSession, bolum: ServiceTimeEntry, *, user: User, clock: Clock
+    db: AsyncSession,
+    bolum: ServiceTimeEntry,
+    *,
+    user: User,
+    clock: Clock,
+    konum: KonumOkuma | None = None,
 ) -> ServiceTimeEntry:
     if bolum.faaliyet not in ("MOLA", "BEKLEME"):
         raise ZamanGirdiHatasi("Devam yalnız mola ya da bekleme sonrasında kullanılır")
     _sahibi_mi(bolum, user)
     faaliyet = await devam_faaliyeti(db, bolum)
-    return await gecis(db, bolum, faaliyet, user=user, clock=clock)
+    return await gecis(db, bolum, faaliyet, user=user, clock=clock, konum=konum)
 
 
 # --- Düzeltmeler (TS-072) -------------------------------------------------------------------
@@ -1132,7 +1220,26 @@ async def sure_eksik_kapanis_dogrula(
     onayla geçilemez. BEKLENMIYOR (telefonla çözüm) sorulmaz.
     """
     ozet = await sure_ozeti(db, so.id)
-    if not ozet.sure_eksik:
+    # M1.10/M9.4 (Faz A): iş sahaya hiç çıkmadan (MUSTERI_TALEBI/PLANLANDI ...)
+    # sonuçlanırsa özet o an "beklenmiyor" der, ama TAMAMLANDI olunca rapor
+    # onu "süre eksik" sayar. Kapanışta hedef duruma göre bakılır: hiç bölüm
+    # yoksa ve çözüm uzaktan/telefonla değilse uyarı verilir (engel değil).
+    sessiz_eksik = (
+        ozet.sure_durumu == "BEKLENMIYOR"
+        and ozet.kisi_saat_dk is None
+        and so.status in BEKLENMIYOR_DURUMLAR
+        and so.status != "IPTAL"
+        and not await db.scalar(
+            select(
+                exists().where(
+                    ServiceResult.service_order_id == so.id,
+                    ServiceResult.gecersiz_at.is_(None),
+                    ServiceResult.cozum_kanali.in_(sorted(UZAKTAN_KANALLAR)),
+                )
+            )
+        )
+    )
+    if not ozet.sure_eksik and not sessiz_eksik:
         return ozet
     if ozet.eksik_kisiler:
         kimler = ", ".join(ozet.eksik_kisiler)
@@ -1149,7 +1256,7 @@ async def sure_eksik_kapanis_dogrula(
         f"Süre kaydı eksik olarak kapatıldı: {kimler}",
         user=user,
         clock=clock,
-        veri={"alan": "zaman", "sure_durumu": ozet.sure_durumu},
+        veri={"alan": "zaman", "sure_durumu": "EKSIK" if sessiz_eksik else ozet.sure_durumu},
     )
     return ozet
 

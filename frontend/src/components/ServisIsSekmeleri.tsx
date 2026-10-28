@@ -6,6 +6,9 @@
  *   kayıt girer (`ManuelKayitPenceresi`).
  * - `PlanGecmisiSekmesi` (D1-D, TS-044): aktif ve pasif bütün plan satırları,
  *   planlayan ve neden ile.
+ * - G7.8 (Faz A): canlı bölümün başlat/bitir konumu; alınamadıysa "Konum
+ *   bilgisi alınamadı" yazılır. Koordinat yalnız sunucu verdiyse (sahibi,
+ *   planlayıcı) haritaya bağlanır.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Descriptions, Empty, List, Space, Tag, Typography } from "antd";
@@ -13,12 +16,50 @@ import dayjs from "dayjs";
 import { useState } from "react";
 
 import { DEGISIM_ETIKETLERI, PLAN_NEDENLERI, planlamaApi } from "../api/servisPlanlama";
-import { FAALIYET_ADLARI, SURE_DURUMU_ADLARI, servisZaman, sureMetni } from "../api/servisZaman";
+import {
+  FAALIYET_ADLARI,
+  SURE_DURUMU_ADLARI,
+  servisZaman,
+  sureMetni,
+  type KonumBilgisi,
+} from "../api/servisZaman";
 import { useAuth } from "../auth/AuthContext";
 import { TAYIN } from "../fiori/etiketler";
 import { ManuelKayitPenceresi } from "./SayacDugmeleri";
 
 const zaman = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY HH:mm") : "—");
+
+/** Başlat/bitir konumu: alınamadıysa uyarı metni, alındıysa (varsa) harita bağlantısı. */
+function KonumMetni({ etiket, k }: { etiket: string; k?: KonumBilgisi | null }) {
+  if (!k) return null;
+  if (k.durum !== "ALINDI") {
+    return (
+      <Typography.Text type="warning" style={{ fontSize: 12 }}>
+        {etiket}: {k.metin}
+      </Typography.Text>
+    );
+  }
+  if (k.enlem == null || k.boylam == null) {
+    return (
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        {etiket}: {k.metin}
+      </Typography.Text>
+    );
+  }
+  return (
+    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+      {etiket}:{" "}
+      <a
+        href={`https://www.openstreetmap.org/?mlat=${k.enlem}&mlon=${k.boylam}#map=17/${k.enlem}/${k.boylam}`}
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        {k.enlem.toFixed(5)}, {k.boylam.toFixed(5)}
+      </a>
+      {k.dogruluk_m != null ? ` (±${k.dogruluk_m} m)` : ""}
+    </Typography.Text>
+  );
+}
 
 export function ZamanSekmesi({ isId, soNo }: { isId: number; soNo: string }) {
   const { yetkili } = useAuth();
@@ -68,6 +109,8 @@ export function ZamanSekmesi({ isId, soNo }: { isId: number; soNo: string }) {
                 {b.sure_dk != null ? ` · ${b.sure_dk} dk` : ""}
                 {b.kaynak !== "CANLI" ? ` · ${b.kaynak.replaceAll("_", " ").toLowerCase()}` : ""}
               </Typography.Text>
+              <KonumMetni etiket="Başlangıç konumu" k={b.bas_konum} />
+              <KonumMetni etiket="Bitiş konumu" k={b.bit_konum} />
             </Space>
           </List.Item>
         )}

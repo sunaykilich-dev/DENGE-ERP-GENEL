@@ -26,12 +26,12 @@ async def test_acilis_yetki_ve_numara(client, db, kullanici_ac, birimli_kullanic
     hesap = await musteri(db)
 
     await giris(client, "satis1")
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap))
     assert r.status_code == 403
 
     await giris(client, "op1")
     r = await client.post(
-        "/api/teknik-servis/isler", json=acilis(hesap.id, seriler=[" 00123-a/1 ", "00123-A/1"])
+        "/api/teknik-servis/isler", json=acilis(hesap, seriler=[" 00123-a/1 ", "00123-A/1"])
     )
     assert r.status_code == 201, r.text
     is_ = r.json()
@@ -56,7 +56,7 @@ async def test_sistem_turu_ekrandan_acilamaz(client, db, birimli_kullanici_ac) -
     await giris(client, "op2")
     for tur in ("PB", "ATOLYE"):
         r = await client.post(
-            "/api/teknik-servis/isler", json=acilis(hesap.id, tur=tur, seriler=["SN-1"])
+            "/api/teknik-servis/isler", json=acilis(hesap, tur=tur, seriler=["SN-1"])
         )
         assert r.status_code == 400, r.text
     assert await db.scalar(select(func.count()).select_from(ServiceOrder)) == 0
@@ -68,13 +68,13 @@ async def test_birim_kapsami_acilista(client, db, kullanici_ac, birimli_kullanic
     hesap = await musteri(db)
 
     await giris(client, "sef_g")
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id, birim="HABERLESME"))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, birim="HABERLESME"))
     assert r.status_code == 404
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id, birim="XYZ"))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, birim="XYZ"))
     assert r.status_code == 400
 
     await giris(client, "mudur")
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id, birim="HABERLESME"))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, birim="HABERLESME"))
     assert r.status_code == 201, r.text
 
 
@@ -87,18 +87,16 @@ async def test_musteri_lokasyon_ve_talep_dogrulamasi(
     tedarikci = await musteri(db, "Tedarikçi", is_musteri=False, is_tedarikci=True)
     await giris(client, "op3")
 
-    r = await client.post(
-        "/api/teknik-servis/isler", json=acilis(hesap.id, address_id=baska_tesis.id)
-    )
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, address_id=baska_tesis.id))
     assert r.status_code == 400
     assert "lokasyon" in r.json()["detail"]
     r = await client.post("/api/teknik-servis/isler", json=acilis(tedarikci.id))
     assert r.status_code == 400
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id, talep_kanali=None))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, talep_kanali=None))
     assert r.status_code == 400
     r = await client.post(
         "/api/teknik-servis/isler",
-        json=acilis(hesap.id, iletisim_ad=None, iletisim_telefon=None),
+        json=acilis(hesap, iletisim_ad=None, iletisim_telefon=None),
     )
     assert r.status_code == 400
     # Bildirim zamanı: ileri 400, 7 günden eski 400, 6 gün önce 201.
@@ -109,7 +107,7 @@ async def test_musteri_lokasyon_ve_talep_dogrulamasi(
         (simdi - timedelta(days=6), 201),
     ):
         r = await client.post(
-            "/api/teknik-servis/isler", json=acilis(hesap.id, reported_at=an.isoformat())
+            "/api/teknik-servis/isler", json=acilis(hesap, reported_at=an.isoformat())
         )
         assert r.status_code == kod, (an, r.text)
 
@@ -118,18 +116,18 @@ async def test_mukerrer_seri_409_ve_gecis(client, db, birimli_kullanici_ac, serv
     await birimli_kullanici_ac("op4", "SERVIS_OPERASYON", ["GUVENLIK"])
     hesap = await musteri(db)
     await giris(client, "op4")
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id, seriler=["  abc-01 "]))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, seriler=["  abc-01 "]))
     assert r.status_code == 201
     ilk = r.json()
 
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id, seriler=["ABC-01"]))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, seriler=["ABC-01"]))
     assert r.status_code == 409
     detay = r.json()["detail"]
     assert detay["kod"] == "MUKERRER"
     assert [m["so_no"] for m in detay["mevcut_isler"]] == [ilk["so_no"]]
 
     r = await client.post(
-        "/api/teknik-servis/isler", json=acilis(hesap.id, seriler=["ABC-01"], mukerrer_gec=True)
+        "/api/teknik-servis/isler", json=acilis(hesap, seriler=["ABC-01"], mukerrer_gec=True)
     )
     assert r.status_code == 201
     yeni = r.json()
@@ -151,7 +149,7 @@ async def test_kapsam_disi_mukerrerde_numara_sizmaz(
     await db.commit()
 
     await giris(client, "op5")
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id, seriler=["gizli-9"]))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, seriler=["gizli-9"]))
     assert r.status_code == 409
     detay = r.json()["detail"]
     assert detay["mevcut_isler"] == []
@@ -161,7 +159,7 @@ async def test_kapsam_disi_mukerrerde_numara_sizmaz(
     yabanci.status = "IPTAL"
     yabanci.cancel_reason = "test"
     await db.commit()
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap.id, seriler=["gizli-9"]))
+    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, seriler=["gizli-9"]))
     assert r.status_code == 201
 
 
@@ -274,7 +272,7 @@ async def test_uzaktan_cozuldu_tek_istek(client, db, birimli_kullanici_ac) -> No
     await birimli_kullanici_ac("sef8", "SERVIS_SEF", ["GUVENLIK"])
     hesap = await musteri(db)
     govde = acilis(
-        hesap.id, tur="DESTEK", cozum_kanali="TELEFON", yapilan_islem="Telefonla yönlendirildi"
+        hesap, tur="DESTEK", cozum_kanali="TELEFON", yapilan_islem="Telefonla yönlendirildi"
     )
     await giris(client, "op8")
     r = await client.post("/api/teknik-servis/isler/uzaktan-cozuldu", json=govde)
@@ -297,7 +295,7 @@ async def test_uzaktan_cozuldu_izin(client, db, birimli_kullanici_ac) -> None:
     await birimli_kullanici_ac("sef9", "SERVIS_SEF", ["GUVENLIK"])  # uzaktan_coz var
     await birimli_kullanici_ac("tek9", "SERVIS_TEKNISYEN", ["GUVENLIK"])  # yok
     hesap = await musteri(db)
-    govde = acilis(hesap.id, cozum_kanali="UZAKTAN", yapilan_islem="Uzaktan bağlanıldı")
+    govde = acilis(hesap, cozum_kanali="UZAKTAN", yapilan_islem="Uzaktan bağlanıldı")
     await giris(client, "tek9")
     r = await client.post("/api/teknik-servis/isler/uzaktan-cozuldu", json=govde)
     assert r.status_code == 403

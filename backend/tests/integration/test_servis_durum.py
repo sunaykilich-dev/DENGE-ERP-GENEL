@@ -103,26 +103,19 @@ async def test_yasam_dongusu_damgalari(client, db, birimli_kullanici_ac, servis_
     assert so.first_completed_at == ilk_an and so.closed_at is not None
 
     client.clock.advance(hours=3)  # oturum 12 saatte düşer
+    # M1.7 (Faz A): kapanmış iş yeniden açılmaz (409); kayıt ve sonuç değişmez.
     r = await client.post(
         f"/api/teknik-servis/isler/{so.id}/yeniden-ac", json={"gerekce": "Arıza sürüyor"}
     )
-    assert r.status_code == 200, r.text
+    assert r.status_code == 409, r.text
     so = await tazele(db, so)
-    assert so.status == "TEKRAR_ACILDI"
-    assert so.completed_at is None and so.closed_at is None
-    assert so.first_completed_at == ilk_an  # SİLİNMEZ
-    assert so.reopen_count == 1
+    assert so.status == "KAPATILDI" and so.closed_at is not None
+    assert so.first_completed_at == ilk_an
+    assert so.reopen_count == 0
     sonuclar = (
         await db.scalars(select(ServiceResult).where(ServiceResult.service_order_id == so.id))
     ).all()
-    assert len(sonuclar) == 1 and sonuclar[0].gecersiz_at is not None
-
-    client.clock.advance(hours=3)
-    r = await client.post(f"/api/teknik-servis/isler/{so.id}/sonuc", json=SONUC)
-    assert r.status_code == 200
-    so = await tazele(db, so)
-    assert so.first_completed_at == ilk_an
-    assert so.completed_at > so.first_completed_at
+    assert len(sonuclar) == 1 and sonuclar[0].gecersiz_at is None
 
 
 async def test_iptal_gerekce_ve_terminal(client, db, birimli_kullanici_ac, servis_isi_ac) -> None:

@@ -163,6 +163,8 @@ OLAY_TURLERI = (
     "ATOLYE",
     "TEKLIF",
     "SLA",
+    # Faz A (e1a000000001): kalite onayı (D3.4, G4.6).
+    "KALITE",
 )
 
 # Zaman faaliyetleri (E09-D02 tek sözlük; ISCILIK YOK → SAHA, KD-24).
@@ -173,6 +175,10 @@ ZAMAN_KAYNAKLARI = ("CANLI", "MANUEL", "KULLANICI_DUZELTMESI", "YONETICI_DUZELTM
 ZAMAN_KAPANIS_TURLERI = ("BITIR", "GECIS", "UNUTULDU", "YONETICI")
 ZAMAN_IPTAL_TURLERI = ("GERI_ALINDI", "YONETICI_IPTAL", "KAYIT_IPTAL", "GOC_IPTAL", "GOC_CAKISMA")
 SAHA_AKIS = {"YOLA_CIKTIM": "YOL", "SAHAYA_VARDIM": "SAHA"}
+# İş başlat/bitir konumu (G7.8, e1a000000001). ALINAMADI = istemci konumu
+# alamadı (izin yok, zaman aşımı, cihazda GPS yok); ekranda "Konum bilgisi
+# alınamadı" yazılır. NULL = konum sorulmayan kayıt (manuel, göç, unuttum).
+KONUM_DURUMLARI = ("ALINDI", "ALINAMADI")
 
 # Tohumlar (migration `bulk_insert` bunları yazar; değerler veri olarak
 # yönetilir, kod yalnız ilk hâli taşır).
@@ -362,6 +368,15 @@ class ServiceOrder(
             name="ck_so_pb_bag",
         ),
         CheckConstraint("reopen_count >= 0", name="ck_so_yeniden_acilma"),
+        # --- Faz A (e1a000000001) --------------------------------------------
+        # Kapanmış iş yeniden açılmaz; yeni iş açılıp öncekine bağlanır (M1.7).
+        CheckConstraint("onceki_is_id <> id", name="ck_so_onceki_kendisi"),
+        # Kalite onayını veren varsa onay anı da vardır (kişi silinirse SET NULL).
+        CheckConstraint(
+            "kalite_onaylayan_id IS NULL OR kalite_onay_at IS NOT NULL",
+            name="ck_so_kalite_onay",
+        ),
+        Index("ix_so_onceki_is", "onceki_is_id"),
         # --- Dalga 2: SLA (d2a000000001) -----------------------------------
         # PB ve atölye işine politika/hedef damgalanamaz (TS-081, E10-10). Bu iki
         # türe ya da bu türlerden geçiş yasak olduğundan kısıt güvenle şemada;
@@ -470,7 +485,23 @@ class ServiceOrder(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     cancel_reason: Mapped[str | None] = mapped_column(String(500))
+    # Yalnız eski (Faz A öncesi) yeniden açılışların sayacı; yeni açılış yok (M1.7).
     reopen_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), default=0)
+
+    # --- Faz A (e1a000000001) ---------------------------------------------
+    # Kapanmış işin devamı olarak açılan işte önceki iş (M1.7). Ayrı kolon:
+    # `iliskili_is_id` kullanıcının seçtiği mükerrer/tekrar arıza bağı içindir.
+    onceki_is_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("service_orders.id", ondelete="SET NULL", name="fk_so_onceki_is"),
+    )
+    # Kalite onayı (D3.4, G4.6): TAMAMLANDI/KAPATILDI işte bir kez verilir;
+    # işte tayinli ya da süre kaydı olan kişi veremez (görevler ayrılığı).
+    kalite_onay_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    kalite_onaylayan_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL", name="fk_so_kalite_onaylayan")
+    )
+    kalite_notu: Mapped[str | None] = mapped_column(String(500))
 
     # --- Bağlar -------------------------------------------------------------
     iliskili_is_id: Mapped[int | None] = mapped_column(
@@ -866,6 +897,18 @@ class ServiceApproval(Base, PkMixin, TimestampMixin, ActorMixin):
     approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+def _konum_kosulu(on: str) -> str:
+    """`bas_`/`bit_` konum CHECK ifadesi (migration aynı metni kullanır)."""
+    return (
+        f"({on}_konum_durumu IS NULL OR {on}_konum_durumu IN ('ALINDI', 'ALINAMADI')) AND ("
+        f"({on}_konum_durumu = 'ALINDI' AND {on}_enlem BETWEEN -90 AND 90 "
+        f"AND {on}_boylam BETWEEN -180 AND 180 "
+        f"AND ({on}_dogruluk_m IS NULL OR {on}_dogruluk_m >= 0)) OR "
+        f"({on}_konum_durumu IS DISTINCT FROM 'ALINDI' AND {on}_enlem IS NULL "
+        f"AND {on}_boylam IS NULL AND {on}_dogruluk_m IS NULL))"
+    )
+
+
 class ServiceTimeEntry(
     Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, VersionedMixin, SourceMixin
 ):
@@ -917,6 +960,10 @@ class ServiceTimeEntry(
             "ended_at IS NOT NULL OR kaynak = 'CANLI'", name="ck_ste_acik_yalniz_canli"
         ),
         CheckConstraint("is_deleted = (iptal_turu IS NOT NULL)", name="ck_ste_iptal"),
+        # G7.8 (e1a000000001): ALINDI ise koordinat vardır ve geçerlidir;
+        # ALINAMADI/NULL ise koordinat yoktur (uydurma konum yazılmaz).
+        CheckConstraint(_konum_kosulu("bas"), name="ck_ste_bas_konum"),
+        CheckConstraint(_konum_kosulu("bit"), name="ck_ste_bit_konum"),
         CheckConstraint(
             "user_id IS NOT NULL "
             "OR (source_system IS NOT NULL AND kaynak_personel_adi IS NOT NULL)",
@@ -963,8 +1010,19 @@ class ServiceTimeEntry(
         BigInteger, ForeignKey("service_time_entries.id", ondelete="SET NULL")
     )
     girildi_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    # Serbest metin; GPS yok (KVKK, ürün kararı).
+    # Serbest metin (elle girilen yer notu).
     konum_notu: Mapped[str | None] = mapped_column(String(200))
+    # İş başlat/bitir konumu (G7.8, Faz A). Sürekli konum takibi YOK: yalnız
+    # canlı bölümün açıldığı ve kapandığı an (açık rıza gelene kadar, G10.3).
+    # Kişisel veri: denetim izi `is_personal_data` ile yazılır.
+    bas_enlem: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    bas_boylam: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    bas_dogruluk_m: Mapped[int | None] = mapped_column(Integer)
+    bas_konum_durumu: Mapped[str | None] = mapped_column(String(10))
+    bit_enlem: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    bit_boylam: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    bit_dogruluk_m: Mapped[int | None] = mapped_column(Integer)
+    bit_konum_durumu: Mapped[str | None] = mapped_column(String(10))
     aciklama: Mapped[str | None] = mapped_column(Text)
     iptal_turu: Mapped[str | None] = mapped_column(String(20))
     iptal_gerekcesi: Mapped[str | None] = mapped_column(String(300))
@@ -1136,6 +1194,7 @@ __all__ = [
     "ServiceSlaPolicy",
     "KAPSAM_DURUMLARI",
     "KISI_SAATE_DAHIL",
+    "KONUM_DURUMLARI",
     "KUTUK_FARK_DURUMLARI",
     "OLAY_TURLERI",
     "ONAY_TURLERI",

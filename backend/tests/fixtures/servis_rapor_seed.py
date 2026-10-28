@@ -55,7 +55,7 @@ from app.models import (
     ServiceTimeEntry,
 )
 from app.services.normalize import normalize_seri
-from app.services.teknik_servis import is_emirleri, numara, sonuc
+from app.services.teknik_servis import gecmis, is_emirleri, kancalar, numara, sonuc
 
 AKYAKA = "AKYAKA AVM Yönetimi"
 _DB_KALIBI = re.compile(r"_test(_[a-z0-9]+)?$")
@@ -64,6 +64,34 @@ _DB_KALIBI = re.compile(r"_test(_[a-z0-9]+)?$")
 def z(gun: int, saat: int, dakika: int = 0, ay: int = 3) -> datetime:
     """2026 yılı UTC anı (Türkiye = UTC+3)."""
     return datetime(2026, ay, gun, saat, dakika, tzinfo=UTC)
+
+
+async def eski_yeniden_acilis(db, so, saat, gerekce: str) -> None:
+    """Faz A ÖNCESİ yeniden açılışın izi (M1.7 ile kullanıcıya kapandı; makinede
+    TAMAMLANDI → TEKRAR_ACILDI geçişi yok). Eski kayıtlar canlıda bu hâlde
+    durur: rapor "yeniden açılan iş" sayısını bu DURUM olayından okur. Eski
+    `durum_degistir(kaynak='yeniden_ac')` ne yazıyorsa aynısı yazılır."""
+    onceki = so.status
+    so.reopen_count = (so.reopen_count or 0) + 1
+    so.completed_at = None
+    so.completed_by = None
+    so.closed_at = None
+    so.closed_by = None
+    so.status = "TEKRAR_ACILDI"
+    await db.flush()
+    await gecmis.olay_yaz(
+        db,
+        so,
+        "DURUM",
+        f"{is_emirleri.DURUM_ADLARI[onceki]} → {is_emirleri.DURUM_ADLARI['TEKRAR_ACILDI']}"
+        f" — gerekçe: {gerekce}",
+        user=None,
+        clock=saat,
+        eski_durum=onceki,
+        yeni_durum="TEKRAR_ACILDI",
+        veri={"kaynak": "yeniden_ac"},
+    )
+    await kancalar.durum_degisti(db, so, onceki, "TEKRAR_ACILDI", "yeniden_ac", saat)
 
 
 @dataclass
@@ -281,10 +309,7 @@ async def kur(db, kisiler: dict[str, Any]) -> Seed:
     )
     await is_emirleri.durum_degistir(db, j4, "TAMAMLANDI", kaynak="sonuc", user=None, clock=saat)
     saat.set(z(12, 6))
-    await is_emirleri.durum_degistir(
-        db, j4, "TEKRAR_ACILDI", kaynak="yeniden_ac", user=None, clock=saat,
-        gerekce="Arıza devam ediyor",
-    )  # fmt: skip
+    await eski_yeniden_acilis(db, j4, saat, "Arıza devam ediyor")
     db.add(_bolum(j4, tek1, "SAHA", z(12, 7), z(12, 8, 30)))
     await db.flush()
     saat.set(z(12, 9))

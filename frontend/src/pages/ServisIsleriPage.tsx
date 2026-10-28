@@ -11,6 +11,10 @@
  *   durur ki panel kutusu (`?kpi=<kod>&donem=`) ve geri tuşu aynı listeyi açsın.
  * - Durum düğmeleri sunucunun `gecisler` listesinden (makine + uç + izin)
  *   çizilir; ekran kendi geçiş kuralı yazmaz. Yetkisiz düğme görünmez.
+ * - Faz A: kapanmış iş YENİDEN AÇILMAZ (M1.7); "Bağlı yeni iş" bu işe bağlı
+ *   yeni iş açar ve iki yönlü bağ ayrıntıda görünür. Tamamlanan işe "Kalite
+ *   onayı" verilir (D3.4/G4.6); işte çalışmış kişiye düğme kapalıdır (sunucu
+ *   da 403 döner). Süzgeçte "Kalite onayı bekleyenler" vardır.
  * - Her yazma isteği ekranda görülen durumu (`beklenen_durum`) ya da sürümü
  *   taşır; başkası değiştirdiyse sunucu 409 döner, kayıt yeniden yüklenir ve
  *   kullanıcıya "yenilendi" denir (sessiz üzerine yazma yok).
@@ -23,6 +27,7 @@ import {
   FilePdfOutlined,
   PlusOutlined,
   ReloadOutlined,
+  SafetyCertificateOutlined,
   StopOutlined,
   UnorderedListOutlined,
   UserAddOutlined,
@@ -53,6 +58,7 @@ import {
   Tabs,
   Tag,
   Timeline,
+  Tooltip,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -75,6 +81,7 @@ import {
   ONCELIK_RENKLERI,
   teknikServisApi,
   type AtamaSatiri,
+  type BagliIsSatiri,
   type FormVerileri,
   type IsSatiri,
   type IsSuzgeci,
@@ -121,6 +128,7 @@ function suzgecOku(p: URLSearchParams): IsSuzgeci {
     // Müşteri servis kartından tesis bazlı açık iş (TS-192) bağlantısı.
     adres_id: p.get("adres_id") ? Number(p.get("adres_id")) : undefined,
     siralama: p.get("siralama") ?? undefined,
+    kalite: p.get("kalite") ?? undefined,
   };
 }
 
@@ -514,15 +522,27 @@ type Pencere =
   | "sonuc"
   | "kapat"
   | "iptal"
-  | "yeniden_ac"
+  | "bagli_is"
+  | "kalite"
   | "atama"
   | "onay";
 
 /** Alt eylem çubuğundan gelen "detayı aç ve şu pencereyi göster" isteği. */
 export interface PencereIstegi {
-  pencere: "duzenle" | "iptal";
+  pencere: "duzenle" | "iptal" | "kalite";
   /** Aynı pencere ikinci kez istenince de çalışsın diye artan sayaç. */
   n: number;
+}
+
+/** Bağlı iş bağlantısı: kapsam dışı iş maskeli (tıklanamaz). */
+function BagliIsBaglantisi({ s, ac }: { s: BagliIsSatiri; ac?: (id: number) => void }) {
+  if (s.kapsam_disi || s.id == null || !ac) return <Tag>{s.so_no}</Tag>;
+  const id = s.id;
+  return (
+    <Button type="link" size="small" style={{ padding: 0 }} onClick={() => ac(id)}>
+      {s.so_no}
+    </Button>
+  );
 }
 
 function IsDetayCekmecesi({
@@ -530,11 +550,14 @@ function IsDetayCekmecesi({
   sozluk,
   kapat,
   istek,
+  isAc,
 }: {
   id: number;
   sozluk?: FormVerileri;
   kapat: () => void;
   istek?: PencereIstegi | null;
+  /** Başka bir işin ayrıntısını aç (bağlı iş bağlantıları). */
+  isAc?: (id: number) => void;
 }) {
   const { yetkili } = useAuth();
   const { message } = App.useApp();
@@ -619,13 +642,30 @@ function IsDetayCekmecesi({
           return teknikServisApi.kapat(d.id, beklenen, (v.gerekce as string) || undefined);
         case "iptal":
           return teknikServisApi.iptal(d.id, v.gerekce as string, beklenen);
-        case "yeniden_ac":
-          return teknikServisApi.yenidenAc(d.id, v.gerekce as string, beklenen);
+        case "kalite":
+          return teknikServisApi.kaliteOnayi(d.id, d.version, (v.not as string)?.trim() || undefined);
+        case "bagli_is":
+          return teknikServisApi.bagliYeniIs(d.id, {
+            konu: (v.konu as string).trim(),
+            aciklama: (v.aciklama as string)?.trim() || null,
+            talep_kanali: v.talep_kanali as string,
+            iletisim_ad: (v.iletisim_ad as string)?.trim() || null,
+            iletisim_telefon: (v.iletisim_telefon as string)?.trim() || null,
+            // Çok cihazlı eski işte yeni işin TEK cihazı seçilir (M1.6).
+            ...(d.seriler.length > 1 ? { seriler: v.seri ? [v.seri as string] : [] } : {}),
+          });
         default:
           throw new Error("Bilinmeyen işlem");
       }
     },
-    onSuccess: () => {
+    onSuccess: (sonuc) => {
+      if (pencere === "bagli_is" && sonuc && typeof sonuc === "object" && "so_no" in sonuc) {
+        message.success(`Bağlı yeni iş açıldı: ${sonuc.so_no}`);
+        pencereKapat();
+        yenile();
+        if (isAc) isAc(sonuc.id);
+        return;
+      }
       message.success("Kaydedildi");
       pencereKapat();
       yenile();
@@ -660,6 +700,11 @@ function IsDetayCekmecesi({
       else message.warning("Bu iş düzenlenemez");
       return;
     }
+    if (istek.pencere === "kalite") {
+      if (d.kalite.verebilir) pencereAc("kalite");
+      else message.warning(d.kalite.engel ?? "Bu işe kalite onayı verilemez");
+      return;
+    }
     const g = (d.gecisler ?? []).find((x) => x.uc === "iptal" && x.yetkili);
     if (g) pencereAc("iptal", g.hedef);
     else message.warning("Bu iş bu durumda iptal edilemez");
@@ -690,7 +735,6 @@ function IsDetayCekmecesi({
       sonuc: "sonuc",
       kapat: "kapat",
       iptal: "iptal",
-      yeniden_ac: "yeniden_ac",
     };
     pencereAc(harita[uc] ?? null, h);
   };
@@ -702,8 +746,24 @@ function IsDetayCekmecesi({
     sonuc: "Sonuç gir ve tamamla",
     kapat: "İşi kapat",
     iptal: "İşi iptal et",
-    yeniden_ac: "İşi yeniden aç",
+    bagli_is: "Bu işe bağlı yeni iş aç",
+    kalite: "Kalite onayı",
   };
+  const iliski = d?.iliskili_isler;
+  const sureEksik = !!d && kapali && ["EKSIK", "KISMI"].includes(d.sure_durumu);
+  const kanallar = (sozluk?.talep_kanallari ?? []).filter((k) => k.kod !== "BAKIM_OTOMATIK");
+  const bagliIsBaslangic =
+    d && pencere === "bagli_is"
+      ? {
+          konu: d.konu,
+          talep_kanali: d.talep_kanali && d.talep_kanali !== "BAKIM_OTOMATIK" ? d.talep_kanali : undefined,
+          iletisim_ad: d.iletisim_ad ?? undefined,
+          iletisim_telefon: d.iletisim_telefon ?? undefined,
+          seri: d.seriler.length > 1 ? undefined : d.seriler[0]?.seri_no,
+        }
+      : undefined;
+  // Kayıtlı irtibat kişisinin telefonu varsa ad/telefon boş bırakılabilir.
+  const irtibatTam = !!d?.irtibat?.full_name && !!d?.irtibat?.telefon;
 
   return (
     <Drawer
@@ -746,9 +806,27 @@ function IsDetayCekmecesi({
                 danger={g.uc === "iptal"}
                 onClick={() => gecisTiklandi(g.uc, g.hedef)}
               >
-                {g.uc === "sonuc" ? "Sonuç gir" : g.uc === "kapat" ? "Kapat" : g.uc === "iptal" ? "İptal et" : g.uc === "yeniden_ac" ? "Yeniden aç" : g.uc === "planla" ? "Planla" : g.ad}
+                {g.uc === "sonuc" ? "Sonuç gir" : g.uc === "kapat" ? "Kapat" : g.uc === "iptal" ? "İptal et" : g.uc === "planla" ? "Planla" : g.ad}
               </Button>
             ))}
+            {d.kalite.bekliyor && yetkili("servis.kalite_onay") && (
+              <Tooltip title={d.kalite.verebilir ? "Tamamlanan işi kalite yönünden onayla" : d.kalite.engel}>
+                <Button
+                  icon={<SafetyCertificateOutlined />}
+                  disabled={!d.kalite.verebilir}
+                  onClick={() => pencereAc("kalite")}
+                >
+                  Kalite onayı
+                </Button>
+              </Tooltip>
+            )}
+            {yazabilir && kapali && (
+              <Tooltip title="Kapanmış iş yeniden açılmaz; bu işe bağlı yeni iş açılır">
+                <Button icon={<PlusOutlined />} onClick={() => pencereAc("bagli_is")}>
+                  Bağlı yeni iş
+                </Button>
+              </Tooltip>
+            )}
             {d.status === "BEKLEMEDE" && yazabilir && (
               <Button onClick={() => pencereAc("bekleme_bitir")}>Beklemeyi bitir</Button>
             )}
@@ -853,6 +931,51 @@ function IsDetayCekmecesi({
                       {d.cancel_reason && (
                         <Descriptions.Item label="İptal gerekçesi" span={2}>
                           {d.cancel_reason}
+                        </Descriptions.Item>
+                      )}
+                      {iliski?.onceki && (
+                        <Descriptions.Item label="Önceki iş (devamı olduğu)" span={2}>
+                          <BagliIsBaglantisi s={iliski.onceki} ac={isAc} />
+                        </Descriptions.Item>
+                      )}
+                      {!!iliski?.sonrakiler.length && (
+                        <Descriptions.Item label="Bağlı yeni işler" span={2}>
+                          <Space wrap size={4}>
+                            {iliski.sonrakiler.map((s) => (
+                              <BagliIsBaglantisi key={s.so_no} s={s} ac={isAc} />
+                            ))}
+                          </Space>
+                        </Descriptions.Item>
+                      )}
+                      {(iliski?.ust || !!iliski?.alt.length) && (
+                        <Descriptions.Item label="İlişkili işler" span={2}>
+                          <Space wrap size={4}>
+                            {iliski?.ust && <BagliIsBaglantisi s={iliski.ust} ac={isAc} />}
+                            {iliski?.alt.map((s) => <BagliIsBaglantisi key={s.so_no} s={s} ac={isAc} />)}
+                          </Space>
+                        </Descriptions.Item>
+                      )}
+                      {(d.kalite.onay_at || d.kalite.bekliyor) && (
+                        <Descriptions.Item label="Kalite onayı" span={2}>
+                          {d.kalite.onay_at ? (
+                            <Space orientation="vertical" size={0}>
+                              <span>
+                                <Tag color="green">Onaylandı</Tag>
+                                {zaman(d.kalite.onay_at)} · {d.kalite.onaylayan?.ad ?? "—"}
+                              </span>
+                              {d.kalite.notu && <Typography.Text type="secondary">{d.kalite.notu}</Typography.Text>}
+                            </Space>
+                          ) : (
+                            <Tag color="orange">Kalite onayı bekliyor</Tag>
+                          )}
+                        </Descriptions.Item>
+                      )}
+                      {sureEksik && (
+                        <Descriptions.Item label="Süre kaydı" span={2}>
+                          <Tag color="warning">Süre kaydı eksik</Tag>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            Raporlarda "süre eksik" sayılır (0 saat değil).
+                          </Typography.Text>
                         </Descriptions.Item>
                       )}
                       <Descriptions.Item label={TAYIN.tayinEdilenEkip} span={2}>
@@ -1157,13 +1280,18 @@ function IsDetayCekmecesi({
           open={!!pencere && pencere in pencereBasligi}
           onCancel={pencereKapat}
           onOk={() => form.submit()}
-          okText="Kaydet"
           cancelText="Vazgeç"
+          okText={pencere === "bagli_is" ? "Yeni işi aç" : pencere === "kalite" ? "Onayla" : "Kaydet"}
           okButtonProps={{ danger: pencere === "iptal" }}
           confirmLoading={islem.isPending}
           destroyOnHidden
         >
-          <Form form={form} layout="vertical" onFinish={(v) => islem.mutate(v)}>
+          <Form
+            form={form}
+            layout="vertical"
+            initialValues={bagliIsBaslangic}
+            onFinish={(v) => islem.mutate(v)}
+          >
             {pencere === "genel" && (
               <Form.Item name="gerekce" label="Not (isteğe bağlı)">
                 <Input maxLength={500} />
@@ -1277,7 +1405,87 @@ function IsDetayCekmecesi({
                 <Input maxLength={500} />
               </Form.Item>
             )}
-            {(pencere === "iptal" || pencere === "yeniden_ac") && (
+            {pencere === "kalite" && (
+              <>
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  title="Tamamlanan işin kalite yönünden uygun olduğunu onaylarsınız. İşte tayinli ya da süre kaydı olan kişi onay veremez."
+                />
+                <Form.Item name="not" label="Kalite notu (isteğe bağlı)">
+                  <Input.TextArea rows={2} maxLength={500} />
+                </Form.Item>
+              </>
+            )}
+            {pencere === "bagli_is" && (
+              <>
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  title={`Kapanmış iş yeniden açılmaz. Müşteri, lokasyon ve cihaz ${d.so_no} işinden kopyalanır; yeni iş bu işe bağlanır.`}
+                />
+                {["PB", "ATOLYE"].includes(d.tur) && (
+                  <Typography.Paragraph type="secondary">Yeni iş “Arıza” türünde açılır.</Typography.Paragraph>
+                )}
+                <Form.Item
+                  name="konu"
+                  label="Arıza tanımı"
+                  rules={[{ required: true, whitespace: true, message: "Arıza tanımı zorunlu" }]}
+                >
+                  <Input maxLength={200} />
+                </Form.Item>
+                <Form.Item name="aciklama" label="Açıklama">
+                  <Input.TextArea rows={2} maxLength={4000} />
+                </Form.Item>
+                <Form.Item
+                  name="talep_kanali"
+                  label="Talep kanalı"
+                  rules={[{ required: true, message: "Talep kanalı seçin" }]}
+                >
+                  <Select options={kanallar.map((k) => ({ value: k.kod, label: k.ad }))} />
+                </Form.Item>
+                <Row gutter={8}>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="iletisim_ad"
+                      label="Talep eden kişi"
+                      extra={irtibatTam ? `Boşsa kayıtlı irtibat: ${d.irtibat?.full_name}` : undefined}
+                      rules={irtibatTam ? [] : [{ required: true, whitespace: true, message: "Ad zorunlu" }]}
+                    >
+                      <Input maxLength={120} />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="iletisim_telefon"
+                      label="Telefon"
+                      rules={irtibatTam ? [] : [{ required: true, whitespace: true, message: "Telefon zorunlu" }]}
+                    >
+                      <Input maxLength={20} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                {d.seriler.length > 1 ? (
+                  <Form.Item
+                    name="seri"
+                    label="Cihaz (seri no)"
+                    extra="Arıza işinde tek cihaz olur; her cihaz için ayrı iş açın."
+                  >
+                    <Select
+                      allowClear
+                      options={d.seriler.map((s) => ({ value: s.seri_no, label: s.seri_no }))}
+                    />
+                  </Form.Item>
+                ) : (
+                  <Typography.Paragraph type="secondary">
+                    Cihaz: {d.seriler[0]?.seri_no ?? "—"}
+                  </Typography.Paragraph>
+                )}
+              </>
+            )}
+            {pencere === "iptal" && (
               <Form.Item
                 name="gerekce"
                 label="Gerekçe"
@@ -1565,11 +1773,16 @@ export function ServisIsListesi({
   const secebilir = yazabilir || planlayabilir;
   const ac = (id: number) => detayAc(id);
 
+  const kaliteYetkili = yetkili("servis.kalite_onay");
+  const tekKaliteBekliyor =
+    !!tek && ["TAMAMLANDI", "KAPATILDI"].includes(tek.status) && !tek.kalite_onay_at;
+
   const ekSuzgecSayisi = [
     suzgec.birim,
     suzgec.oncelik,
     suzgec.atanmamis,
     suzgec.kapali_dahil,
+    suzgec.kalite,
     suzgec.siralama,
     suzgec.durum?.length && !seciliGrup ? 1 : undefined,
     suzgec.musteri_id,
@@ -1791,6 +2004,26 @@ export function ServisIsListesi({
       },
     },
     {
+      anahtar: "kalite",
+      ad: "Kalite Onayı",
+      ikon: <SafetyCertificateOutlined />,
+      yalnizIkon: true,
+      gizli: !kaliteYetkili,
+      ipucu: !tek
+        ? "Kalite onayı: bir iş seçin"
+        : tek.kalite_onay_at
+          ? "Kalite onayı verilmiş"
+          : tekKaliteBekliyor
+            ? "Kalite onayı ver"
+            : "Kalite onayı iş tamamlandıktan sonra verilir",
+      devreDisi: !tekKaliteBekliyor,
+      onClick: () => {
+        if (!tek) return;
+        setIstek({ pencere: "kalite", n: Date.now() });
+        ac(tek.id);
+      },
+    },
+    {
       anahtar: "duzenle",
       ad: "Düzenle",
       ikon: <EditOutlined />,
@@ -1892,6 +2125,12 @@ export function ServisIsListesi({
             onChange={(e) => suzgecDegistir({ ...urlSuzgeci, kapali_dahil: e.target.checked || undefined })}
           >
             Eski kapalı işler dahil
+          </Checkbox>
+          <Checkbox
+            checked={suzgec.kalite === "BEKLEYEN"}
+            onChange={(e) => suzgecDegistir({ ...urlSuzgeci, kalite: e.target.checked ? "BEKLEYEN" : undefined })}
+          >
+            Kalite onayı bekleyenler
           </Checkbox>
           {ekSuzgecSayisi > 0 && (
             <Button
@@ -2040,6 +2279,10 @@ export function ServisIsListesi({
           id={detayId}
           sozluk={sozluk.data}
           istek={istek}
+          isAc={(x) => {
+            setIstek(null);
+            detayAc(x);
+          }}
           kapat={() => {
             setIstek(null);
             detayAc(null);

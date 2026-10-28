@@ -33,6 +33,10 @@ from app.models import (
 
 pytestmark = pytest.mark.integration
 
+# Faz A (M1.10/M9.4): süre kaydı olmayan PB kapanışı uyarı ister; bu testler
+# formu konu alır, süre uyarısı `test_servis_faz_a` ve bütünleştirme testinde.
+SURE_ONAY = {"sure_eksik_onay": True}
+
 IS = "/api/teknik-servis/isler"
 
 
@@ -93,7 +97,7 @@ async def test_atanmamis_teknisyen_404_ve_veri_degismez(
     assert (await client.get(f"{ONEK}/formlar/{so.id}")).status_code == 404
     r = await client.put(f"{ONEK}/formlar/{so.id}", json={"version": 1, "zone": "X"})
     assert r.status_code == 404
-    assert (await client.post(f"{ONEK}/formlar/{so.id}/tamamla")).status_code == 404
+    assert (await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)).status_code == 404
     form = await db.scalar(select(MaintenanceForm).where(MaintenanceForm.service_order_id == so.id))
     await db.refresh(form)
     assert form.zone != "X" and form.version == 1
@@ -132,7 +136,7 @@ async def test_not_zorunlu_400_bekleyen_madde_409_taslak_ziyaret_yazmaz(
     )
     assert r.status_code == 200
     assert await db.scalar(select(func.count(MaintenanceVisit.id))) == 0  # taslak ziyaret değil
-    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla")
+    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)
     assert r.status_code == 409
     assert r.json()["detail"]["kod"] == "BEKLEYEN_MADDE"
 
@@ -144,11 +148,11 @@ async def test_tamamlama_onay_ister_ziyaret_yazar_donemi_kapatir(
     await ata(db, so, kisiler["tek"])
     await giris(client, "tek_f")
     await _doldur(client, so.id)
-    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla")
+    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)
     assert r.status_code == 409  # servis_onay_zorunlu_turler = ["PB"]
     assert "onay" in r.text
     await _alinamadi_onayi(client, so.id)
-    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla")
+    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)
     assert r.status_code == 200, r.text
     assert r.json()["so"]["status"] == "TAMAMLANDI"
     assert r.json()["form"]["status"] == "TAMAMLANDI"
@@ -163,7 +167,7 @@ async def test_tamamlama_onay_ister_ziyaret_yazar_donemi_kapatir(
     await db.refresh(donem)
     assert donem.closing_kind == "TAMAMLANDI" and donem.closed_at is not None
     # Tamamlanmış form tekrar tamamlanamaz.
-    assert (await client.post(f"{ONEK}/formlar/{so.id}/tamamla")).status_code == 409
+    assert (await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)).status_code == 409
 
 
 async def test_pb_genel_uctan_tamamlanamaz_ve_iptal_edilemez(
@@ -191,7 +195,7 @@ async def test_uygunsuzluk_beklemeye_alir_kapaninca_tamamlar(
     await giris(client, "tek_f")
     await _doldur(client, so.id, XR_BELT=("UYGUNSUZ", "Bant yırtık"))
     await _alinamadi_onayi(client, so.id)
-    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla")
+    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)
     assert r.status_code == 200, r.text
     assert r.json()["acilan_uygunsuzluk"] == 1
     await db.refresh(so)
@@ -232,7 +236,7 @@ async def test_uygunsuzluktan_bagli_ariza_isi(client, db, kisiler, lokasyon_ac, 
     await giris(client, "tek_f")
     await _doldur(client, so.id, XR_IMG=("UYGUNSUZ", "Görüntü bozuk"))
     await _alinamadi_onayi(client, so.id)
-    await client.post(f"{ONEK}/formlar/{so.id}/tamamla")
+    await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)
     nc = await db.scalar(
         select(MaintenanceNonconformity).where(MaintenanceNonconformity.service_order_id == so.id)
     )
@@ -274,7 +278,9 @@ async def test_kapsam_disi_kendi_onayi_409_kismi_donem_ve_yeniden_uretilmez(
     await giris(client, "sef_f")
     await _doldur(client, birinci.id)
     await _alinamadi_onayi(client, birinci.id)
-    assert (await client.post(f"{ONEK}/formlar/{birinci.id}/tamamla")).status_code == 200
+    assert (
+        await client.post(f"{ONEK}/formlar/{birinci.id}/tamamla", json=SURE_ONAY)
+    ).status_code == 200
     await db.refresh(donem)
     assert donem.closing_kind == "KISMI"
     # İptal edilen cihaz-dönem yeniden üretilmez.
@@ -282,45 +288,45 @@ async def test_kapsam_disi_kendi_onayi_409_kismi_donem_ve_yeniden_uretilmez(
     assert r.json()["generated"] == 0
 
 
-async def test_yeniden_acma_formu_taslaga_ve_donemi_aciga_dondurur(
+async def test_tamamlanan_pb_yeniden_acilmaz_bagli_ariza_isi_acilir(
     client, db, kisiler, lokasyon_ac, ekipman_ac
 ):
+    """M1.7 (Faz A): tamamlanan PB yeniden açılmaz (409; form ve dönem
+    değişmez); devamı PB'ye bağlı ARIZA işi olarak açılır (1 cihaz = 1 PB korunur)."""
     _, [so] = await _pb_kur(client, db, lokasyon_ac, ekipman_ac)
     await giris(client, "sef_f")
     await _doldur(client, so.id)
     await _alinamadi_onayi(client, so.id)
-    assert (await client.post(f"{ONEK}/formlar/{so.id}/tamamla")).status_code == 200
+    assert (await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)).status_code == 200
     donem = await db.get(MaintenancePeriod, so.maintenance_period_id)
+    await db.refresh(donem)
+    kapanis = donem.closed_at
+    assert kapanis is not None
 
     r = await client.post(f"{IS}/{so.id}/yeniden-ac", json={"gerekce": "Bölge yanlış yazılmış"})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 409, r.text
     form = await db.scalar(select(MaintenanceForm).where(MaintenanceForm.service_order_id == so.id))
     await db.refresh(form)
-    assert form.status == "TASLAK" and form.completed_at is None
-    ziyaretler = (
-        await db.scalars(
-            select(MaintenanceVisit)
-            .where(MaintenanceVisit.service_order_id == so.id)
-            .order_by(MaintenanceVisit.visit_no)
-        )
-    ).all()
-    assert [z.tur for z in ziyaretler] == ["TAMAMLAMA", "YENIDEN_ACMA"]
-    assert ziyaretler[1].gerekce == "Bölge yanlış yazılmış"
-    assert ziyaretler[1].technician_user_id == kisiler["sef"].id
+    assert form.status != "TASLAK" and form.completed_at is not None
     await db.refresh(donem)
-    assert donem.closed_at is None  # sayaç −1
+    assert donem.closed_at == kapanis
+    assert await db.scalar(select(func.count(MaintenanceVisit.id))) == 1
 
-    # Yeniden tamamlanınca dönem tekrar kapanır, ilk ziyaret korunur.
-    form_json = (await client.get(f"{ONEK}/formlar/{so.id}")).json()
-    r = await client.put(
-        f"{ONEK}/formlar/{so.id}",
-        json={"version": form_json["form"]["version"], "zone": "Çıkış Kapısı"},
+    r = await client.post(
+        f"{IS}/{so.id}/bagli-yeni-is",
+        json={
+            "konu": "Bölge yanlış yazılmış, tekrar bakılacak",
+            "talep_kanali": "TELEFON",
+            "iletisim_ad": "Tesis Sorumlusu",
+            "iletisim_telefon": "+905321112233",
+        },
     )
-    assert r.status_code == 200
-    assert (await client.post(f"{ONEK}/formlar/{so.id}/tamamla")).status_code == 200
+    assert r.status_code == 201, r.text
+    yeni = r.json()
+    assert yeni["tur"] == "ARIZA" and yeni["onceki_is_id"] == so.id
+    assert len(yeni["seriler"]) == 1
     await db.refresh(donem)
-    assert donem.closing_kind == "TAMAMLANDI"
-    assert await db.scalar(select(func.count(MaintenanceVisit.id))) == 3
+    assert donem.closed_at == kapanis  # yeni iş dönemi açmaz
 
 
 async def test_donem_uzlastirmasi_idempotent(client, db, kisiler, lokasyon_ac, ekipman_ac):
@@ -331,7 +337,7 @@ async def test_donem_uzlastirmasi_idempotent(client, db, kisiler, lokasyon_ac, e
     await giris(client, "sef_f")
     await _doldur(client, so.id)
     await _alinamadi_onayi(client, so.id)
-    await client.post(f"{ONEK}/formlar/{so.id}/tamamla")
+    await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)
     # Kancayı atlayan bir yol dönemi bozmuş olsun: gece uzlaştırması düzeltir.
     donem = await db.get(MaintenancePeriod, so.maintenance_period_id)
     donem.closed_at = None
@@ -377,7 +383,7 @@ async def test_sahada_farkli_seri_kutuk_farki_exclude_tamamlamayi_bloke_etmez(
     )
     assert r.status_code == 200, r.text
     await _alinamadi_onayi(client, so.id)
-    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla")
+    r = await client.post(f"{ONEK}/formlar/{so.id}/tamamla", json=SURE_ONAY)
     assert r.status_code == 200, r.text
     assert any("başka bir sözleşmenin kapsamında" in u for u in r.json()["uyarilar"])
     assert r.json()["form"]["kutuk_fark_durumu"] == "ACIK"

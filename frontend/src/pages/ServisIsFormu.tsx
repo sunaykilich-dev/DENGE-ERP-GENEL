@@ -11,6 +11,9 @@
  *   istekte (iş TAMAMLANDI doğar; şef ayrıca kapatır).
  * - Düzenlemede `version` gönderilir (iyimser kilit): başkası değiştirdiyse
  *   409 → çağıran kaydı yeniler. Kapalı işte düzeltme gerekçe ister.
+ * - Faz A: yeni işte lokasyon, talep eden kişinin adı ve telefonu ve arıza
+ *   tanımı zorunlu (M1.2); günlük servis işinde (arıza/destek/plansız bakım)
+ *   en çok bir cihaz (M1.6). Sunucu aynı kuralı 400 ile uygular.
  */
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -133,6 +136,10 @@ export default function ServisIsFormu({
   const seriler = Form.useWatch("seriler", form);
   const musteri = Form.useWatch("musteri", form);
   const kategoriDegeri = Form.useWatch("kategori", form);
+  const turDegeri = Form.useWatch("tur", form);
+  const tekCihaz =
+    formVerileri?.turler.find((t) => t.kod === turDegeri)?.kategori === "GUNLUK_SERVIS" ||
+    turDegeri === "PB";
 
   const arizaNedenleri = useQuery({
     queryKey: ["ariza-nedenleri", birim],
@@ -432,7 +439,11 @@ export default function ServisIsFormu({
         rules={[
           {
             validator: (_, v: MusteriLokasyonSecimi | undefined) =>
-              v?.musteriId ? Promise.resolve() : Promise.reject(new Error("Müşteri seçin")),
+              !v?.musteriId
+                ? Promise.reject(new Error("Müşteri seçin"))
+                : !duzenleme && !v.lokasyonId
+                  ? Promise.reject(new Error("Lokasyon seçin"))
+                  : Promise.resolve(),
           },
         ]}
       >
@@ -459,20 +470,29 @@ export default function ServisIsFormu({
         <Col xs={24} sm={12}>
           <Form.Item
             name="iletisim_ad"
-            label="Saha yetkilisi"
+            label="Talep eden kişi"
             extra={onerilenIrtibat ? `Lokasyonun birincil irtibatı: ${onerilenIrtibat.ad}` : undefined}
+            rules={duzenleme ? [] : [{ required: true, whitespace: true, message: "Talep eden kişinin adı zorunlu" }]}
           >
             <Input maxLength={120} placeholder="Ad Soyad" />
           </Form.Item>
         </Col>
         <Col xs={24} sm={12}>
-          <Form.Item name="iletisim_telefon" label="Telefon">
+          <Form.Item
+            name="iletisim_telefon"
+            label="Telefon"
+            rules={duzenleme ? [] : [{ required: true, whitespace: true, message: "Telefon zorunlu" }]}
+          >
             <Input maxLength={20} inputMode="tel" placeholder="05xx xxx xx xx" />
           </Form.Item>
         </Col>
       </Row>
 
-      <Form.Item name="konu" label="Konu" rules={[{ required: true, whitespace: true, max: 200 }]}>
+      <Form.Item
+        name="konu"
+        label="Arıza tanımı / konu"
+        rules={[{ required: true, whitespace: true, max: 200, message: "Arıza tanımı zorunlu (en çok 200 karakter)" }]}
+      >
         <Input placeholder="Ör. Kamera görüntü vermiyor" />
       </Form.Item>
       <Form.Item name="aciklama" label="Açıklama">
@@ -480,8 +500,20 @@ export default function ServisIsFormu({
       </Form.Item>
       <Form.Item
         name="seriler"
-        label="Seri numaraları"
-        extra="Enter ile ekleyin. Seri metin olarak saklanır (baştaki sıfır korunur)."
+        label={tekCihaz ? "Cihaz seri numarası" : "Seri numaraları"}
+        extra={
+          tekCihaz
+            ? "Bu iş türünde tek cihaz olur; her cihaz için ayrı iş açın. Seri metin olarak saklanır."
+            : "Enter ile ekleyin. Seri metin olarak saklanır (baştaki sıfır korunur)."
+        }
+        rules={[
+          {
+            validator: (_, v: string[] | undefined) =>
+              tekCihaz && (v ?? []).filter((s) => s.trim()).length > 1
+                ? Promise.reject(new Error("Bu iş türünde en çok bir cihaz (seri) girilebilir"))
+                : Promise.resolve(),
+          },
+        ]}
       >
         <Select mode="tags" tokenSeparators={[",", ";"]} open={false} disabled={mevcut?.tur === "PB"} />
       </Form.Item>

@@ -26,6 +26,11 @@ iş erişimi yoksa 404 (varlık sızdırılmaz), varsa 403.
 **Çift basış:** her bölüm eylemi `version` ister; uyuşmazlık 409 (ikinci istek
 artık açık olmayan bölümü gösterir). Her yanıt `sunucu_zamani` taşır
 (istemci saat farkı, TS-071). `sistem.kullanici` tek başına hiçbir uca yetmez.
+
+**Konum (G7.8, Faz A):** başlat/geçiş/mola/devam/bitir gövdesi isteğe bağlı
+`konum` taşır. Gelmezse ya da koordinatsızsa bölüme "alınamadı" yazılır; uç
+konum yüzünden ASLA reddetmez. Koordinatı yalnız bölümün sahibi ve
+`servis.planla` sahibi görür; diğerleri yalnız durum metnini görür (KVKK).
 """
 
 from datetime import date, datetime
@@ -69,6 +74,14 @@ BaslatEylemi = Literal["YOLA_CIKTIM", "SAHAYA_VARDIM", "DIGER"]
 # --- Şemalar -----------------------------------------------------------------------
 
 
+class KonumOut(BaseModel):
+    durum: str
+    metin: str
+    enlem: float | None = None
+    boylam: float | None = None
+    dogruluk_m: int | None = None
+
+
 class BolumOut(BaseModel):
     id: int
     version: int
@@ -95,6 +108,8 @@ class BolumOut(BaseModel):
     iptal_eden_id: int | None
     iptal_at: datetime | None
     iptal: bool
+    bas_konum: KonumOut | None = None
+    bit_konum: KonumOut | None = None
 
 
 class SureOzetiOut(BaseModel):
@@ -124,6 +139,24 @@ class IsZamaniOut(BaseModel):
     sure_ozeti: SureOzetiOut
 
 
+class KonumIn(BaseModel):
+    """Tarayıcı `navigator.geolocation` okuması. Koordinat yoksa (izin
+    reddi, zaman aşımı) `hata` kodu gönderilebilir; durum ALINAMADI olur."""
+
+    # Aralık dışı değer reddedilmez, "alınamadı" sayılır (işlem engellenmez).
+    enlem: float | None = None
+    boylam: float | None = None
+    dogruluk_m: float | None = None
+    hata: str | None = None  # yalnız istemci tanısı; saklanmaz
+
+    def okuma(self) -> svc.KonumOkuma:
+        return svc.KonumOkuma(self.enlem, self.boylam, self.dogruluk_m)
+
+
+def _okuma(konum: "KonumIn | None") -> svc.KonumOkuma | None:
+    return konum.okuma() if konum is not None else None
+
+
 class BaslatIn(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={"examples": [{"is_id": 1, "eylem": "YOLA_CIKTIM"}]}
@@ -135,12 +168,17 @@ class BaslatIn(BaseModel):
     faaliyet: Faaliyet | None = None
     bekleme_nedeni: str | None = Field(default=None, max_length=30)
     konum_notu: str | None = Field(default=None, max_length=200)
+    konum: KonumIn | None = None
 
 
 class SurumIn(BaseModel):
     model_config = ConfigDict(json_schema_extra={"examples": [{"version": 1}]})
 
     version: int
+
+
+class KonumluSurumIn(SurumIn):
+    konum: KonumIn | None = None
 
 
 class GecisIn(BaseModel):
@@ -151,6 +189,7 @@ class GecisIn(BaseModel):
     bekleme_nedeni: str | None = Field(default=None, max_length=30)
     # TS-074: sayacı sonraki işe taşı (aynı ziyaretteki sıradaki cihaz).
     hedef_is_id: int | None = None
+    konum: KonumIn | None = None
 
 
 class BitirIn(BaseModel):
@@ -158,6 +197,7 @@ class BitirIn(BaseModel):
 
     version: int
     aciklama: str | None = Field(default=None, max_length=2000)
+    konum: KonumIn | None = None
 
 
 class UnuttumIn(BaseModel):
@@ -296,7 +336,17 @@ async def _adlar(db, kimlikler: set[int | None]) -> dict[int, str]:
     )
 
 
-async def _bolum_out(db, bolum: ServiceTimeEntry, adlar: dict[int, str] | None = None) -> BolumOut:
+def _konum_out(bolum: ServiceTimeEntry, on: str, koordinat: bool) -> KonumOut | None:
+    ozet = svc.konum_ozeti(bolum, on, koordinat=koordinat)
+    return KonumOut(**ozet) if ozet is not None else None
+
+
+async def _bolum_out(
+    db,
+    bolum: ServiceTimeEntry,
+    adlar: dict[int, str] | None = None,
+    goren: User | None = None,
+) -> BolumOut:
     if adlar is None:
         adlar = await _adlar(db, {bolum.user_id, bolum.created_by})
     so_no = await db.scalar(
@@ -307,6 +357,8 @@ async def _bolum_out(db, bolum: ServiceTimeEntry, adlar: dict[int, str] | None =
         if bolum.ended_at is not None
         else None
     )
+    # Koordinat kişisel veridir: yalnız sahibi ve planlayıcı görür.
+    koordinat = goren is not None and (bolum.user_id == goren.id or goren.has("servis.planla"))
     return BolumOut(
         id=bolum.id,
         version=bolum.version,
@@ -333,6 +385,8 @@ async def _bolum_out(db, bolum: ServiceTimeEntry, adlar: dict[int, str] | None =
         iptal_eden_id=bolum.deleted_by,
         iptal_at=bolum.deleted_at,
         iptal=bolum.is_deleted,
+        bas_konum=_konum_out(bolum, "bas", koordinat),
+        bit_konum=_konum_out(bolum, "bit", koordinat),
     )
 
 
@@ -353,7 +407,11 @@ def _ozet_out(ozet: svc.SureOzeti) -> SureOzetiOut:
 
 
 async def _sonuc(
-    db, clock, bolum: ServiceTimeEntry, yeni: ServiceTimeEntry | None = None
+    db,
+    clock,
+    bolum: ServiceTimeEntry,
+    yeni: ServiceTimeEntry | None = None,
+    goren: User | None = None,
 ) -> BolumSonucOut:
     hedef = yeni or bolum
     durum = await db.scalar(
@@ -361,8 +419,8 @@ async def _sonuc(
     )
     return BolumSonucOut(
         sunucu_zamani=clock.now(),
-        bolum=await _bolum_out(db, bolum),
-        yeni_bolum=await _bolum_out(db, yeni) if yeni is not None else None,
+        bolum=await _bolum_out(db, bolum, goren=goren),
+        yeni_bolum=await _bolum_out(db, yeni, goren=goren) if yeni is not None else None,
         is_durumu=durum,
     )
 
@@ -427,10 +485,11 @@ async def baslat(payload: BaslatIn, db: DbDep, clock: ClockDep, user: ZamanServi
             clock=clock,
             konum_notu=payload.konum_notu,
             bekleme_nedeni=payload.bekleme_nedeni,
+            konum=_okuma(payload.konum),
         )
     except _HATALAR as exc:
         raise _hata(exc) from exc
-    sonuc = await _sonuc(db, clock, bolum)
+    sonuc = await _sonuc(db, clock, bolum, goren=user)
     await db.commit()
     return sonuc
 
@@ -459,41 +518,52 @@ async def gecis(
             clock=clock,
             hedef_is=hedef,
             bekleme_nedeni=payload.bekleme_nedeni,
+            konum=_okuma(payload.konum),
         )
     except _HATALAR as exc:
         raise _hata(exc) from exc
-    sonuc = await _sonuc(db, clock, bolum, yeni)
+    sonuc = await _sonuc(db, clock, bolum, yeni, goren=user)
     await db.commit()
     return sonuc
 
 
 @router.post("/isler/{is_id}/zaman/bolumler/{bolum_id}/mola", response_model=BolumSonucOut)
 async def mola(
-    is_id: int, bolum_id: int, payload: SurumIn, db: DbDep, clock: ClockDep, user: ZamanYazici
+    is_id: int,
+    bolum_id: int,
+    payload: KonumluSurumIn,
+    db: DbDep,
+    clock: ClockDep,
+    user: ZamanYazici,
 ) -> BolumSonucOut:
     bolum = await _bolum(db, user, is_id, bolum_id, sahibi=True)
     _surum(bolum, payload.version)
     try:
-        yeni = await svc.mola(db, bolum, user=user, clock=clock)
+        yeni = await svc.mola(db, bolum, user=user, clock=clock, konum=_okuma(payload.konum))
     except _HATALAR as exc:
         raise _hata(exc) from exc
-    sonuc = await _sonuc(db, clock, bolum, yeni)
+    sonuc = await _sonuc(db, clock, bolum, yeni, goren=user)
     await db.commit()
     return sonuc
 
 
 @router.post("/isler/{is_id}/zaman/bolumler/{bolum_id}/devam", response_model=BolumSonucOut)
 async def devam(
-    is_id: int, bolum_id: int, payload: SurumIn, db: DbDep, clock: ClockDep, user: ZamanYazici
+    is_id: int,
+    bolum_id: int,
+    payload: KonumluSurumIn,
+    db: DbDep,
+    clock: ClockDep,
+    user: ZamanYazici,
 ) -> BolumSonucOut:
     """Mola/bekleme sonrası: son mola dışı faaliyet SUNUCUDA bulunur."""
     bolum = await _bolum(db, user, is_id, bolum_id, sahibi=True)
     _surum(bolum, payload.version)
     try:
-        yeni = await svc.devam(db, bolum, user=user, clock=clock)
+        yeni = await svc.devam(db, bolum, user=user, clock=clock, konum=_okuma(payload.konum))
     except _HATALAR as exc:
         raise _hata(exc) from exc
-    sonuc = await _sonuc(db, clock, bolum, yeni)
+    sonuc = await _sonuc(db, clock, bolum, yeni, goren=user)
     await db.commit()
     return sonuc
 
@@ -506,10 +576,17 @@ async def bitir(
     bolum = await _bolum(db, user, is_id, bolum_id, sahibi=True)
     _surum(bolum, payload.version)
     try:
-        await svc.bitir(db, bolum, user=user, clock=clock, aciklama=payload.aciklama)
+        await svc.bitir(
+            db,
+            bolum,
+            user=user,
+            clock=clock,
+            aciklama=payload.aciklama,
+            konum=_okuma(payload.konum),
+        )
     except _HATALAR as exc:
         raise _hata(exc) from exc
-    sonuc = await _sonuc(db, clock, bolum)
+    sonuc = await _sonuc(db, clock, bolum, goren=user)
     await db.commit()
     return sonuc
 
@@ -588,7 +665,7 @@ async def is_zamani(is_id: int, db: DbDep, clock: ClockDep, user: Okuyucu) -> Is
     adlar = await _adlar(db, {b.user_id for b in bolumler} | {b.created_by for b in bolumler})
     return IsZamaniOut(
         sunucu_zamani=clock.now(),
-        bolumler=[await _bolum_out(db, b, adlar) for b in bolumler],
+        bolumler=[await _bolum_out(db, b, adlar, goren=user) for b in bolumler],
         sure_ozeti=_ozet_out(await svc.sure_ozeti(db, so.id)),
     )
 

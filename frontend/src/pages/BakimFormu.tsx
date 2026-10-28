@@ -74,10 +74,8 @@ export default function BakimFormu({
   const [maddeler, setMaddeler] = useState<Record<string, Madde>>({});
   const [onayAcik, setOnayAcik] = useState(false);
   const [kdAcik, setKdAcik] = useState(false);
-  const [acmaAcik, setAcmaAcik] = useState(false);
   const [onayForm] = Form.useForm();
   const [kdForm] = Form.useForm();
-  const [acmaForm] = Form.useForm();
 
   const sorgu = useQuery({
     queryKey: ["bakim", "form", soId],
@@ -173,16 +171,6 @@ export default function BakimFormu({
     onSuccess: (v) => {
       message.success("Karar kaydedildi");
       yenile(v);
-    },
-    onError: hata,
-  });
-  const yenidenAc = useMutation({
-    mutationFn: (gerekce: string) => bakimApi.yenidenAc(soId!, gerekce),
-    onSuccess: () => {
-      message.success("İş yeniden açıldı; form düzenlenebilir");
-      setAcmaAcik(false);
-      acmaForm.resetFields();
-      yenile();
     },
     onError: hata,
   });
@@ -359,9 +347,8 @@ export default function BakimFormu({
                 Kapsam Dışı Talebi
               </Button>
             )}
-            {yetkili("servis.kapat") && ["TAMAMLANDI", "KAPATILDI"].includes(veri.so.status) && (
-              <Button onClick={() => setAcmaAcik(true)}>Yeniden Aç</Button>
-            )}
+            {/* M1.7 (Faz A): kapanmış iş yeniden açılmaz; Servis İşleri ayrıntısında
+                "Bağlı yeni iş" düğmesiyle bu işe bağlı yeni iş açılır. */}
           </Space>
 
           {veri.kapsam_disi.length > 0 && (
@@ -471,22 +458,6 @@ export default function BakimFormu({
         </Form>
       </Modal>
 
-      <Modal
-        title="İşi yeniden aç"
-        open={acmaAcik}
-        onCancel={() => setAcmaAcik(false)}
-        onOk={() => acmaForm.submit()}
-        confirmLoading={yenidenAc.isPending}
-        okText="Yeniden Aç"
-        cancelText="Vazgeç"
-        destroyOnHidden
-      >
-        <Form form={acmaForm} layout="vertical" onFinish={(v) => yenidenAc.mutate(v.gerekce)}>
-          <Form.Item name="gerekce" label="Gerekçe" rules={[{ required: true, min: 3 }]}>
-            <Input.TextArea rows={3} maxLength={500} />
-          </Form.Item>
-        </Form>
-      </Modal>
     </Drawer>
   );
 }

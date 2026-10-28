@@ -4,16 +4,18 @@
 Durum geçişi YALNIZ `durum_degistir` ile yapılır:
 1. `kaynak` `UC_HEDEFLERI`'nde ve hedef o kaynağın kümesinde olmalı;
 2. `SERVIS_IS_EMRI.dogrula(onceki, hedef)` (aynı durum → 409, olay YOK);
-3. kaynak-izin kuralı (KAPATILDI/IPTAL/TEKRAR_ACILDI yalnız `servis.kapat`,
-   `sonuc` yolu yalnız `servis.tamamla`) — kullanıcısız (worker) çağrıda yok;
+3. kaynak-izin kuralı (KAPATILDI/IPTAL yalnız `servis.kapat`, `sonuc` yolu
+   yalnız `servis.tamamla`) — kullanıcısız (worker) çağrıda yok;
 4. `kancalar.durum_dogrula` (sonuçsuz TAMAMLANDI, PB koruması, atölye, açık
    sayaç → 409) — YAZMADAN ÖNCE;
-5. damgalar (TAMAMLANDI → `completed_at`, ilk seferde `first_completed_at`
-   — TEKRAR_ACILDI'da SİLİNMEZ; KAPATILDI → `closed_at`; IPTAL →
-   `cancelled_at` + gerekçe; TEKRAR_ACILDI → `reopen_count + 1`,
-   `completed_at/closed_at` NULL);
+5. damgalar (TAMAMLANDI → `completed_at`, ilk seferde `first_completed_at`;
+   KAPATILDI → `closed_at`; IPTAL → `cancelled_at` + gerekçe);
 6. DURUM olayı (`gecmis.olay_yaz`) + `kancalar.durum_degisti` (aktif
    beklemenin kapanması, sonucun geçersiz kılınması ... aynı transaction).
+
+**Kapanmış iş yeniden açılmaz (M1.7, Faz A):** makinede TAMAMLANDI/KAPATILDI
+→ TEKRAR_ACILDI geçişi yoktur; kapanmış işin devamı `bagli_yeni_is` ile YENİ
+iş olarak açılır (`onceki_is_id`). TEKRAR_ACILDI yalnız eski kayıtlarda kalır.
 
 Servis fonksiyonları `flush` eder, `commit` ETMEZ; transaction sınırı API'dir.
 Kapsam (404) API'nin işidir; burada yalnız iş kuralı vardır.
@@ -34,6 +36,7 @@ from app.models import (
     ServiceOrder,
     ServiceOrderAssignment,
     ServiceOrderSerial,
+    ServiceTimeEntry,
 )
 from app.models.rbac import BIRIM_KODLARI
 from app.models.teknik_servis import (
@@ -79,7 +82,9 @@ class IsEmriKapsamDisi(ServisHatasi):
 class TurKurali:
     """Tür → kategori ve tür kuralları (plan §1.7 `TUR_KURALLARI`).
 
-    `seri_zorunlu`: açılışta en az bir seri ister. `birim_kisiti`: yalnız bu
+    `seri_zorunlu`: açılışta en az bir seri ister. `azami_seri`: işte en çok
+    bu kadar aktif seri olur (GUNLUK_SERVIS: 1 — "arıza işinde tek cihaz",
+    M1.6; None = genel üst sınır `SERI_UST_SINIR`). `birim_kisiti`: yalnız bu
     birimlerde açılabilir (None = hepsi). `sla_olculur`: yalnız
     GUNLUK_SERVIS. `yalniz_sistem`: kullanıcı ekranından açılamaz (PB'yi
     yalnız bakım üretimi, ATOLYE'yi yalnız atölye kabulü açar) ve ekrandan
@@ -93,15 +98,19 @@ class TurKurali:
     sla_olculur: bool = False
     yalniz_sistem: bool = False
     tek_seri: bool = False
+    azami_seri: int | None = None
 
 
 # Kategori YALNIZ buradan türetilir (iş no önekinden tahmin yasak, E12-04).
 # Birim kısıtı Dalga 1'de yok: her tür her birimde açılabilir (pilot GUVENLIK).
 TUR_KURALLARI: dict[str, TurKurali] = {
-    "ARIZA": TurKurali("GUNLUK_SERVIS", sla_olculur=True),
-    "PLANSIZ_BAKIM": TurKurali("GUNLUK_SERVIS", sla_olculur=True),
-    "DESTEK": TurKurali("GUNLUK_SERVIS", sla_olculur=True),
-    "PB": TurKurali("PLANLI_BAKIM", seri_zorunlu=True, yalniz_sistem=True, tek_seri=True),
+    # M1.6 (Faz A): günlük servis işinde en çok bir cihaz; seri zorunlu değil.
+    "ARIZA": TurKurali("GUNLUK_SERVIS", sla_olculur=True, azami_seri=1),
+    "PLANSIZ_BAKIM": TurKurali("GUNLUK_SERVIS", sla_olculur=True, azami_seri=1),
+    "DESTEK": TurKurali("GUNLUK_SERVIS", sla_olculur=True, azami_seri=1),
+    "PB": TurKurali(
+        "PLANLI_BAKIM", seri_zorunlu=True, yalniz_sistem=True, tek_seri=True, azami_seri=1
+    ),
     "ATOLYE": TurKurali("ATOLYE", seri_zorunlu=True, yalniz_sistem=True),
     "KURULUM": TurKurali("PROJE"),
     "TOPLAMA": TurKurali("PROJE"),
@@ -135,7 +144,6 @@ UC_HEDEFLERI: dict[str, frozenset[str]] = {
     "bakim_formu": frozenset({"TAMAMLANDI"}),
     "kapsam_disi": frozenset({"IPTAL"}),
     "kapat": frozenset({"KAPATILDI"}),
-    "yeniden_ac": frozenset({"TEKRAR_ACILDI"}),
     "iptal": frozenset({"IPTAL"}),
     "kiralama": frozenset({"IPTAL"}),
 }
@@ -152,20 +160,23 @@ _HEDEF_UCU: dict[str, tuple[str, str]] = {
     "TAMAMLANDI": ("sonuc", "servis.tamamla"),
     "KAPATILDI": ("kapat", "servis.kapat"),
     "IPTAL": ("iptal", "servis.kapat"),
-    "TEKRAR_ACILDI": ("yeniden_ac", "servis.kapat"),
 }
 
 # Kaynak → kullanıcı çağırıyorsa gereken izin (worker/sistem çağrısında aranmaz).
 _KAYNAK_IZNI: dict[str, str] = {
     "kapat": "servis.kapat",
-    "yeniden_ac": "servis.kapat",
     "iptal": "servis.kapat",
     "sonuc": "servis.tamamla",
     "uzaktan": "servis.uzaktan_coz",
 }
 
 # Gerekçesi zorunlu kaynaklar (iptal gerekçesi ayrıca `ck_so_iptal_gerekce`).
-_GEREKCE_ZORUNLU = frozenset({"iptal", "yeniden_ac", "kapsam_disi", "kiralama"})
+_GEREKCE_ZORUNLU = frozenset({"iptal", "kapsam_disi", "kiralama"})
+
+# M1.7 kullanıcı mesajı (API'nin eski `yeniden-ac` ucu da bunu döner).
+YENIDEN_ACMA_YOK = "Kapanmış iş yeniden açılamaz; bu işe bağlı yeni iş açın"
+# Bağlı yeni iş yalnız kapanmış işten açılır (açık işte mevcut iş sürdürülür).
+BAGLI_IS_KAYNAK_DURUMLARI = DURUM_GRUPLARI["KAPALI"]
 
 DURUM_ADLARI: dict[str, str] = {
     "MUSTERI_TALEBI": "Müşteri Talebi",
@@ -252,6 +263,18 @@ def tur_kategorisi(tur: str) -> str:
 
 def kapali_mi(so: ServiceOrder) -> bool:
     return so.status in DURUM_GRUPLARI["KAPALI"]
+
+
+def seri_sayisi_dogrula(tur: str, seriler: list[str]) -> None:
+    """Tür kuralının seri üst sınırı (M1.6). Eski çok cihazlı kayıtlar
+    OKUNUR kalır; yalnız yeni yazım (açılış, seri değişikliği, tür geçişi)
+    sınırı aşamaz → 400."""
+    azami = TUR_KURALLARI[tur].azami_seri
+    if azami is not None and len(seriler) > azami:
+        raise ServisGirdiHatasi(
+            f"'{TUR_ADLARI[tur]}' işinde en çok {azami} cihaz (seri numarası) olur; "
+            "her cihaz için ayrı iş açın"
+        )
 
 
 @dataclass
@@ -376,6 +399,7 @@ async def olustur(
         raise ServisGirdiHatasi(f"'{TUR_ADLARI[girdi.tur]}' işinde seri numarası zorunlu")
     if kural.tek_seri and len(seriler) != 1:
         raise ServisGirdiHatasi(f"'{TUR_ADLARI[girdi.tur]}' işinde tam bir seri olur")
+    seri_sayisi_dogrula(girdi.tur, seriler)
     _bildirim_dogrula(girdi.reported_at, clock, geriye_sinir=user is not None)
     await _musteri_dogrula(db, girdi.customer_id, girdi.address_id, girdi.contact_id)
 
@@ -524,12 +548,6 @@ async def durum_degistir(
         so.cancelled_at = simdi
         so.cancelled_by = kimlik
         so.cancel_reason = gerekce
-    elif hedef == "TEKRAR_ACILDI":
-        so.reopen_count = (so.reopen_count or 0) + 1
-        so.completed_at = None
-        so.completed_by = None
-        so.closed_at = None
-        so.closed_by = None
     so.status = hedef
     if kimlik is not None:
         so.updated_by = kimlik
@@ -649,6 +667,7 @@ async def guncelle(
             raise IsEmriHatasi(
                 f"'{TUR_ADLARI[so.tur]}' → '{TUR_ADLARI[hedef_tur]}' tür geçişi yapılamaz"
             )
+        seri_sayisi_dogrula(hedef_tur, [s.seri_no for s in await aktif_seriler(db, so)])
     if "kategori" in yeni:
         if not user.has("servis.kapat"):
             raise IsEmriYetkiHatasi("Kategori düzeltmesi için yetkiniz yok (servis.kapat)")
@@ -774,6 +793,7 @@ async def serileri_yaz(
         raise IsEmriHatasi("Planlı bakım işinde seri değiştirilemez (1 cihaz = 1 iş)")
     if kural.seri_zorunlu and not yeni_liste:
         raise ServisGirdiHatasi(f"'{TUR_ADLARI[so.tur]}' işinde seri numarası zorunlu")
+    seri_sayisi_dogrula(so.tur, yeni_liste)
     kapali = kapali_mi(so)
     if kapali:
         if not user.has("servis.kapat"):
@@ -926,7 +946,229 @@ async def bagli_isler(db: AsyncSession, user: User, so: ServiceOrder) -> dict[st
             .order_by(ServiceOrder.id)
         )
     ).all()
-    return {"ust": ust, "alt": [await _satir(a, a.iliski_turu) for a in altlar]}
+    # M1.7: kapanmış işin devamı zinciri (iki yön).
+    onceki = None
+    if so.onceki_is_id is not None:
+        hedef = await db.get(ServiceOrder, so.onceki_is_id)
+        if hedef is not None and not hedef.is_deleted:
+            onceki = await _satir(hedef, None)
+    sonrakiler = (
+        await db.scalars(
+            select(ServiceOrder)
+            .where(ServiceOrder.onceki_is_id == so.id, ServiceOrder.is_deleted.is_(False))
+            .order_by(ServiceOrder.id)
+        )
+    ).all()
+    return {
+        "ust": ust,
+        "alt": [await _satir(a, a.iliski_turu) for a in altlar],
+        "onceki": onceki,
+        "sonrakiler": [await _satir(a, None) for a in sonrakiler],
+    }
+
+
+# --- Bağlı yeni iş (M1.7, Faz A) -------------------------------------------------
+
+
+def bagli_is_girdisi(onceki: ServiceOrder, seriler: list[str]) -> ServisIsiGirdisi:
+    """Kapanmış işten yeni işin varsayılan girdisi: müşteri, lokasyon,
+    irtibat, cihaz ve konu kopyalanır. Yalnız sistemin açtığı türlerin (PB,
+    atölye) devamı ARIZA olarak açılır — ekrandan PB/atölye açılamaz."""
+    tur = "ARIZA" if TUR_KURALLARI[onceki.tur].yalniz_sistem else onceki.tur
+    return ServisIsiGirdisi(
+        birim=onceki.birim,
+        tur=tur,
+        konu=onceki.konu,
+        customer_id=onceki.customer_id,  # type: ignore[arg-type]
+        address_id=onceki.address_id,
+        contact_id=onceki.contact_id,
+        oncelik=onceki.oncelik,
+        talep_kanali=onceki.talep_kanali
+        if onceki.talep_kanali not in (None, "BAKIM_OTOMATIK")
+        else None,
+        iletisim_ad=onceki.iletisim_ad,
+        iletisim_telefon=onceki.iletisim_telefon,
+        proje=onceki.proje,
+        sistem=onceki.sistem,
+        seriler=list(seriler),
+        equipment_id=onceki.equipment_id,
+    )
+
+
+async def bagli_yeni_is(
+    db: AsyncSession,
+    onceki: ServiceOrder,
+    girdi: ServisIsiGirdisi,
+    *,
+    user: User,
+    clock: Clock,
+) -> ServiceOrder:
+    """Kapanmış işe bağlı YENİ iş açar (yeniden açma yerine, M1.7).
+
+    Kaynak iş kapalı olmalı (TAMAMLANDI/KAPATILDI/IPTAL; açık işte 409 —
+    mevcut iş sürdürülür). Yeni iş normal açılış kurallarıyla açılır
+    (`olustur`), `onceki_is_id` ile öncekine bağlanır; iki iş de ILISKI olayı
+    alır. Önceki işin durumu, sonucu ve SLA damgaları DEĞİŞMEZ.
+    """
+    if onceki.is_deleted:
+        raise IsEmriHatasi("Silinmiş işe bağlı iş açılamaz")
+    if onceki.status not in BAGLI_IS_KAYNAK_DURUMLARI:
+        raise IsEmriHatasi(
+            "İş henüz kapanmadı; bağlı yeni iş yalnız kapanmış işten açılır, "
+            "açık işte mevcut iş sürdürülür"
+        )
+    so = await olustur(db, girdi, user=user, clock=clock)
+    so.onceki_is_id = onceki.id
+    so.updated_by = user.id
+    await db.flush()
+    await gecmis.olay_yaz(
+        db,
+        so,
+        "ILISKI",
+        f"Kapanmış işin devamı olarak açıldı: {onceki.so_no}",
+        user=user,
+        clock=clock,
+        veri={"onceki_is_id": onceki.id, "yon": "onceki"},
+    )
+    await gecmis.olay_yaz(
+        db,
+        onceki,
+        "ILISKI",
+        f"Bu işe bağlı yeni iş açıldı: {so.so_no}",
+        user=user,
+        clock=clock,
+        veri={"sonraki_is_id": so.id, "yon": "sonraki"},
+    )
+    return so
+
+
+# --- Kalite onayı (D3.4, G4.6; Faz A) --------------------------------------------
+
+KALITE_IZNI = "servis.kalite_onay"
+KALITE_DURUMLARI = DURUM_GRUPLARI["COZULDU"]
+KALITE_SUZGECLERI = ("BEKLEYEN", "ONAYLI")
+
+
+async def kalite_engeli(db: AsyncSession, so: ServiceOrder, user: User) -> str | None:
+    """Görevler ayrılığı (G4.6): kullanıcı bu işte çalıştıysa engel metni.
+
+    Çalışmış sayılan: işe hiç tayin edilmiş olmak (kaldırılmış tayin dahil),
+    işte iptal edilmemiş süre kaydı olmak ya da sonucu girmiş olmak.
+    """
+    tayinli = await db.scalar(
+        select(
+            exists().where(
+                ServiceOrderAssignment.service_order_id == so.id,
+                ServiceOrderAssignment.user_id == user.id,
+            )
+        )
+    )
+    if tayinli:
+        return "Bu işe tayin edildiğiniz için kalite onayını veremezsiniz (görevler ayrılığı)"
+    sureli = await db.scalar(
+        select(
+            exists().where(
+                ServiceTimeEntry.service_order_id == so.id,
+                ServiceTimeEntry.user_id == user.id,
+                ServiceTimeEntry.is_deleted.is_(False),
+            )
+        )
+    )
+    if sureli:
+        return "Bu işte süre kaydınız olduğu için kalite onayını veremezsiniz (görevler ayrılığı)"
+    if so.completed_by is not None and so.completed_by == user.id:
+        return "İşi siz tamamladığınız için kalite onayını veremezsiniz (görevler ayrılığı)"
+    return None
+
+
+async def kalite_durumu(db: AsyncSession, so: ServiceOrder, user: User) -> dict[str, Any]:
+    """Detay ekranı için kalite onayı bilgisi ve düğme durumu."""
+    engel: str | None = None
+    if so.kalite_onay_at is not None:
+        engel = "Kalite onayı verilmiş"
+    elif so.status not in KALITE_DURUMLARI:
+        engel = "Kalite onayı iş tamamlandıktan sonra verilir"
+    elif not user.has(KALITE_IZNI):
+        engel = f"Yetkiniz yok ({KALITE_IZNI})"
+    else:
+        engel = await kalite_engeli(db, so, user)
+    ad = None
+    if so.kalite_onaylayan_id is not None:
+        from app.models import User as _User
+
+        ad = await db.scalar(select(_User.full_name).where(_User.id == so.kalite_onaylayan_id))
+    return {
+        "onay_at": so.kalite_onay_at,
+        "onaylayan": (
+            {"id": so.kalite_onaylayan_id, "ad": ad} if so.kalite_onaylayan_id is not None else None
+        ),
+        "notu": so.kalite_notu,
+        "bekliyor": so.kalite_onay_at is None and so.status in KALITE_DURUMLARI,
+        "verebilir": engel is None,
+        "engel": engel,
+    }
+
+
+async def kalite_onayla(
+    db: AsyncSession,
+    so: ServiceOrder,
+    *,
+    user: User,
+    clock: Clock,
+    version: int,
+    notu: str | None = None,
+) -> ServiceOrder:
+    """Tamamlanan işe kalite onayı (yeni durum YOK; iş TAMAMLANDI/KAPATILDI kalır).
+
+    Hatalar: sürüm uyuşmazlığı / tamamlanmamış iş / onay zaten var → 409;
+    izin yok ya da görevler ayrılığı → 403; not 500 karakteri aşarsa 400.
+    """
+    if version != so.version:
+        raise IsEmriHatasi("Kayıt başka biri tarafından değiştirildi; sayfayı yenileyin")
+    if not user.has(KALITE_IZNI):
+        raise IsEmriYetkiHatasi(f"Kalite onayı için yetkiniz yok ({KALITE_IZNI})")
+    if so.is_deleted:
+        raise IsEmriHatasi("Silinmiş işe kalite onayı verilemez")
+    if so.status not in KALITE_DURUMLARI:
+        raise IsEmriHatasi("Kalite onayı yalnız tamamlanmış ya da kapatılmış işe verilir")
+    if so.kalite_onay_at is not None:
+        raise IsEmriHatasi("Bu işin kalite onayı zaten verilmiş")
+    engel = await kalite_engeli(db, so, user)
+    if engel is not None:
+        raise IsEmriYetkiHatasi(engel)
+    notu = _bos(notu)
+    if notu is not None and len(notu) > 500:
+        raise ServisGirdiHatasi("Kalite notu en çok 500 karakter olabilir")
+    so.kalite_onay_at = clock.now()
+    so.kalite_onaylayan_id = user.id
+    so.kalite_notu = notu
+    so.updated_by = user.id
+    await db.flush()
+    try:
+        await gecmis.olay_yaz(
+            db,
+            so,
+            "KALITE",
+            "Kalite onayı verildi" + (f" — not: {notu}" if notu else ""),
+            user=user,
+            clock=clock,
+        )
+    except gecmis.KisiselVeriHatasi as exc:
+        raise ServisGirdiHatasi("Kalite notuna irtibat adı veya telefonu yazılamaz") from exc
+    return so
+
+
+def kalite_kosulu(suzgec: str) -> Any:
+    """Liste süzgeci: BEKLEYEN = tamamlanmış/kapatılmış, onaysız ve göç
+    kaydı olmayan iş (eski sistemden gelen kapalı işler onay kuyruğunu
+    doldurmasın); ONAYLI = kalite onayı verilmiş iş."""
+    if suzgec == "ONAYLI":
+        return ServiceOrder.kalite_onay_at.is_not(None)
+    return and_(
+        ServiceOrder.status.in_(sorted(KALITE_DURUMLARI)),
+        ServiceOrder.kalite_onay_at.is_(None),
+        ServiceOrder.source_system.is_(None),
+    )
 
 
 # --- Mükerrer kontrolü (TS-029) ----------------------------------------------------
@@ -1022,6 +1264,8 @@ class ListeFiltresi:
     kpi: str | None = None
     donem: str | None = None
     siralama: str = "yeni"
+    # Faz A: "kalite onayı bekleyenler" (BEKLEYEN) / onaylılar (ONAYLI).
+    kalite: str | None = None
 
 
 SIRALAMALAR = ("yeni", "eski", "oncelik", "no")
@@ -1044,6 +1288,8 @@ def _filtre_dogrula(f: ListeFiltresi) -> None:
         raise ServisGirdiHatasi(f"Bilinmeyen öncelik: {f.oncelik}")
     if f.siralama not in SIRALAMALAR:
         raise ServisGirdiHatasi(f"Bilinmeyen sıralama: {f.siralama}")
+    if f.kalite is not None and f.kalite not in KALITE_SUZGECLERI:
+        raise ServisGirdiHatasi(f"Bilinmeyen kalite süzgeci: {f.kalite}")
     if f.bas is not None and f.bit is not None and f.bit < f.bas:
         raise ServisGirdiHatasi("Bitiş tarihi başlangıçtan önce olamaz")
 
@@ -1120,7 +1366,9 @@ def liste_sorgusu(user: User, f: ListeFiltresi, clock: Clock) -> Select:
         from app.services.teknik_servis import panel
 
         stmt = panel.kpi_uygula(stmt, f.kpi, user=user, clock=clock, donem=f.donem)
-    varsayilan = not (f.durum or f.durum_grubu or f.kpi or f.kapali_dahil)
+    if f.kalite:
+        stmt = stmt.where(kalite_kosulu(f.kalite))
+    varsayilan = not (f.durum or f.durum_grubu or f.kpi or f.kapali_dahil or f.kalite)
     if varsayilan:
         sinir = clock.now() - timedelta(days=LISTE_KAPALI_GUN)
         kapanis = func.coalesce(

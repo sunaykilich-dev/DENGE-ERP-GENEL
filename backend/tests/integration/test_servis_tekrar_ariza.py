@@ -63,12 +63,12 @@ async def ortam(client, db, kullanici_ac):
     neden = await db.scalar(
         select(ServiceFaultReason.id).where(ServiceFaultReason.birim == "GUVENLIK").limit(1)
     )
-    return hesap.id, neden
+    return hesap, neden
 
 
 async def test_eslesme_kurallari(client, db, ortam) -> None:
     """Kabul: 20 gün önce kapanan aynı seri → bağ; 45 gün → yok; '0AB001' ≠ 'AB-001';
-    iki serili işte yalnız ikinci seri eşleşse de işaret; elle kurulan bağ korunur."""
+    iki serili (kurulum) işte yalnız ikinci seri eşleşse de işaret; elle kurulan bağ korunur."""
     hesap, _ = ortam
     a = await _ac(client, hesap, ["AB-001"])
     g = await _ac(client, hesap, ["XY-9"])
@@ -84,7 +84,8 @@ async def test_eslesme_kurallari(client, db, ortam) -> None:
     assert (kb.iliskili_is_id, kb.iliski_turu) == (a["id"], "TEKRAR_ARIZA")
     c = await _ac(client, hesap, ["0AB001"])
     assert (await _kayit(db, c["id"])).tekrar_ariza_aday is False
-    h = await _ac(client, hesap, ["ZZ-1", "AB-001"])
+    # M1.6: arıza işinde tek cihaz; çok serili iş yalnız proje türünde (kurulum).
+    h = await _ac(client, hesap, ["ZZ-1", "AB-001"], tur="KURULUM")
     assert (await _kayit(db, h["id"])).tekrar_ariza_aday is True
     d = await _ac(client, hesap, ["AB-001"], iliskili_is_id=c["id"], iliski_turu="MUKERRER")
     kd = await _kayit(db, d["id"])
