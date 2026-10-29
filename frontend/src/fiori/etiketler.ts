@@ -91,7 +91,7 @@ export type KategoriRengi = "kirmizi" | "yesil" | "mavi";
 /** Servis türü → kategori şeridi etiketi ve rengi (arıza/plansız kırmızı, planlı yeşil). */
 export const SERVIS_TUR_ETIKETLERI: Record<string, { ad: string; renk: KategoriRengi }> = {
   ARIZA: { ad: "ARIZA", renk: "kirmizi" },
-  PLANSIZ_BAKIM: { ad: "PLANSIZ BAKIM", renk: "kirmizi" },
+  PLANSIZ_BAKIM: { ad: "BAKIM", renk: "kirmizi" },
   DESTEK: { ad: "DESTEK", renk: "kirmizi" },
   KURULUM: { ad: "KURULUM", renk: "yesil" },
   KESIF: { ad: "KEŞİF", renk: "yesil" },

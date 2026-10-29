@@ -194,7 +194,7 @@ DURUM_ADLARI: dict[str, str] = {
 }
 TUR_ADLARI: dict[str, str] = {
     "ARIZA": "Arıza",
-    "PLANSIZ_BAKIM": "Plansız Bakım",
+    "PLANSIZ_BAKIM": "Bakım",
     "DESTEK": "Destek",
     "PB": "Planlı Bakım",
     "ATOLYE": "Atölye",

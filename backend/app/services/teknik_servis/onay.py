@@ -102,7 +102,7 @@ ZIYARET_UST_SINIR = 150  # toplu atama sınırıyla aynı mertebede
 
 SERVIS_TURU_ADLARI = {
     "ARIZA": "Arıza",
-    "PLANSIZ_BAKIM": "Plansız bakım",
+    "PLANSIZ_BAKIM": "Bakım",
     "DESTEK": "Destek",
     "PB": "Planlı bakım",
     "ATOLYE": "Atölye",
