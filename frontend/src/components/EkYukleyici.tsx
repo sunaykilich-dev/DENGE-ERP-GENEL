@@ -33,6 +33,11 @@ interface Props {
    * ekleme: verilmezse davranış eskisi gibidir.
    */
   capture?: boolean | "user" | "environment";
+  /**
+   * Saha (mobil) kullanımı: düğmeler en az 44 px dokunma hedefi olur
+   * (rol testi B10). Masaüstü ekranlarda verilmez, görünüm değişmez.
+   */
+  buyukDugme?: boolean;
 }
 
 const boyut = (b: number) =>
@@ -56,6 +61,7 @@ export default function EkYukleyici({
   yalnizTur = true,
   accept,
   capture,
+  buyukDugme = false,
 }: Props) {
   const qc = useQueryClient();
   const { message } = App.useApp();
@@ -77,6 +83,8 @@ export default function EkYukleyici({
   });
 
   const liste = (ekler.data ?? []).filter((e) => !yalnizTur || e.kind === kind);
+  const dugmeBoyu = buyukDugme ? undefined : ("small" as const);
+  const dokunma = buyukDugme ? { minHeight: 44, minWidth: 44 } : undefined;
 
   async function yukle(dosya: File) {
     const govde = new FormData();
@@ -125,7 +133,7 @@ export default function EkYukleyici({
                 });
             }}
           >
-            <Button size="small" icon={<UploadOutlined />}>
+            <Button size={dugmeBoyu} style={dokunma} icon={<UploadOutlined />}>
               Yükle
             </Button>
           </Upload>
@@ -191,7 +199,14 @@ export default function EkYukleyici({
                     cancelText="Vazgeç"
                     onConfirm={() => sil.mutate(e.id)}
                   >
-                    <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                    <Button
+                      size={dugmeBoyu}
+                      style={dokunma}
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      aria-label="Eki sil"
+                    />
                   </Popconfirm>
                 )}
               </Space>

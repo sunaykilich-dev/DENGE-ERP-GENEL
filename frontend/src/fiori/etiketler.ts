@@ -38,19 +38,55 @@ export const SERVIS_DURUM_ETIKETLERI: Record<string, string> = {
   SAHADA: "İŞLEM-SAHADA",
   ISLEMDE: "İŞLEM-BAŞLADI",
   ATOLYEDE: "İŞLEM-ATÖLYEDE",
-  BEKLEMEDE: "İŞLEM-ARA VERİLDİ",
+  // Rol testi B9 (2026-11-04): durum çubuğundaki grup adıyla TEK terim ("ASKIDA").
+  BEKLEMEDE: "ASKIDA",
   TAMAMLANDI: "TAMAMLANDI",
   KAPATILDI: "TAMAMLANDI-KAPATILDI",
   IPTAL: "YAPILAMADI-İPTAL",
 };
 
 /**
+ * Bekleme nedeni kodu → ad. Sunucu kataloğunun (`VARSAYILAN_BEKLEME_NEDENLERI`)
+ * ilk hâli; form verisi `bekleme_nedenleri` ekrandan seçilemeyen sistem
+ * nedenlerini (BAKIM_UYGUNSUZLUK) döndürmediği için ham kod görünmesin diye
+ * yedek olarak kullanılır. Katalogdaki ad her zaman önce gelir.
+ */
+export const BEKLEME_NEDENI_ADLARI: Record<string, string> = {
+  MALZEME: "Malzeme bekleniyor",
+  MUSTERI_ONAYI: "Müşteri onayı bekleniyor",
+  TEKLIF: "Teklif onayı bekleniyor",
+  MUSTERI_ERISIMI: "Müşteri/saha erişimi yok",
+  PERSONEL: "Personel bekleniyor",
+  BAKIM_UYGUNSUZLUK: "Bakım uygunsuzluğu giderilecek",
+  DIS_SERVIS: "Dış servis/üretici bekleniyor",
+  DIGER: "Diğer",
+};
+
+/** Bekleme nedeni adı: önce verilen katalog, sonra yerel sözlük, en son okunur kod. */
+export function beklemeNedeniAdi(
+  kod: string | null | undefined,
+  katalog?: { kod: string; ad: string }[],
+): string | null {
+  if (!kod) return null;
+  return katalog?.find((n) => n.kod === kod)?.ad ?? BEKLEME_NEDENI_ADLARI[kod] ?? kodOkunur(kod);
+}
+
+/** Bilinmeyen sunucu kodu için son çare: alt çizgi yerine boşluk (ham kod gösterilmez). */
+export function kodOkunur(kod: string): string {
+  return kod.replaceAll("_", " ");
+}
+
+/**
  * Durum etiketi; beklemedeki iş, bekleme nedeni biliniyorsa "ASKIDA-<NEDEN>"
- * olarak yazılır (fotoğraf 1: "ASKIDA-DİĞER BİRİM İLERLEME").
+ * olarak yazılır (fotoğraf 1: "ASKIDA-DİĞER BİRİM İLERLEME"). Neden kod ya da
+ * ad olarak gelebilir; kod ise ada çevrilir.
  */
 export function servisDurumEtiketi(kod: string, beklemeNedeni?: string | null): string {
-  if (kod === "BEKLEMEDE" && beklemeNedeni) return `ASKIDA-${beklemeNedeni.toLocaleUpperCase("tr")}`;
-  return SERVIS_DURUM_ETIKETLERI[kod] ?? kod.replaceAll("_", " ");
+  if (kod === "BEKLEMEDE" && beklemeNedeni) {
+    const ad = BEKLEME_NEDENI_ADLARI[beklemeNedeni] ?? kodOkunur(beklemeNedeni);
+    return `ASKIDA-${ad.toLocaleUpperCase("tr")}`;
+  }
+  return SERVIS_DURUM_ETIKETLERI[kod] ?? kodOkunur(kod);
 }
 
 export interface FioriDurumGrubu {

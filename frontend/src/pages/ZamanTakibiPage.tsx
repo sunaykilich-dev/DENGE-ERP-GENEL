@@ -40,6 +40,7 @@ import {
   FAALIYET_ADLARI,
   type Faaliyet,
   type PersonelSatiri,
+  KAYNAK_ADLARI,
   SURE_DURUMU_ADLARI,
   type ZamanIsi,
   type ZamanKaydi,
@@ -68,13 +69,6 @@ import ListeRaporu, { KpiKutucugu } from "../fiori/ListeRaporu";
 const ISO = "YYYY-MM-DD";
 const SAYFA = 50;
 const IS_KPI = new Set(["farkli_is", "sure_eksik"]);
-
-const KAYNAK_ADLARI: Record<string, string> = {
-  CANLI: "Canlı",
-  MANUEL: "Manuel",
-  KULLANICI_DUZELTMESI: "Kullanıcı düzeltmesi",
-  YONETICI_DUZELTMESI: "Yönetici düzeltmesi",
-};
 
 function sure(dk: number | null | undefined) {
   const m = sureMetni(dk);

@@ -44,6 +44,7 @@ import {
   bakimApi,
   CIHAZ_TURLERI,
   hataMetni,
+  KAPSAM_DISI_DURUMLARI,
   KAPSAM_DISI_NEDENLERI,
   KONTROL_SONUCLARI,
   ONAY_TURLERI,
@@ -355,7 +356,7 @@ export default function BakimFormu({
             <Card size="small" title="Kapsam dışı talepleri">
               {veri.kapsam_disi.map((t) => (
                 <div key={t.id} style={{ marginBottom: 8 }}>
-                  <Tag>{t.status}</Tag> {KAPSAM_DISI_NEDENLERI[t.reason_code] ?? t.reason_code} —{" "}
+                  <Tag>{KAPSAM_DISI_DURUMLARI[t.status] ?? t.status}</Tag> {KAPSAM_DISI_NEDENLERI[t.reason_code] ?? t.reason_code} —{" "}
                   {t.description}
                   {t.status === "TALEP" && yetkili("bakim.onayla") && (
                     <Space style={{ marginLeft: 8 }}>

@@ -21,7 +21,6 @@
  * - 375 px: tablo yatay kayar, ikincil sütunlar gizlenir, Drawer tam ekran.
  */
 import {
-  ClearOutlined,
   ClockCircleOutlined,
   EditOutlined,
   FilePdfOutlined,
@@ -89,6 +88,7 @@ import {
 } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
 import {
+  beklemeNedeniAdi,
   durumGrubuBul,
   ONCELIK_ETIKETLERI,
   SERVIS_DURUM_GRUPLARI,
@@ -105,6 +105,7 @@ import EkYukleyici from "../components/EkYukleyici";
 import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
 import { PlanGecmisiSekmesi, ZamanSekmesi } from "../components/ServisIsSekmeleri";
+import ImzaAlani, { tuvalPng } from "../components/ImzaAlani";
 import ServisParcalari from "../components/ServisParcalari";
 import SlaEtiketi, { SlaKartiPenceresi } from "../components/SlaEtiketi";
 import BakimFormu from "./BakimFormu";
@@ -169,79 +170,6 @@ function DurumEtiketi({ kod, sozluk, bekleme }: { kod: string; sozluk?: FormVeri
       {servisDurumEtiketi(kod, bekleme)}
     </Tag>
   );
-}
-
-// --- İmza (canvas → PNG) -----------------------------------------------------------
-
-function ImzaAlani({ onDegisti }: { onDegisti: (bos: boolean) => void }) {
-  const tuval = useRef<HTMLCanvasElement | null>(null);
-  const ciziyor = useRef(false);
-
-  const nokta = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    return {
-      x: ((e.clientX - r.left) * e.currentTarget.width) / r.width,
-      y: ((e.clientY - r.top) * e.currentTarget.height) / r.height,
-    };
-  };
-
-  return (
-    <Space orientation="vertical" style={{ width: "100%" }} size={4}>
-      <canvas
-        ref={tuval}
-        width={600}
-        height={200}
-        style={{
-          width: "100%",
-          height: 160,
-          border: "1px solid #d9d9d9",
-          borderRadius: 4,
-          touchAction: "none",
-          background: "#fff",
-        }}
-        onPointerDown={(e) => {
-          const c = e.currentTarget.getContext("2d");
-          if (!c) return;
-          ciziyor.current = true;
-          e.currentTarget.setPointerCapture(e.pointerId);
-          const p = nokta(e);
-          c.lineWidth = 2.5;
-          c.lineCap = "round";
-          c.strokeStyle = "#000";
-          c.beginPath();
-          c.moveTo(p.x, p.y);
-        }}
-        onPointerMove={(e) => {
-          if (!ciziyor.current) return;
-          const c = e.currentTarget.getContext("2d");
-          if (!c) return;
-          const p = nokta(e);
-          c.lineTo(p.x, p.y);
-          c.stroke();
-        }}
-        onPointerUp={() => {
-          if (ciziyor.current) onDegisti(false);
-          ciziyor.current = false;
-        }}
-      />
-      <Button
-        size="small"
-        icon={<ClearOutlined />}
-        onClick={() => {
-          const c = tuval.current?.getContext("2d");
-          if (c && tuval.current) c.clearRect(0, 0, tuval.current.width, tuval.current.height);
-          onDegisti(true);
-        }}
-      >
-        Temizle
-      </Button>
-    </Space>
-  );
-}
-
-function tuvalPng(kapsayici: HTMLElement | null): Promise<Blob | null> {
-  const c = kapsayici?.querySelector("canvas");
-  return new Promise((coz) => (c ? c.toBlob((b) => coz(b), "image/png") : coz(null)));
 }
 
 /** Tekil ya da ziyaret (çoklu iş) müşteri onayı penceresi (TS-036). */
@@ -565,7 +493,7 @@ function IsDetayCekmecesi({
   /** Başka bir işin ayrıntısını aç (bağlı iş bağlantıları). */
   isAc?: (id: number) => void;
 }) {
-  const { yetkili } = useAuth();
+  const { yetkili, kullanici } = useAuth();
   const { message } = App.useApp();
   const qc = useQueryClient();
   const git = useNavigate();
@@ -666,9 +594,18 @@ function IsDetayCekmecesi({
     },
     onSuccess: (sonuc) => {
       if (pencere === "bagli_is" && sonuc && typeof sonuc === "object" && "so_no" in sonuc) {
-        message.success(`Bağlı yeni iş açıldı: ${sonuc.so_no}`);
         pencereKapat();
         yenile();
+        // Rol testi B8: "yalnız kendi işleri" kapsamındaki kişi tayinsiz yeni işi
+        // göremez (sunucu 404); ayrıntıyı açıp hata göstermek yerine söylenir.
+        if (kullanici?.role.scope === "KENDI_ISLERI") {
+          message.info(
+            `Bağlı yeni iş açıldı: ${sonuc.so_no}. Tayin için şefe iletildi; size tayin edilince İşlerim'de görünür.`,
+            6,
+          );
+          return;
+        }
+        message.success(`Bağlı yeni iş açıldı: ${sonuc.so_no}`);
         if (isAc) isAc(sonuc.id);
         return;
       }
@@ -1862,8 +1799,7 @@ export function ServisIsListesi({
   const tekKapali = tek ? KAPALI_DURUMLAR.includes(tek.status) : false;
   const aktarabilir = yetkili("servis.gor", "servis_rapor.disaaktar");
   const durumAdi = (k: string) => sozluk.data?.durumlar.find((d) => d.kod === k)?.ad ?? k;
-  const beklemeAdi = (k: string | null) =>
-    k ? (sozluk.data?.bekleme_nedenleri.find((n) => n.kod === k)?.ad ?? k) : null;
+  const beklemeAdi = (k: string | null) => beklemeNedeniAdi(k, sozluk.data?.bekleme_nedenleri);
   const banaAit = !!kullanici && suzgec.teknisyen_id === kullanici.id;
   const seciliGrup = durumGrubuBul(durumGruplari, suzgec.durum);
   const planlayabilir = yetkili("servis.planla");

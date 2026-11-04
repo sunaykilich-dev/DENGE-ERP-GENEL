@@ -55,6 +55,19 @@ export const SAYIM_DURUM_ADLARI: Record<string, string> = {
 /** Ölçü birimleri (sunucu `OLCU_BIRIMLERI`; adet daima tam sayı). */
 export const OLCU_BIRIMLERI = ["ADET", "METRE", "TAKIM", "LITRE", "PAKET", "KUTU"];
 
+/** Ölçü birimi kodu → ekranda görünen kısa ad (ham kod gösterilmez). */
+export const OLCU_BIRIMI_ADLARI: Record<string, string> = {
+  ADET: "adet",
+  METRE: "metre",
+  TAKIM: "takım",
+  LITRE: "litre",
+  PAKET: "paket",
+  KUTU: "kutu",
+};
+
+export const olcuBirimiAdi = (kod: string | null | undefined) =>
+  kod ? (OLCU_BIRIMI_ADLARI[kod] ?? kod.toLocaleLowerCase("tr")) : "";
+
 // --- Tipler ------------------------------------------------------------------
 
 export interface Depo {

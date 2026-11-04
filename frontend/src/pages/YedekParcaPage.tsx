@@ -61,6 +61,7 @@ import {
   type Hareket,
   type HareketSuzgeci,
   OLCU_BIRIMLERI,
+  olcuBirimiAdi,
   parcaApi,
   parcaHatasi,
   SAYIM_DURUM_ADLARI,
@@ -256,7 +257,7 @@ function StokSekmesi() {
       responsive: ["md"],
       render: (_, r) => <Kucuk>{[r.marka, r.model].filter(Boolean).join(" ") || null}</Kucuk>,
     },
-    { title: "Toplam", key: "t", width: 90, align: "right", render: (_, r) => <b>{`${r.toplam} ${r.birim}`}</b> },
+    { title: "Toplam", key: "t", width: 90, align: "right", render: (_, r) => <b>{`${r.toplam} ${olcuBirimiAdi(r.birim)}`}</b> },
     { title: "Asgari", key: "a", width: 70, align: "right", responsive: ["sm"], render: (_, r) => r.min_stok ?? "—" },
     {
       title: "Depolar",
@@ -365,7 +366,7 @@ function StokSekmesi() {
             <InputNumber min={0} max={1_000_000} precision={0} />
           </Form.Item>
           <Form.Item name="birim" label="Ölçü birimi">
-            <Select allowClear options={OLCU_BIRIMLERI.map((b) => ({ value: b, label: b }))} />
+            <Select allowClear options={OLCU_BIRIMLERI.map((b) => ({ value: b, label: olcuBirimiAdi(b) }))} />
           </Form.Item>
         </Form>
       </Modal>
@@ -483,7 +484,7 @@ function HareketSekmesi() {
       key: "a",
       width: 90,
       align: "right",
-      render: (_, h) => <b>{`${h.adet > 0 ? "+" : ""}${h.adet} ${h.birim}`}</b>,
+      render: (_, h) => <b>{`${h.adet > 0 ? "+" : ""}${h.adet} ${olcuBirimiAdi(h.birim)}`}</b>,
     },
     { title: "Depo", dataIndex: "depo_adi", key: "d", width: 150, align: "center", responsive: ["sm"], render: (v: string) => <Kucuk>{v}</Kucuk> },
     { title: "İş No", key: "so", width: 150, align: "center", responsive: ["lg"], render: (_, h) => <Kucuk>{h.so_no}</Kucuk> },
@@ -1303,7 +1304,7 @@ function KartPenceresi({ acik, onKapat }: { acik: boolean; onKapat: () => void }
           </Col>
           <Col xs={12} sm={6}>
             <Form.Item name="birim" label="Birim">
-              <Select options={OLCU_BIRIMLERI.map((b) => ({ value: b, label: b }))} />
+              <Select options={OLCU_BIRIMLERI.map((b) => ({ value: b, label: olcuBirimiAdi(b) }))} />
             </Form.Item>
           </Col>
           <Col xs={12} sm={6}>
