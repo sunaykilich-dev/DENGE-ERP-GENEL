@@ -1161,9 +1161,11 @@ export default function AtolyePage() {
   const soId = id ? Number(id) : null;
   const yolEki = arama.toString() ? `?${arama.toString()}` : "";
 
+  // Ekran sözlüğü (durum/garanti adları, arıza nedenleri): süzülen birimin;
+  // süzgeç yoksa eskisi gibi HABERLESME (birimsiz istek çok birimli kullanıcıda 400 olur).
   const sozluk = useQuery({
-    queryKey: ["atolye-form-verileri"],
-    queryFn: () => atolyeApi.formVerileri(),
+    queryKey: ["atolye-form-verileri", suzgec.birim ?? "HABERLESME"],
+    queryFn: () => atolyeApi.formVerileri(suzgec.birim ?? "HABERLESME"),
     staleTime: 5 * 60_000,
   });
   const ozet = useQuery({ queryKey: ["atolye-ozet", suzgec], queryFn: () => atolyeApi.ozet(suzgec) });
@@ -1600,6 +1602,7 @@ export default function AtolyePage() {
 
       <AtolyeKabulPenceresi
         acik={kabulAcik}
+        birim={suzgec.birim}
         kapat={() => setKabulAcik(false)}
         bitti={(r) => {
           setKabulAcik(false);

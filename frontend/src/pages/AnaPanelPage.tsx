@@ -678,10 +678,12 @@ export default function AnaPanelPage() {
   });
   const veri = panel.data;
   const sec = veri?.secenekler;
-  // Rol testi B-12: POC birimi etkin şirkette yoksa (yalnız TELEKOM'da) kart çizilmez.
-  const { aktifBirimler } = useSirket();
+  // Rol testi B-12 / tur 2 §7.17: kartlar YALNIZ sunucunun döndürdüklerinden
+  // çizilir — `poc_acik` gelmezse POC kartı yoktur (yer tutucu çizilmez). Ek
+  // güvence: POC görünür birimlerde (`gorunur_birimler` ∩ etkin şirket) değilse gizli.
+  const { menuBirimleri } = useSirket();
   const kpiler = (veri?.kpiler ?? []).filter(
-    (k) => k.kod !== "poc_acik" || !aktifBirimler || aktifBirimler.has("POC"),
+    (k) => k.kod !== "poc_acik" || !menuBirimleri || menuBirimleri.has("POC"),
   );
 
   const degistir = (yeni: Partial<AnaPanelSuzgeci>) => {
@@ -714,7 +716,12 @@ export default function AnaPanelPage() {
           <span>Bölüm</span>
           <Select
             aria-label="Bölüm"
-            {...secim(suzgec.birim, (sec?.birimler ?? []).map((b) => ({ value: b.kod, label: b.ad })))}
+            {...secim(
+              suzgec.birim,
+              (sec?.birimler ?? [])
+                .filter((b) => !menuBirimleri || menuBirimleri.has(b.kod))
+                .map((b) => ({ value: b.kod, label: b.ad })),
+            )}
             onChange={(v) => degistir({ birim: v as string | undefined })}
           />
         </div>

@@ -11,6 +11,12 @@
  *   de onay kaydıdır (saha bloke olmaz).
  * - Tamamlanmış form salt okunurdur; düzeltme E01 "Yeniden Aç" (`servis.kapat`).
  * - Düğmeler `yetkili()` ile; 409'da yenileme mesajı.
+ * - Rol testi tur 2 (KARARLAR 2026-11-04 §7.5): form sözleşmesiz bakımda
+ *   (PLANSIZ_BAKIM) da açılır — sözleşme/dönem ve kapsam dışı talebi yalnız PB'de.
+ *   Ölçümler isteğe bağlı ve birimlidir (etiket/birim sunucudan); boş alan
+ *   "ölçülmedi" olarak null gider, 0'a çevrilmez. Uygunsuz maddede önem seçilir
+ *   (KRİTİK kırmızı); önem aksiyona ve bulgudan açılan arıza işinin önceliğine geçer.
+ *   Cihazsız/şablonsuz işte sunucunun 404 açıklaması gösterilir.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,6 +30,7 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
   Radio,
@@ -48,8 +55,11 @@ import {
   KAPSAM_DISI_NEDENLERI,
   KONTROL_SONUCLARI,
   ONAY_TURLERI,
+  ONEM_ADLARI,
+  ONEM_RENKLERI,
   type Uygunsuzluk,
 } from "../api/bakim";
+import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import ServisParcalari from "../components/ServisParcalari";
 
@@ -59,7 +69,25 @@ const KAPALI = new Set(["TAMAMLANDI", "KAPATILDI", "IPTAL"]);
 interface Madde {
   sonuc: string;
   not: string | null;
+  onem: string | null;
 }
+
+/** Önem rozeti: KRİTİK kırmızı (rol testi tur 2 B3). */
+function OnemEtiketi({ onem }: { onem?: string | null }) {
+  if (!onem) return null;
+  return (
+    <Tag color={ONEM_RENKLERI[onem]} style={onem === "KRITIK" ? { fontWeight: 700 } : undefined}>
+      {ONEM_ADLARI[onem] ?? onem}
+    </Tag>
+  );
+}
+
+/** Sunucunun ondalık metni ya da sayısı → InputNumber değeri; boş = null (ölçülmedi). */
+const olcumDegeri = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 export default function BakimFormu({
   soId,
@@ -94,8 +122,13 @@ export default function BakimFormu({
       technician_note: veri.form.technician_note,
       parts_text: veri.form.parts_text,
       bakim_sonucu: veri.form.bakim_sonucu,
+      ...Object.fromEntries(
+        (veri.olcum_tanimlari ?? []).map((t) => [t.alan, olcumDegeri(veri.form[t.alan as `olcum_${string}`])]),
+      ),
     });
-    setMaddeler(Object.fromEntries(veri.maddeler.map((m) => [m.kod, { sonuc: m.sonuc, not: m.not }])));
+    setMaddeler(
+      Object.fromEntries(veri.maddeler.map((m) => [m.kod, { sonuc: m.sonuc, not: m.not, onem: m.onem ?? null }])),
+    );
   }, [veri, form]);
 
   const yenile = (yeni?: BakimFormuVerisi) => {
@@ -104,11 +137,24 @@ export default function BakimFormu({
   };
   const hata = (e: unknown) => message.error(hataMetni(e));
 
-  const girdi = () => ({
-    version: veri?.form.version,
-    ...form.getFieldsValue(),
-    kontroller: Object.entries(maddeler).map(([kod, m]) => ({ kod, sonuc: m.sonuc, not: m.not })),
-  });
+  const girdi = () => {
+    const alanlar = form.getFieldsValue() as Record<string, unknown>;
+    // Boş ölçüm = ölçülmedi: null gönderilir, 0 DEĞİL (InputNumber boşta null verir).
+    for (const t of veri?.olcum_tanimlari ?? []) {
+      const v = alanlar[t.alan];
+      alanlar[t.alan] = v === undefined || v === "" ? null : v;
+    }
+    return {
+      version: veri?.form.version,
+      ...alanlar,
+      kontroller: Object.entries(maddeler).map(([kod, m]) => ({
+        kod,
+        sonuc: m.sonuc,
+        not: m.not,
+        onem: m.sonuc === "UYGUNSUZ" ? m.onem : null,
+      })),
+    };
+  };
 
   const kaydet = useMutation({
     mutationFn: () => bakimApi.formKaydet(soId!, girdi()),
@@ -182,12 +228,17 @@ export default function BakimFormu({
     !KAPALI.has(veri.so.status) &&
     yetkili("servis.yaz");
   const tamamlayabilir = formYazabilir && yetkili("servis.tamamla") && veri?.so.status !== "BEKLEMEDE";
+  // PLANSIZ_BAKIM (sözleşmesiz): dönem kapanışı ve kapsam dışı talebi yalnız PB'de.
+  const planli = (veri?.form.tur ?? "PB") === "PB";
+  const onemler = veri?.onemler?.length ? veri.onemler : Object.keys(ONEM_ADLARI);
+  const olcumler = veri?.olcum_tanimlari ?? [];
+  const bulunamadi = sorgu.error instanceof ApiError && sorgu.error.status === 404;
   const bekleyen = Object.values(maddeler).filter((m) => m.sonuc === "BEKLIYOR").length;
 
   const hepsiniUygun = () =>
     setMaddeler((eski) =>
       Object.fromEntries(
-        Object.entries(eski).map(([k, m]) => [k, m.sonuc === "BEKLIYOR" ? { sonuc: "UYGUN", not: m.not } : m]),
+        Object.entries(eski).map(([k, m]) => [k, m.sonuc === "BEKLIYOR" ? { ...m, sonuc: "UYGUN" } : m]),
       ),
     );
 
@@ -200,7 +251,18 @@ export default function BakimFormu({
       title={veri ? `${veri.form.baslik} · ${veri.so.so_no}` : "Bakım Formu"}
       destroyOnHidden
     >
-      {sorgu.isError && <Alert type="error" title={hataMetni(sorgu.error)} />}
+      {sorgu.isError && (
+        <Alert
+          type={bulunamadi ? "warning" : "error"}
+          showIcon
+          title={hataMetni(sorgu.error)}
+          description={
+            bulunamadi
+              ? "Bakım formu, işe bağlı cihazın (kütük kaydı) türünden ve o türün bakım şablonundan açılır. İşe cihaz bağlanınca ya da şablon tanımlanınca form açılır."
+              : undefined
+          }
+        />
+      )}
       {veri && (
         <Space orientation="vertical" style={{ width: "100%" }} size="middle">
           <Descriptions size="small" column={1} bordered>
@@ -214,8 +276,14 @@ export default function BakimFormu({
               {veri.ekipman?.brand ? ` · ${veri.ekipman.brand} ${veri.ekipman.model ?? ""}` : ""}
             </Descriptions.Item>
             <Descriptions.Item label="Sözleşme / dönem">
-              <span className="mono">{veri.sozlesme?.contract_no}</span>
-              {veri.donem ? ` · hedef ${dayjs(veri.donem.target_date).format("DD.MM.YYYY")}` : ""}
+              {veri.sozlesme ? (
+                <>
+                  <span className="mono">{veri.sozlesme.contract_no}</span>
+                  {veri.donem ? ` · hedef ${dayjs(veri.donem.target_date).format("DD.MM.YYYY")}` : ""}
+                </>
+              ) : (
+                <Typography.Text type="secondary">Sözleşmesiz bakım</Typography.Text>
+              )}
             </Descriptions.Item>
             <Descriptions.Item label="Durum">
               <Tag>{veri.so.status.replaceAll("_", " ")}</Tag>
@@ -254,7 +322,8 @@ export default function BakimFormu({
                 const secim = maddeler[m.kod] ?? { sonuc: m.sonuc, not: m.not };
                 return (
                   <div key={m.kod} style={{ padding: "8px 0", borderBottom: "1px solid #f0f0f0" }}>
-                    <Typography.Text>{m.etiket}</Typography.Text>
+                    <Typography.Text>{m.etiket}</Typography.Text>{" "}
+                    {secim.sonuc === "UYGUNSUZ" && <OnemEtiketi onem={secim.onem} />}
                     <div>
                       <Radio.Group
                         size="small"
@@ -270,6 +339,26 @@ export default function BakimFormu({
                           .map(([value, label]) => ({ value, label }))}
                       />
                     </div>
+                    {secim.sonuc === "UYGUNSUZ" && (
+                      <Select
+                        size="small"
+                        allowClear
+                        style={{ width: 200, margin: "4px 0" }}
+                        placeholder="Önem (isteğe bağlı)"
+                        aria-label={`${m.etiket} önemi`}
+                        value={secim.onem ?? undefined}
+                        onChange={(v?: string) =>
+                          setMaddeler((eski) => ({
+                            ...eski,
+                            [m.kod]: { ...secim, onem: v ?? null },
+                          }))
+                        }
+                        options={onemler.map((o) => ({
+                          value: o,
+                          label: <OnemEtiketi onem={o} />,
+                        }))}
+                      />
+                    )}
                     {NOT_ZORUNLU.has(secim.sonuc) && (
                       <Input.TextArea
                         rows={2}
@@ -289,6 +378,31 @@ export default function BakimFormu({
                 );
               })}
             </Card>
+
+            {olcumler.length > 0 && (
+              <Card
+                size="small"
+                title="Ölçümler"
+                extra={<Typography.Text type="secondary">İsteğe bağlı · boş = ölçülmedi</Typography.Text>}
+                style={{ marginTop: 12 }}
+              >
+                <Space wrap size={[12, 0]}>
+                  {olcumler.map((t) => (
+                    <Form.Item key={t.alan} name={t.alan} label={t.etiket} style={{ marginBottom: 8 }}>
+                      <InputNumber<number>
+                        min={0}
+                        step={0.1}
+                        precision={t.birim === "µSv/h" ? 3 : 2}
+                        decimalSeparator=","
+                        suffix={t.birim}
+                        placeholder="ölçülmedi"
+                        style={{ width: 170 }}
+                      />
+                    </Form.Item>
+                  ))}
+                </Space>
+              </Card>
+            )}
 
             <Form.Item name="performed_work" label="Yapılan İşlem" style={{ marginTop: 12 }}>
               <Input.TextArea rows={2} maxLength={4000} />
@@ -343,7 +457,7 @@ export default function BakimFormu({
                 </Button>
               </Popconfirm>
             )}
-            {yetkili("servis.yaz") && !KAPALI.has(veri.so.status) && (
+            {planli && yetkili("servis.yaz") && !KAPALI.has(veri.so.status) && (
               <Button danger onClick={() => setKdAcik(true)}>
                 Kapsam Dışı Talebi
               </Button>
@@ -516,9 +630,15 @@ function UygunsuzlukKarti({
         rowKey="id"
         pagination={false}
         dataSource={kayitlar}
-        scroll={{ x: 560 }}
+        scroll={{ x: 650 }}
         columns={[
           { title: "Madde", dataIndex: "check_label", ellipsis: true },
+          {
+            title: "Önem",
+            dataIndex: "onem",
+            width: 90,
+            render: (v: string | null | undefined) => (v ? <OnemEtiketi onem={v} /> : "—"),
+          },
           { title: "Not", dataIndex: "description", ellipsis: true },
           {
             title: "Aksiyon",

@@ -58,6 +58,23 @@ export const AKSIYON_TURLERI: Record<string, string> = {
   MUSTERI_KAYNAKLI: "Müşteri kaynaklı",
 };
 
+/**
+ * Uygunsuzluk önemi (rol testi tur 2 B3, KARARLAR 2026-11-04 §7.5). Sıra ve
+ * kodlar sunucudan (`onemler`) gelir; burası yalnız ad ve renk.
+ */
+export const ONEM_ADLARI: Record<string, string> = {
+  DUSUK: "Düşük",
+  NORMAL: "Normal",
+  YUKSEK: "Yüksek",
+  KRITIK: "KRİTİK",
+};
+export const ONEM_RENKLERI: Record<string, string> = {
+  DUSUK: "default",
+  NORMAL: "blue",
+  YUKSEK: "orange",
+  KRITIK: "red",
+};
+
 export const ONAY_TURLERI: Record<string, string> = {
   SOZLU: "Sözlü onay",
   BASILI_FORM: "Basılı form",
@@ -253,6 +270,8 @@ export interface Uygunsuzluk {
   check_code: string;
   check_label: string;
   description: string | null;
+  /** DUSUK/NORMAL/YUKSEK/KRITIK; eski kayıtta null. */
+  onem?: string | null;
   action_type: string | null;
   responsible_user_id: number | null;
   due_date: string | null;
@@ -284,6 +303,15 @@ export interface FormMaddesi {
   sira: number;
   sonuc: string;
   not: string | null;
+  /** Uygunsuz maddenin önemi (yalnız UYGUNSUZ'da dolu). */
+  onem?: string | null;
+}
+
+/** Ölçüm alanı tanımı (`olcum_tanimlari`): alan → etiket + birim. */
+export interface OlcumTanimi {
+  alan: string;
+  etiket: string;
+  birim: string;
 }
 
 export interface Ziyaret {
@@ -318,6 +346,8 @@ export interface BakimFormu {
     status: string;
     template_code: string;
     baslik: string;
+    /** PB ya da PLANSIZ_BAKIM (sözleşmesiz bakım; dönem ve kapsam dışı talebi yok). */
+    tur?: string;
     seri_no: string | null;
     zone: string | null;
     performed_work: string | null;
@@ -327,7 +357,13 @@ export interface BakimFormu {
     kutuk_fark_durumu: string | null;
     completed_at: string | null;
     version: number;
+    /** Ölçümler (`olcum_*`); null = ölçülmedi (0 değil). Sayı ya da ondalık metin gelebilir. */
+    [olcum: `olcum_${string}`]: number | string | null;
   };
+  /** Ölçüm alanlarının etiket/birimi (sunucu tek kaynak). */
+  olcum_tanimlari?: OlcumTanimi[];
+  /** Uygunsuzluk önem kodları (sıralı). */
+  onemler?: string[];
   maddeler: FormMaddesi[];
   ziyaretler: Ziyaret[];
   uygunsuzluklar: Uygunsuzluk[];
@@ -347,7 +383,9 @@ export interface FormGirdisi {
   technician_note?: string | null;
   parts_text?: string | null;
   bakim_sonucu?: string | null;
-  kontroller?: { kod: string; sonuc: string; not: string | null }[];
+  /** Ölçümler: boş alan null gider ("ölçülmedi"), asla 0'a çevrilmez. */
+  [olcum: `olcum_${string}`]: number | null | undefined;
+  kontroller?: { kod: string; sonuc: string; not: string | null; onem?: string | null }[];
   /** Yalnız tamamlamada: süre kaydı eksik olduğu bilinerek kapatılıyor (TS-076). */
   sure_eksik_onay?: boolean;
 }

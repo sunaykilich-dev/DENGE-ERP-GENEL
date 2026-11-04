@@ -23,7 +23,9 @@ export const TAYIN = {
   tayiniKaldir: "Tayini Kaldır",
   banaTayinEdilenler: "Bana Tayin Edilenler",
   vekilTayini: "Vekil Tayini",
-  yetkinlikUyarisiylaTayinEdildi: "Yetkinlik uyarısıyla tayin edildi",
+  // Rol testi tur 2 (§7.12): uyarı yalnız yetkinlik değil, "ekipte sonuç
+  // girebilecek kimse yok" da olabilir; başlık ikisini de kapsar.
+  yetkinlikUyarisiylaTayinEdildi: "Tayin edildi — dikkat edilecekler",
   ekipTayini: "Ekip Tayini",
   planlaVeTayinEt: "Planla + Tayin Et",
 } as const;
