@@ -21,6 +21,7 @@ from app.models import (
     StockMovement,
     Warehouse,
 )
+from app.permissions import BIRIMLER
 
 pytestmark = pytest.mark.integration
 
@@ -336,7 +337,10 @@ class TestTarife:
         eksik = next(u for u in uyari if u["kod"] == "maliyet.tarife_eksik")
         assert eksik["adet"] == 1 and eksik["aciklama"] == "HABERLESME"
         uyari = (await ortam["yonetici"].get("/api/raporlar/uyarilar")).json()["uyarilar"]
-        assert next(u for u in uyari if u["kod"] == "maliyet.tarife_eksik")["adet"] == 4
+        assert (
+            next(u for u in uyari if u["kod"] == "maliyet.tarife_eksik")["adet"]
+            == len(BIRIMLER) - 1
+        )
 
 
 class TestAnaliz:
