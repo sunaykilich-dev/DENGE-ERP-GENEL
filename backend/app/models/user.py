@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.models.mixins import PkMixin, TimestampMixin, VersionedMixin
-from app.models.rbac import Role, UserPermission, UserUnit
+from app.models.rbac import KullaniciSirketi, Role, UserPermission, UserUnit
 
 # Saha rolü bir YETKİ değil, İK olgusudur: atama listeleri buna bakar, yetki
 # `Role`'e. Ünvan hiçbir kurala girmez ("Sistem Mühendisi" sahada teknisyen
@@ -139,6 +139,20 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
     sessions: Mapped[list["Session"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    # Şirket üyelikleri (KARARLAR 2026-11-04 §1) kullanıcıyla BİRLİKTE yüklenir:
+    # oturum her istekte etkin şirketi bu listeye karşı doğrular.
+    sirket_uyelikleri: Mapped[list["KullaniciSirketi"]] = relationship(
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        foreign_keys="KullaniciSirketi.user_id",
+        order_by="KullaniciSirketi.sirket_kod",
+    )
+
+    @property
+    def sirket_kodlari(self) -> list[str]:
+        """Üyesi olduğu şirket kodları (ham üyelik; aktiflik/ADMIN kuralı
+        `services/sirketler.py`'de)."""
+        return sorted(u.sirket_kod for u in self.sirket_uyelikleri)
 
     def mfa_kurulumu_gerekli(self) -> bool:
         """MFA zorunluyken kurulmamışsa True.
@@ -231,6 +245,12 @@ class Session(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     istemci: Mapped[str] = mapped_column(
         String(10), server_default=text("'MASAUSTU'"), default="MASAUSTU"
+    )
+    # Etkin şirket (KARARLAR 2026-11-04 §1) OTURUMDA tutulur: aynı kişi iki
+    # sekmede/cihazda farklı şirketle çalışabilir. NULL = üyeliği yok →
+    # şirkete bağlı hiçbir kayıt görünmez (fail-closed).
+    aktif_sirket: Mapped[str | None] = mapped_column(
+        String(20), ForeignKey("sirketler.kod", ondelete="SET NULL")
     )
 
     user: Mapped[User] = relationship(back_populates="sessions")

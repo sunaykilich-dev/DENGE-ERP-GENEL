@@ -57,7 +57,10 @@ def test_yetkinlik_eslemesi_tur_check_servis_turleriyle_ayni() -> None:
     for tur in SERVIS_TURLERI:
         assert f"'{tur}'" in kisit, tur
     migration = _rev("d3a000000004")
-    assert set(migration._SERVIS_TURLERI) == set(SERVIS_TURLERI)
+    # f1a000000001 (KARARLAR 2026-11-04, TASIMA) `ck_scr_tur`'u yeniden kurdu:
+    # güncel liste o migration'dadır; d3a000000004 tarihsel listedir.
+    assert set(migration._SERVIS_TURLERI) | {"TASIMA"} == set(SERVIS_TURLERI)
+    assert set(_rev("f1a000000001").YENI_TURLER) == set(SERVIS_TURLERI)
 
 
 def test_zincir_mesai_revizyonu_atlandi() -> None:

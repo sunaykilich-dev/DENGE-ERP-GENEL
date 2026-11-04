@@ -49,6 +49,7 @@ from app.models import (
     User,
     UserUnit,
 )
+from app.models.rbac import BIRIM_KODLARI
 from app.services import settings as ayar_svc
 from app.services.teknik_servis import kapsam
 from app.services.teknik_servis import uyarilar as ts_uyarilar
@@ -654,7 +655,7 @@ async def ozet(
     }
 
     birim_ilerleme = []
-    for b in ("GUVENLIK", "HABERLESME", "POC", "MOBILITE", "ARAC_TAKIP"):
+    for b in BIRIM_KODLARI:
         if birim and b != birim:
             continue
         alt = plan_sorgusu(

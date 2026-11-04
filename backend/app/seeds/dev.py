@@ -18,8 +18,24 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session_factory
-from app.models import Permission, Role, RolePermission, User, UserUnit
-from app.permissions import BIRIM_KAPSAMLARI, PERMISSIONS, ROLES, YALNIZ_OFIS_ROLLERI
+from app.models import (
+    BirimSirketi,
+    KullaniciSirketi,
+    Permission,
+    Role,
+    RolePermission,
+    Sirket,
+    User,
+    UserUnit,
+)
+from app.permissions import (
+    BIRIM_KAPSAMLARI,
+    PERMISSIONS,
+    ROLES,
+    SIRKETLER,
+    VARSAYILAN_BIRIM_SIRKETLERI,
+    YALNIZ_OFIS_ROLLERI,
+)
 from app.services import auth as auth_service
 
 
@@ -127,6 +143,25 @@ async def sync_roles(db: AsyncSession) -> None:
     await db.flush()
 
 
+async def sync_sirketler(db: AsyncSession) -> None:
+    """Şirket kataloğu (KARARLAR 2026-11-04 §1): `SIRKETLER`'deki şirketler
+    yoksa açılır, adı eşitlenir; `aktif` bayrağına DOKUNULMAZ (yönetici kararı).
+    Birim → şirket eşlemesi yalnız EKSİK birim için varsayılandan yazılır;
+    var olan eşleme (yönetici değiştirmiş olabilir) korunur."""
+    mevcut = {s.kod: s for s in (await db.scalars(select(Sirket))).all()}
+    for kod, ad in SIRKETLER.items():
+        if kod not in mevcut:
+            db.add(Sirket(kod=kod, ad=ad, aktif=True))
+        elif mevcut[kod].ad != ad:
+            mevcut[kod].ad = ad
+    await db.flush()
+    eslenen = set((await db.scalars(select(BirimSirketi.birim))).all())
+    for birim, sirket in VARSAYILAN_BIRIM_SIRKETLERI.items():
+        if birim not in eslenen:
+            db.add(BirimSirketi(birim=birim, sirket_kod=sirket))
+    await db.flush()
+
+
 async def ensure_admin(db: AsyncSession, full_name: str) -> str | None:
     """İlk yöneticiyi açar. Kullanıcı zaten varsa dokunmaz ve None döner.
 
@@ -147,6 +182,8 @@ async def ensure_admin(db: AsyncSession, full_name: str) -> str | None:
             password_hash=auth_service.hash_password(parola),
             role_id=role.id,
             parola_degismeli=True,
+            # ADMIN bütün şirketleri seçer (üyelik satırı rol değişirse kaybolmasın).
+            sirket_uyelikleri=[KullaniciSirketi(sirket_kod=k) for k in SIRKETLER],
         )
     )
     await db.flush()
@@ -187,6 +224,9 @@ async def ensure_demo_users(db: AsyncSession) -> int:
         # deneme hesabı boş ekranla açılmasın diye pilot birim verilir.
         if ROLES[code][2] in BIRIM_KAPSAMLARI:
             kisi.birimler = [UserUnit(birim=DEMO_BIRIM, is_primary=True)]
+        # Şirket üyeliği: deneme hesapları bütün şirketleri seçebilir (menünün
+        # şirkete göre daraldığını elle görmek için).
+        kisi.sirket_uyelikleri = [KullaniciSirketi(sirket_kod=k) for k in SIRKETLER]
         # Saha rolü olmayan kişi plana/işe atanamaz; deneme şef ve teknisyeni
         # boş atama listesiyle açılmasın.
         kisi.saha_rolu = DEMO_SAHA_ROLU.get(code)
@@ -209,6 +249,7 @@ async def main(argv: list[str] | None = None) -> int:
     async with get_session_factory()() as db:
         eklenen, guncellenen = await sync_permissions(db)
         await sync_roles(db)
+        await sync_sirketler(db)
         print(f"İzinler: {eklenen} eklendi, {guncellenen} güncellendi, toplam {len(PERMISSIONS)}")
         print(f"Roller : {len(ROLES)} rol senkronlandı")
 

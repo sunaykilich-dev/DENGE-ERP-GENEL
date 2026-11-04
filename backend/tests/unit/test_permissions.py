@@ -5,6 +5,7 @@ from app.permissions import (
     AYRILIS_NEDENLERI,
     BIRIM_KAPSAMLARI,
     BIRIMLER,
+    GENEL_ROLLER,
     PERMISSIONS,
     ROLES,
     SAHA_ROLLERI,
@@ -40,7 +41,14 @@ def test_maliyet_gorunurlugu_varsayilan_kapali():
     gizle' tasarımı güvenlik açısından yanlış olurdu — bu testi kıran bir
     değişiklik o yanlışa dönüş demektir."""
     gorenler = {r for r in ROLES if "maliyet.gor" in permissions_of(r)}
-    assert gorenler == {"ADMIN", "SATIS_MUDURU", "MUHASEBE_DESTEK", "YONETIM"}
+    # FINANS_YONETICI: KARARLAR 2026-11-04 §3 ("maliyet/fiyat görür").
+    assert gorenler == {
+        "ADMIN",
+        "SATIS_MUDURU",
+        "MUHASEBE_DESTEK",
+        "YONETIM",
+        "FINANS_YONETICI",
+    }
 
 
 def test_satis_temsilcisi_kendi_musterileriyle_sinirli():
@@ -81,8 +89,10 @@ _MOBILITE_ROLLERI = (
 
 
 def test_mevcut_roller_aynen_kalir_ve_servis_rolleri_eklenir():
-    assert set(ROLES) == set(_MOBILITE_ROLLERI) | set(SERVIS_ROLLERI)
-    assert len(SERVIS_ROLLERI) == 8
+    assert set(ROLES) == set(_MOBILITE_ROLLERI) | set(SERVIS_ROLLERI) | set(GENEL_ROLLER)
+    assert len(SERVIS_ROLLERI) == 9
+    assert set(GENEL_ROLLER) == {"SATIS_DESTEK", "FINANS_YONETICI"}
+    assert not set(GENEL_ROLLER) & set(SERVIS_ROLLERI)
 
 
 def test_teknik_servis_mobilite_rolu_anlik_goruntuyle_ayni():
@@ -139,6 +149,7 @@ def test_servis_rollerinin_kapsamlari():
         "SERVIS_DEPO": SCOPE_OWN_UNITS,
         "KIRALAMA_DEPO": SCOPE_OWN_UNITS,
         "IK": SCOPE_ALL,
+        "SAHA_SORUMLUSU": SCOPE_OWN_UNITS,
     }
     assert {r: ROLES[r][2] for r in SERVIS_ROLLERI} == beklenen
 
@@ -236,11 +247,21 @@ def test_musteri_karti_yalniz_yetkili_rollerde_g10_2():
     """G10.2: müşteri kartını TS'den açma/düzeltme (`hesap.kart_yaz`) yalnız
     yöneticilerde. TS saha/operasyon rolleri müşteriyi seçer, kart açmaz.
     Mobilite kart yetkisi (`hesap.yaz`) değişmedi ve hiçbir servis rolünde yok."""
+    # G10.2 metni kart açanları "Müşteri İlişkileri / satış destek / muhasebe /
+    # yöneticiler" diye sayar: SATIS_DESTEK ve FINANS_YONETICI KARARLAR 2026-11-04 §3.
     assert {r for r in ROLES if "hesap.kart_yaz" in permissions_of(r)} == {
         "ADMIN",
         "SERVIS_YONETICI",
+        "SATIS_DESTEK",
+        "FINANS_YONETICI",
     }
-    for rol in ("SERVIS_OPERASYON", "SERVIS_TEKNISYEN", "SERVIS_SEF", "ATOLYE"):
+    for rol in (
+        "SERVIS_OPERASYON",
+        "SERVIS_TEKNISYEN",
+        "SERVIS_SEF",
+        "ATOLYE",
+        "SAHA_SORUMLUSU",
+    ):
         assert {"hesap.kart_yaz", "hesap.yaz"} & set(permissions_of(rol)) == set(), rol
     assert {r for r in ROLES if "hesap.yaz" in permissions_of(r)} == {
         "ADMIN",

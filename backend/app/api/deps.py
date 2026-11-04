@@ -13,7 +13,7 @@ from app.db import get_session
 from app.models import User
 from app.permissions import SCOPE_OWN_CUSTOMERS
 from app.services import auth as auth_service
-from app.services import erisim_yeri
+from app.services import erisim_yeri, sirketler
 
 SESSION_COOKIE = "dngerp_session"
 _real_clock = RealClock()
@@ -162,6 +162,30 @@ def require_any_permission(*codes: str):
 
 
 AdminUser = Annotated[User, Depends(require_permission("sistem.kullanici"))]
+
+
+async def mobilite_sirketi_gerekli(user: CurrentUser) -> User:
+    """Canlı mobilite modülünün şirket kapısı (KARARLAR 2026-11-04 §1).
+
+    Cihaz, hat, araç, iş emri, hak ediş, tarife, sipariş, abonelik, tahsilat,
+    RMA, satın alma, stok ve mobilite raporları yalnız etkin şirket DENGE
+    MOBİLİTE iken açılır. Modülün iş kodu DEĞİŞMEZ (G2.5, D8.6): kapı
+    `main.py`'de yönlendirici dahil edilirken (`dependencies=MOBILITE_KAPISI`)
+    eklenir. Müşteri/hesap kartları grup ortaktır, kapı yoktur.
+    """
+    if not sirketler.mobilite_acik_mi(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {
+                "kod": sirketler.SIRKET_DISI_KODU,
+                "mesaj": "Bu ekran yalnız DENGE MOBİLİTE şirketinde kullanılır. "
+                "Üst çubuktaki şirket seçiciden DENGE MOBİLİTE'ye geçin.",
+            },
+        )
+    return user
+
+
+MOBILITE_KAPISI = [Depends(mobilite_sirketi_gerekli)]
 
 
 def sees_cost(user: User) -> bool:

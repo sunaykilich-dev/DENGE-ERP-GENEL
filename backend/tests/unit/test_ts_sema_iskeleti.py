@@ -79,10 +79,11 @@ def test_mola_kisi_saate_girmez() -> None:
 
 def test_birim_check_ifadesi() -> None:
     assert birim_check("birim") == (
-        "birim IN ('GUVENLIK', 'HABERLESME', 'POC', 'MOBILITE', 'ARAC_TAKIP')"
+        "birim IN ('GUVENLIK', 'HABERLESME', 'POC', 'MOBILITE', 'ARAC_TAKIP', 'BARIYER')"
     )
     assert birim_check("birim", bos_olabilir=True).startswith("birim IS NULL OR ")
-    assert len(BIRIM_KODLARI) == 5
+    # BARIYER (Set Bariyer): KARARLAR 2026-11-04, migration f1a000000001.
+    assert len(BIRIM_KODLARI) == 6
 
 
 def test_model_anahtari_bosluk_ve_tireyi_yok_sayar() -> None:

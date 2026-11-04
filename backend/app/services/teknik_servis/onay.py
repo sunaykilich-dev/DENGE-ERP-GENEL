@@ -110,6 +110,7 @@ SERVIS_TURU_ADLARI = {
     "TOPLAMA": "Toplama",
     "KESIF": "Keşif",
     "DEMONTAJ": "Demontaj",
+    "TASIMA": "Taşıma",
 }
 SONUC_ADLARI = {
     "COZULDU": "Çözüldü",

@@ -27,6 +27,11 @@ from app.services import stock as stok_svc
 from app.services import subscriptions as abonelik_svc
 
 router = APIRouter(prefix="/api/raporlar", tags=["rapor"])
+# Şirket ayrımı (KARARLAR 2026-11-04 §1): `router` mobilite raporlarıdır ve
+# `main.py`'de DENGE MOBİLİTE kapısıyla dahil edilir. Uyarı zili bütün
+# modüllerin (teknik servis dahil) ORTAK ucudur; kapısız ayrı yönlendiricide
+# durur, mobilite satırlarını `services/uyarilar.topla` şirketle süzer.
+ortak_router = APIRouter(prefix="/api/raporlar", tags=["rapor"])
 
 Okuyucu = Annotated[User, Depends(require_permission("rapor.gor"))]
 Aktarici = Annotated[User, Depends(require_permission("rapor.disaaktar"))]
@@ -255,7 +260,7 @@ async def mrr_hareketi(donem: str, db: DbDep, user: Okuyucu) -> dict:
     return veri
 
 
-@router.get("/uyarilar")
+@ortak_router.get("/uyarilar")
 async def uyarilar(db: DbDep, clock: ClockDep, user: CurrentUser) -> dict:
     """Kullanıcının görebileceği zamana bağlı uyarılar.
 

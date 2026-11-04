@@ -141,13 +141,39 @@ async def db(session_factory):
         yield session
 
 
+@pytest.fixture(autouse=True)
+def _sirket_ayrimi_varsayilan(request, monkeypatch):
+    """Şirket ayrımı (KARARLAR 2026-11-04 §1) varsayılan testlerde NÖTR.
+
+    Var olan yüzlerce test, şirket kavramı yokken yazıldı: TUMU kapsamlı
+    yönetici aynı testte GUVENLIK (ELEKTRONİK) ve HABERLESME (TELEKOM) işini
+    birlikte görür, mobilite testleri teknik servis kullanıcısıyla aynı
+    oturumda cihaz ekranını açar. Şirket tek bir etkin değere bağlı olduğu için
+    bu testlere "makul" bir varsayılan şirket yoktur. Bu yüzden şirket
+    süzgecinin TEK noktası (`services/sirketler.etkin_birimler`) ve mobilite
+    kapısı (`mobilite_acik_mi`) varsayılan testlerde süzgeçsiz sürüme çevrilir;
+    birim kapsamı, fail-closed ve sayı = liste kuralları aynen sınanır.
+
+    Şirket ayrımının KENDİSİ `@pytest.mark.sirket_ayrimi` işaretli testlerde
+    gerçek kodla sınanır (`tests/integration/test_sirket_ayrimi.py`). MFA
+    zorunluluğu da aynı kalıpla kapatılıp kendi testinde açılıyor.
+    """
+    if request.node.get_closest_marker("sirket_ayrimi") is not None:
+        return
+    from app.services import sirketler
+
+    monkeypatch.setattr(sirketler, "etkin_birimler", lambda user: None)
+    monkeypatch.setattr(sirketler, "mobilite_acik_mi", lambda user: True)
+
+
 @pytest_asyncio.fixture
 async def seeded(db):
-    """Roller ve izinler yüklenmiş veritabanı."""
-    from app.seeds.dev import sync_permissions, sync_roles
+    """Roller, izinler ve şirket kataloğu yüklenmiş veritabanı."""
+    from app.seeds.dev import sync_permissions, sync_roles, sync_sirketler
 
     await sync_permissions(db)
     await sync_roles(db)
+    await sync_sirketler(db)
     await db.commit()
     return db
 

@@ -20,7 +20,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, or_, select
 
 from app.api.deps import ClockDep, DbDep, client_ip, require_permission
-from app.models import Role, RolePermission, User, UserPermission, UserUnit
+from app.models import (
+    KullaniciSirketi,
+    Role,
+    RolePermission,
+    Sirket,
+    User,
+    UserPermission,
+    UserUnit,
+)
 from app.permissions import (
     BIRIM_KAPSAMLARI,
     BIRIMLER,
@@ -40,6 +48,7 @@ from app.schemas.auth import (
 )
 from app.services import audit, yetki
 from app.services import auth as auth_service
+from app.services import sirketler as sirket_svc
 
 router = APIRouter(prefix="/api", tags=["kullanicilar"])
 
@@ -194,14 +203,22 @@ class BirimSatiri(BaseModel):
     ad: str
 
 
+class SirketSecenegi(BaseModel):
+    kod: str
+    ad: str
+    birimler: list[str] = []
+
+
 class KapsamKatalogu(BaseModel):
     kapsamlar: list[KapsamSatiri]
     birimler: list[BirimSatiri]
+    # Kullanıcı formundaki şirket üyeliği seçenekleri (aktif şirketler).
+    sirketler: list[SirketSecenegi] = []
 
 
 @router.get("/kapsamlar", response_model=KapsamKatalogu)
-async def kapsam_katalogu(_: AdminDep) -> KapsamKatalogu:
-    """Rol kapsamları ve birimler — rol/kullanıcı ekranının seçenekleri.
+async def kapsam_katalogu(db: DbDep, _: AdminDep) -> KapsamKatalogu:
+    """Rol kapsamları, birimler ve şirketler — rol/kullanıcı ekranının seçenekleri.
 
     Liste sunucudan gelir (E13-D02): ön yüzde sabit iki seçenek vardı ve yeni
     kapsamlar rol ekranından hiç seçilemiyordu.
@@ -212,6 +229,10 @@ async def kapsam_katalogu(_: AdminDep) -> KapsamKatalogu:
             for k, (ad, ac) in _KAPSAMLAR.items()
         ],
         birimler=[BirimSatiri(kod=k, ad=ad) for k, ad in BIRIMLER.items()],
+        sirketler=[
+            SirketSecenegi(kod=s.kod, ad=s.ad, birimler=list(s.birimler))
+            for s in await sirket_svc.katalog(db)
+        ],
     )
 
 
@@ -681,6 +702,20 @@ def _birimleri_dogrula(
     return temiz, birincil
 
 
+async def _sirketleri_dogrula(db, kodlar: list[str]) -> list[str]:
+    """Şirket kodları katalogda (DB) olmalı; boş liste 400 — üyeliksiz kullanıcı
+    hiçbir şirkete giremez, bunu sessizce açmak yerine yönetici açıkça seçer."""
+    temiz = sorted(set(kodlar))
+    if not temiz:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir şirket seçilmeli")
+    var = set((await db.scalars(select(Sirket.kod).where(Sirket.kod.in_(temiz)))).all())
+    if bilinmeyen := [k for k in temiz if k not in var]:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"Bilinmeyen şirket: {', '.join(bilinmeyen)}"
+        )
+    return temiz
+
+
 @router.post("/kullanicilar", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def create_user(
     payload: UserCreate, request: Request, db: DbDep, clock: ClockDep, admin: AdminDep
@@ -693,6 +728,10 @@ async def create_user(
     if role is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen rol: {payload.role_code}")
     birimler, birincil = _birimleri_dogrula(role, payload.birimler, payload.birincil_birim)
+    if payload.sirketler is not None:
+        sirket_kodlari = await _sirketleri_dogrula(db, payload.sirketler)
+    else:
+        sirket_kodlari = await sirket_svc.varsayilan_uyelik(db, role, birimler)
     if not yetki.rol_atanabilir_mi(admin, role):
         await _reddet(
             db,
@@ -715,9 +754,12 @@ async def create_user(
     user.birimler = [
         UserUnit(birim=b, is_primary=(b == birincil), created_by=admin.id) for b in birimler
     ]
+    user.sirket_uyelikleri = [
+        KullaniciSirketi(sirket_kod=k, created_by=admin.id) for k in sirket_kodlari
+    ]
     db.add(user)
     await db.flush()
-    yeni = {"username": user.username, "rol": role.code}
+    yeni = {"username": user.username, "rol": role.code, "sirketler": sirket_kodlari}
     if birimler:
         yeni["birimler"] = birimler
     await audit.log(
@@ -827,6 +869,10 @@ async def patch_user(
                 "Bu rol için en az bir birim gerekli; önce personel kartından birim verin.",
             )
 
+    yeni_sirketler = (
+        await _sirketleri_dogrula(db, payload.sirketler) if payload.sirketler is not None else None
+    )
+
     if payload.full_name is not None:
         user.full_name = payload.full_name
     if payload.email is not None:
@@ -856,6 +902,27 @@ async def patch_user(
     await audit.log_change(
         db, user, "guncelle", user_id=admin.id, ip=client_ip(request), is_personal_data=True
     )
+    # Şirket üyeliği (KARARLAR 2026-11-04 §1) ilişki tablosundadır; `log_change`
+    # yalnız kolonları gördüğü için ayrı denetim satırı yazılır.
+    if yeni_sirketler is not None and yeni_sirketler != user.sirket_kodlari:
+        eski_sirketler = user.sirket_kodlari
+        mevcut = {u.sirket_kod: u for u in user.sirket_uyelikleri}
+        for kod, uyelik in mevcut.items():
+            if kod not in yeni_sirketler:
+                user.sirket_uyelikleri.remove(uyelik)
+        for kod in yeni_sirketler:
+            if kod not in mevcut:
+                user.sirket_uyelikleri.append(KullaniciSirketi(sirket_kod=kod, created_by=admin.id))
+        await audit.log(
+            db,
+            "users",
+            "sirket_uyeligi",
+            entity_id=user.id,
+            old_value={"sirketler": eski_sirketler},
+            new_value={"sirketler": yeni_sirketler},
+            user_id=admin.id,
+            ip=client_ip(request),
+        )
 
     # Yetki, parola, aktiflik veya giriş değiştiyse açık oturumları düşür: eski
     # yetkiyle açılmış bir oturum yeni kısıtı görmezdi; girişi kapatılan kişinin

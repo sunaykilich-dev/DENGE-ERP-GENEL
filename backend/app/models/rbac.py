@@ -28,7 +28,12 @@ VEKALET_AZAMI_GUN = 30
 # taşıdığı `tests/unit/test_servis_sozluk_tutarliligi.py` ile kilitlenir.
 # Kod listesi kalıcıdır: değiştirmek bütün `ck_*_birim` kısıtlarının elle
 # drop+create edilmesi demektir (autogenerate CHECK değişikliğini görmez).
-BIRIM_KODLARI = ("GUVENLIK", "HABERLESME", "POC", "MOBILITE", "ARAC_TAKIP")
+BIRIM_KODLARI = ("GUVENLIK", "HABERLESME", "POC", "MOBILITE", "ARAC_TAKIP", "BARIYER")
+
+# Şirket KODLARI (KARARLAR 2026-11-04 §1) — `ck_sirketler_kod`'un tek kaynağı.
+# Ad sözlüğü `permissions.SIRKETLER`'dedir (birimlerle aynı ayrım ve aynı
+# tutarlılık kilidi `tests/unit/test_permissions.py`).
+SIRKET_KODLARI = ("TELEKOM", "ELEKTRONIK", "MOBILITE")
 
 
 def birim_check(sutun: str, *, bos_olabilir: bool = False) -> str:
@@ -193,4 +198,64 @@ class UserUnit(Base, TimestampMixin, ActorMixin):
     birim: Mapped[str] = mapped_column(String(20), primary_key=True)
     is_primary: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), default=False, nullable=False
+    )
+
+
+# --- Şirket ayrımı (KARARLAR 2026-11-04 §1, migration f1a000000001) -------------
+
+
+def _sirket_check(sutun: str) -> str:
+    return f"{sutun} IN (" + ", ".join(f"'{k}'" for k in SIRKET_KODLARI) + ")"
+
+
+class Sirket(Base):
+    """Grup şirketi (DENGE TELEKOM / ELEKTRONİK / MOBİLİTE).
+
+    Pasif şirket seçicide görünmez ve etkin şirket olamaz; kaydı silinmez
+    (birim ve üyelik bağları kalır).
+    """
+
+    __tablename__ = "sirketler"
+    __table_args__ = (CheckConstraint(_sirket_check("kod"), name="ck_sirketler_kod"),)
+
+    kod: Mapped[str] = mapped_column(String(20), primary_key=True)
+    ad: Mapped[str] = mapped_column(String(80))
+    aktif: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), default=True, nullable=False
+    )
+
+
+class BirimSirketi(Base, TimestampMixin, ActorMixin):
+    """Birim → şirket. Her birim TEK şirkete aittir (birim birincil anahtar).
+
+    **Neden birim üzerinden:** servis işi, ekipman, bakım, kiralama, depo ...
+    zaten birime bağlı ve kapsam birimle süzülüyor (`kapsam.py`). Her tabloya
+    `sirket` sütunu eklemek yerine birim kümesi etkin şirketin birimleriyle
+    kesiştirilir; sayı = liste kuralı ve fail-closed davranışı kendiliğinden
+    korunur.
+    """
+
+    __tablename__ = "birim_sirketleri"
+    __table_args__ = (CheckConstraint(birim_check("birim"), name="ck_birim_sirketleri_birim"),)
+
+    birim: Mapped[str] = mapped_column(String(20), primary_key=True)
+    sirket_kod: Mapped[str] = mapped_column(
+        String(20), ForeignKey("sirketler.kod", ondelete="RESTRICT"), index=True
+    )
+
+
+class KullaniciSirketi(Base, TimestampMixin, ActorMixin):
+    """Kullanıcı ↔ şirket üyeliği: şirket seçicide yalnız bunlar seçilir.
+
+    ADMIN rolü üyelikten bağımsız olarak bütün aktif şirketleri seçebilir
+    (karar §1); satır yine yazılır (rol değişirse üyelik kaybolmasın).
+    """
+
+    __tablename__ = "kullanici_sirketleri"
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    sirket_kod: Mapped[str] = mapped_column(
+        String(20), ForeignKey("sirketler.kod", ondelete="CASCADE"), primary_key=True
     )

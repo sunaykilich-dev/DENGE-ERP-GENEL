@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, DbDep
 from app.models import Account, Device, Product, SimCard, User, Vehicle
 from app.services import accounts as hesap_svc
+from app.services import sirketler
 from app.services.normalize import tr_normkey
 
 router = APIRouter(prefix="/api/arama", tags=["arama"])
@@ -222,12 +223,26 @@ async def _hat_ara(db: AsyncSession, user: User, terim: str, limit: int) -> list
     ]
 
 
+def _yalniz_mobilite(arayici: Callable) -> Callable:
+    """Mobilite modülü arayıcısı yalnız DENGE MOBİLİTE etkinken sonuç verir
+    (KARARLAR 2026-11-04 §1): ekranı 403 olan kaydın aramada çıkması kapıyı
+    yan yoldan açardı. Arayıcının kendisi değişmez; hesap/ürün ortaktır."""
+
+    async def _sarili(db: AsyncSession, user: User, terim: str, limit: int):
+        if not sirketler.mobilite_acik_mi(user):
+            return []
+        return await arayici(db, user, terim, limit)
+
+    _sarili.__name__ = arayici.__name__
+    return _sarili
+
+
 # Canlı arayıcılar — sıra eskisiyle aynı (cihaz, araç, hat, hesap, ürün).
 # Teknik servis arayıcıları kendi API dosyalarından SONRA kaydolur.
 for _izin, _arayici in (
-    ("cihaz.gor", _cihaz_ara),
-    ("arac.gor", _arac_ara),
-    ("hat.gor", _hat_ara),
+    ("cihaz.gor", _yalniz_mobilite(_cihaz_ara)),
+    ("arac.gor", _yalniz_mobilite(_arac_ara)),
+    ("hat.gor", _yalniz_mobilite(_hat_ara)),
     ("hesap.gor", _hesap_ara),
     ("urun.gor", _urun_ara),
 ):

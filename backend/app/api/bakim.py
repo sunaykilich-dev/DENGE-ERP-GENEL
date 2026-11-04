@@ -899,7 +899,9 @@ async def uretim_kayitlari(
     birimin sözleşme numarası/müşterisi görünmez)."""
     stmt = select(MaintenanceGenerationRun).order_by(MaintenanceGenerationRun.id.desc())
     satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
-    tum = user.role is not None and user.role.scope == SCOPE_ALL
+    # Şirket ayrımı: TUMU kapsamı da etkin şirketle sınırlı; genel sayı ve
+    # süzülmemiş atlanan listesi yalnız şirket süzgeci olmayan kullanıcıda.
+    tum = kapsam.tum_kayitlar_mi(user)
     gorunur: set[int] | None = None
     if not tum:
         gorunur = set(
@@ -925,6 +927,10 @@ async def uretim_kayitlari(
 
 @router.get("/otomatik-uretim")
 async def otomatik_uretim_durumu(db: DbDep, user: Okuyucu) -> dict[str, Any]:
+    # Bilinçli olarak ROL kapsamı (şirket değil): otomatik üretim GENEL bir
+    # ayardır ve kapısı (`bakim.otomatik_uretim_ayarla`) genel eşleştirme
+    # oranına bakar; TUMU kullanıcıya gösterilen oran kapıyla aynı olmalı.
+    # Yalnız toplam/eşleşen SAYISIDIR, kayıt ayrıntısı içermez.
     tum = user.role is not None and user.role.scope == SCOPE_ALL
     return {
         "acik": bool(await ayar_svc.get(db, "bakim_otomatik_uretim")),

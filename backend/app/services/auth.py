@@ -9,6 +9,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 
 from app.clock import Clock
 from app.models import LoginAttempt, Session, User
+from app.services import sirketler
 
 # Kayan pencere: her istekte tazelenir, ama 4 saat hareketsiz kalan oturum
 # düşer. Ofiste açık unutulan bir ekran akşama kadar açık kalmasın diye
@@ -293,6 +294,9 @@ async def create_session(
 ) -> str:
     token = secrets.token_hex(32)
     now = clock.now()
+    # Etkin şirket (KARARLAR 2026-11-04 §1): girişte varsayılan şirket seçilir
+    # ve kullanıcıya bağlanır — giriş yanıtı (`UserOut`) da onu taşır.
+    aktif = await sirketler.oturuma_bagla(db, user, None)
     db.add(
         Session(
             token=token,
@@ -301,6 +305,7 @@ async def create_session(
             expires_at=_bitis(now, now, istemci),
             last_seen_at=now,
             istemci=istemci,
+            aktif_sirket=aktif,
         )
     )
     await db.flush()
@@ -332,9 +337,18 @@ async def resolve_session(db: AsyncSession, token: str, clock: Clock) -> User | 
     user = await db.get(User, sess.user_id)
     if user is None or not user.giris_yapabilir_mi():
         return None
-    if now - sess.last_seen_at > SLIDE_THRESHOLD:
+    # Etkin şirket her istekte üyeliğe karşı doğrulanır ve kullanıcıya bağlanır
+    # (kapsam yardımcıları buradan okur). Üyelik kaldırıldıysa/şirket pasifse
+    # varsayılana düşülür ve oturum satırı güncellenir (aşağıdaki commit'le).
+    aktif = await sirketler.oturuma_bagla(db, user, sess.aktif_sirket)
+    sirket_degisti = aktif != sess.aktif_sirket
+    if sirket_degisti:
+        sess.aktif_sirket = aktif
+    kaydir = now - sess.last_seen_at > SLIDE_THRESHOLD
+    if kaydir:
         sess.last_seen_at = now
         sess.expires_at = _bitis(sess.created_at, now, sess.istemci)
+    if kaydir or sirket_degisti:
         # COMMIT burada bilinçli (servis katmanında istisna): kaydırma eskiden
         # yalnız flush ediliyordu ve yazma yapmayan uçlarda (GET) istek
         # sonunda geri alınıyordu — salt okuyan kullanıcının oturumu girişten

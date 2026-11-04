@@ -24,6 +24,7 @@ from app.api import kiralamalar as kiralamalar_api
 from app.api import kvkk as kvkk_api
 from app.api import lokasyonlar as lokasyonlar_api
 from app.api import orders as orders_api
+from app.api import oturum as oturum_api
 from app.api import payments as payments_api
 from app.api import personel as personel_api
 from app.api import pricing as pricing_api
@@ -50,6 +51,7 @@ from app.api import users as users_api
 from app.api import vehicles as vehicles_api
 from app.api import workorders as workorders_api
 from app.api import yedek_parca as yedek_parca_api
+from app.api.deps import MOBILITE_KAPISI
 from app.config import YapilandirmaHatasi, get_config, uretim_kontrolu
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -197,24 +199,30 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_api.router)
     app.include_router(users_api.router)
+    # Şirket seçici (KARARLAR 2026-11-04 §1). Mobilite modülü yönlendiricileri
+    # aşağıda `MOBILITE_KAPISI` ile yalnız DENGE MOBİLİTE etkinken açılır.
+    app.include_router(oturum_api.router)
     app.include_router(accounts_api.router)
     app.include_router(catalog_api.router)
-    app.include_router(devices_api.router)
-    app.include_router(sims_api.router)
-    app.include_router(vehicles_api.router)
-    app.include_router(workorders_api.router)
-    app.include_router(settlements_api.router)
-    app.include_router(stock_api.router)
+    app.include_router(devices_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(sims_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(vehicles_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(workorders_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(settlements_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(stock_api.router, dependencies=MOBILITE_KAPISI)
+    # Teklif uçları mobilite (birimsiz) ve servis (birimli) teklifinin ORTAK ucu:
+    # şirket kuralı yönlendiricide değil `services/quotes._sirket_kosulu`'nda.
     app.include_router(quotes_api.router)
-    app.include_router(orders_api.router)
-    app.include_router(subscriptions_api.router)
-    app.include_router(tariffs_api.router)
-    app.include_router(pricing_api.router)
-    app.include_router(payments_api.router)
+    app.include_router(orders_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(subscriptions_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(tariffs_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(pricing_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(payments_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(imports_api.router)
-    app.include_router(rma_api.router)
-    app.include_router(purchasing_api.router)
-    app.include_router(reports_api.router)
+    app.include_router(rma_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(purchasing_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(reports_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(reports_api.ortak_router)
     app.include_router(kvkk_api.router)
     # Oturumsuz: erişim yalnız jetona dayanır (bkz. public_quotes.py).
     app.include_router(public_quotes_api.router)
