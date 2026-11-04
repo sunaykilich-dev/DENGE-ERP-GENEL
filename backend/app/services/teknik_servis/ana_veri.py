@@ -75,15 +75,44 @@ def unvan_anahtari(ham: str | None) -> str:
     return normalize.unvan_anahtari(ham) if ham else ""
 
 
+YURT_DISI = "Yurt dışı"
+# Yurt dışı yazımları (normalize anahtar → ülke; None = ülke belirtilmemiş).
+_YURT_DISI_TAKMA = {"kktc": "KKTC", "kibris": "KKTC", "kuzeykibris": "KKTC"}
+
+
+def _yurt_disi(ham: str) -> str | None:
+    """Yurt dışı müşteri/tesis (rol testi B14): "Yurt dışı", "Yurtdışı - Nijerya",
+    "KKTC"/"Kıbrıs" → "Yurt dışı" ya da "Yurt dışı (Ülke)". Değilse None.
+
+    81 il listesi dışındaki tek kabul edilen değer budur; ülke adı serbest
+    metindir (ülke kataloğu Faz C, Logo cari eşlemesiyle).
+    """
+    anahtar = normalize._il_anahtar(ham)
+    if anahtar in _YURT_DISI_TAKMA:
+        return f"{YURT_DISI} ({_YURT_DISI_TAKMA[anahtar]})"
+    if not anahtar.startswith("yurtdisi"):
+        return None
+    metin = str(ham).strip()
+    # "Yurt dışı" önekinden sonraki kısım (ayraçlar atılır) ülke adıdır.
+    for i in range(len(metin), 0, -1):
+        if normalize._il_anahtar(metin[:i]) == "yurtdisi":
+            ulke = metin[i:].strip(" -/:,()").strip()
+            return f"{YURT_DISI} ({ulke})" if ulke else YURT_DISI
+    return YURT_DISI  # pragma: no cover - önek anahtarla doğrulandı
+
+
 def il_dogrula(ham: str | None) -> str | None:
     """İl adını 81 il listesine göre tek yazıma çevirir; bilinmeyen il 400.
 
     "istanbul", "İSTANBUL" ve "Istanbul" aynı değeri üretmeli: hafif arama
     "ad + il" döndürüyor ve lokasyon anahtarı il bilgisini taşıyor; serbest
     metin il, aynı şehri üç gruba bölüyordu (E14-D02). Boş girdi `None`.
+    Yurt dışı müşteri/tesis "Yurt dışı (Ülke)" olarak kabul edilir (B14).
     """
     if ham is None or not str(ham).strip():
         return None
+    if (yurt_disi := _yurt_disi(str(ham))) is not None:
+        return yurt_disi
     try:
         il = normalize.il_normalize(ham)
     except ValueError:

@@ -77,7 +77,10 @@ async def test_atanabilirlik_kurallari(client, db, birimli_kullanici_ac, servis_
     ayrilan.ayrilis_nedeni = "ISTIFA"
     girissiz = await teknisyen(birimli_kullanici_ac, "girissiz_a2")
     girissiz.giris_acik = False
-    baska_birim = await teknisyen(birimli_kullanici_ac, "haber_a2", ["HABERLESME"])
+    # Aynı şirketin başka birimi (BARIYER) → 409; başka şirket (HABERLESME) → 400
+    # "bulunamadı", ad sızmaz (KARARLAR 2026-11-04 §6.4).
+    baska_birim = await teknisyen(birimli_kullanici_ac, "bariyer_a2", ["BARIYER"])
+    baska_sirket = await teknisyen(birimli_kullanici_ac, "haber_a2", ["HABERLESME"])
     ofis = await birimli_kullanici_ac("ofis_a2", "SERVIS_OPERASYON", ["GUVENLIK"])
     t1 = await teknisyen(birimli_kullanici_ac, "tek_a3")
     await db.commit()
@@ -92,6 +95,8 @@ async def test_atanabilirlik_kurallari(client, db, birimli_kullanici_ac, servis_
     assert (await client.put(yol, json=tek(ayrilan))).status_code == 400
     assert (await client.put(yol, json=tek(ofis))).status_code == 400  # saha rolü yok
     assert (await client.put(yol, json=tek(baska_birim))).status_code == 409
+    r = await client.put(yol, json=tek(baska_sirket))
+    assert r.status_code == 400 and "Kullanıcı bulunamadı" in r.text
     assert (
         await client.put(yol, json={"atamalar": [{"user_id": 987654, "rol": "SEF"}]})
     ).status_code == 400
@@ -102,9 +107,11 @@ async def test_atanabilirlik_kurallari(client, db, birimli_kullanici_ac, servis_
         ]
     }
     assert (await client.put(yol, json=iki_sorumlu)).status_code == 409
-    sef_sorumlu = {"atamalar": [{"user_id": t1.id, "rol": "SEF", "is_lead": True}]}
-    assert (await client.put(yol, json=sef_sorumlu)).status_code == 400
     assert await _aktif(db, so.id) == []
+    # Şef de sorumlu olabilir (rol testi B1, KARARLAR 2026-11-04 §6.6).
+    sef_sorumlu = {"atamalar": [{"user_id": t1.id, "rol": "SEF", "is_lead": True}]}
+    assert (await client.put(yol, json=sef_sorumlu)).status_code == 200
+    assert (await client.put(yol, json={"atamalar": []})).status_code == 200
     # Girişsiz saha personeli atanabilir.
     r = await client.put(yol, json=tek(girissiz, True))
     assert r.status_code == 200, r.text

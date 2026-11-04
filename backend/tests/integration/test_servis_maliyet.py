@@ -336,7 +336,8 @@ class TestTarife:
         eksik = next(u for u in uyari if u["kod"] == "maliyet.tarife_eksik")
         assert eksik["adet"] == 1 and eksik["aciklama"] == "HABERLESME"
         uyari = (await ortam["yonetici"].get("/api/raporlar/uyarilar")).json()["uyarilar"]
-        assert next(u for u in uyari if u["kod"] == "maliyet.tarife_eksik")["adet"] == 4
+        # 6 birim (BARIYER, KARARLAR 2026-11-04 §1) − GUVENLIK = 5 (önceden 5 birim − 1 = 4).
+        assert next(u for u in uyari if u["kod"] == "maliyet.tarife_eksik")["adet"] == 5
 
 
 class TestAnaliz:

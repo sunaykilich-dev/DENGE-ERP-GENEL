@@ -41,7 +41,6 @@ from app.models import (
     MaintenancePeriod,
     ServiceHold,
     ServiceOrder,
-    ServiceOrderAssignment,
     ServiceOrderSerial,
     ServicePlan,
     ServiceResult,
@@ -207,13 +206,10 @@ def _acik(stmt: Select) -> Select:
 
 
 def _atanmamis_kosulu():
-    return not_(
-        exists().where(
-            ServiceOrderAssignment.service_order_id == ServiceOrder.id,
-            ServiceOrderAssignment.removed_at.is_(None),
-            ServiceOrderAssignment.rol == "TEKNISYEN",
-        )
-    )
+    """Liste süzgeciyle (`/isler?atanmamis=true`) AYNI tanım (rol testi B1)."""
+    from app.services.teknik_servis.is_emirleri import tayinsiz_is_kosulu
+
+    return tayinsiz_is_kosulu()
 
 
 def _saat_gerekli(clock: Clock | None) -> Clock:

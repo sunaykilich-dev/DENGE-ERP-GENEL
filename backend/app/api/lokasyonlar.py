@@ -325,6 +325,10 @@ async def olustur(payload: LokasyonIn, request: Request, db: DbDep, user: Yazici
         primary_contact_id=payload.primary_contact_id,
         is_primary=payload.is_primary,
         sla_takvim_turu=payload.sla_takvim_turu,
+        # Doğrulama yetkisi (`hesap.birlestir`) olmayanın açtığı tesis
+        # doğrulanmamış doğar (rol testi B7): operasyon/satış destek tesisi
+        # "Doğrulanmamış tesis" listesine düşer, yönetici doğrular.
+        is_verified=user.has("hesap.birlestir"),
         created_by=user.id,
     )
     db.add(adres)
@@ -341,6 +345,7 @@ async def olustur(payload: LokasyonIn, request: Request, db: DbDep, user: Yazici
             "adres": adres.line,
             "il": adres.city,
             "sla_takvim_turu": adres.sla_takvim_turu,
+            "dogrulanmis": adres.is_verified,
         },
         user_id=user.id,
         ip=client_ip(request),

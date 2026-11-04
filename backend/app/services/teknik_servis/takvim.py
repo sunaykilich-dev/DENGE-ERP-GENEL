@@ -713,11 +713,18 @@ async def kaynak_gorunumu(
     def bos() -> dict[str, Any]:
         return {"plan_dk": 0, "ziyaretler": set(), "isler": set(), "cakisma": False}
 
+    # Ziyaretin süresi kişi başına BİR KEZ sayılır (rol testi B2): ziyaretteki
+    # her işin planı ziyaretin süresini taşır; toplanınca 5 cihazlık 300 dk'lık
+    # ziyaret 1500 dk görünüyordu. Ziyaretsiz plan kendi süresiyle sayılır.
     hucre: dict[tuple[int, date], dict[str, Any]] = {}
+    sureler: dict[tuple[int, date], dict[str, int]] = {}
     for uid, plan_id, gun, sure, visit_id, so_id in planlar:
         h = hucre.setdefault((uid, gun), bos())
-        h["plan_dk"] += int(sure)
-        h["ziyaretler"].add(f"Z{visit_id}" if visit_id else f"P{plan_id}")
+        anahtar = f"Z{visit_id}" if visit_id else f"P{plan_id}"
+        kume = sureler.setdefault((uid, gun), {})
+        kume[anahtar] = max(kume.get(anahtar, 0), int(sure))
+        h["plan_dk"] = sum(kume.values())
+        h["ziyaretler"].add(anahtar)
         h["isler"].add(so_id)
         h["cakisma"] = h["cakisma"] or plan_id in bayraklar
 

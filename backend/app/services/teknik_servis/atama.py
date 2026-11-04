@@ -29,8 +29,15 @@ from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy import select
 
-from app.models import ServiceOrder, ServiceOrderAssignment, User
-from app.models.teknik_servis import ATAMA_ROLLERI
+from app.models import (
+    BirimSirketi,
+    KullaniciSirketi,
+    ServiceOrder,
+    ServiceOrderAssignment,
+    User,
+    UserUnit,
+)
+from app.models.teknik_servis import ATAMA_ROLLERI, SORUMLU_ROLLERI
 from app.permissions import ATANABILIR_SAHA_ROLLERI
 from app.services.teknik_servis import gecmis, kancalar, kapsam
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
@@ -100,11 +107,46 @@ def _satirlari_dogrula(atamalar: Sequence[AtamaSatiri]) -> list[AtamaSatiri]:
     for a in atamalar:
         if a.rol not in ATAMA_ROLLERI:
             raise ServisGirdiHatasi(f"Bilinmeyen tayin rolü: {a.rol}")
-        if a.is_lead and a.rol != "TEKNISYEN":
-            raise ServisGirdiHatasi("Sorumlu yalnız teknisyen rolünde olabilir")
+        # Şef de sorumlu olabilir (rol testi B1): Set Bariyer gibi yalnız şefin
+        # sahaya gittiği birimlerde iş hiç "sorumlulu" olamıyordu.
+        if a.is_lead and a.rol not in SORUMLU_ROLLERI:
+            raise ServisGirdiHatasi("Sorumlu yalnız teknisyen ya da şef rolünde olabilir")
     if sum(1 for a in atamalar if a.is_lead) > 1:
-        raise AtamaHatasi("Bir işte tek sorumlu teknisyen olur")
+        raise AtamaHatasi("Bir işte tek sorumlu olur")
     return list(atamalar)
+
+
+async def _sirket_disi_kisiler(db: AsyncSession, birim: str, kimlikler: set[int]) -> set[int]:
+    """İşin biriminin şirketiyle hiçbir bağı olmayan kişiler (rol testi B3).
+
+    Bağ: o şirketin bir biriminde üyelik ya da şirket üyeliği
+    (`kullanici_sirketleri`). Birim bir şirkete eşlenmemişse (eşleme yok)
+    süzgeç uygulanmaz — eski davranış.
+    """
+    if not kimlikler:
+        return set()
+    sirket = await db.scalar(select(BirimSirketi.sirket_kod).where(BirimSirketi.birim == birim))
+    if sirket is None:
+        return set()
+    sirket_birimleri = select(BirimSirketi.birim).where(BirimSirketi.sirket_kod == sirket)
+    bagli = set(
+        (
+            await db.scalars(
+                select(UserUnit.user_id).where(
+                    UserUnit.user_id.in_(kimlikler), UserUnit.birim.in_(sirket_birimleri)
+                )
+            )
+        ).all()
+    ) | set(
+        (
+            await db.scalars(
+                select(KullaniciSirketi.user_id).where(
+                    KullaniciSirketi.user_id.in_(kimlikler), KullaniciSirketi.sirket_kod == sirket
+                )
+            )
+        ).all()
+    )
+    return kimlikler - bagli
 
 
 async def _atanabilirlik_dogrula(db: AsyncSession, birim: str, kimlikler: set[int]) -> None:
@@ -114,9 +156,12 @@ async def _atanabilirlik_dogrula(db: AsyncSession, birim: str, kimlikler: set[in
     kisiler = {
         k.id: k for k in (await db.scalars(select(User).where(User.id.in_(kimlikler)))).all()
     }
+    sirket_disi = await _sirket_disi_kisiler(db, birim, set(kisiler))
     for kimlik in sorted(kimlikler):
         kisi = kisiler.get(kimlik)
-        if kisi is None:
+        # Başka şirketin kişisi "yok" ile aynı yanıtı alır: ad, birim ya da
+        # durum mesajı şirketler arası ad listesi çıkarmaya yaramasın (B3).
+        if kisi is None or kimlik in sirket_disi:
             raise ServisGirdiHatasi(f"Kullanıcı bulunamadı (#{kimlik})")
         if not kisi.is_active or kisi.ayrilis_tarihi is not None:
             raise ServisGirdiHatasi(f"{kisi.full_name} ayrılmış/pasif; tayin edilemez")

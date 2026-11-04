@@ -93,6 +93,19 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Tamamlanan işe kalite onayı verir (kendi çalıştığı işe veremez)",
     ),
     "servis.uzaktan_coz": ("Teknik Servis", "Açılışta telefonla/uzaktan çözüldü kaydı açar"),
+    # Rol testi B3 (KARARLAR 2026-11-04 §6.5): satış destek satılan cihazın
+    # kurulum takibini yapar. `servis.yaz` (her tür iş, not, ek) yerine yalnız
+    # KURULUM işi açma izni — en az yetki.
+    "servis.kurulum_ac": (
+        "Teknik Servis",
+        "Satılan cihaz için yalnız KURULUM türünde servis işi açar",
+    ),
+    # Rol testi B5 (KARARLAR 2026-11-04 §6.11): talep listesi/göç aktarımında
+    # asıl bildirim tarihi korunur (7 gün sınırı yok); SLA ölçülmez (GECIS).
+    "servis.gecis_kaydi": (
+        "Teknik Servis",
+        "Geçiş/içe aktarma kaydı açar: eski bildirim tarihi korunur, SLA ölçülmez",
+    ),
     "servis.tanim": ("Teknik Servis", "Arıza nedeni kataloğunu düzenler"),
     "servis.arac_yaz": ("Teknik Servis", "Servis araç havuzunu yönetir"),
     # Adı bilerek `.gor` ile bitmez: YONETIM'in otomatik salt-okunur kümesine
@@ -148,6 +161,9 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Atölye",
         "Kabul, teşhis, onarım, test, onay, aksesuar, teslim ve kargo girer",
     ),
+    # Rol testi B4 (KARARLAR 2026-11-04 §6.5): operasyon kargoyla gelen cihazı
+    # atölyeye KABUL eder; teşhis/onarım/teslim `atolye.yaz`'da kalır.
+    "atolye.kabul": ("Atölye", "Atölye kabul kaydı açar (tekli ve toplu kabul)"),
     # --- Kiralama ----------------------------------------------------------------
     "kiralama.gor": ("Kiralama", "Kiralamaları ve kiralık envanteri görür"),
     "kiralama.yaz": (
@@ -504,6 +520,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis.tanim",
             "servis.arac_yaz",
             "servis.irtibat_gor",
+            "servis.gecis_kaydi",
             "hesap.gor",
             "lokasyon.yaz",
             "hesap.kart_yaz",
@@ -593,6 +610,10 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
         ),
         SCOPE_OWN_UNITS,
     ),
+    # Rol testi (KARARLAR 2026-11-04 §6.5): operasyon listede olmayan müşteriyi
+    # hızlı kartla açar (`hesap.kart_yaz`; kart doğrulanmamış doğar, benzer kayıt
+    # uyarısı korunur, doğrulama `hesap.birlestir`'de) ve atölye kabulü yapar
+    # (`atolye.kabul`; teşhis/onarım `atolye.yaz` değil).
     "SERVIS_OPERASYON": (
         "Teknik Servis Operasyon Uzmanı",
         (
@@ -600,7 +621,10 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis.yaz",
             "servis.uzaktan_coz",
             "hesap.gor",
+            "hesap.kart_yaz",
             "lokasyon.yaz",
+            "atolye.gor",
+            "atolye.kabul",
             "urun.gor",
             "cihaz.gor",
             "kiralama.gor",
@@ -729,7 +753,9 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
     # Satış Destek: teklif/sipariş hazırlar; servis kayıtlarını ve atölye
     # teşhisini (arıza tespit sonucu) OKUR. G10.2: müşteri kartını satış destek
     # açar/düzeltir (`hesap.kart_yaz`; mobilite `hesap.yaz` değil). Maliyet,
-    # teklif iç onayı ve iskonto onayı YOK.
+    # teklif iç onayı ve iskonto onayı YOK. Rol testi (KARARLAR 2026-11-04
+    # §6.5): satılan cihazların kurulum takibi — ekipman (KURULUM_BEKLIYOR) ve
+    # tesis açar, yalnız KURULUM işi açar (`servis.kurulum_ac`; `servis.yaz` yok).
     "SATIS_DESTEK": (
         "Satış Destek",
         (
@@ -738,10 +764,13 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "siparis.gor",
             "siparis.yaz",
             "servis.gor",
+            "servis.kurulum_ac",
             "atolye.gor",
             "ekipman.gor",
+            "ekipman.yaz",
             "hesap.gor",
             "hesap.kart_yaz",
+            "lokasyon.yaz",
             "urun.gor",
             "cihaz.gor",
             "gorev.gor",

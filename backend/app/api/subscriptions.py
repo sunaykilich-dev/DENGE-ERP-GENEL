@@ -249,9 +249,15 @@ async def tahakkuk(donem: str, db: DbDep, user: Okuyucu) -> dict:
 
 @router.get("/tahakkuk/{donem}/xlsx")
 async def tahakkuk_xlsx(
-    donem: str, db: DbDep, user: Annotated[User, Depends(require_permission("rapor.disaaktar"))]
+    donem: str,
+    db: DbDep,
+    user: Annotated[User, Depends(require_permission("rapor.disaaktar", "abonelik.gor"))],
 ) -> Response:
-    """Aylık tahakkuk Excel'i — muhasebeye aktarılacak satırlar."""
+    """Aylık tahakkuk Excel'i — muhasebeye aktarılacak satırlar.
+
+    Görüntüleme izni (`abonelik.gor`) de gerekir (rol testi S2): abonelik
+    ekranını göremeyen rol tahakkuku dışa aktaramaz.
+    """
     try:
         svc.donem_araligi(donem)
     except (ValueError, IndexError) as exc:

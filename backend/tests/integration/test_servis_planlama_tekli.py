@@ -173,7 +173,10 @@ async def test_ekipte_baska_birim_ya_da_ayrilmis_kisi(ortam, servis_isi_ac, db) 
     r = await sef.put(
         YOL.format(so.id), json=plan_govdesi(ekip={"teknisyen_idler": [ortam.kisi("tek_h").id]})
     )
-    assert r.status_code == 409, r.text  # birim dışı kişi (atama kuralı, E01-12)
+    # Başka ŞİRKETİN kişisi (HABERLESME = TELEKOM, iş GUVENLIK = ELEKTRONİK):
+    # "bulunamadı", ad yok (KARARLAR 2026-11-04 §6.4). Aynı şirketin başka birimi 409.
+    assert r.status_code == 400, r.text
+    assert "Kullanıcı bulunamadı" in r.text
     tek2 = ortam.kisi("tek2")
     tek2.ayrilis_tarihi = date(2025, 12, 31)
     tek2.ayrilis_nedeni = "ISTIFA"

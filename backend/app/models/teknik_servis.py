@@ -143,6 +143,9 @@ KUTUK_FARK_DURUMLARI = ("ACIK", "UYGULANDI", "YOK_SAYILDI")
 
 ONAY_TURLERI = ("IMZA", "SOZLU", "BASILI_FORM", "ALINAMADI")
 ATAMA_ROLLERI = ("SEF", "TEKNISYEN")
+# Sorumlu (is_lead) olabilecek roller. Rol testi B1 (KARARLAR 2026-11-04 §6.6):
+# yalnız şefin sahaya gittiği işte (Set Bariyer) şef de sorumlu olur.
+SORUMLU_ROLLERI = ("TEKNISYEN", "SEF")
 
 # Dalga 0'da sonraki dalgaların türleri de dahil (TEKLIF, SLA, PARCA, ATOLYE):
 # CHECK sonradan genişletilmek zorunda kalmasın (autogenerate CHECK görmez).
@@ -824,13 +827,13 @@ class ServiceOrderAssignment(Base, PkMixin, TimestampMixin):
     Eski sistem atamayı AD METNİ ile tutuyordu; kişi bazlı her sayı yanlıştı.
     Satır silinmez: çıkarılan kişi `removed_at` alır, atama geçmişi kalır
     (KENDI_ISLERI kapsamı yalnız AKTİF atamaya bakar). Tek sorumlu
-    teknisyen (`uq_soa_tek_sorumlu`), sorumlu yalnız TEKNISYEN rolünde.
+    kişi (`uq_soa_tek_sorumlu`); sorumlu TEKNISYEN ya da SEF rolünde (B1).
     """
 
     __tablename__ = "service_order_assignments"
     __table_args__ = (
         CheckConstraint(_in("rol", ATAMA_ROLLERI), name="ck_soa_rol"),
-        CheckConstraint("NOT is_lead OR rol = 'TEKNISYEN'", name="ck_soa_sorumlu_teknisyen"),
+        CheckConstraint("NOT is_lead OR rol IN ('TEKNISYEN', 'SEF')", name="ck_soa_sorumlu_rol"),
         Index(
             "uq_soa_aktif",
             "service_order_id",
@@ -1175,6 +1178,7 @@ def _seri_anahtari(_mapper, _connection, target: ServiceOrderSerial) -> None:
 
 __all__ = [
     "ATAMA_ROLLERI",
+    "SORUMLU_ROLLERI",
     "BIRIM_KODLARI",
     "COZUM_KANALLARI",
     "DURUM_GRUPLARI",

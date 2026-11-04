@@ -66,7 +66,8 @@ class TestLokasyonYazma:
         r = await _lokasyon_ac(client, h.id, line="Kemeraltı Mah. 1", access_note="B girişi")
         assert r.status_code == 201, r.text
         lok = r.json()
-        assert lok["kind"] == "TESIS" and lok["is_verified"] is True and lok["city"] == "Muğla"
+        # Operasyonun açtığı tesis doğrulanmamış doğar (KARARLAR 2026-11-04 §6.5).
+        assert lok["kind"] == "TESIS" and lok["is_verified"] is False and lok["city"] == "Muğla"
 
         r = await client.post(
             f"/api/lokasyonlar/{lok['id']}/kisiler",

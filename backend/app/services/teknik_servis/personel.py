@@ -68,7 +68,7 @@ from app.models.rbac import BIRIM_KODLARI
 from app.models.teknik_servis import DURUM_GRUPLARI
 from app.models.user import AYRILIS_NEDENLERI, SAHA_ROLLERI
 from app.permissions import ATANABILIR_SAHA_ROLLERI, SCOPE_ALL, SCOPE_OWN_JOBS
-from app.services import audit, yetki
+from app.services import audit, sirketler, yetki
 from app.services import auth as auth_service
 from app.services.normalize import tr_normkey
 from app.services.teknik_servis import kancalar, kapsam
@@ -1136,14 +1136,20 @@ async def _inceleme_karti_ac(
 ) -> Card:
     """Görev panosunda "İşten çıkış incelemesi" kartı (E13-09 adım 5).
 
-    Kart KİŞİ ADI taşımaz (görev uçlarında kayıt kapsamı uygulanmaz, bkz.
+    Kart KİŞİ ADI taşımaz (bağlı kaydın etiketi yalnız görebilene döner, bkz.
     `services/gorevler.py`): "personel #id" ve iş numaraları. Pano yoksa
     açılır (iki kolon: bekliyor / tamamlandı). Kart servis işine bağlanır:
     önce açık sayaçlı iş, yoksa ekipten çıkarılan ilk iş.
     """
+    # Pano şirkete aittir (rol testi S1): çıkışı yapan kişinin etkin şirketi.
+    sirket = sirketler.aktif_sirket(aktor)
     pano = await db.scalar(
         select(Board)
-        .where(Board.title == CIKIS_PANOSU, Board.arsivlendi.is_(False))
+        .where(
+            Board.title == CIKIS_PANOSU,
+            Board.arsivlendi.is_(False),
+            Board.sirket_kod.is_(None) if sirket is None else Board.sirket_kod == sirket,
+        )
         .order_by(Board.id)
         .limit(1)
     )
@@ -1151,6 +1157,7 @@ async def _inceleme_karti_ac(
         pano = Board(
             title=CIKIS_PANOSU,
             description="İşten çıkışta açık iş ve sayaç incelemeleri (otomatik açılır).",
+            sirket_kod=sirket,
             created_by=aktor.id,
             updated_by=aktor.id,
         )

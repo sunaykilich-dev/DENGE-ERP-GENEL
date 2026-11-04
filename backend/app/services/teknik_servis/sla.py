@@ -375,8 +375,13 @@ def _damga_ozeti(so: ServiceOrder) -> dict[str, Any]:
 
 async def damgala(db: AsyncSession, so: ServiceOrder, clock: Clock) -> None:
     """`is_olusturuldu` kancası: yalnız GUNLUK_SERVIS ve `servis_sla_yururluk_at` doluyken
-    hedef damgalar. Aktif politika yoksa açılış 409 ("SLA politikası tanımsız")."""
+    hedef damgalar. Aktif politika yoksa açılış 409 ("SLA politikası tanımsız").
+
+    Geçiş/içe aktarma kaydı (`sla_kaynak=GECIS`, damgasız) damgalanmaz: asıl
+    bildirim tarihi eski olabilir, SLA ölçülmez (rol testi B5)."""
     if not sla_olculur_mu(so) or so.sla_policy_id is not None:
+        return
+    if so.sla_kaynak == "GECIS":
         return
     simdi = clock.now()
     yururluk = await yururluk_ani(db)
@@ -457,6 +462,8 @@ async def yeniden_damgala(db: AsyncSession, so: ServiceOrder, clock: Clock) -> N
         )
         return
     if so.sla_policy_id is None:
+        if so.sla_kaynak == "GECIS":
+            return  # geçiş kaydı: hiç damgalanmaz (rol testi B5)
         acilis = await _acilis_ani(db, so)
         yururluk = await yururluk_ani(db)
         if acilis is None or yururluk is None or acilis < yururluk:

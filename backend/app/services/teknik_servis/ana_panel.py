@@ -616,10 +616,12 @@ async def aktif_isler(
                 "musteri": musteri["title"] if musteri else so.customer_name_raw,
                 "lokasyon": lokasyon["ad"] if lokasyon else None,
                 "tayin_edilen_sef": [{"id": k, "ad": a} for rol, k, a, _ in ekip if rol == "SEF"],
+                # Sorumlu şef (yalnız şefin sahaya gittiği iş, B1) de tayinli
+                # personeldir; aksi halde Set Bariyer satırı hep "—" görünürdü.
                 "tayin_edilen_personel": [
                     {"id": k, "ad": a, "sorumlu": lead}
                     for rol, k, a, lead in ekip
-                    if rol == "TEKNISYEN"
+                    if rol == "TEKNISYEN" or lead
                 ],
                 "arac": araclar.get(so.id),
                 "durum": so.status,
