@@ -386,7 +386,9 @@ def _s_bakim_tamamlanan(stmt, user=None, clock=None, donem=None):
 
 KPI_TANIMLARI: dict[str, KpiTanimi] = {}
 # Panelde kutu olarak çizilmeyen gruplar (uyarı zili ve servis raporları).
-PANEL_DISI_GRUPLAR = frozenset({"UYARI", "RAPOR"})
+# ANA_PANEL: Ana Panel'in birleşik kutuları (`ana_panel.py`); `/isler?kpi=` liste
+# süzgeci olarak çalışır, Servis Paneli'nde ikinci kez çizilmez.
+PANEL_DISI_GRUPLAR = frozenset({"UYARI", "RAPOR", "ANA_PANEL"})
 
 
 def kpi_kaydet(tanim: KpiTanimi) -> KpiTanimi:

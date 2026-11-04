@@ -9,6 +9,7 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.api import accounts as accounts_api
+from app.api import ana_panel as ana_panel_api
 from app.api import atolye as atolye_api
 from app.api import attachments as attachments_api
 from app.api import audit_api, settings_api
@@ -242,6 +243,8 @@ def create_app() -> FastAPI:
     app.include_router(egitim_api.router)
     # --- Teknik servis (Dalga 3, D3-S) --------------------------------------
     app.include_router(servis_raporlari_api.router)
+    # Ana Panel (2026-11-04 §4; Launchpad yerine ana sayfa).
+    app.include_router(ana_panel_api.router)
     # Genel `/api/teknik-servis/{...}` yolları alt önekli routerlardan SONRA:
     # `/isler/{id}` gibi bir kalıp `/planlama/...` yolunu yutmasın.
     app.include_router(teknik_servis_api.router)

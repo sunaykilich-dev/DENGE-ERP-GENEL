@@ -1266,6 +1266,9 @@ class ListeFiltresi:
     siralama: str = "yeni"
     # Faz A: "kalite onayı bekleyenler" (BEKLEYEN) / onaylılar (ONAYLI).
     kalite: str | None = None
+    # Ana Panel (2026-11-04 §4): aktif ŞEF tayini olan işler (`teknisyen_id`
+    # rol ayırmaz; şef süzgeci yalnız SEF rolüne bakar).
+    sef_id: int | None = None
 
 
 SIRALAMALAR = ("yeni", "eski", "oncelik", "no")
@@ -1325,6 +1328,15 @@ def liste_sorgusu(user: User, f: ListeFiltresi, clock: Clock) -> Select:
             exists().where(
                 ServiceOrderAssignment.service_order_id == ServiceOrder.id,
                 ServiceOrderAssignment.user_id == f.teknisyen_id,
+                ServiceOrderAssignment.removed_at.is_(None),
+            )
+        )
+    if f.sef_id is not None:
+        stmt = stmt.where(
+            exists().where(
+                ServiceOrderAssignment.service_order_id == ServiceOrder.id,
+                ServiceOrderAssignment.user_id == f.sef_id,
+                ServiceOrderAssignment.rol == "SEF",
                 ServiceOrderAssignment.removed_at.is_(None),
             )
         )

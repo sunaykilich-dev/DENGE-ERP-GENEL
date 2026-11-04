@@ -126,6 +126,10 @@ function suzgecOku(p: URLSearchParams): IsSuzgeci {
     kpi: p.get("kpi") ?? undefined,
     donem: p.get("donem") ?? undefined,
     teknisyen_id: p.get("teknisyen_id") ? Number(p.get("teknisyen_id")) : undefined,
+    // Ana Panel bağlantıları (2026-11-04 §4): şef süzgeci ve açılış tarih aralığı.
+    sef_id: p.get("sef_id") ? Number(p.get("sef_id")) : undefined,
+    bas: p.get("bas") ?? undefined,
+    bit: p.get("bit") ?? undefined,
     musteri_id: p.get("musteri_id") ? Number(p.get("musteri_id")) : undefined,
     // Müşteri servis kartından tesis bazlı açık iş (TS-192) bağlantısı.
     adres_id: p.get("adres_id") ? Number(p.get("adres_id")) : undefined,
