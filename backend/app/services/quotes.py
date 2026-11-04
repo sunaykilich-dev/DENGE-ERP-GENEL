@@ -73,7 +73,7 @@ from app.permissions import (
     SCOPE_OWN_UNITS,
     SERVIS_ROLLERI,
 )
-from app.services import audit
+from app.services import audit, sirketler
 from app.services import settings as ayar_svc
 from app.services.statemachine import TEKLIF, IzinsizGecis
 
@@ -428,7 +428,35 @@ def _admin_mu(user: User) -> bool:
 
 
 def kullanici_birimleri(user: User) -> frozenset[str]:
-    return frozenset(u.birim for u in user.birimler)
+    """Üyesi olduğu birimler ∩ etkin şirketin birimleri (tek kaynak kapsam.py)."""
+    from app.services.teknik_servis import kapsam
+
+    return kapsam.kullanici_birimleri(user)
+
+
+def _sirket_kosulu(user: User) -> ColumnElement[bool] | None:
+    """Şirket ayrımı (KARARLAR 2026-11-04 §1); None = süzgeç yok.
+
+    Birimli (servis) teklif etkin şirketin birimlerinde olmalı; birimsiz
+    (satış/mobilite) teklif yalnız DENGE MOBİLİTE etkinken görünür — teklif
+    ekranı iki modülün ortak ucu olduğu için kapı yönlendiricide değil burada.
+    """
+    birimler = sirketler.etkin_birimler(user)
+    if birimler is None:
+        return None
+    birimli = Quote.birim.in_(sorted(birimler)) if birimler else false()
+    if sirketler.mobilite_acik_mi(user):
+        return or_(Quote.birim.is_(None), birimli)
+    return birimli
+
+
+def _sirket_disinda_mi(user: User, t: Quote) -> bool:
+    birimler = sirketler.etkin_birimler(user)
+    if birimler is None:
+        return False
+    if t.birim is None:
+        return not sirketler.mobilite_acik_mi(user)
+    return t.birim not in birimler
 
 
 def bugun_yerel(clock: Clock) -> date:
@@ -460,12 +488,16 @@ def _kapsam_kosulu(user: User) -> ColumnElement[bool] | None:
 
 def teklif_kapsami(stmt: Select, user: User) -> Select:
     """Liste, KPI, Excel ve uyarı aynı süzgeci kullanır (sayı = sızıntı)."""
-    kosul = _kapsam_kosulu(user)
-    return stmt if kosul is None else stmt.where(kosul)
+    for kosul in (_kapsam_kosulu(user), _sirket_kosulu(user)):
+        if kosul is not None:
+            stmt = stmt.where(kosul)
+    return stmt
 
 
 def teklif_kapsam_disinda_mi(user: User, t: Quote) -> bool:
     """`teklif_kapsami`'nın tek kayıt karşılığı (aynı kural)."""
+    if _sirket_disinda_mi(user, t):
+        return True
     kapsam = _kapsam(user)
     if kapsam == SCOPE_ALL:
         return False
@@ -967,6 +999,9 @@ async def baslik_dogrula(
     if g.birim is not None:
         if g.birim not in BIRIM_KODLARI:
             raise TeklifGirdiHatasi(f"Bilinmeyen birim: {g.birim}")
+        # Şirket ayrımı (KARARLAR 2026-11-04 §1): birim etkin şirketin olmalı.
+        if not sirketler.birim_etkin_sirkette_mi(user, g.birim):
+            raise TeklifYetkiHatasi(sirketler.sirket_disi_mesaji(user))
         if not birimli_yazabilir_mi(user, g.birim):
             raise TeklifYetkiHatasi("Birimli (servis) teklifi yalnız teknik servis rolleri açar")
         if _kapsam(user) != SCOPE_ALL and g.birim not in kullanici_birimleri(user):
@@ -977,6 +1012,12 @@ async def baslik_dogrula(
             raise TeklifGirdiHatasi("Geçerlilik tarihi geçmiş bir gün olamaz")
     elif not satis_yazabilir_mi(user):
         raise TeklifYetkiHatasi("Teknik servis rolleri yalnız birimli (servis) teklif açabilir")
+    elif sirketler.etkin_birimler(user) is not None and not sirketler.mobilite_acik_mi(user):
+        # Birimsiz teklif canlı mobilite satış teklifidir (karar §1).
+        raise TeklifYetkiHatasi(
+            "Birimsiz (satış) teklifi yalnız DENGE MOBİLİTE seçiliyken açılır; "
+            "servis teklifi için birim seçin."
+        )
     await _irtibat_adres_dogrula(db, g.customer_id, g.contact_id, g.address_id)
     return so
 

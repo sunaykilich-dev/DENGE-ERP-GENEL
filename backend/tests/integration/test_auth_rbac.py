@@ -139,7 +139,8 @@ async def test_admin_kullanici_acabilir_ve_denetime_yazilir(client, kullanici_ac
         select(AuditLog).where(AuditLog.entity == "users", AuditLog.action == "olustur")
     )
     assert kayit is not None
-    assert kayit.new_value == {"username": "satisci", "rol": "SATIS"}
+    # Şirket üyeliği (KARARLAR 2026-11-04 §1): birimsiz, TUMU olmayan rol → MOBİLİTE.
+    assert kayit.new_value == {"username": "satisci", "rol": "SATIS", "sirketler": ["MOBILITE"]}
 
 
 async def test_kendi_rolunu_degistiremez(client, kullanici_ac):

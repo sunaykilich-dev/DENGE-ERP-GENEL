@@ -48,11 +48,17 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
     """Kullanıcının GÖREBİLECEĞİ uyarıları toplar."""
     from app.services import payments as tahsilat_svc
     from app.services import sims as hat_svc
+    from app.services import sirketler
     from app.services import subscriptions as abonelik_svc
 
     ozet = UyariOzeti()
+    # Şirket ayrımı (KARARLAR 2026-11-04 §1): aşağıdaki mobilite uyarıları
+    # (hat, abonelik, tahsilat, hak ediş, montaj noktası) yalnız DENGE MOBİLİTE
+    # etkinken sayılır — ekranları başka şirkette 403'tür, sayı da sızıntıdır.
+    # Teknik servis uyarıları kapsam.py üzerinden şirketle zaten süzülür.
+    mobilite = sirketler.mobilite_acik_mi(user)
 
-    if user.has("hat.gor"):
+    if mobilite and user.has("hat.gor"):
         taahhut = await hat_svc.taahhudu_bitenler(db, clock)
         if taahhut:
             ozet.uyarilar.append(
@@ -99,7 +105,7 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
                 )
             )
 
-    if user.has("abonelik.gor"):
+    if mobilite and user.has("abonelik.gor"):
         yenilenecek = await abonelik_svc.yenilenecekler(db, clock)
         if yenilenecek:
             ozet.uyarilar.append(
@@ -112,7 +118,7 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
                 )
             )
 
-    if user.has("tahsilat.gor"):
+    if mobilite and user.has("tahsilat.gor"):
         geciken = await tahsilat_svc.gecikenler(db, clock)
         if geciken:
             ozet.uyarilar.append(
@@ -125,7 +131,7 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
                 )
             )
 
-    if user.has("hakedis.gor"):
+    if mobilite and user.has("hakedis.gor"):
         # Karar verilmeyen kalem döküme HİÇ girmez; montaj noktası parasını
         # alamaz ve kimse fark etmez.
         bekleyen = await db.scalar(
@@ -163,7 +169,7 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
                 )
             )
 
-    if user.has("hesap.gor"):
+    if mobilite and user.has("hesap.gor"):
         # E-postası/IBAN'ı olmayan montaj noktasına döküm gönderilemez ve
         # ödeme listesi çıkarılamaz (plan §8 madde 2).
         eksikli = 0

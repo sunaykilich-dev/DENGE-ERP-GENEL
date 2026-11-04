@@ -48,7 +48,7 @@ from app.models import (
     ServiceTimeEntry,
 )
 from app.models.teknik_servis import DURUM_GRUPLARI
-from app.permissions import BIRIMLER, SCOPE_ALL
+from app.permissions import BIRIMLER
 from app.services.teknik_servis import kapsam
 from app.services.teknik_servis import uyarilar as ts_uyarilar
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi
@@ -470,9 +470,8 @@ def birim_dogrula(user: User, birim: str | None) -> str | None:
         return None
     if birim not in BIRIMLER:
         raise PanelHatasi(f"Bilinmeyen birim: {birim}")
-    if user.role is not None and user.role.scope == SCOPE_ALL:
-        return birim
-    if birim not in kapsam.kullanici_birimleri(user):
+    # TUMU her birimi seçer — etkin şirketin birimleri içinde (KARARLAR 2026-11-04 §1).
+    if kapsam.birim_disinda_mi(user, birim, birimsiz_gorunur=False):
         raise PermissionError(f"Bu birimin panelini görme yetkiniz yok: {birim}")
     return birim
 

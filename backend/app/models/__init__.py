@@ -48,7 +48,16 @@ from app.models.purchase import (
     PurchaseOrderLine,
 )
 from app.models.quote import Quote, QuoteLine, QuoteSend, QuoteVersion
-from app.models.rbac import Permission, Role, RolePermission, UserPermission, UserUnit
+from app.models.rbac import (
+    BirimSirketi,
+    KullaniciSirketi,
+    Permission,
+    Role,
+    RolePermission,
+    Sirket,
+    UserPermission,
+    UserUnit,
+)
 from app.models.service import RmaCase
 from app.models.servis_atolye import WorkshopAccessory, WorkshopRecord
 from app.models.servis_bakim import (
@@ -220,6 +229,9 @@ __all__ = [
     "ServiceVehicle",
     "ServiceVisit",
     "UserUnit",
+    "BirimSirketi",
+    "KullaniciSirketi",
+    "Sirket",
     # --- Teknik servis (Dalga 2, D2-S) ---
     "Competency",
     "CompetencyAssessment",

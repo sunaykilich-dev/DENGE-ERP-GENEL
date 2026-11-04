@@ -121,7 +121,10 @@ async def test_kapsam_katalogu_dort_kapsam_ve_birimleri_verir(client, kullanici_
         "POC",
         "MOBILITE",
         "ARAC_TAKIP",
+        "BARIYER",
     }
+    # Şirket üyeliği seçenekleri (KARARLAR 2026-11-04 §1)
+    assert [s["kod"] for s in d["sirketler"]] == ["TELEKOM", "ELEKTRONIK", "MOBILITE"]
     # Maliyet/fiyat anahtarı yok (DoD: yeni uçta maliyet anahtarı testi).
     assert "maliyet" not in r.text and "fiyat" not in r.text
 

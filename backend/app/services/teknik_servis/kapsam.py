@@ -31,9 +31,17 @@ ikisi ayrışmasın (`is_erisimi_yok_mu` aynı sorguyu tek satıra uygular).
 Yanıt kodları: URL'deki kayıt kapsam dışı → 404 ve yazma yok; gövdedeki
 referans (iş, kişi) kapsam dışı → 404; gövdedeki katalog öğesi başka birimin
 → 403 (`katalog_birim_yasak_mi`).
+
+**Şirket ayrımı (KARARLAR 2026-11-04 §1):** bütün kurallar etkin şirketin
+birimleriyle KESİŞTİRİLİR (`_sirket_birimleri`). KENDI_BIRIMI/KENDI_ISLERI'de
+`kullanici_birimleri` zaten kesişimdir; TUMU kapsamı da yalnız etkin şirketin
+birimlerini görür (birimsiz ortak kayıt, ör. ortak depo, eskisi gibi görünür).
+Kesişim boşsa fail-closed: liste boş, tek kayıt 404. Şirket kümesi
+`services/sirketler.etkin_birimler`'den, MODÜL ÖZNİTELİĞİ olarak okunur (tek
+nokta; test altyapısı varsayılan kullanıcılar için oradan süzgeçsiz çalıştırır).
 """
 
-from sqlalchemy import ColumnElement, Select, and_, exists, false, or_, select
+from sqlalchemy import ColumnElement, Select, and_, exists, false, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -44,6 +52,7 @@ from app.models import (
     User,
     UserUnit,
 )
+from app.models.rbac import BIRIM_KODLARI
 from app.permissions import (
     SCOPE_ALL,
     SCOPE_OWN_CUSTOMERS,
@@ -51,12 +60,45 @@ from app.permissions import (
     SCOPE_OWN_UNITS,
     SCOPES,
 )
+from app.services import sirketler
 from app.services.accounts import kendi_hesaplari
 
 
+def _sirket_birimleri(user: User) -> frozenset[str] | None:
+    """Etkin şirketin birimleri; None = şirket süzgeci yok."""
+    return sirketler.etkin_birimler(user)
+
+
 def kullanici_birimleri(user: User) -> frozenset[str]:
-    """Kullanıcının üyesi olduğu birim kodları (`user_units`)."""
-    return frozenset(u.birim for u in user.birimler)
+    """Kullanıcının üyesi olduğu birimler (`user_units`) ∩ etkin şirketin birimleri."""
+    birimler = frozenset(u.birim for u in user.birimler)
+    sirket = _sirket_birimleri(user)
+    return birimler if sirket is None else birimler & sirket
+
+
+def gorunur_birimler(user: User) -> list[str]:
+    """Kullanıcının seçebileceği/görebileceği birim kodları (katalog sırası).
+
+    TUMU: etkin şirketin bütün birimleri; diğer kapsamlar: kendi birimleri
+    (kesişim). Form süzgeçleri ve "hangi birimler" listeleri bunu kullanır.
+    """
+    if _kapsam(user) == SCOPE_ALL:
+        sirket = _sirket_birimleri(user)
+        return [b for b in BIRIM_KODLARI if sirket is None or b in sirket]
+    if _kapsam(user) is None:
+        return []
+    birimler = kullanici_birimleri(user)
+    return [b for b in BIRIM_KODLARI if b in birimler]
+
+
+def tum_kayitlar_mi(user: User) -> bool:
+    """Kullanıcı HİÇBİR süzgeç olmadan bütün kayıtları mı görüyor?
+
+    TUMU kapsamı artık şirketle sınırlıdır; bu yalnız şirket süzgeci olmayan
+    (sahte/sistem) kullanıcıda True'dur. "TUMU ise genel sayıyı göster" türü
+    kısayollar buna bakmalı, rol kapsamına değil.
+    """
+    return _kapsam(user) == SCOPE_ALL and _sirket_birimleri(user) is None
 
 
 def _kapsam(user: User) -> str | None:
@@ -74,6 +116,19 @@ def _birim_kosulu(user: User, sutun, *, birimsiz_gorunur: bool) -> ColumnElement
     return or_(sutun.is_(None), kosul) if birimsiz_gorunur else kosul
 
 
+def _sirket_kosulu(user: User, sutun) -> ColumnElement[bool] | None:
+    """TUMU kapsamı için şirket koşulu; None = süzgeç yok.
+
+    Birimsiz kayıt (ortak) TUMU'ya her şirkette görünür — eski TUMU kuralı.
+    """
+    sirket = _sirket_birimleri(user)
+    if sirket is None:
+        return None
+    if not sirket:
+        return sutun.is_(None)
+    return or_(sutun.is_(None), sutun.in_(sorted(sirket)))
+
+
 # --- Birimli varlıklar (ekipman, sözleşme, kiralama, depo, teklif, eğitim) ------
 
 
@@ -82,14 +137,23 @@ def kapsam_birim(stmt: Select, user: User, sutun, *, birimsiz_gorunur: bool = Tr
 
     `birimsiz_gorunur`: birimi NULL kayıt (ör. ortak depo) birimli kullanıcıya
     görünür mü. Birim kolonu NOT NULL ise etkisizdir. Birimsiz KULLANICI her
-    durumda hiçbir şey görmez (fail-closed).
+    durumda hiçbir şey görmez (fail-closed). TUMU: etkin şirketin birimleri.
     """
     kapsam = _kapsam(user)
     if kapsam == SCOPE_ALL:
-        return stmt
+        kosul = _sirket_kosulu(user, sutun)
+        return stmt if kosul is None else stmt.where(kosul)
     if kapsam is None:
         return stmt.where(false())
     return stmt.where(_birim_kosulu(user, sutun, birimsiz_gorunur=birimsiz_gorunur))
+
+
+def _sirket_disinda_mi(user: User, birim: str | None) -> bool:
+    """TUMU için tek kayıt: birimli kayıt etkin şirketin dışında mı?"""
+    sirket = _sirket_birimleri(user)
+    if sirket is None or birim is None:
+        return False
+    return birim not in sirket
 
 
 def birim_disinda_mi(user: User, birim: str | None, *, birimsiz_gorunur: bool = True) -> bool:
@@ -99,7 +163,7 @@ def birim_disinda_mi(user: User, birim: str | None, *, birimsiz_gorunur: bool = 
     """
     kapsam = _kapsam(user)
     if kapsam == SCOPE_ALL:
-        return False
+        return _sirket_disinda_mi(user, birim)
     if kapsam is None:
         return True
     birimler = kullanici_birimleri(user)
@@ -130,7 +194,7 @@ def katalog_birim_yasak_mi(user: User, birim: str | None) -> bool:
     """
     kapsam = _kapsam(user)
     if kapsam == SCOPE_ALL:
-        return False
+        return _sirket_disinda_mi(user, birim)
     if kapsam is None:
         return True
     if birim is None:
@@ -162,15 +226,21 @@ def _kendi_isleri(user: User):
 def _is_kosulu(user: User) -> ColumnElement[bool] | None:
     """`service_orders` satırına uygulanacak kapsam koşulu; None = süzgeç yok."""
     kapsam = _kapsam(user)
+    sirket = _sirket_birimleri(user)
     if kapsam == SCOPE_ALL:
-        return None
+        if sirket is None:
+            return None
+        return ServiceOrder.birim.in_(sorted(sirket)) if sirket else false()
     if kapsam is None or not kullanici_birimleri(user):
         return false()
     if kapsam == SCOPE_OWN_UNITS:
         return _birim_kosulu(user, ServiceOrder.birim, birimsiz_gorunur=False)
     if kapsam == SCOPE_OWN_JOBS:
-        # Atandığı iş başka birimde olsa da görünür (birimler arası destek).
-        return ServiceOrder.id.in_(_kendi_isleri(user))
+        # Atandığı iş başka birimde olsa da görünür (birimler arası destek) —
+        # ama yalnız etkin şirketin birimlerinde (başka şirketin işi o şirket
+        # seçiliyken görünür).
+        kendi = ServiceOrder.id.in_(_kendi_isleri(user))
+        return kendi if sirket is None else and_(kendi, ServiceOrder.birim.in_(sorted(sirket)))
     if kapsam == SCOPE_OWN_CUSTOMERS:
         return and_(
             _birim_kosulu(user, ServiceOrder.birim, birimsiz_gorunur=False),
@@ -212,10 +282,29 @@ async def is_erisimi_yok_mu(db: AsyncSession, user: User, so: ServiceOrder) -> b
 # --- Personel --------------------------------------------------------------------
 
 
+def sirket_personel_kosulu(user: User, user_id_sutunu) -> ColumnElement[bool] | None:
+    """Personelin etkin şirkete göre koşulu; None = süzgeç yok.
+
+    Etkin şirketin bir biriminde üyeliği olan kişi VEYA hiç birimi olmayan
+    kişi (birimsiz personel eskisi gibi yalnız TUMU'ya görünür; şirket
+    birimden türediği için birimsiz kişinin şirketi yoktur → ortak).
+    """
+    sirket = _sirket_birimleri(user)
+    if sirket is None:
+        return None
+    birimsiz = not_(exists().where(UserUnit.user_id == user_id_sutunu))
+    if not sirket:
+        return birimsiz
+    return or_(
+        exists().where(UserUnit.user_id == user_id_sutunu, UserUnit.birim.in_(sorted(sirket))),
+        birimsiz,
+    )
+
+
 def _personel_kosulu(user: User, user_id_sutunu) -> ColumnElement[bool] | None:
     kapsam = _kapsam(user)
     if kapsam == SCOPE_ALL:
-        return None
+        return sirket_personel_kosulu(user, user_id_sutunu)
     birimler = kullanici_birimleri(user)
     if kapsam is None or not birimler:
         return false()

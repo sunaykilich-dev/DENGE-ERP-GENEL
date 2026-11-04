@@ -116,6 +116,9 @@ TUR_KURALLARI: dict[str, TurKurali] = {
     "TOPLAMA": TurKurali("PROJE"),
     "KESIF": TurKurali("PROJE"),
     "DEMONTAJ": TurKurali("PROJE"),
+    # KARARLAR 2026-11-04 §2 (Set Bariyer): KURULUM/TOPLAMA ile aynı kural —
+    # PROJE kategorisi, SLA yok, seri zorunlu değil, birim kısıtı yok.
+    "TASIMA": TurKurali("PROJE"),
 }
 
 # Kaynak (uç/modül) → sürebileceği hedef durumlar. Makine "hangi geçiş var"ı,
@@ -202,6 +205,7 @@ TUR_ADLARI: dict[str, str] = {
     "TOPLAMA": "Toplama",
     "KESIF": "Keşif",
     "DEMONTAJ": "Demontaj",
+    "TASIMA": "Taşıma",
 }
 KATEGORI_ADLARI: dict[str, str] = {
     "GUNLUK_SERVIS": "Günlük Servis",

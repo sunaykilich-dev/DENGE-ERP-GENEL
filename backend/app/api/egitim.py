@@ -2052,7 +2052,11 @@ def _gecerlilik_kisi(kisi: User, clock, pencere: int):
 
     from app.permissions import SCOPE_ALL
 
-    tumu = SimpleNamespace(role=SimpleNamespace(scope=SCOPE_ALL), birimler=[])
+    # `_sirket_birimleri=None`: şirket süzgeci de yok (kart zaten kapsamdan geçti;
+    # bağlanmamış kullanıcı fail-closed boş küme sayılırdı — services/sirketler).
+    tumu = SimpleNamespace(
+        role=SimpleNamespace(scope=SCOPE_ALL), birimler=[], _sirket_birimleri=None
+    )
     return rapor.gecerlilik_sorgusu(tumu, clock, pencere_gun=pencere, kisi_id=kisi.id)  # type: ignore[arg-type]
 
 

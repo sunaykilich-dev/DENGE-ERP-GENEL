@@ -48,7 +48,8 @@ from app.models.teknik_servis import (
     SERVIS_KATEGORILERI,
     SERVIS_TURLERI,
 )
-from app.permissions import BIRIMLER, SCOPE_ALL, SCOPE_OWN_JOBS
+from app.permissions import BIRIMLER, SCOPE_ALL, SCOPE_OWN_JOBS, SIRKETLER
+from app.services import sirketler
 from app.services.normalize import il_normalize
 from app.services.teknik_servis import kapsam, panel
 from app.services.teknik_servis import rapor_tanimlari as rt
@@ -177,10 +178,10 @@ async def filtre_hazirla(
         if bilinmeyen:
             raise RaporHatasi(f"Bilinmeyen {ad}: {', '.join(bilinmeyen)}")
     birim = _tekil(birim)
-    if user.role is None or user.role.scope != SCOPE_ALL:
-        yetkisiz = [b for b in birim if b not in kapsam.kullanici_birimleri(user)]
-        if yetkisiz:
-            raise RaporYetkiHatasi(f"Bu birimin raporunu görme yetkiniz yok: {', '.join(yetkisiz)}")
+    # TUMU da yalnız etkin şirketin birimlerini seçer (KARARLAR 2026-11-04 §1).
+    yetkisiz = [b for b in birim if kapsam.birim_disinda_mi(user, b, birimsiz_gorunur=False)]
+    if yetkisiz:
+        raise RaporYetkiHatasi(f"Bu birimin raporunu görme yetkiniz yok: {', '.join(yetkisiz)}")
     if teknisyen_id is not None and not user.has("servis_rapor.personel"):
         raise RaporYetkiHatasi("Kişi bazlı süzgeç için yetkiniz yok (servis_rapor.personel)")
     if tekrar_gun is not None and not rt.TEKRAR_GUN_ALT <= tekrar_gun <= rt.TEKRAR_GUN_UST:
@@ -424,7 +425,10 @@ def kapsam_metni(user: User) -> str:
     """Yanıtta ve Excel'de "bu rapor kimin gözüyle" (E12-08 kabul 4)."""
     kapsam_kodu = user.role.scope if user.role is not None else None
     if kapsam_kodu == SCOPE_ALL:
-        return "Tüm birimler"
+        if kapsam.tum_kayitlar_mi(user):
+            return "Tüm birimler"
+        sirket = SIRKETLER.get(sirketler.aktif_sirket(user) or "", "şirket seçilmedi")
+        return f"Tüm birimler ({sirket})"
     birimler = ", ".join(BIRIMLER.get(b, b) for b in sorted(kapsam.kullanici_birimleri(user)))
     if kapsam_kodu == SCOPE_OWN_JOBS:
         return f"Tayin edildiğim işler ({birimler or 'birim yok'})"

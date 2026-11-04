@@ -249,6 +249,32 @@ BIRIMLER: dict[str, str] = {
     "POC": "POC",
     "MOBILITE": "Mobilite",
     "ARAC_TAKIP": "Araç Takip",
+    # KARARLAR 2026-11-04 §1-2: Set Bariyer (Kurulum/Toplama/Taşıma), DENGE ELEKTRONİK.
+    "BARIYER": "Set Bariyer",
+}
+
+# --- Şirketler (KARARLAR 2026-11-04 §1) -----------------------------------------
+# Üç şirket tek sistemi kullanır; ayrım anahtarı BİRİMDİR (her birim bir şirkete
+# ait, `birim_sirketleri`). Kodlar KALICIDIR ve ön yüzle sözleşmedir. Sıra =
+# şirket seçicideki sıra. DB'deki `sirketler` tablosu bu sözlükten doldurulur
+# (migration f1a000000001 + `seeds.dev.sync_sirketler`).
+SIRKETLER: dict[str, str] = {
+    "TELEKOM": "DENGE TELEKOM",
+    "ELEKTRONIK": "DENGE ELEKTRONİK",
+    "MOBILITE": "DENGE MOBİLİTE",
+}
+# Canlı mobilite modülü (cihaz, hat, araç, iş emri, hak ediş ...) yalnız bu
+# şirket etkinken açılır (`api/deps.mobilite_sirketi_gerekli`).
+MOBILITE_SIRKETI = "MOBILITE"
+# Varsayılan birim → şirket eşlemesi (karar varsayımı). Yalnız ilk dolumda
+# kullanılır; sonrasında tek kaynak `birim_sirketleri` tablosudur.
+VARSAYILAN_BIRIM_SIRKETLERI: dict[str, str] = {
+    "HABERLESME": "TELEKOM",
+    "POC": "TELEKOM",
+    "GUVENLIK": "ELEKTRONIK",
+    "BARIYER": "ELEKTRONIK",
+    "MOBILITE": "MOBILITE",
+    "ARAC_TAKIP": "MOBILITE",
 }
 
 # --- Kayıt bazlı kapsam -------------------------------------------------------
@@ -431,8 +457,10 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
         ),
         SCOPE_ALL,
     ),
+    # KARARLAR 2026-11-04 §3: görünen ad "Finans Uzmanı" (kod ve yalnız ofis
+    # kısıtı aynı; seed özelleştirilmemiş rolün adını eşitler).
     "MUHASEBE_DESTEK": (
-        "Muhasebe Destek",
+        "Finans Uzmanı",
         (
             "gorev.gor",
             "gorev.yaz",
@@ -675,6 +703,85 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
         ),
         SCOPE_ALL,
     ),
+    # --- KARARLAR 2026-11-04 §3: yeni roller -----------------------------------
+    # Saha Sorumlusu: sahadaki işleri açar, izler, günceller; zaman kaydı ve
+    # ek/fotoğraf (`servis.yaz`). Tayin (`servis.planla`), kalite onayı,
+    # tamamlama/kapatma ve maliyet YOK. Müşteriyi seçer, kart açmaz (G10.2).
+    "SAHA_SORUMLUSU": (
+        "Saha Sorumlusu",
+        (
+            "servis.gor",
+            "servis.yaz",
+            "servis.irtibat_gor",
+            "hesap.gor",
+            "lokasyon.yaz",
+            "urun.gor",
+            "cihaz.gor",
+            "ekipman.gor",
+            "zaman.yaz",
+            "operasyon.gor",
+            "egitim.kendim",
+            "gorev.gor",
+            "gorev.yaz",
+        ),
+        SCOPE_OWN_UNITS,
+    ),
+    # Satış Destek: teklif/sipariş hazırlar; servis kayıtlarını ve atölye
+    # teşhisini (arıza tespit sonucu) OKUR. G10.2: müşteri kartını satış destek
+    # açar/düzeltir (`hesap.kart_yaz`; mobilite `hesap.yaz` değil). Maliyet,
+    # teklif iç onayı ve iskonto onayı YOK.
+    "SATIS_DESTEK": (
+        "Satış Destek",
+        (
+            "teklif.gor",
+            "teklif.yaz",
+            "siparis.gor",
+            "siparis.yaz",
+            "servis.gor",
+            "atolye.gor",
+            "ekipman.gor",
+            "hesap.gor",
+            "hesap.kart_yaz",
+            "urun.gor",
+            "cihaz.gor",
+            "gorev.gor",
+            "gorev.yaz",
+        ),
+        SCOPE_OWN_UNITS,
+    ),
+    # Finans Yöneticisi: maliyet/fiyat görür, servis fatura devrini işaretler
+    # (`tahsilat.yaz`), hak ediş dökümünü onaylar, raporları alır. `maliyet.yaz`
+    # (tarife girişi) yalnız ADMIN'de kalır (KD-11); yüksek yetkili izin yok.
+    "FINANS_YONETICI": (
+        "Finans Yöneticisi",
+        (
+            "maliyet.gor",
+            "tahsilat.gor",
+            "tahsilat.yaz",
+            "hakedis.gor",
+            "hakedis.onayla",
+            "hakedis.ode",
+            "teklif.gor",
+            "siparis.gor",
+            "abonelik.gor",
+            "satinalma.gor",
+            "isemri.gor",
+            "servis.gor",
+            "bakim.gor",
+            "kiralama.gor",
+            "hesap.gor",
+            "hesap.kart_yaz",
+            "urun.gor",
+            "cihaz.gor",
+            "rapor.gor",
+            "rapor.disaaktar",
+            "servis_rapor.gor",
+            "servis_rapor.disaaktar",
+            "gorev.gor",
+            "gorev.yaz",
+        ),
+        SCOPE_ALL,
+    ),
 }
 
 # Teknik servis rolleri (Dalga 0). Unit testler "mobilite finans/yazma izni
@@ -688,7 +795,11 @@ SERVIS_ROLLERI = (
     "SERVIS_DEPO",
     "KIRALAMA_DEPO",
     "IK",
+    "SAHA_SORUMLUSU",
 )
+# Şirket geneli roller (KARARLAR 2026-11-04 §3). Servis rolü DEĞİLLER: satış
+# destek birimsiz (satış) teklif de hazırlar, finans mobilite hak edişini onaylar.
+GENEL_ROLLER = ("SATIS_DESTEK", "FINANS_YONETICI")
 
 
 # --- Erişim yeri kısıtı (G3.8, KARARLAR 2026-10-28 §7 Faz A/8) ------------------

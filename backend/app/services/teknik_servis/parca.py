@@ -77,6 +77,7 @@ from app.models import (
 from app.models.stock import SERVIS_HAREKET_TURLERI, SERVIS_HAREKET_YONU
 from app.models.teknik_servis import DURUM_GRUPLARI
 from app.permissions import SCOPE_ALL, SCOPE_OWN_JOBS, SCOPES
+from app.services import sirketler
 from app.services.statemachine import PARCA_TALEBI, STOK_SAYIM
 from app.services.teknik_servis import gecmis, kancalar, kapsam
 from app.services.teknik_servis import uyarilar as ts_uyarilar
@@ -191,7 +192,11 @@ def depo_kosulu(user: User) -> ColumnElement[bool]:
     temel = Warehouse.servis_deposu.is_(True)
     kod = _kapsam_kodu(user)
     if kod == SCOPE_ALL:
-        return temel
+        # Şirket ayrımı: TUMU da etkin şirketin birim depoları + ortak depolar.
+        sirket = sirketler.etkin_birimler(user)
+        if sirket is None:
+            return temel
+        return and_(temel, or_(Warehouse.birim.is_(None), Warehouse.birim.in_(sorted(sirket))))
     birimler = kapsam.kullanici_birimleri(user)
     if kod is None or not birimler:
         return false()

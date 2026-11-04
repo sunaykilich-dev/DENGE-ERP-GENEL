@@ -54,8 +54,8 @@ from app.models.teknik_servis import (
     TALEP_KANALLARI,
 )
 from app.models.teknik_servis import durum_grubu as durum_grubu_hesapla
-from app.permissions import BIRIMLER, SCOPE_ALL
-from app.services import audit, kvkk
+from app.permissions import BIRIMLER
+from app.services import audit, kvkk, sirketler
 from app.services import export as export_svc
 from app.services.accounts import kapsam_disinda_mi as hesap_kapsam_disinda_mi
 from app.services.pdf import PdfUretilemedi
@@ -669,6 +669,14 @@ async def _acilis_on_kontrol(db, payload: IsAcIn, user: User) -> list[dict[str, 
     """
     if payload.birim not in BIRIM_KODLARI:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {payload.birim}")
+    # Şirket ayrımı (KARARLAR 2026-11-04 §1): birim etkin şirketin değilse 403 +
+    # makine okunur kod (birim bilinen bir katalog öğesi; gizlemenin anlamı yok).
+    # Kapsam kontrolünden ÖNCE: TUMU yönetici de yanlış şirkette iş açamaz.
+    if not sirketler.birim_etkin_sirkette_mi(user, payload.birim):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {"kod": "SIRKET_DISI_BIRIM", "mesaj": sirketler.sirket_disi_mesaji(user)},
+        )
     if kapsam.birim_disinda_mi(user, payload.birim, birimsiz_gorunur=False):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Birim bulunamadı")
     if payload.tur not in is_emirleri.TUR_KURALLARI:
@@ -744,10 +752,8 @@ async def _acilis_denetimi(db, so: ServiceOrder, user: User, request: Request, e
 @router.get("/isler/form-verileri", response_model=None)
 async def form_verileri(db: DbDep, user: Okuyucu) -> dict[str, Any]:
     """Açılış/filtre formu sözlükleri (tek kaynak: model tuple'ları ve kataloglar)."""
-    if user.role is not None and user.role.scope == SCOPE_ALL:
-        birimler = list(BIRIM_KODLARI)
-    else:
-        birimler = [b for b in BIRIM_KODLARI if b in kapsam.kullanici_birimleri(user)]
+    # TUMU: etkin şirketin bütün birimleri; diğerleri kendi birimleri (kesişim).
+    birimler = kapsam.gorunur_birimler(user)
     nedenler = await bekletme.neden_katalogu(db)
     return {
         "birimler": [{"kod": b, "ad": BIRIMLER[b]} for b in birimler],
@@ -2061,9 +2067,8 @@ async def ariza_nedenleri(
         liste = await sonuc.ariza_nedenleri(db, birim, yalniz_aktif=not tumu)
     except _HATALAR as exc:
         raise _hata(exc) from exc
-    if user.role is None or user.role.scope != SCOPE_ALL:
-        izinli = kapsam.kullanici_birimleri(user)
-        liste = [n for n in liste if n.birim in izinli]
+    # Aynı kural tek kayıtta da: birim kapsamı + etkin şirket (TUMU dahil).
+    liste = [n for n in liste if not kapsam.birim_disinda_mi(user, n.birim)]
     return [_ariza_cikti(n) for n in liste]
 
 

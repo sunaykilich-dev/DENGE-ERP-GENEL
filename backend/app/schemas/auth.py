@@ -42,12 +42,20 @@ class UserOut(BaseModel):
     parola_degismeli: bool = False
     birimler: list[str] = []
     birincil_birim: str | None = None
+    # Şirket ayrımı (KARARLAR 2026-11-04 §1) — ön yüzle sözleşme: etkin şirket
+    # kodu (oturumdan) ve seçilebilir şirket kodları. Oturum dışı (kullanıcı
+    # listesi) yanıtta `aktif_sirket` boş, `sirketler` ham üyeliktir.
+    aktif_sirket: str | None = None
+    sirketler: list[str] = []
 
     model_config = {"from_attributes": True}
 
     @classmethod
     def of(cls, user) -> "UserOut":
+        from app.services import sirketler as sirket_svc
+
         codes = user.etkin_izinler()
+        secilebilir = getattr(user, "_uye_sirketler", None)
         return cls(
             id=user.id,
             full_name=user.full_name,
@@ -58,6 +66,8 @@ class UserOut(BaseModel):
             parola_degismeli=user.parola_degismeli,
             birimler=user.birim_kodlari,
             birincil_birim=user.birincil_birim,
+            aktif_sirket=sirket_svc.aktif_sirket(user),
+            sirketler=list(secilebilir) if secilebilir is not None else user.sirket_kodlari,
             mfa_enabled=user.mfa_enabled,
             # GİRİŞ yanıtı da bunu taşımak ZORUNDA: arayüz girişten sonra
             # kullanıcıyı bu yanıttan kuruyor, /auth/me'yi yalnız sayfa
@@ -120,6 +130,9 @@ class UserCreate(BaseModel):
     # kimse fark etmezdi. Sonraki birim değişiklikleri personel kartından.
     birimler: list[str] = Field(default_factory=list, max_length=5)
     birincil_birim: str | None = None
+    # Şirket üyeliği (KARARLAR 2026-11-04 §1). Verilmezse birimlerden türetilir
+    # (`services/sirketler.varsayilan_uyelik`, migration göçüyle aynı kural).
+    sirketler: list[str] | None = Field(default=None, max_length=10)
 
 
 class UserPatch(BaseModel):
@@ -136,5 +149,8 @@ class UserPatch(BaseModel):
     # Sunucu tek seferlik parola üretir ve yanıtta BİR KEZ döner (denetimde yok).
     parola_sifirla: bool | None = None
     reset_mfa: bool | None = None  # admin: kullanıcının MFA'sını sıfırla (cihaz kaybı)
+    # Şirket üyeliğini TAMAMEN değiştirir (None = dokunma). Açık oturumların
+    # etkin şirketi bir sonraki istekte üyeliğe göre doğrulanır.
+    sirketler: list[str] | None = Field(default=None, max_length=10)
     # İyimser kilitleme: istemci gördüğü sürümü geri gönderir.
     version: int | None = None

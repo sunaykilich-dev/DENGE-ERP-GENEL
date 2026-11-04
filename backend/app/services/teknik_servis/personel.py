@@ -315,12 +315,13 @@ async def personel_olustur(
     if sicil and await sicil_cakisiyor_mu(db, sicil):
         raise PersonelKuralHatasi(f"Bu sicil numarası başka bir personelde kayıtlı: {sicil}")
     birimler = birim_satirlarini_dogrula(girdi.birimler)
-    if aktor.role.scope != SCOPE_ALL:
-        if not birimler:
-            raise PersonelGirdiHatasi("Personelin en az bir birimi olmalı.")
-        for s in birimler:
-            if kapsam.birim_disinda_mi(aktor, s.birim):
-                raise PersonelKapsamDisi("Birim bulunamadı")
+    if aktor.role.scope != SCOPE_ALL and not birimler:
+        raise PersonelGirdiHatasi("Personelin en az bir birimi olmalı.")
+    # TUMU da etkin şirketin dışındaki birime personel açamaz (KARARLAR
+    # 2026-11-04 §1): açtığı kaydı o şirket seçiliyken göremezdi.
+    for s in birimler:
+        if kapsam.birim_disinda_mi(aktor, s.birim):
+            raise PersonelKapsamDisi("Birim bulunamadı")
 
     rol = await db.scalar(select(Role).where(Role.code == VARSAYILAN_PERSONEL_ROLU))
     if rol is None:
@@ -758,7 +759,7 @@ async def atanabilir_personel(
     stmt = select(User).where(atanabilir_kosulu(birim, saha_rolleri)).order_by(User.full_name)
     if user.role.scope == SCOPE_OWN_JOBS:
         stmt = stmt.where(User.id == user.id)
-    elif user.role.scope != SCOPE_ALL and not user.birim_kodlari:
+    elif user.role.scope != SCOPE_ALL and not kapsam.kullanici_birimleri(user):
         # Savunma (fail-closed): birimsiz kapsamlı rol hiçbir kişiyi görmez.
         stmt = stmt.where(false())
     kisiler = (await db.scalars(stmt)).all()
