@@ -28,7 +28,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala, sees_cost
+from app.api.deps import (
+    ClockDep,
+    DbDep,
+    client_ip,
+    require_any_permission,
+    require_permission,
+    sayfala,
+    sees_cost,
+)
 from app.models import (
     Account,
     ServiceEquipment,
@@ -73,6 +81,9 @@ router = APIRouter(prefix="/api/teknik-servis/atolye", tags=["atolye"])
 
 Okuyucu = Annotated[User, Depends(require_permission("atolye.gor"))]
 Yazici = Annotated[User, Depends(require_permission("atolye.yaz"))]
+# Kabul (tekli/toplu): atölye ustası (`atolye.yaz`) ya da yalnız kabul yetkili
+# operasyon (`atolye.kabul`, rol testi B4). Teşhis/onarım/teslim Yazici'da kalır.
+Kabulcu = Annotated[User, Depends(require_any_permission("atolye.yaz", "atolye.kabul"))]
 Atayici = Annotated[User, Depends(require_permission("atolye.yaz", "servis.planla"))]
 Aktarici = Annotated[User, Depends(require_permission("atolye.gor", "servis_rapor.disaaktar"))]
 
@@ -771,7 +782,7 @@ async def form_verileri(db: DbDep, user: Okuyucu, birim: str = "HABERLESME") -> 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=None)
 async def kabul(
-    payload: KabulIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
+    payload: KabulIn, request: Request, db: DbDep, clock: ClockDep, user: Kabulcu
 ) -> dict[str, Any]:
     """Cihaz kabulü: servis işi (ATOLYE) + atölye kaydı + aksesuarlar tek transaction."""
     veri = _ortak(payload)
@@ -788,7 +799,7 @@ async def kabul(
 
 @router.post("/toplu-kabul", status_code=status.HTTP_201_CREATED, response_model=None)
 async def toplu_kabul(
-    payload: TopluKabulIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
+    payload: TopluKabulIn, request: Request, db: DbDep, clock: ClockDep, user: Kabulcu
 ) -> dict[str, Any]:
     """N cihaz → N kayıt + N servis işi, ortak kabul grubu; hepsi ya da hiçbiri."""
     ortak = _ortak(payload)

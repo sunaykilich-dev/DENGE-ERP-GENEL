@@ -66,7 +66,7 @@ from app.services.teknik_servis import (
 )
 from app.services.teknik_servis.atama import AtamaSatiri
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
-from app.services.teknik_servis.yerel_zaman import YEREL
+from app.services.teknik_servis.yerel_zaman import YEREL, yerel_bugun
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,6 +91,13 @@ class PlanlamaHatasi(ServisHatasi):
     def __init__(self, mesaj: str, is_nolari: Sequence[str] = ()) -> None:
         super().__init__(mesaj)
         self.is_nolari = list(is_nolari)
+
+
+class GecmisTarihHatasi(PlanlamaHatasi):
+    """Geçmiş tarihe plan gerekçesiz → 409 `GECMIS_TARIH` (rol testi B6).
+
+    Engel değil uyarıdır: aynı istek `gecmis_tarih_gerekcesi` (≥10 karakter)
+    ile tekrarlanınca kabul edilir (çakışma gerekçesi kalıbı)."""
 
 
 class PlanlamaGirdiHatasi(ServisGirdiHatasi):
@@ -128,6 +135,8 @@ class PlanGirdisi:
     # Yalnız tekli planda karşılaştırılır; toplu/yeniden planda her işin
     # aktif planı sunucuda kilit altında okunur.
     beklenen_aktif_plan_id: int | None = None
+    # Geçmiş tarihe plan (göç/geriye dönük kayıt) gerekçesi; yoksa 409.
+    gecmis_tarih_gerekcesi: str | None = None
 
 
 # --- Yardımcılar -------------------------------------------------------------------
@@ -157,6 +166,43 @@ def _neden_dogrula(neden: str | None, not_: str | None) -> None:
         raise PlanlamaGirdiHatasi(f"Geçersiz neden: {neden} (geçerli: {', '.join(PLAN_NEDENLERI)})")
     if neden == "DIGER" and not (not_ or "").strip():
         raise PlanlamaGirdiHatasi("'Diğer' nedeninde açıklama zorunlu")
+
+
+GECMIS_TARIH_GEREKCE_ALT = 10
+
+
+def _gecmis_tarih_dogrula(
+    girdi: PlanGirdisi, clock: Clock, is_nolari: Sequence[str] = ()
+) -> str | None:
+    """Plan tarihi bugünden (yerel) önceyse gerekçe ister (rol testi B6).
+
+    Gerekçe yoksa ya da kısaysa `GecmisTarihHatasi` (409); geçerliyse kırpılmış
+    gerekçeyi döner (denetim izine yazılır). Bugün ve sonrası için None.
+    """
+    if girdi.plan_date >= yerel_bugun(clock):
+        return None
+    gerekce = _metin(girdi.gecmis_tarih_gerekcesi)
+    if gerekce is None or len(gerekce) < GECMIS_TARIH_GEREKCE_ALT:
+        raise GecmisTarihHatasi(
+            f"Plan tarihi geçmişte ({girdi.plan_date:%d.%m.%Y}). Geçmiş tarihe plan için "
+            f"gerekçe yazın (en az {GECMIS_TARIH_GEREKCE_ALT} karakter).",
+            is_nolari,
+        )
+    return gerekce
+
+
+def _sahada_kimse_yok(sahadakiler: Sequence[int], is_nolari: Sequence[str]) -> None:
+    """Sahaya kimsenin gitmediği plan "Planlandı" olamaz (rol testi B7).
+
+    Tekli (ekip gönderildiğinde) ve toplu plan AYNI kuralı uygular: en az bir
+    teknisyen ya da sahaya giden şef. Ekip yalnız sahaya gitmeyen şeften
+    oluşuyorsa da reddedilir.
+    """
+    if not sahadakiler:
+        raise PlanlamaGirdiHatasi(
+            "Sahada kimse yok: en az bir teknisyen ya da sahaya giden şef seçin"
+            + (f" ({', '.join(is_nolari)})" if is_nolari else "")
+        )
 
 
 def _metin(deger: str | None) -> str | None:
@@ -527,6 +573,10 @@ async def planla(
             raise PlanlamaHatasi("Plan tarihi/saati değişiyor: erteleme nedeni zorunlu")
     else:
         degisim = "EKIP_DEGISIMI"
+    # Tarih değişmeyen ekip/araç güncellemesi geçmiş planı yeniden sormaz.
+    gecmis_gerekce = (
+        _gecmis_tarih_dogrula(girdi, clock, [so.so_no]) if degisim != "EKIP_DEGISIMI" else None
+    )
 
     await _arac_dogrula(db, girdi.vehicle_id, so.birim)
     if girdi.ekip is not None:
@@ -540,6 +590,11 @@ async def planla(
         else await _onceki_sahaya_gidenler(db, onceki)
     )
     sahadakiler = _sahadakiler(ekip, sahaya_giden)
+    # Ekip GÖNDERİLDİYSE sahada en az bir kişi olmalı (ekran her zaman ekip
+    # gönderir). Ekip gönderilmeyen çağrı "mevcut ekibi koru" demektir (göç,
+    # erteleme betikleri); o yol eski davranışında kalır (KARARLAR §6.9).
+    if girdi.ekip is not None:
+        _sahada_kimse_yok(sahadakiler, [so.so_no])
 
     bas, bit = saat_araligi(girdi.plan_date, girdi.start_time, girdi.duration_min)
     await cakisma.gun_kilitleri(db, cakisma.dokunulan_gunler(bas, bit, girdi.plan_date))
@@ -599,7 +654,12 @@ async def planla(
         "planla",
         entity_id=plan.id,
         old_value=_plan_ozeti(onceki) if onceki else None,
-        new_value={**_plan_ozeti(plan), "so_id": so.id, "cakisma_gecildi": bool(gecilen)},
+        new_value={
+            **_plan_ozeti(plan),
+            "so_id": so.id,
+            "cakisma_gecildi": bool(gecilen),
+            "gecmis_tarih_gerekcesi": gecmis_gerekce,
+        },
         user_id=user.id,
     )
     await db.flush()
@@ -712,10 +772,12 @@ async def toplu_planla(
     ornek = isler[0]
     if not girdi.ekip:
         raise PlanlamaGirdiHatasi("Toplu planda en az bir şef ya da teknisyen seçilmeli")
+    gecmis_gerekce = _gecmis_tarih_dogrula(girdi, clock, [so.so_no for so in isler])
     await _ekip_dogrula(db, girdi.ekip, ornek.birim)
     await _arac_dogrula(db, girdi.vehicle_id, ornek.birim)
     sahaya_giden = set(girdi.sahaya_giden_sefler or ())
     sahadakiler = _sahadakiler(girdi.ekip, sahaya_giden)
+    _sahada_kimse_yok(sahadakiler, [])
 
     bas, bit = saat_araligi(girdi.plan_date, girdi.start_time, girdi.duration_min)
     await cakisma.gun_kilitleri(db, cakisma.dokunulan_gunler(bas, bit, girdi.plan_date))
@@ -768,6 +830,7 @@ async def toplu_planla(
             "is_idler": [so.id for so in isler],
             "plan_tarihi": girdi.plan_date.isoformat(),
             "cakisma_gecildi": bool(gecilen),
+            "gecmis_tarih_gerekcesi": gecmis_gerekce,
         },
         user_id=user.id,
     )
@@ -810,6 +873,11 @@ async def yeniden_planla(
     if degisenler and not girdi.change_reason:
         sorunlu = [so.so_no for so in isler if so.id in degisenler]
         raise PlanlamaHatasi("Tarih/saat değişiyor: yeniden planlama nedeni zorunlu", sorunlu)
+    gecmis_gerekce = (
+        _gecmis_tarih_dogrula(girdi, clock, [so.so_no for so in isler if so.id in degisenler])
+        if any(eski[i].plan_date != girdi.plan_date for i in degisenler)
+        else None
+    )
 
     ornek = isler[0]
     await _arac_dogrula(db, girdi.vehicle_id, ornek.birim)
@@ -940,6 +1008,7 @@ async def yeniden_planla(
             "plan_tarihi": girdi.plan_date.isoformat(),
             "ziyaret_id": hedef_ziyaret,
             "cakisma_gecildi": bool(gecilen),
+            "gecmis_tarih_gerekcesi": gecmis_gerekce,
         },
         user_id=user.id,
     )

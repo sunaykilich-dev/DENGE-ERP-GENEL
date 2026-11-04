@@ -48,6 +48,12 @@ class Board(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin):
     # Arşiv silme DEĞİLDİR: pano kapanır ama kartları ve geçmişi durur.
     # Bitmiş bir işin panosunu silmek, o işin nasıl yürüdüğünü de siler.
     arsivlendi: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # Şirket ayrımı (rol testi S1, KARARLAR 2026-11-04 §6.1): pano açıldığı
+    # etkin şirkete aittir ve yalnız o şirket seçiliyken görünür. NULL yalnız
+    # süzgeçsiz sistem yolunda olur (normal açılışta etkin şirket zorunlu).
+    sirket_kod: Mapped[str | None] = mapped_column(
+        String(20), ForeignKey("sirketler.kod", ondelete="RESTRICT"), index=True
+    )
 
     kolonlar: Mapped[list["BoardColumn"]] = relationship(
         back_populates="pano",

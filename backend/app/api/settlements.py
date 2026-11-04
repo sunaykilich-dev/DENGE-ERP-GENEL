@@ -529,9 +529,14 @@ async def dokum_gonder(
 async def odeme_listesi_excel(
     period: str,
     db: DbDep,
-    user: Annotated[User, Depends(require_permission("rapor.disaaktar"))],
+    user: Annotated[User, Depends(require_permission("rapor.disaaktar", "hakedis.gor"))],
 ) -> Response:
-    """Muhasebe için ödeme listesi (kolon düzeni ayarlardaki şablona göre)."""
+    """Muhasebe için ödeme listesi (kolon düzeni ayarlardaki şablona göre).
+
+    Dışa aktarma, ekranın görüntüleme izniyle (`hakedis.gor`) aynı kapıdan
+    geçer (rol testi S2): hak ediş ekranını göremeyen rol bayi ödeme listesini
+    Excel olarak da alamaz. Şirket kapısı yönlendiricide (`MOBILITE_KAPISI`).
+    """
     donem_dogrula(period)
     dokumler = (
         await db.scalars(

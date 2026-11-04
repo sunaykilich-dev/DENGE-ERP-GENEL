@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Select, and_, exists, false, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, exists, false, func, not_, or_, select
 
 from app.models import (
     Account,
@@ -36,6 +36,8 @@ from app.models import (
     ServiceOrder,
     ServiceOrderAssignment,
     ServiceOrderSerial,
+    ServicePlan,
+    ServicePlanMember,
     ServiceTimeEntry,
 )
 from app.models.rbac import BIRIM_KODLARI
@@ -307,6 +309,9 @@ class ServisIsiGirdisi:
     equipment_id: int | None = None
     iliskili_is_id: int | None = None
     iliski_turu: str | None = None
+    # Geçiş/içe aktarma kaydı (rol testi B5): bildirim tarihi geriye sınırsız,
+    # SLA damgalanmaz (`sla_kaynak=GECIS`, sonuç ÖLÇÜLEMEDİ). Yetki API'de.
+    gecis_kaydi: bool = False
     # --- sistem açılışları (PB/atölye/kiralama) ---
     contract_item_id: int | None = None
     maintenance_period_id: int | None = None
@@ -404,7 +409,9 @@ async def olustur(
     if kural.tek_seri and len(seriler) != 1:
         raise ServisGirdiHatasi(f"'{TUR_ADLARI[girdi.tur]}' işinde tam bir seri olur")
     seri_sayisi_dogrula(girdi.tur, seriler)
-    _bildirim_dogrula(girdi.reported_at, clock, geriye_sinir=user is not None)
+    _bildirim_dogrula(
+        girdi.reported_at, clock, geriye_sinir=user is not None and not girdi.gecis_kaydi
+    )
     await _musteri_dogrula(db, girdi.customer_id, girdi.address_id, girdi.contact_id)
 
     onek = "PB" if girdi.tur == "PB" else "SRV"
@@ -433,6 +440,8 @@ async def olustur(
         maintenance_period_id=girdi.maintenance_period_id,
         coverage_status=girdi.coverage_status,
         coverage_snapshot=girdi.coverage_snapshot,
+        # GECIS: `sla.damgala` bu işi damgalamaz (hedef yok → ÖLÇÜLEMEDİ).
+        sla_kaynak="GECIS" if girdi.gecis_kaydi else None,
         reopen_count=0,
         created_by=user.id if user is not None else None,
         updated_by=user.id if user is not None else None,
@@ -1217,6 +1226,33 @@ async def mukerrer_adaylari(
     )
 
 
+def tayinsiz_is_kosulu() -> ColumnElement[bool]:
+    """ "Tayin edilmemiş iş" TEK tanımı (rol testi B1; liste, KPI, panel aynı).
+
+    Tayinli sayılan iş: aktif TEKNISYEN tayini VEYA aktif sorumlu (teknisyen
+    ya da şef) VEYA sahaya giden en az bir kişisi olan aktif plan. Yalnız
+    şefin sahaya gittiği planlı iş (Set Bariyer) böylece tayinli sayılır;
+    listede "TAYİN EDİLDİ" (PLANLANDI) görünen iş KPI'da "tayin edilmemiş"
+    sayılmaz. Sahaya gitmeyen, sorumlu olmayan şef tek başına tayin değildir.
+    """
+    tayinli = exists().where(
+        ServiceOrderAssignment.service_order_id == ServiceOrder.id,
+        ServiceOrderAssignment.removed_at.is_(None),
+        or_(
+            ServiceOrderAssignment.rol == "TEKNISYEN",
+            ServiceOrderAssignment.is_lead.is_(True),
+        ),
+    )
+    sahada_planli = exists().where(
+        ServicePlan.service_order_id == ServiceOrder.id,
+        ServicePlan.is_active.is_(True),
+        ServicePlan.is_deleted.is_(False),
+        ServicePlanMember.plan_id == ServicePlan.id,
+        ServicePlanMember.sahaya_gidiyor.is_(True),
+    )
+    return not_(or_(tayinli, sahada_planli))
+
+
 async def ayni_lokasyon_acik_isler(
     db: AsyncSession,
     user: User,
@@ -1345,13 +1381,7 @@ def liste_sorgusu(user: User, f: ListeFiltresi, clock: Clock) -> Select:
             )
         )
     if f.atanmamis:
-        stmt = stmt.where(
-            ~exists().where(
-                ServiceOrderAssignment.service_order_id == ServiceOrder.id,
-                ServiceOrderAssignment.rol == "TEKNISYEN",
-                ServiceOrderAssignment.removed_at.is_(None),
-            )
-        )
+        stmt = stmt.where(tayinsiz_is_kosulu())
     if f.bas is not None:
         stmt = stmt.where(ServiceOrder.created_at >= yerel_gun_araligi(f.bas)[0])
     if f.bit is not None:

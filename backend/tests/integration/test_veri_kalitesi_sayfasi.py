@@ -102,7 +102,8 @@ async def test_her_kontrol_sayisi_liste_toplamina_esit_ve_salt_okuma(
     kodlar = {k["kod"]: k for k in kontroller}
     assert {"tanimsiz_durum", "cozum_zamani_eksik", "seri_eksik", "mukerrer_unvan"} <= set(kodlar)
     assert kodlar["tanimsiz_durum"]["deger"] == 1  # HABERLESME satırı kapsam dışı
-    assert kodlar["seri_eksik"]["deger"] == 1
+    # ATOLYE + seri/ekipmansız tamamlanmış ARIZA (KARARLAR 2026-11-04 §6.10).
+    assert kodlar["seri_eksik"]["deger"] == 2
     assert kodlar["mukerrer_vkn"]["deger"] == 1
     assert kodlar["ekipman_seri_eksik"]["hedef"].startswith("/servis-ekipman")
     for kod, k in kodlar.items():

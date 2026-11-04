@@ -3,11 +3,13 @@
 **Kart ERP kaydına bağlanabilir ama zorunlu değil** (kullanıcı kararı,
 30 Eyl 2026). Bağlantı polimorfik; çözümlemesi `services/gorevler.py`'de.
 
-**Kapsam filtresi UYGULANMAZ** (kullanıcı kararı: "yetkisi olan herkes").
-Yani `KENDI_MUSTERILERI` kapsamındaki bir satış temsilcisi, başkasının
-müşterisine bağlı bir kartı da görür. Buna karşılık karttan o kayda GİTMEK
-serbest değil: kayıt uçlarının kendi kapsam kontrolü yerinde duruyor, tıklayan
-kişi yetkisi yoksa kaydı açamaz. Kartın başlığı görünür, kaydın içi görünmez.
+**Pano etkin şirkete aittir** (rol testi S1, KARARLAR 2026-11-04 §6.1):
+pano, kolon, etiket, kart ve yorum uçları yalnız panonun şirketi seçiliyken
+çalışır; başka şirketin panosu/kartı kimlikle istense de 404. Şirket içinde
+"yetkisi olan herkes" kuralı (kullanıcı kararı) sürer: kartın başlığı görünür.
+**Bağlı kayıt ise kapsamlıdır:** karta yalnız kullanıcının kendi ekranında
+görebildiği kayıt bağlanır (aksi 404) ve bağlantı etiketi (iş no, plaka,
+MSISDN ...) yalnız o kaydı görebilene döner (`services/gorevler.py`).
 
 **Sıralama tam sayı ve taşımada yeniden numaralanır.** Kesirli konum (Trello
 deseni) kayan noktada zamanla çözünürlük kaybediyor; kolon başına kart sayısı
@@ -33,7 +35,7 @@ from app.models import (
     User,
 )
 from app.models.gorev import ONCELIKLER
-from app.services import audit
+from app.services import audit, sirketler
 from app.services import gorevler as svc
 
 router = APIRouter(prefix="/api/gorevler", tags=["gorevler"])
@@ -184,18 +186,38 @@ class YorumIn(BaseModel):
 # --- Yardımcılar -------------------------------------------------------------
 
 
-async def _pano(db, board_id: int) -> Board:
+async def _pano(db, board_id: int, user: User) -> Board:
+    """Pano yok ya da etkin şirketin değil → 404 (varlığı sızdırılmaz)."""
     pano = await db.get(Board, board_id)
-    if pano is None:
+    if pano is None or not svc.pano_gorunur_mu(user, pano):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pano bulunamadı")
     return pano
 
 
-async def _kart(db, card_id: int) -> Card:
+async def _kart(db, card_id: int, user: User) -> Card:
     kart = await db.get(Card, card_id)
     if kart is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kart bulunamadı")
+    pano = await db.get(Board, kart.board_id)
+    if pano is None or not svc.pano_gorunur_mu(user, pano):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kart bulunamadı")
     return kart
+
+
+async def _kolon(db, column_id: int, user: User) -> BoardColumn:
+    kolon = await db.get(BoardColumn, column_id)
+    pano = await db.get(Board, kolon.board_id) if kolon is not None else None
+    if kolon is None or pano is None or not svc.pano_gorunur_mu(user, pano):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kolon bulunamadı")
+    return kolon
+
+
+async def _etiket(db, label_id: int, user: User) -> BoardLabel:
+    etiket = await db.get(BoardLabel, label_id)
+    pano = await db.get(Board, etiket.board_id) if etiket is not None else None
+    if etiket is None or pano is None or not svc.pano_gorunur_mu(user, pano):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Etiket bulunamadı")
+    return etiket
 
 
 def _baglantiyi_dogrula(entity: str | None, entity_id: int | None) -> None:
@@ -210,7 +232,19 @@ def _baglantiyi_dogrula(entity: str | None, entity_id: int | None) -> None:
         )
 
 
-async def _kartlari_zenginlestir(db, kartlar: list[Card]) -> list[KartOut]:
+async def _baglanti_kapsami(db, user: User, entity: str | None, entity_id: int | None) -> None:
+    """Bağlanacak kayıt kullanıcının görebileceği bir kayıt değilse 404.
+
+    Kayıt yok ile kapsam dışı aynı yanıtı alır: id sayarak başka şirketin ya
+    da mobilitenin kayıt numarasının varlığı öğrenilemesin (rol testi S1).
+    """
+    if entity is None or entity_id is None:
+        return
+    if not await svc.baglanti_erisimi_var_mi(db, user, entity, entity_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bağlanacak kayıt bulunamadı")
+
+
+async def _kartlari_zenginlestir(db, kartlar: list[Card], user: User) -> list[KartOut]:
     """Atanan adı, bağlantı etiketi ve yorum sayısını TOPLU çözer.
 
     Kart başına sorgu, elli kartlık bir panoda elli gidiş geliş demekti.
@@ -257,7 +291,7 @@ async def _kartlari_zenginlestir(db, kartlar: list[Card]) -> list[KartOut]:
         }
 
     ciftler = {(k.entity, k.entity_id) for k in kartlar if k.entity and k.entity_id}
-    baglantilar = await svc.baglanti_cozumle(db, ciftler) if ciftler else {}
+    baglantilar = await svc.baglanti_cozumle(db, ciftler, user) if ciftler else {}
 
     sayimlar = dict(
         (
@@ -378,10 +412,12 @@ async def kayit_tipleri(_: Okuyucu) -> list[dict[str, str]]:
 @router.get("/panolar", response_model=list[PanoOut])
 async def panolari_listele(
     db: DbDep,
-    _: Okuyucu,
+    user: Okuyucu,
     arsiv: Annotated[bool, Query(description="Arşivlenmiş panoları da getir")] = False,
 ) -> list[PanoOut]:
     sorgu = select(Board).order_by(Board.sira, Board.id)
+    if (kosul := svc.pano_sirket_kosulu(user)) is not None:
+        sorgu = sorgu.where(kosul)
     if not arsiv:
         sorgu = sorgu.where(Board.arsivlendi.is_(False))
     panolar = (await db.scalars(sorgu)).all()
@@ -403,11 +439,19 @@ async def pano_olustur(payload: PanoIn, request: Request, db: DbDep, user: Yazic
     # gönderebiliyordu; canlıda bir pano bu şekilde kolonsuz doğdu.
     if not payload.kolonlar:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pano en az bir kolonla açılmalı.")
+    # Pano etkin şirkete ait doğar (rol testi S1). Etkin şirketi olmayan
+    # kullanıcı (üyeliği yok) pano açamaz: açtığı pano hiçbir yerde görünmezdi.
+    sirket = sirketler.aktif_sirket(user)
+    if sirket is None and sirketler.etkin_birimler(user) is not None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Etkin şirket yok; önce şirket seçiciden şirket seçin."
+        )
     sonraki = (await db.scalar(select(func.coalesce(func.max(Board.sira), -1)))) + 1
     pano = Board(
         title=payload.title,
         description=payload.description,
         sira=sonraki,
+        sirket_kod=sirket,
         created_by=user.id,
     )
     db.add(pano)
@@ -433,7 +477,7 @@ async def pano_olustur(payload: PanoIn, request: Request, db: DbDep, user: Yazic
         "boards",
         "olustur",
         entity_id=pano.id,
-        new_value={"ad": pano.title, "kolon": len(payload.kolonlar)},
+        new_value={"ad": pano.title, "kolon": len(payload.kolonlar), "sirket": sirket},
         user_id=user.id,
         ip=client_ip(request),
     )
@@ -446,7 +490,7 @@ async def pano_olustur(payload: PanoIn, request: Request, db: DbDep, user: Yazic
 async def pano_guncelle(
     board_id: int, payload: PanoPatch, request: Request, db: DbDep, user: Yazici
 ) -> PanoOut:
-    pano = await _pano(db, board_id)
+    pano = await _pano(db, board_id, user)
     if payload.version is not None and payload.version != pano.version:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Bu kaydı siz görüntülerken başka biri değiştirdi."
@@ -481,7 +525,7 @@ async def pano_sil(board_id: int, request: Request, db: DbDep, user: Yazici) -> 
     Kartlı pano silmek, o işlerin geçmişini de siler. Bitmiş bir pano için
     doğru hareket arşivlemektir; arşiv listeden kaldırır, kaydı korur.
     """
-    pano = await _pano(db, board_id)
+    pano = await _pano(db, board_id, user)
     adet = await db.scalar(select(func.count()).select_from(Card).where(Card.board_id == board_id))
     if adet:
         raise HTTPException(
@@ -508,7 +552,7 @@ async def pano_sil(board_id: int, request: Request, db: DbDep, user: Yazici) -> 
     "/panolar/{board_id}/kolonlar", response_model=KolonOut, status_code=status.HTTP_201_CREATED
 )
 async def kolon_ekle(board_id: int, payload: KolonIn, db: DbDep, user: Yazici) -> KolonOut:
-    await _pano(db, board_id)
+    await _pano(db, board_id, user)
     sonraki = (
         await db.scalar(
             select(func.coalesce(func.max(BoardColumn.sira), -1)).where(
@@ -531,9 +575,7 @@ async def kolon_ekle(board_id: int, payload: KolonIn, db: DbDep, user: Yazici) -
 
 @router.patch("/kolonlar/{column_id}", response_model=KolonOut)
 async def kolon_guncelle(column_id: int, payload: KolonPatch, db: DbDep, user: Yazici) -> KolonOut:
-    kolon = await db.get(BoardColumn, column_id)
-    if kolon is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kolon bulunamadı")
+    kolon = await _kolon(db, column_id, user)
     if payload.title is not None:
         kolon.title = payload.title
     if payload.bitis_mi is not None:
@@ -549,9 +591,7 @@ async def kolon_guncelle(column_id: int, payload: KolonPatch, db: DbDep, user: Y
 
 @router.delete("/kolonlar/{column_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def kolon_sil(column_id: int, db: DbDep, user: Yazici) -> None:
-    kolon = await db.get(BoardColumn, column_id)
-    if kolon is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kolon bulunamadı")
+    kolon = await _kolon(db, column_id, user)
     adet = await db.scalar(
         select(func.count()).select_from(Card).where(Card.column_id == column_id)
     )
@@ -571,7 +611,7 @@ async def kolon_sil(column_id: int, db: DbDep, user: Yazici) -> None:
     "/panolar/{board_id}/etiketler", response_model=EtiketOut, status_code=status.HTTP_201_CREATED
 )
 async def etiket_ekle(board_id: int, payload: EtiketIn, db: DbDep, user: Yazici) -> EtiketOut:
-    await _pano(db, board_id)
+    await _pano(db, board_id, user)
     sonraki = (
         await db.scalar(
             select(func.coalesce(func.max(BoardLabel.sira), -1)).where(
@@ -588,9 +628,7 @@ async def etiket_ekle(board_id: int, payload: EtiketIn, db: DbDep, user: Yazici)
 
 @router.patch("/etiketler/{label_id}", response_model=EtiketOut)
 async def etiket_guncelle(label_id: int, payload: EtiketIn, db: DbDep, user: Yazici) -> EtiketOut:
-    etiket = await db.get(BoardLabel, label_id)
-    if etiket is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Etiket bulunamadı")
+    etiket = await _etiket(db, label_id, user)
     etiket.ad = payload.ad or None
     etiket.renk = payload.renk
     await db.commit()
@@ -601,9 +639,7 @@ async def etiket_guncelle(label_id: int, payload: EtiketIn, db: DbDep, user: Yaz
 @router.delete("/etiketler/{label_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def etiket_sil(label_id: int, db: DbDep, user: Yazici) -> None:
     """Etiket silinince kartlardan da düşer (CASCADE) — kart silinmez."""
-    etiket = await db.get(BoardLabel, label_id)
-    if etiket is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Etiket bulunamadı")
+    etiket = await _etiket(db, label_id, user)
     await db.delete(etiket)
     await db.commit()
 
@@ -612,8 +648,8 @@ async def etiket_sil(label_id: int, db: DbDep, user: Yazici) -> None:
 
 
 @router.get("/panolar/{board_id}/kartlar", response_model=list[KartOut])
-async def kartlari_listele(board_id: int, db: DbDep, _: Okuyucu) -> list[KartOut]:
-    await _pano(db, board_id)
+async def kartlari_listele(board_id: int, db: DbDep, user: Okuyucu) -> list[KartOut]:
+    await _pano(db, board_id, user)
     kartlar = list(
         (
             await db.scalars(
@@ -621,23 +657,27 @@ async def kartlari_listele(board_id: int, db: DbDep, _: Okuyucu) -> list[KartOut
             )
         ).all()
     )
-    return await _kartlari_zenginlestir(db, kartlar)
+    return await _kartlari_zenginlestir(db, kartlar, user)
 
 
 @router.get("/kayit/{entity}/{entity_id}", response_model=list[KartOut])
-async def kaydin_kartlari(entity: str, entity_id: int, db: DbDep, _: Okuyucu) -> list[KartOut]:
-    """Bir ERP kaydına bağlı kartlar — kayıt ekranındaki "Görevler" paneli."""
+async def kaydin_kartlari(entity: str, entity_id: int, db: DbDep, user: Okuyucu) -> list[KartOut]:
+    """Bir ERP kaydına bağlı kartlar — kayıt ekranındaki "Görevler" paneli.
+
+    Kaydı göremeyen 404 alır; kartlar yalnız etkin şirketin panolarından.
+    """
     _baglantiyi_dogrula(entity, entity_id)
-    kartlar = list(
-        (
-            await db.scalars(
-                select(Card)
-                .where(Card.entity == entity, Card.entity_id == entity_id)
-                .order_by(Card.created_at.desc())
-            )
-        ).all()
+    await _baglanti_kapsami(db, user, entity, entity_id)
+    sorgu = (
+        select(Card)
+        .join(Board, Board.id == Card.board_id)
+        .where(Card.entity == entity, Card.entity_id == entity_id)
+        .order_by(Card.created_at.desc())
     )
-    return await _kartlari_zenginlestir(db, kartlar)
+    if (kosul := svc.pano_sirket_kosulu(user)) is not None:
+        sorgu = sorgu.where(kosul)
+    kartlar = list((await db.scalars(sorgu)).all())
+    return await _kartlari_zenginlestir(db, kartlar, user)
 
 
 @router.post(
@@ -646,13 +686,14 @@ async def kaydin_kartlari(entity: str, entity_id: int, db: DbDep, _: Okuyucu) ->
 async def kart_olustur(
     board_id: int, payload: KartIn, request: Request, db: DbDep, user: Yazici
 ) -> KartOut:
-    await _pano(db, board_id)
+    await _pano(db, board_id, user)
     kolon = await db.get(BoardColumn, payload.column_id)
     if kolon is None or kolon.board_id != board_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kolon bu panoya ait değil")
     if payload.oncelik not in ONCELIKLER:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Geçersiz öncelik: {payload.oncelik}")
     _baglantiyi_dogrula(payload.entity, payload.entity_id)
+    await _baglanti_kapsami(db, user, payload.entity, payload.entity_id)
 
     sonraki = (
         await db.scalar(
@@ -687,14 +728,14 @@ async def kart_olustur(
     )
     await db.commit()
     await db.refresh(kart)
-    return (await _kartlari_zenginlestir(db, [kart]))[0]
+    return (await _kartlari_zenginlestir(db, [kart], user))[0]
 
 
 @router.patch("/kartlar/{card_id}", response_model=KartOut)
 async def kart_guncelle(
     card_id: int, payload: KartPatch, request: Request, db: DbDep, user: Yazici
 ) -> KartOut:
-    kart = await _kart(db, card_id)
+    kart = await _kart(db, card_id, user)
     if payload.version is not None and payload.version != kart.version:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Bu kaydı siz görüntülerken başka biri değiştirdi."
@@ -706,6 +747,10 @@ async def kart_guncelle(
     yeni_entity = payload.entity if "entity" in alanlar else kart.entity
     yeni_entity_id = payload.entity_id if "entity_id" in alanlar else kart.entity_id
     _baglantiyi_dogrula(yeni_entity, yeni_entity_id)
+    # Bağlantı DEĞİŞİYORSA yeni kayıt da kapsamdan geçer; değişmeyen eski
+    # bağlantı başlık/üye düzenlemesini engellemez (etiket zaten kapsamlı).
+    if (yeni_entity, yeni_entity_id) != (kart.entity, kart.entity_id):
+        await _baglanti_kapsami(db, user, yeni_entity, yeni_entity_id)
 
     eski = {
         "baslik": kart.title,
@@ -746,7 +791,7 @@ async def kart_guncelle(
     )
     await db.commit()
     await db.refresh(kart)
-    return (await _kartlari_zenginlestir(db, [kart]))[0]
+    return (await _kartlari_zenginlestir(db, [kart], user))[0]
 
 
 @router.post("/kartlar/{card_id}/tasi", response_model=KartOut)
@@ -759,7 +804,7 @@ async def kart_tasi(
     sürüm çakışmasıyla reddetmek panoyu kullanılmaz yapardı. Çakışan iki
     taşımada son yazan kazanır — kaybolan şey yalnız sıra.
     """
-    kart = await _kart(db, card_id)
+    kart = await _kart(db, card_id, user)
     hedef = await db.get(BoardColumn, payload.column_id)
     if hedef is None or hedef.board_id != kart.board_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kolon bu panoya ait değil")
@@ -798,12 +843,12 @@ async def kart_tasi(
 
     await db.commit()
     await db.refresh(kart)
-    return (await _kartlari_zenginlestir(db, [kart]))[0]
+    return (await _kartlari_zenginlestir(db, [kart], user))[0]
 
 
 @router.delete("/kartlar/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def kart_sil(card_id: int, request: Request, db: DbDep, user: Yazici) -> None:
-    kart = await _kart(db, card_id)
+    kart = await _kart(db, card_id, user)
     kolon = kart.column_id
     await audit.log(
         db,
@@ -834,8 +879,8 @@ class YorumOut(BaseModel):
 
 
 @router.get("/kartlar/{card_id}/yorumlar", response_model=list[YorumOut])
-async def yorumlari_listele(card_id: int, db: DbDep, _: Okuyucu) -> list[YorumOut]:
-    await _kart(db, card_id)
+async def yorumlari_listele(card_id: int, db: DbDep, user: Okuyucu) -> list[YorumOut]:
+    await _kart(db, card_id, user)
     yorumlar = (
         await db.scalars(
             select(CardComment)
@@ -864,7 +909,7 @@ async def yorumlari_listele(card_id: int, db: DbDep, _: Okuyucu) -> list[YorumOu
     "/kartlar/{card_id}/yorumlar", response_model=YorumOut, status_code=status.HTTP_201_CREATED
 )
 async def yorum_ekle(card_id: int, payload: YorumIn, db: DbDep, user: Yazici) -> YorumOut:
-    await _kart(db, card_id)
+    await _kart(db, card_id, user)
     yorum = CardComment(card_id=card_id, user_id=user.id, metin=payload.metin)
     db.add(yorum)
     await db.commit()

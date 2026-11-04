@@ -45,6 +45,7 @@ from sqlalchemy import ColumnElement, Select, and_, exists, false, not_, or_, se
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    KullaniciSirketi,
     ServiceOrder,
     ServiceOrderAssignment,
     ServicePlan,
@@ -285,19 +286,31 @@ async def is_erisimi_yok_mu(db: AsyncSession, user: User, so: ServiceOrder) -> b
 def sirket_personel_kosulu(user: User, user_id_sutunu) -> ColumnElement[bool] | None:
     """Personelin etkin şirkete göre koşulu; None = süzgeç yok.
 
-    Etkin şirketin bir biriminde üyeliği olan kişi VEYA hiç birimi olmayan
-    kişi (birimsiz personel eskisi gibi yalnız TUMU'ya görünür; şirket
-    birimden türediği için birimsiz kişinin şirketi yoktur → ortak).
+    Etkin şirketin bir biriminde üyeliği olan kişi VEYA hiç birimi olmayan ve
+    etkin şirketin ÜYESİ olan kişi (`kullanici_sirketleri`). Birimsiz kişi
+    eskisi gibi yalnız TUMU'ya görünür; ama artık yalnız üyesi olduğu şirkette
+    (rol testi S3/B19): yalnız MOBİLİTE üyesi depo kullanıcısı TELEKOM'un
+    personel listesinde görünmez. ADMIN üyelik satırı taşıdığı şirketlerde
+    görünür (seed/göç bütün şirketleri yazar).
     """
     sirket = _sirket_birimleri(user)
     if sirket is None:
         return None
+    aktif = sirketler.aktif_sirket(user)
     birimsiz = not_(exists().where(UserUnit.user_id == user_id_sutunu))
+    if aktif is None:
+        return false()
+    birimsiz_uye = and_(
+        birimsiz,
+        exists().where(
+            KullaniciSirketi.user_id == user_id_sutunu, KullaniciSirketi.sirket_kod == aktif
+        ),
+    )
     if not sirket:
-        return birimsiz
+        return birimsiz_uye
     return or_(
         exists().where(UserUnit.user_id == user_id_sutunu, UserUnit.birim.in_(sorted(sirket))),
-        birimsiz,
+        birimsiz_uye,
     )
 
 

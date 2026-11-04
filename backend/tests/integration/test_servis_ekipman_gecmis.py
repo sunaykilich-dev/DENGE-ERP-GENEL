@@ -213,11 +213,12 @@ async def test_hata_atilan_yazmada_denetim_yok(birimli_kullanici_ac, giris, db, 
     assert sonra == once
 
 
-async def test_gorev_baglantisi_ve_veri_bul(db, ekipman_ac) -> None:
+async def test_gorev_baglantisi_ve_veri_bul(db, seeded, kullanici_ac, ekipman_ac) -> None:
     from app.services import gorevler
 
     e = await ekipman_ac(seri="GRV-1", contact_name_raw="Zeynep Yılmaz")
-    etiket = await gorevler.baglanti_cozumle(db, {("ekipman", e.id)})
+    okuyan = await kullanici_ac("gorev_okuyan", "ADMIN")
+    etiket = await gorevler.baglanti_cozumle(db, {("ekipman", e.id)}, okuyan)
     assert etiket[("ekipman", e.id)]["etiket"] == f"#{e.id}"
     assert etiket[("ekipman", e.id)]["yol"] == f"/servis-ekipman/{e.id}"
 

@@ -249,8 +249,16 @@ async def ariza_orani(
 
 
 @router.get("/mrr/{donem}")
-async def mrr_hareketi(donem: str, db: DbDep, user: Okuyucu) -> dict:
-    """MRR / ARR / churn analizi."""
+async def mrr_hareketi(
+    donem: str,
+    db: DbDep,
+    user: Annotated[User, Depends(require_permission("rapor.gor", "abonelik.gor"))],
+) -> dict:
+    """MRR / ARR / churn analizi.
+
+    Abonelik gelir verisidir: `abonelik.gor` da gerekir (rol testi S2; abonelik
+    ekranının `/abonelikler/mrr` ucuyla aynı görüntüleme izni).
+    """
     try:
         abonelik_svc.donem_araligi(donem)
     except (ValueError, IndexError) as exc:

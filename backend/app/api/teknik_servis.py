@@ -33,7 +33,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, select
 
-from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala
+from app.api.deps import (
+    ClockDep,
+    DbDep,
+    client_ip,
+    require_any_permission,
+    require_permission,
+    sayfala,
+)
 from app.api.search import AramaSonucu, arayici_kaydet
 from app.models import (
     ServiceApproval,
@@ -73,6 +80,12 @@ router = APIRouter(prefix="/api/teknik-servis", tags=["teknik-servis"])
 
 Okuyucu = Annotated[User, Depends(require_permission("servis.gor"))]
 Yazici = Annotated[User, Depends(require_permission("servis.yaz"))]
+# İş açılışı: `servis.yaz` (her tür) ya da yalnız KURULUM açan satış destek
+# (`servis.kurulum_ac`, rol testi B3); tür kuralı `_acilis_on_kontrol`'de.
+IsAcici = Annotated[User, Depends(require_any_permission("servis.yaz", "servis.kurulum_ac"))]
+# Sözlük (form verileri): servis ekranları ve Servis Maliyet raporu (Finans,
+# `maliyet.gor`; rol testi 2/B-07) — yalnız katalog, kayıt yok.
+SozlukOkuyucu = Annotated[User, Depends(require_any_permission("servis.gor", "maliyet.gor"))]
 Tamamlayici = Annotated[User, Depends(require_permission("servis.tamamla"))]
 Kapatici = Annotated[User, Depends(require_permission("servis.kapat"))]
 Planlayici = Annotated[User, Depends(require_permission("servis.planla"))]
@@ -111,6 +124,10 @@ class IsAcIn(BaseModel):
     iliski_turu: str | None = Field(default=None, max_length=20)
     # Açık işte aynı seri varsa 409; kullanıcı uyarıyı görüp geçerse true.
     mukerrer_gec: bool = False
+    # Geçiş/içe aktarma kaydı (rol testi B5; `servis.gecis_kaydi`): asıl
+    # bildirim tarihi 7 günden eski olabilir, SLA ölçülmez (`sla_kaynak=GECIS`).
+    gecis_kaydi: bool = False
+    gecis_gerekcesi: str | None = Field(default=None, max_length=500)
 
     model_config = {
         "json_schema_extra": {
@@ -631,7 +648,35 @@ def _girdi(payload: IsAcIn) -> is_emirleri.ServisIsiGirdisi:
         seriler=list(payload.seriler),
         iliskili_is_id=payload.iliskili_is_id,
         iliski_turu=payload.iliski_turu,
+        gecis_kaydi=payload.gecis_kaydi,
     )
+
+
+GECIS_GEREKCE_ALT = 10
+
+
+def _acilis_yetkisi(payload: IsAcIn, user: User) -> None:
+    """Tür ve geçiş kaydı yetkisi (rol testi B3/B5).
+
+    `servis.yaz` olmayan (yalnız `servis.kurulum_ac`) kullanıcı yalnız KURULUM
+    açar. Geçiş kaydı `servis.gecis_kaydi` ve gerekçe ister: SLA ölçülmediği
+    için gerekçesiz/izinsiz kullanılırsa SLA'dan kaçış yolu olurdu.
+    """
+    if not user.has("servis.yaz") and payload.tur != "KURULUM":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Yalnız Kurulum işi açabilirsiniz (servis.kurulum_ac)",
+        )
+    if payload.gecis_kaydi:
+        if not user.has("servis.gecis_kaydi"):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Geçiş kaydı için yetkiniz yok (servis.gecis_kaydi)"
+            )
+        if len((payload.gecis_gerekcesi or "").strip()) < GECIS_GEREKCE_ALT:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Geçiş kaydında gerekçe zorunlu (en az {GECIS_GEREKCE_ALT} karakter)",
+            )
 
 
 async def _talep_bilgisi_dogrula(
@@ -667,6 +712,7 @@ async def _acilis_on_kontrol(db, payload: IsAcIn, user: User) -> list[dict[str, 
     Kapsam: hedef birim kullanıcının birimlerinde olmalı (TUMU her birime
     açar) → aksi 404; müşteri temsilcisinin kapsamı dışındaki hesap 404.
     """
+    _acilis_yetkisi(payload, user)
     if payload.birim not in BIRIM_KODLARI:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {payload.birim}")
     # Şirket ayrımı (KARARLAR 2026-11-04 §1): birim etkin şirketin değilse 403 +
@@ -726,10 +772,22 @@ async def _acilis_on_kontrol(db, payload: IsAcIn, user: User) -> list[dict[str, 
     uyarilar = []
     for m in mukerrer:
         uyarilar.append({"kod": "MUKERRER_GECILDI", "so_no": m["so_no"], "id": m["id"]})
-    for s in await is_emirleri.ayni_lokasyon_acik_isler(
+    # Aynı lokasyondaki açık işler TEK uyarıda toplanır (rol testi B9): 1 cihaz
+    # = 1 iş kuralıyla aynı tesiste 6 bakım açılırken 6. işte 5 ayrı uyarı
+    # çıkıyordu. `so_no`/`id` ilk iş (geri uyum); hepsi `isler`'de.
+    ayni = await is_emirleri.ayni_lokasyon_acik_isler(
         db, user, payload.customer_id, payload.address_id
-    ):
-        uyarilar.append({"kod": "AYNI_LOKASYON", "so_no": s["so_no"], "id": s["id"]})
+    )
+    if ayni:
+        uyarilar.append(
+            {
+                "kod": "AYNI_LOKASYON",
+                "so_no": ayni[0]["so_no"],
+                "id": ayni[0]["id"],
+                "adet": len(ayni),
+                "isler": [{"id": a["id"], "so_no": a["so_no"]} for a in ayni],
+            }
+        )
     return uyarilar
 
 
@@ -750,7 +808,7 @@ async def _acilis_denetimi(db, so: ServiceOrder, user: User, request: Request, e
 
 
 @router.get("/isler/form-verileri", response_model=None)
-async def form_verileri(db: DbDep, user: Okuyucu) -> dict[str, Any]:
+async def form_verileri(db: DbDep, user: SozlukOkuyucu) -> dict[str, Any]:
     """Açılış/filtre formu sözlükleri (tek kaynak: model tuple'ları ve kataloglar)."""
     # TUMU: etkin şirketin bütün birimleri; diğerleri kendi birimleri (kesişim).
     birimler = kapsam.gorunur_birimler(user)
@@ -1082,7 +1140,7 @@ async def disa_aktar(
 
 @router.post("/isler", status_code=status.HTTP_201_CREATED, response_model=None)
 async def olustur(
-    payload: IsAcIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
+    payload: IsAcIn, request: Request, db: DbDep, clock: ClockDep, user: IsAcici
 ) -> dict[str, Any]:
     """Servis işi açar. Mükerrer seri 409 (`mukerrer_gec` ile geçilir);
     aynı müşteri+lokasyonda açık iş yalnız `uyarilar`'da döner."""
@@ -1106,6 +1164,17 @@ async def olustur(
             )
     except _HATALAR as exc:
         raise _hata(exc) from exc
+    if payload.gecis_kaydi:
+        await gecmis.olay_yaz(
+            db,
+            so,
+            "NOT",
+            "Geçiş/içe aktarma kaydı: bildirim tarihi kaynaktan korundu, SLA ölçülmez. "
+            f"Gerekçe: {(payload.gecis_gerekcesi or '').strip()}",
+            user=user,
+            clock=clock,
+            veri={"gecis_kaydi": True},
+        )
     await _acilis_denetimi(db, so, user, request, "olustur")
     await db.commit()
     cikti = await _detay(db, so, user, clock)
@@ -1142,12 +1211,20 @@ async def uzaktan_cozuldu(
     return cikti
 
 
-EkipmandanAcici = Annotated[User, Depends(require_permission("servis.yaz", "ekipman.gor"))]
+EkipmandanAcici = Annotated[
+    User, Depends(require_any_permission("servis.yaz", "servis.kurulum_ac"))
+]
+EkipmanOkuyucu = Annotated[User, Depends(require_permission("ekipman.gor"))]
 
 
 @router.post("/isler/ekipmandan", status_code=status.HTTP_201_CREATED, response_model=None)
 async def ekipmandan_ac(
-    payload: EkipmandanIsIn, request: Request, db: DbDep, clock: ClockDep, user: EkipmandanAcici
+    payload: EkipmandanIsIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: EkipmandanAcici,
+    _ekipman: EkipmanOkuyucu,
 ) -> dict[str, Any]:
     """Kütükten seçili ekipmanlara toplu servis işi (tek transaction).
 
@@ -1172,6 +1249,11 @@ async def ekipmandan_ac(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"'{is_emirleri.TUR_ADLARI[payload.tur]}' işi bu ekrandan açılamaz",
+        )
+    if not user.has("servis.yaz") and payload.tur != "KURULUM":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Yalnız Kurulum işi açabilirsiniz (servis.kurulum_ac)",
         )
     if payload.talep_kanali not in TALEP_KANALLARI or payload.talep_kanali == "BAKIM_OTOMATIK":
         raise HTTPException(

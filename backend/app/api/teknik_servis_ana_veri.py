@@ -5,8 +5,10 @@ Servis personeli müşteriyi canlı Hesaplar ekranından değil buradan seçer:
 - **Hafif arama** (`servis.gor`): yalnız ad + il + doğrulama rozeti. VKN,
   IBAN, telefon, e-posta ve irtibat DÖNMEZ — teknisyende `hesap.gor` yok
   (KD-09) ve olmamalı; müşteri bilgisi ona iş detayında gömülü gelir.
-- **Hızlı ekleme** (`servis.yaz` + `hesap.kart_yaz`|`hesap.yaz`): yalnız ad +
-  il (+ tesis); kayıt doğrulanmamış doğar, mali alanlar hiç açılmaz (KD-07).
+- **Hızlı ekleme** (`hesap.kart_yaz`|`hesap.yaz`): yalnız ad + il (+ tesis);
+  kayıt doğrulanmamış doğar, mali alanlar hiç açılmaz (KD-07). Eskiden ayrıca
+  `servis.yaz` isteniyordu; satış destekte (`hesap.kart_yaz` var, `servis.yaz`
+  yok) izin hiçbir uçta işe yaramıyordu (rol testi B2, KARARLAR 2026-11-04 §6.5).
   G10.2 (KARARLAR 2026-10-28): müşteri KARTINI yalnız Müşteri İlişkileri /
   satış destek / muhasebe / yöneticiler açar; eskiden kapı `lokasyon.yaz`
   idi ve bütün TS saha/operasyon rollerinde vardı. TS operasyon müşteriyi
@@ -44,7 +46,6 @@ from app.services.teknik_servis.ana_veri import AnaVeriHatasi
 router = APIRouter(prefix="/api/teknik-servis/ana-veri", tags=["teknik-servis-ana-veri"])
 
 Arayici = Annotated[User, Depends(require_permission("servis.gor"))]
-HizliEkleyici = Annotated[User, Depends(require_permission("servis.yaz"))]
 # Müşteri kartı açma/düzeltme (G10.2): TS'ye özel `hesap.kart_yaz` ya da
 # mobilite Hesaplar ekranının `hesap.yaz`'ı — biri yeter.
 KartYazici = Annotated[User, Depends(require_any_permission("hesap.kart_yaz", "hesap.yaz"))]
@@ -147,8 +148,7 @@ async def hizli_musteri(
     request: Request,
     db: DbDep,
     clock: ClockDep,
-    user: HizliEkleyici,
-    _kart: KartYazici,
+    user: KartYazici,
 ) -> HizliMusteriOut:
     """Servis ekranından müşteri (+ tesis) açar; benzer kayıt varsa 409 + adaylar."""
     try:

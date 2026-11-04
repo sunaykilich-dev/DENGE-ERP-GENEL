@@ -254,9 +254,10 @@ def test_musteri_karti_yalniz_yetkili_rollerde_g10_2():
         "SERVIS_YONETICI",
         "SATIS_DESTEK",
         "FINANS_YONETICI",
+        # KARARLAR 2026-11-04 §6.5: operasyon hızlı kart açar (doğrulanmamış doğar).
+        "SERVIS_OPERASYON",
     }
     for rol in (
-        "SERVIS_OPERASYON",
         "SERVIS_TEKNISYEN",
         "SERVIS_SEF",
         "ATOLYE",

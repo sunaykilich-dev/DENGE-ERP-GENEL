@@ -54,6 +54,11 @@ _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 def _hata_yaniti(exc: Exception) -> JSONResponse:
     if isinstance(exc, cakisma.PlanCakismasi):
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=exc.govde())
+    if isinstance(exc, planlama.GecmisTarihHatasi):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(exc), "kod": "GECMIS_TARIH", "is_nolari": exc.is_nolari},
+        )
     if isinstance(exc, planlama.PlanlamaHatasi):
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
@@ -112,8 +117,12 @@ def _tarih(ham: str | None, alan: str) -> date | None:
 
 
 class EkipIn(BaseModel):
-    """Ekip: şefler (sorumlu; yalnız `sahaya_giden_sefler` sahaya gider ve
-    çakışmaya girer), teknisyenler (her zaman sahada), tek sorumlu teknisyen."""
+    """Ekip: şefler (yalnız `sahaya_giden_sefler` sahaya gider ve çakışmaya
+    girer), teknisyenler (her zaman sahada), tek sorumlu.
+
+    Sorumlu ekipteki bir teknisyen ya da şef olur (rol testi B1). Verilmezse
+    ilk teknisyen; teknisyen yoksa sahaya giden ilk şef (Set Bariyer: şef tek
+    başına sahada → iş tayinli ve sorumlulu görünür)."""
 
     sef_idler: list[int] = Field(default_factory=list, max_length=5)
     sahaya_giden_sefler: list[int] = Field(default_factory=list, max_length=5)
@@ -124,11 +133,19 @@ class EkipIn(BaseModel):
         sorumlu = self.sorumlu_id
         if sorumlu is None and self.teknisyen_idler:
             sorumlu = self.teknisyen_idler[0]
-        if sorumlu is not None and sorumlu not in self.teknisyen_idler:
+        if sorumlu is None:
+            sorumlu = next((u for u in self.sahaya_giden_sefler if u in self.sef_idler), None)
+        if (
+            sorumlu is not None
+            and sorumlu not in self.teknisyen_idler
+            and sorumlu not in self.sef_idler
+        ):
             raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "Sorumlu, ekipteki bir teknisyen olmalı"
+                status.HTTP_400_BAD_REQUEST, "Sorumlu, ekipteki bir teknisyen ya da şef olmalı"
             )
-        return [AtamaSatiri(user_id=u, rol="SEF") for u in self.sef_idler] + [
+        return [
+            AtamaSatiri(user_id=u, rol="SEF", is_lead=(u == sorumlu)) for u in self.sef_idler
+        ] + [
             AtamaSatiri(user_id=u, rol="TEKNISYEN", is_lead=(u == sorumlu))
             for u in self.teknisyen_idler
         ]
@@ -150,6 +167,8 @@ class PlanIn(BaseModel):
     degisim_nedeni: str | None = Field(default=None, max_length=24)
     degisim_notu: str | None = Field(default=None, max_length=500)
     cakisma_gerekcesi: str | None = Field(default=None, max_length=500)
+    # Geçmiş tarihe plan gerekçesi (rol testi B6): yoksa 409 `GECMIS_TARIH`.
+    gecmis_tarih_gerekcesi: str | None = Field(default=None, max_length=500)
     # Tekli planda istemcinin gördüğü aktif plan (iyimser kilit); yoksa null.
     beklenen_aktif_plan_id: int | None = None
 
@@ -170,6 +189,7 @@ class PlanIn(BaseModel):
             change_note=self.degisim_notu,
             conflict_override_note=self.cakisma_gerekcesi or None,
             beklenen_aktif_plan_id=self.beklenen_aktif_plan_id,
+            gecmis_tarih_gerekcesi=self.gecmis_tarih_gerekcesi or None,
         )
 
 
@@ -455,7 +475,19 @@ async def takvim_excel(
 
 @router.post("/kontrol", response_model=None)
 async def kontrol(payload: KontrolIn, db: DbDep, user: Planlayici) -> Any:
-    """Kayıt yapmadan çakışma önizlemesi (yazma uçlarıyla aynı motor)."""
+    """Kayıt yapmadan çakışma önizlemesi (yazma uçlarıyla aynı motor).
+
+    Kişi ve araç planlayıcının kapsamında olmalı (rol testi B3): başka
+    şirketin (ya da birimin) personelinin/aracının doluluk takvimi kimlik
+    sayarak okunamasın. Kapsam dışı ya da olmayan kaynak → 404.
+    """
+    for kisi_id in dict.fromkeys(payload.kisi_idler):
+        if await kapsam.personel_disinda_mi(db, user, kisi_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Personel bulunamadı (#{kisi_id})")
+    if payload.arac_id is not None:
+        arac = await db.get(ServiceVehicle, payload.arac_id)
+        if arac is None or arac.is_deleted or kapsam.birim_disinda_mi(user, arac.birim):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis aracı bulunamadı")
     bas, bit = planlama.saat_araligi(payload.plan_tarihi, payload.baslangic_saati, payload.sure_dk)
     bulunan = await cakisma.cakismalari_bul(
         db,

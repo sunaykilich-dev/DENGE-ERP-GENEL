@@ -75,14 +75,11 @@ class TestHizliEkleme:
         assert tesis.kind == "TESIS" and tesis.line is None and tesis.account_id == hesap.id
         assert await _denetim(db, "hesap.hizli_olustur")
 
-    @pytest.mark.parametrize(
-        "rol", ["SERVIS_TEKNISYEN", "SERVIS_OPERASYON", "SERVIS_SEF", "ATOLYE"]
-    )
-    async def test_ts_saha_ve_operasyon_rolleri_hizli_ekleyemez(
-        self, client, kullanici_ac, db, rol
-    ):
+    @pytest.mark.parametrize("rol", ["SERVIS_TEKNISYEN", "SERVIS_SEF", "ATOLYE"])
+    async def test_ts_saha_rolleri_hizli_ekleyemez(self, client, kullanici_ac, db, rol):
         """G10.2 (KARARLAR 2026-10-28): müşteri kartını yalnız Mİ / satış destek /
-        muhasebe / yöneticiler açar. `hesap.kart_yaz` ve `hesap.yaz` yok → 403
+        muhasebe / yöneticiler açar; operasyon KARARLAR 2026-11-04 §6.5 ile
+        eklendi (hızlı kart doğrulanmamış doğar). `hesap.kart_yaz` ve `hesap.yaz` yok → 403
         (form "Hızlı ekle"yi de göstermez), kayıt AÇILMAZ."""
         await _giris(client, kullanici_ac, "tskisi", rol)
         r = await client.post(f"{ANA}/hizli-musteri", json={"unvan": "Yeni Firma", "il": "Ankara"})
@@ -91,13 +88,8 @@ class TestHizliEkleme:
 
     async def test_hesap_yazan_mobilite_kullanicisi_de_kart_acar(self, client, kullanici_ac, db):
         """`hesap.yaz` (Hesaplar ekranının kart yetkisi) TS kapısını da açar;
-        servis işi açmak için yine `servis.yaz` gerekir."""
-        satis = await _giris(client, kullanici_ac, "satismud", "SATIS_MUDURU")
-        r = await client.post(
-            f"{ANA}/hizli-musteri", json={"unvan": "Satış Firması", "il": "Ankara"}
-        )
-        assert r.status_code == 403  # servis.yaz yok
-        await _izin_ver(db, satis, "servis.yaz")
+        `servis.yaz` artık gerekmez (KARARLAR 2026-11-04 §6.5, rol testi B2)."""
+        await _giris(client, kullanici_ac, "satismud", "SATIS_MUDURU")
         r = await client.post(
             f"{ANA}/hizli-musteri", json={"unvan": "Satış Firması", "il": "Ankara"}
         )
@@ -349,7 +341,7 @@ class TestServisMusteriDuzenleme:
         }
         assert await _denetim(db, "servis.musteri.guncelle")
 
-    @pytest.mark.parametrize("rol", ["SERVIS_TEKNISYEN", "SERVIS_OPERASYON", "SERVIS_SEF"])
+    @pytest.mark.parametrize("rol", ["SERVIS_TEKNISYEN", "SERVIS_SEF"])
     async def test_ts_rolleri_kart_duzeltemez_403(self, client, kullanici_ac, db, rol):
         """G10.2: kart künyesi düzeltmesi de müşteri kartı değişikliğidir."""
         h = await _hesap(db, "TEKNİSYEN DÜZENLEYEMEZ")

@@ -299,12 +299,17 @@ class TestAyarSinirlari:
 # --- Görev panosu ----------------------------------------------------------------------
 
 
-async def test_gorev_karti_servis_kayitlarina_baglanir(db, servis_isi_ac, ekipman_ac, sozlesme_ac):
+async def test_gorev_karti_servis_kayitlarina_baglanir(
+    db, seeded, kullanici_ac, servis_isi_ac, ekipman_ac, sozlesme_ac
+):
     so = await servis_isi_ac()
     ekipman = await ekipman_ac(seri="GIZLI-SERI")
     sozlesme = await sozlesme_ac()
+    okuyan = await kullanici_ac("gorev_okuyan", "ADMIN")
     sonuc = await gorev_svc.baglanti_cozumle(
-        db, {("servis_isi", so.id), ("ekipman", ekipman.id), ("bakim_sozlesme", sozlesme.id)}
+        db,
+        {("servis_isi", so.id), ("ekipman", ekipman.id), ("bakim_sozlesme", sozlesme.id)},
+        okuyan,
     )
     assert sonuc[("servis_isi", so.id)] == {
         "ad": "Servis İşi",

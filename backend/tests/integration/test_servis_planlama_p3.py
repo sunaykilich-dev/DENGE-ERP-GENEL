@@ -40,6 +40,8 @@ def _blok(kisi_id, bas="2026-01-15T09:00:00+03:00", bit="2026-01-15T18:00:00+03:
 
 
 async def _planla(ist, so_id, **kw):
+    # Testler saati ilerletip geçmiş günü planlar: gerekçe (KARARLAR 2026-11-04 §6.9).
+    kw.setdefault("gecmis_tarih_gerekcesi", "Geriye dönük plan testi")
     r = await ist.put(f"{ON}/isler/{so_id}/plan", json=plan_govdesi(**kw))
     assert r.status_code == 200, r.text
     return r.json()["plan"]

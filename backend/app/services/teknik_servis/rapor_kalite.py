@@ -18,7 +18,8 @@ kontrolünde aynı liste). Kapsam her kontrolde AYNI yardımcılarla (servis iş
   eşlenemedi). Servis işi tablosunda tanımsız durum yoktur (CHECK).
 - `sure_kaydi_eksik` E09 tanımıdır (`zaman.sure_eksik_ifadesi`, EKSIK ∪
   KISMI); telefon/uzaktan çözülen iş eksik sayılmaz, tahmini süre kullanılmaz.
-- `seri_eksik` yalnız `TUR_KURALLARI.seri_zorunlu` türlerinde (PB, ATOLYE).
+- `seri_eksik`: `TUR_KURALLARI.seri_zorunlu` türleri (PB, ATOLYE) + ekipmansız
+  tek cihazlı ARIZA/PLANSIZ_BAKIM ("seri bekleniyor", rol testi B6).
 - Müşteri varyantı `unvan_anahtari` ile KAPSAM İÇİ hesaplarda gruplanır
   (canlı `mukerrer_adaylari` tek hesap içindir ve kapsamsızdır — B9).
 - Ekipman kontrolleri `ekipman.kalite_ozeti`'ndedir (E03-13); bu sayfa onları
@@ -119,15 +120,28 @@ def _seri_zorunlu_turler() -> list[str]:
     return sorted(t for t, k in TUR_KURALLARI.items() if k.seri_zorunlu)
 
 
+# Tek cihazlı bakım/arıza işleri (1 cihaz = 1 iş): seri açılışta zorunlu değil
+# ("seri bekleniyor", §7.5) ama kalite listesinde görünmeli (rol testi B6).
+TEK_CIHAZLI_SERI_TURLERI = ("ARIZA", "PLANSIZ_BAKIM")
+
+
 def _s_seri_eksik(user: User) -> Select:
+    seri_yok = not_(
+        exists().where(
+            ServiceOrderSerial.service_order_id == ServiceOrder.id,
+            ServiceOrderSerial.is_active.is_(True),
+        )
+    )
     return _is_taban(user).where(
-        ServiceOrder.tur.in_(_seri_zorunlu_turler()),
         ServiceOrder.status != "IPTAL",
-        not_(
-            exists().where(
-                ServiceOrderSerial.service_order_id == ServiceOrder.id,
-                ServiceOrderSerial.is_active.is_(True),
-            )
+        seri_yok,
+        or_(
+            ServiceOrder.tur.in_(_seri_zorunlu_turler()),
+            # Ekipmana bağlı iş cihazını kütükten bilir; yalnız ekipmansız olan eksik.
+            and_(
+                ServiceOrder.tur.in_(TEK_CIHAZLI_SERI_TURLERI),
+                ServiceOrder.equipment_id.is_(None),
+            ),
         ),
     )
 
@@ -439,7 +453,7 @@ KONTROLLER: dict[str, KaliteKontrolu] = {
         KaliteKontrolu("tanimsiz_durum", "Tanımsız (göç karantinası)", "Göçte birimi/türü/durumu eşlenemediği için aktarılamayan, İçe Aktarma'da bekleyen servis işi satırları.", "servis", _SERVIS, (("Parti", "parti_id", "tamsayi"), ("Dosya", "dosya", "metin"), ("Satır", "satir_no", "tamsayi"), ("Kaynak Ref", "ref", "metin"), ("Birim", "birim", "metin"), ("Durum", "durum", "metin"), ("Hatalar", "hatalar", "metin")), satirlar=_karantina_satirlari),  # noqa: E501
         KaliteKontrolu("cozum_zamani_eksik", "Çözüm zamanı eksik", "Çözüldü grubunda (Tamamlandı/Kapatıldı) ama tamamlanma ya da ilk çözüm anı boş işler.", "servis", _SERVIS, _IS_SUTUNLARI, sorgu=_s_cozum_zamani_eksik, donustur=_is_satirlari),  # noqa: E501
         KaliteKontrolu("sure_kaydi_eksik", "Süre kaydı eksik", "Çözülmüş ve süre kaydı hiç olmayan ya da bir teknisyeninin kaydı eksik işler (telefon/uzaktan çözülen hariç; tahmini süre kullanılmaz).", "servis", _SERVIS, _IS_SUTUNLARI, sorgu=_s_sure_kaydi_eksik, donustur=_is_satirlari),  # noqa: E501
-        KaliteKontrolu("seri_eksik", "Seri no eksik", "Seri zorunlu türde (PB, atölye) aktif seri kaydı olmayan, iptal edilmemiş işler.", "servis", _SERVIS, _IS_SUTUNLARI, sorgu=_s_seri_eksik, donustur=_is_satirlari),  # noqa: E501
+        KaliteKontrolu("seri_eksik", "Seri no eksik", "Seri zorunlu türde (PB, atölye) ya da ekipmansız tek cihazlı bakım/arıza işinde aktif seri kaydı olmayan, iptal edilmemiş işler.", "servis", _SERVIS, _IS_SUTUNLARI, sorgu=_s_seri_eksik, donustur=_is_satirlari),  # noqa: E501
         KaliteKontrolu("lokasyonsuz_is", "Lokasyonsuz iş", "Tesise (lokasyona) bağlanmamış, iptal edilmemiş işler.", "servis", _SERVIS, _IS_SUTUNLARI, sorgu=_s_lokasyonsuz_is, donustur=_is_satirlari),  # noqa: E501
         KaliteKontrolu("musterisiz_is", "Müşterisi eşleşmemiş iş", "Müşteri hesabı boş (göçten ham metinle gelmiş), iptal edilmemiş işler.", "servis", _SERVIS, _IS_SUTUNLARI, sorgu=_s_musterisiz_is, donustur=_is_satirlari),  # noqa: E501
         KaliteKontrolu("sef_atanmamis", "Şef tayin edilmemiş", "Açık olup aktif şef tayini olmayan işler.", "servis", _SERVIS, _IS_SUTUNLARI, sorgu=_s_sef_atanmamis, donustur=_is_satirlari),  # noqa: E501
