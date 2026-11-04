@@ -53,10 +53,12 @@ from app.models import (
     ServiceResult,
 )
 from app.models.servis_bakim import (
+    BAKIM_OLCUMLERI,
     BAKIM_SONUCLARI,
     KAPSAM_DISI_NEDENLERI,
     KONTROL_SONUCLARI,
     UYGUNSUZLUK_AKSIYONLARI,
+    UYGUNSUZLUK_ONEMLERI,
 )
 from app.models.teknik_servis import DURUM_GRUPLARI
 from app.services import audit
@@ -85,6 +87,14 @@ _SERVIS_SONUCU = {
 UYGUNSUZLUK_BEKLEME = "BAKIM_UYGUNSUZLUK"
 # Dalga 2'de TS-147 (servis teklifi) ile açılır; Dalga 1'de pasif.
 PASIF_AKSIYONLAR = frozenset({"TEKLIF"})
+# Bakım formu olan iş türleri (rol testi tur 2, 5_teknisyen B2; KARARLAR
+# 2026-11-04 §7.5): sözleşmeli PB'ye ek olarak sözleşmesiz/talep listesi bakımı
+# (PLANSIZ_BAKIM). PB formu üretimde açılır; PLANSIZ_BAKIM formu ilk yazmada
+# işin cihazının türünden (`equipment_type` → şablon) açılır. PB'ye özgü kapılar
+# (dönem kapanışı, kapsam dışı) yalnız PB'de kalır.
+BAKIM_FORMU_TURLERI = frozenset({"PB", "PLANSIZ_BAKIM"})
+# Uygunsuzluk önemi → bağlı arıza işinin önceliği (KRİTİK bulgu KRİTİK iş).
+_ONEM_ONCELIK = {"KRITIK": "KRITIK", "YUKSEK": "YUKSEK"}
 
 
 # =============================================================================
@@ -179,7 +189,10 @@ async def _yeniden_acma_izi(db: AsyncSession, so: ServiceOrder, clock: Clock) ->
         select(ServiceOrderEvent)
         .where(
             ServiceOrderEvent.service_order_id == so.id,
-            ServiceOrderEvent.yeni_durum == "TEKRAR_ACILDI",
+            ServiceOrderEvent.yeni_durum == so.status,
+            ServiceOrderEvent.eski_durum == "TAMAMLANDI"
+            if so.status != "TEKRAR_ACILDI"
+            else ServiceOrderEvent.yeni_durum == "TEKRAR_ACILDI",
         )
         .order_by(ServiceOrderEvent.id.desc())
         .limit(1)
@@ -219,11 +232,14 @@ async def _yeniden_acma_izi(db: AsyncSession, so: ServiceOrder, clock: Clock) ->
 async def donem_kapanisini_guncelle(
     db: AsyncSession, so: ServiceOrder, onceki: str, hedef: str, kaynak: str, clock: Clock
 ) -> None:
-    """`durum_degisti` kancası: dönem kapanışı (idempotent, geri açabilir)."""
+    """`durum_degisti` kancası: dönem kapanışı (idempotent, geri açabilir).
+
+    Yeniden açma ve kalite reddi (rol testi tur 2) formu TASLAK'a döndürür; bu,
+    formu olan sözleşmesiz bakım işinde (PLANSIZ_BAKIM) de geçerlidir."""
+    if hedef == "TEKRAR_ACILDI" or kaynak == "kalite_red":
+        await _yeniden_acma_izi(db, so, clock)
     if so.tur != "PB" or so.maintenance_period_id is None:
         return
-    if hedef == "TEKRAR_ACILDI":
-        await _yeniden_acma_izi(db, so, clock)
     donem = await db.get(MaintenancePeriod, so.maintenance_period_id)
     if donem is not None:
         await donem_kapanisi_hesapla(db, donem, clock)
@@ -279,12 +295,73 @@ async def _sonraki_ziyaret_no(db: AsyncSession, form_id: int) -> int:
 
 
 async def form_getir(db: AsyncSession, so: ServiceOrder) -> MaintenanceForm:
-    if so.tur != "PB":
-        raise BakimKapsamDisi("Bu iş planlı bakım işi değil; bakım formu yok")
+    if so.tur not in BAKIM_FORMU_TURLERI:
+        raise BakimKapsamDisi("Bu iş bakım işi değil; bakım formu yok")
     form = await db.scalar(select(MaintenanceForm).where(MaintenanceForm.service_order_id == so.id))
     if form is None or form.is_deleted:
         raise BakimKapsamDisi("Bakım formu bulunamadı")
     return form
+
+
+async def form_ac(
+    db: AsyncSession, so: ServiceOrder, *, user: User, clock: Clock
+) -> MaintenanceForm:
+    """Sözleşmesiz bakım işinde (PLANSIZ_BAKIM) formu ilk kullanımda açar
+    (idempotent: varsa onu döner). Şablon işin cihazının türünden gelir;
+    cihazı olmayan ya da şablonu olmayan türde 404 (açıklamalı)."""
+    from app.services.teknik_servis.bakim_sablonlari import sablon as sablon_bul
+
+    if so.tur not in BAKIM_FORMU_TURLERI:
+        raise BakimKapsamDisi("Bu iş bakım işi değil; bakım formu yok")
+    mevcut = await db.scalar(
+        select(MaintenanceForm).where(MaintenanceForm.service_order_id == so.id)
+    )
+    if mevcut is not None and not mevcut.is_deleted:
+        return mevcut
+    if so.tur == "PB":
+        raise BakimKapsamDisi("Bakım formu bulunamadı")
+    ekipman = await db.get(ServiceEquipment, so.equipment_id) if so.equipment_id else None
+    if ekipman is None:
+        raise BakimKapsamDisi(
+            "İşe bağlı cihaz (kütük kaydı) yok; bakım formu cihazın türünden açılır. "
+            "Önce işe cihaz bağlayın."
+        )
+    sablon = sablon_bul(ekipman.equipment_type)
+    if sablon is None:
+        raise BakimKapsamDisi(f"'{ekipman.equipment_type}' cihaz türü için bakım şablonu yok")
+    form = MaintenanceForm(
+        service_order_id=so.id,
+        template_code=ekipman.equipment_type,
+        template_version=sablon.surum,
+        zone=ekipman.zone,
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    db.add(form)
+    await db.flush()
+    for sira, madde in enumerate(sablon.maddeler, start=1):
+        db.add(
+            MaintenanceFormCheck(
+                form_id=form.id, check_code=madde.kod, label=madde.etiket, sira=sira
+            )
+        )
+    await db.flush()
+    await gecmis.olay_yaz(
+        db,
+        so,
+        "NOT",
+        f"Bakım formu açıldı ({ekipman.equipment_type}, şablon s{sablon.surum})",
+        user=user,
+        clock=clock,
+        veri={"form_id": form.id, "sablon": ekipman.equipment_type},
+    )
+    return form
+
+
+def olcumler(form: MaintenanceForm) -> dict[str, str] | None:
+    """Dolu ölçümler (metin; ziyaret kaydına kopyalanır). Hiç yoksa None."""
+    dolu = {k: str(getattr(form, k)) for k in BAKIM_OLCUMLERI if getattr(form, k) is not None}
+    return dolu or None
 
 
 async def form_maddeleri(db: AsyncSession, form_id: int) -> list[MaintenanceFormCheck]:
@@ -361,6 +438,12 @@ async def form_kaydet(
         if alan in degisiklikler:
             deger = degisiklikler[alan]
             setattr(form, alan, deger.strip() or None if isinstance(deger, str) else deger)
+    for alan in BAKIM_OLCUMLERI:
+        if alan in degisiklikler:
+            deger = degisiklikler[alan]
+            if deger is not None and deger < 0:
+                raise ServisGirdiHatasi(f"{BAKIM_OLCUMLERI[alan][0]} negatif olamaz")
+            setattr(form, alan, deger)
     if "bakim_sonucu" in degisiklikler:
         sonuc = degisiklikler["bakim_sonucu"]
         if sonuc is not None and sonuc not in BAKIM_SONUCLARI:
@@ -384,9 +467,15 @@ async def form_kaydet(
                     f"'{madde.label}' maddesi {sonuc.replace('_', ' ').lower()} işaretlendi; "
                     "açıklama notu zorunlu"
                 )
-            if madde.result != sonuc or madde.note != not_:
+            onem = k.get("onem")
+            if onem is not None and onem not in UYGUNSUZLUK_ONEMLERI:
+                raise ServisGirdiHatasi(f"Bilinmeyen önem: {onem}")
+            # Önem yalnız uygunsuz maddede anlamlıdır (diğerlerinde temizlenir).
+            onem = onem if sonuc == "UYGUNSUZ" else None
+            if madde.result != sonuc or madde.note != not_ or madde.onem != onem:
                 madde.result = sonuc
                 madde.note = not_
+                madde.onem = onem
                 madde.checked_by = user.id
                 madde.checked_at = simdi
     form.updated_by = user.id
@@ -564,6 +653,7 @@ async def tamamla(
                 for m in maddeler
             ],
             approval_id=onay.id if onay else None,
+            olcumler=olcumler(form),
             created_by=user.id,
         )
     )
@@ -605,6 +695,7 @@ async def tamamla(
                 check_code=m.check_code,
                 check_label=m.label,
                 description=m.note,
+                onem=m.onem,
                 created_by=user.id,
                 updated_by=user.id,
             )
@@ -806,15 +897,21 @@ async def uygunsuzluk_ariza_isi(
     if pb is None:  # pragma: no cover - FK bütünlüğü
         raise BakimKapsamDisi("Kayıt bulunamadı")
     seri = await _aktif_seri(db, pb.id)
+    # Rol testi tur 2 (B3): konu bulgunun KENDİSİ (teknisyenin notu); madde etiketi
+    # ("… kontrol edildi") açıklamaya. Önem KRİTİK/YÜKSEK ise iş önceliği de öyle.
+    bulgu = " ".join((kayit.description or "").split()) or kayit.check_label
     girdi = is_emirleri.ServisIsiGirdisi(
         birim=pb.birim,
         tur="ARIZA",
-        konu=f"Bakım bulgusu: {kayit.check_label}"[:200],
+        konu=f"Bakım bulgusu: {bulgu}"[:200],
         customer_id=pb.customer_id,
         address_id=pb.address_id,
         contact_id=pb.contact_id,
         talep_kanali="SAHADA_BILDIRILDI",
-        aciklama=f"{pb.so_no} planlı bakımında uygunsuzluk: {kayit.description or ''}".strip(),
+        oncelik=_ONEM_ONCELIK.get(kayit.onem or "", "NORMAL"),
+        aciklama=(
+            f"{pb.so_no} bakımında uygunsuzluk ({kayit.check_label}): {kayit.description or ''}"
+        ).strip(),
         seriler=[seri.seri_no] if seri else [],
         equipment_id=pb.equipment_id,
         iliskili_is_id=pb.id,
@@ -911,5 +1008,48 @@ def ziyaret_satiri(z: MaintenanceVisit) -> dict[str, Any]:
 
 # --- Kanca kayıtları (modül sonu; `s/__init__` sabit sırayla import eder) ----------
 
+
+async def sozlesme_gelirini_yaz(
+    db: AsyncSession, so: ServiceOrder, onceki: str, hedef: str, kaynak: str, clock: Clock
+) -> None:
+    """`durum_degisti` kancası (rol testi tur 2 Y4, KARARLAR 2026-11-04 §7.6): PB
+    TAMAMLANDI olunca sözleşmenin ziyaret başı ücreti (TRY) işin geliri olarak
+    `SOZLESME` kaynağıyla yazılır; böylece kalite onayından sonra fatura devrine
+    düşer. Elle girilmiş gelir ya da faturaya iletilmiş iş ASLA ezilmez; ücret
+    yoksa (ya da dövizliyse) hiçbir şey yazılmaz (gelir "sözleşme kapsamı" kalır).
+    Yeniden tamamlamada tutar aynı kalır (idempotent)."""
+    if so.tur != "PB" or hedef != "TAMAMLANDI" or so.contract_item_id is None:
+        return
+    from app.models.servis_maliyet import ServiceOrderFinancial
+
+    kalem = await db.get(MaintenanceContractItem, so.contract_item_id)
+    sozlesme = await db.get(MaintenanceContract, kalem.contract_id) if kalem else None
+    if sozlesme is None or sozlesme.fee_per_visit is None or sozlesme.currency != "TRY":
+        return
+    fin = await db.scalar(
+        select(ServiceOrderFinancial).where(ServiceOrderFinancial.service_order_id == so.id)
+    )
+    if fin is not None and (fin.gelir is not None or fin.fatura_iletildi_at is not None):
+        return
+    if fin is None:
+        fin = ServiceOrderFinancial(
+            service_order_id=so.id, created_by=so.updated_by, updated_by=so.updated_by
+        )
+        db.add(fin)
+    fin.gelir = sozlesme.fee_per_visit
+    fin.gelir_kaynagi = "SOZLESME"
+    fin.gelir_notu = f"Sözleşme {sozlesme.contract_no} ziyaret başı ücreti (otomatik)"
+    await db.flush()
+    await audit.log(
+        db,
+        "service_order_financials",
+        "gelir.sozlesme_otomatik",
+        entity_id=fin.id,
+        new_value={"so_id": so.id, "gelir": str(fin.gelir), "sozlesme": sozlesme.contract_no},
+        user_id=so.updated_by,
+    )
+
+
 kancalar.kaydet("durum_dogrula", pb_gecis_dogrula)
 kancalar.kaydet("durum_degisti", donem_kapanisini_guncelle)
+kancalar.kaydet("durum_degisti", sozlesme_gelirini_yaz)

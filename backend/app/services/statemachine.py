@@ -238,7 +238,12 @@ SERVIS_IS_EMRI = StateMachine(
         # iş açılır (`is_emirleri.bagli_yeni_is`). TEKRAR_ACILDI eski kayıtlar
         # için katalogda kalır: eski yeniden açılmış işler ilerleyebilir ve
         # beklemeden o duruma geri dönebilir.
-        TAMAMLANDI=("KAPATILDI",),
+        # Kalite reddi (rol testi tur 2, KARARLAR 2026-11-04 §7.3): tamamlanmış
+        # ama kalitesi uygun bulunmayan iş düzeltme için İŞLEMDE'ye (kayıt/
+        # sonuç düzeltmesi) ya da PLANLAMADA'ya (yeniden ziyaret) döner. Bu iki
+        # kenar YALNIZ `kaynak='kalite_red'` ile kullanılır (`durum_degistir`
+        # kapısı); KAPATILDI hâlâ terminaldir, yeniden açma (M1.7) yoktur.
+        TAMAMLANDI=("KAPATILDI", "ISLEMDE", "PLANLAMADA"),
         KAPATILDI=(),
         TEKRAR_ACILDI=(
             "PLANLAMADA",

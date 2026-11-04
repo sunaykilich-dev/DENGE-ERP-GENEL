@@ -126,7 +126,7 @@ async def veri(client, db, kullanici_ac, birimli_kullanici_ac, servis_isi_ac):
     sef_c = await birimli_kullanici_ac("sef_c", "SERVIS_SEF", ["GUVENLIK"], saha_rolu="SEF")
     tek = await birimli_kullanici_ac("tek", "SERVIS_TEKNISYEN", ["GUVENLIK"], saha_rolu="TEKNISYEN")
     mudur = await kullanici_ac("mudur", "SERVIS_YONETICI")
-    await kullanici_ac("satis", "SATIS")
+    await kullanici_ac("satis", "DEPO")  # servis.gor yok (SATIS §7.8 ile görür)
     for u, adres in ((sef_a, "sef.a@ornek.test"), (sef_b, "sef.b@ornek.test"),
                      (sef_c, "sef.c@ornek.test"), (mudur, "mudur@ornek.test")):  # fmt: skip
         u.email = adres

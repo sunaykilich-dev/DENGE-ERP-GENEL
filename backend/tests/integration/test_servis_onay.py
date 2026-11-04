@@ -367,7 +367,7 @@ class TestServisFormu:
 
     async def test_pdf_ucu_kapsam_ve_rbac(self, client, kullanici_ac, ortam):
         so = ortam["so"]
-        await kullanici_ac("satis", "SATIS")
+        await kullanici_ac("satis", "DEPO")  # servis.gor yok (SATIS artık kendi müşterisini görür)
         await _giris(client, "satis")
         assert (
             await client.get(f"/api/teknik-servis/isler/{so.id}/servis-formu.pdf")

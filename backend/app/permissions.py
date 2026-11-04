@@ -362,6 +362,11 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "abonelik.gor",
             "rma.gor",
             "rapor.gor",
+            # Rol testi tur 2 (6_satis Y8/O12, KARARLAR 2026-11-04 §7.8): kendi
+            # müşterilerinin servis işlerini (teklif bekleyen sonuçlar dahil)
+            # OKUR; kapsam `kapsam._is_kosulu` KENDI_MUSTERILERI (müşteri sahibi
+            # ∧ etkin şirket). Yazma, irtibat tam görünümü ve maliyet yok.
+            "servis.gor",
         ),
         SCOPE_OWN_CUSTOMERS,  # yalnız kendi müşterilerini görür
     ),
@@ -475,6 +480,9 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     # KARARLAR 2026-11-04 §3: görünen ad "Finans Uzmanı" (kod ve yalnız ofis
     # kısıtı aynı; seed özelleştirilmemiş rolün adını eşitler).
+    # `maliyet.gor` YOK (G4.4: "Muhasebe Uzmanı görmez"; rol testi tur 2 Y7,
+    # KARARLAR 2026-11-04 §7.7). Fatura devri tutarı `teklif.gor` ile görünür
+    # (gelir/teklif tutarı maliyet değildir — `fatura_devri.tutar_gorur_mu`).
     "MUHASEBE_DESTEK": (
         "Finans Uzmanı",
         (
@@ -496,7 +504,6 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "tahsilat.yaz",
             "rapor.gor",
             "rapor.disaaktar",
-            "maliyet.gor",
         ),
         SCOPE_ALL,
     ),
@@ -504,12 +511,15 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
     # --- Teknik servis rolleri (plan §1.4) -----------------------------------
     # Mobilite `TEKNIK_SERVIS` rolü AYRIDIR ve değişmez (isemri.onayla → hak
     # ediş). Servis rollerinde `hesap.yaz`, `isemri.*`, `hakedis.*`,
-    # `tahsilat.*`, `rapor.gor`, `rapor.disaaktar`, `maliyet.*` YOK (unit
+    # `tahsilat.*`, `rapor.gor`, `rapor.disaaktar`, `maliyet.yaz` YOK (unit
     # testle kilitli): servis personeli IBAN/VKN düzenlemez (KD-07), mobilite
     # finans Excel'ine erişmez (KD-06), fiyat varsayılan gizli (KD-11).
+    # Tek istisna: TS Yöneticisi `maliyet.gor` (G4.4 maliyet görenler listesi;
+    # rol testi tur 2 O6, KARARLAR 2026-11-04 §7.7) — iş maliyeti, bakım ücreti.
     "SERVIS_YONETICI": (
         "Teknik Servis Müdürü",
         (
+            "maliyet.gor",
             "servis.gor",
             "servis.yaz",
             "servis.planla",
@@ -839,7 +849,10 @@ GENEL_ROLLER = ("SATIS_DESTEK", "FINANS_YONETICI")
 # kısıtlanır, kişiye istisnayla "kaldırılabilir" bir yetki gibi görünürdü.
 # Seed yalnız özelleştirilmemiş sistem rollerinde eşitler; yönetici rol
 # ekranından istediği role açıp kapatabilir. Saha rolleri her yerden girer.
-YALNIZ_OFIS_ROLLERI = frozenset({"MUHASEBE_DESTEK"})
+# FINANS_YONETICI (rol testi tur 2 O10, KARARLAR 2026-11-04 §7.18): G3.8 ve Faz
+# A/8 "muhasebe rollerine yalnız ofis ağından"; iş analizi §5.9/5 senaryosu
+# finans yöneticisinin ofis dışı girişinin reddini bekler.
+YALNIZ_OFIS_ROLLERI = frozenset({"MUHASEBE_DESTEK", "FINANS_YONETICI"})
 
 
 def permissions_of(role_code: str) -> tuple[str, ...]:

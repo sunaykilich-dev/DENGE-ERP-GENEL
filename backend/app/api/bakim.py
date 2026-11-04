@@ -50,6 +50,7 @@ from app.models import (
     ServiceOrderSerial,
     User,
 )
+from app.models.servis_bakim import BAKIM_OLCUMLERI, UYGUNSUZLUK_ONEMLERI
 from app.models.teknik_servis import DURUM_GRUPLARI
 from app.permissions import SCOPE_ALL
 from app.services import accounts as hesap_svc
@@ -78,7 +79,11 @@ router = APIRouter(prefix="/api/teknik-servis/bakim", tags=["bakim"])
 Okuyucu = Annotated[User, Depends(require_permission("bakim.gor"))]
 Yazici = Annotated[User, Depends(require_permission("bakim.yaz"))]
 Onaylayici = Annotated[User, Depends(require_permission("bakim.onayla"))]
-UcretYazici = Annotated[User, Depends(require_permission("bakim.yaz", "maliyet.gor"))]
+# Ücret: `maliyet.gor` VE (`bakim.yaz` ya da `tahsilat.yaz`). Rol testi tur 2 (Y4,
+# KARARLAR 2026-11-04 §7.6): ücreti TS yöneticisi (G4.4 ile maliyet.gor) ya da
+# finans yöneticisi (fiyat görür, fatura devrini yapar) girer; eskiden yalnız ADMIN.
+UcretYazici = Annotated[User, Depends(require_permission("maliyet.gor"))]
+UCRET_YAZMA_IZINLERI = ("bakim.yaz", "tahsilat.yaz")
 ArizaAcan = Annotated[User, Depends(require_permission("bakim.onayla", "servis.yaz"))]
 ServisOkuyucu = Annotated[User, Depends(require_permission("servis.gor"))]
 FormYazici = Annotated[User, Depends(require_permission("servis.yaz"))]
@@ -153,6 +158,22 @@ async def _pb(db, user: User, so_id: int) -> ServiceOrder:
     if so.tur != "PB":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bu iş planlı bakım işi değil")
     return so
+
+
+async def _bakim_isi(db, user: User, so_id: int) -> ServiceOrder:
+    """Bakım formu uçlarının işi: PB ya da sözleşmesiz bakım (PLANSIZ_BAKIM;
+    rol testi tur 2 B2). Kapsam dışı / başka tür → 404."""
+    so = await db.get(ServiceOrder, so_id)
+    if so is None or so.is_deleted or await kapsam.is_erisimi_yok_mu(db, user, so):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servis işi bulunamadı")
+    if so.tur not in bakim_formu.BAKIM_FORMU_TURLERI:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bu iş bakım işi değil")
+    return so
+
+
+async def _form(db, so: ServiceOrder, user: User, clock) -> Any:
+    """Formu getirir; sözleşmesiz bakımda yoksa açar (yazma uçları)."""
+    return await _cagir(bakim_formu.form_ac(db, so, user=user, clock=clock))
 
 
 def _surum(kayit, version: int | None) -> None:
@@ -277,6 +298,11 @@ class KontrolIn(BaseModel):
     kod: str = Field(max_length=30)
     sonuc: str = Field(max_length=20)
     not_: str | None = Field(default=None, alias="not", max_length=2000)
+    # Uygunsuz maddenin önemi (DUSUK/NORMAL/YUKSEK/KRITIK; rol testi tur 2 B3).
+    onem: str | None = Field(default=None, max_length=10)
+
+
+_OLCUM = {"default": None, "ge": 0, "max_digits": 9, "decimal_places": 3}
 
 
 class FormIn(BaseModel):
@@ -292,6 +318,12 @@ class FormIn(BaseModel):
     technician_note: str | None = Field(default=None, max_length=4000)
     parts_text: str | None = Field(default=None, max_length=2000)
     bakim_sonucu: str | None = Field(default=None, max_length=20)
+    # Ölçümler (opsiyonel, sayısal; boş = ölçülmedi). Birimler `olcum_tanimlari`.
+    olcum_kv: Decimal | None = Field(**_OLCUM)
+    olcum_ma: Decimal | None = Field(**_OLCUM)
+    olcum_penetrasyon_mm: Decimal | None = Field(**_OLCUM)
+    olcum_doz_usv: Decimal | None = Field(**_OLCUM)
+    olcum_voltaj_v: Decimal | None = Field(**_OLCUM)
     kontroller: list[KontrolIn] = Field(default_factory=list, max_length=50)
     # Yalnız tamamlamada: süre kaydı eksik olduğu bilinerek kapatılıyor (TS-076).
     sure_eksik_onay: bool = False
@@ -544,6 +576,13 @@ async def sozlesme_kapsam(
 async def sozlesme_ucret(
     id: int, payload: UcretIn, request: Request, db: DbDep, clock: ClockDep, user: UcretYazici
 ) -> dict[str, Any]:
+    """Ziyaret başı ücret / sözleşme toplamı. Kapı `maliyet.gor`; ayrıca
+    `bakim.yaz` ya da `tahsilat.yaz` (katmanlı yetki, 403)."""
+    if not any(user.has(i) for i in UCRET_YAZMA_IZINLERI):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Ücret girişi için yetkiniz yok (bakim.yaz ya da tahsilat.yaz gerekir)",
+        )
     sozlesme = await _sozlesme(db, user, id)
     govde = payload.model_dump(exclude_unset=True)
     _surum(sozlesme, govde.pop("version", None))
@@ -1217,9 +1256,15 @@ async def _form_ciktisi(db, so: ServiceOrder) -> dict[str, Any]:
     form = await _cagir(bakim_formu.form_getir(db, so))
     musteri = await db.get(Account, so.customer_id) if so.customer_id else None
     tesis = await db.get(Address, so.address_id) if so.address_id else None
-    kalem = await db.get(MaintenanceContractItem, so.contract_item_id)
+    kalem = (
+        await db.get(MaintenanceContractItem, so.contract_item_id) if so.contract_item_id else None
+    )
     sozlesme = await db.get(MaintenanceContract, kalem.contract_id) if kalem else None
-    donem = await db.get(MaintenancePeriod, so.maintenance_period_id)
+    donem = (
+        await db.get(MaintenancePeriod, so.maintenance_period_id)
+        if so.maintenance_period_id
+        else None
+    )
     seri = await db.scalar(
         select(ServiceOrderSerial.seri_no)
         .where(ServiceOrderSerial.service_order_id == so.id, ServiceOrderSerial.is_active.is_(True))
@@ -1285,7 +1330,10 @@ async def _form_ciktisi(db, so: ServiceOrder) -> dict[str, Any]:
             "status": form.status,
             "template_code": form.template_code,
             "template_version": form.template_version,
-            "baslik": "DİJİTAL TEKNİK SERVİS / PLANLI BAKIM FORMU",
+            "baslik": "DİJİTAL TEKNİK SERVİS / PLANLI BAKIM FORMU"
+            if so.tur == "PB"
+            else "DİJİTAL TEKNİK SERVİS / BAKIM FORMU",
+            "tur": so.tur,
             "seri_no": seri,
             "zone": form.zone,
             "performed_work": form.performed_work,
@@ -1296,7 +1344,13 @@ async def _form_ciktisi(db, so: ServiceOrder) -> dict[str, Any]:
             "completed_at": form.completed_at,
             "completed_by": form.completed_by,
             "version": form.version,
+            **{alan: getattr(form, alan) for alan in BAKIM_OLCUMLERI},
         },
+        "olcum_tanimlari": [
+            {"alan": alan, "etiket": etiket, "birim": birim}
+            for alan, (etiket, birim) in BAKIM_OLCUMLERI.items()
+        ],
+        "onemler": list(UYGUNSUZLUK_ONEMLERI),
         "maddeler": [
             {
                 "kod": m.check_code,
@@ -1304,6 +1358,7 @@ async def _form_ciktisi(db, so: ServiceOrder) -> dict[str, Any]:
                 "sira": m.sira,
                 "sonuc": m.result,
                 "not": m.note,
+                "onem": m.onem,
                 "checked_by": m.checked_by,
                 "checked_at": m.checked_at,
             }
@@ -1318,6 +1373,7 @@ async def _form_ciktisi(db, so: ServiceOrder) -> dict[str, Any]:
                 "check_code": n.check_code,
                 "check_label": n.check_label,
                 "description": n.description,
+                "onem": n.onem,
                 "action_type": n.action_type,
                 "responsible_user_id": n.responsible_user_id,
                 "due_date": n.due_date,
@@ -1341,7 +1397,7 @@ async def _form_ciktisi(db, so: ServiceOrder) -> dict[str, Any]:
         ],
         # İmzalayan adı (kişisel veri) burada dönmez; yalnız onayın varlığı.
         "onay": {"id": onay.id, "tur": onay.tur, "approved_at": onay.approved_at} if onay else None,
-        "onay_zorunlu": "PB" in zorunlu,
+        "onay_zorunlu": so.tur in zorunlu,
     }
 
 
@@ -1351,14 +1407,21 @@ def _form_girdisi(payload: FormIn) -> dict[str, Any]:
     )
     if payload.kontroller:
         govde["kontroller"] = [
-            {"kod": k.kod, "sonuc": k.sonuc, "not_": k.not_} for k in payload.kontroller
+            {"kod": k.kod, "sonuc": k.sonuc, "not_": k.not_, "onem": k.onem}
+            for k in payload.kontroller
         ]
     return govde
 
 
 @router.get("/formlar/{so_id}")
-async def form_detay(so_id: int, db: DbDep, user: ServisOkuyucu) -> dict[str, Any]:
-    so = await _pb(db, user, so_id)
+async def form_detay(so_id: int, db: DbDep, clock: ClockDep, user: ServisOkuyucu) -> dict[str, Any]:
+    """Form ayrıntısı. Sözleşmesiz bakımda (PLANSIZ_BAKIM) form henüz yoksa
+    `servis.yaz` sahibi için açılır (ilk görüntüleme = formu başlatma, ek düğme
+    yok — G1.9); okuyucu için 404 "Bakım formu bulunamadı"."""
+    so = await _bakim_isi(db, user, so_id)
+    if so.tur != "PB" and user.has("servis.yaz"):
+        await _form(db, so, user, clock)
+        await db.commit()
     return await _form_ciktisi(db, so)
 
 
@@ -1367,8 +1430,8 @@ async def form_kaydet(
     so_id: int, payload: FormIn, db: DbDep, clock: ClockDep, user: FormYazici
 ) -> dict[str, Any]:
     """Taslak kaydı; ziyaret kaydı OLUŞTURMAZ."""
-    so = await _pb(db, user, so_id)
-    form = await _cagir(bakim_formu.form_getir(db, so))
+    so = await _bakim_isi(db, user, so_id)
+    form = await _form(db, so, user, clock)
     _surum(form, payload.version)
     await _cagir(
         bakim_formu.form_kaydet(db, form, _form_girdisi(payload), so=so, user=user, clock=clock)
@@ -1385,9 +1448,9 @@ async def form_tamamla(
     user: FormTamamlayici,
     payload: FormIn | None = None,
 ) -> dict[str, Any]:
-    """Doğrulama + ziyaret + (uygunsuzlukta aksiyon ve bekleme | PB TAMAMLANDI)."""
-    so = await _pb(db, user, so_id)
-    form = await _cagir(bakim_formu.form_getir(db, so))
+    """Doğrulama + ziyaret + (uygunsuzlukta aksiyon ve bekleme | iş TAMAMLANDI)."""
+    so = await _bakim_isi(db, user, so_id)
+    form = await _form(db, so, user, clock)
     if payload is not None:
         _surum(form, payload.version)
         girdi = _form_girdisi(payload)
@@ -1417,7 +1480,7 @@ async def form_onay(
     """Müşteri onayı — E01 onay servisine (`onay.onay_al`, D1-C) devreder."""
     from app.services.teknik_servis import onay as onay_svc
 
-    so = await _pb(db, user, so_id)
+    so = await _bakim_isi(db, user, so_id)
     girdi = onay_svc.OnayGirdisi(**payload.model_dump())
     await _cagir(onay_svc.onay_al(db, so, girdi, user=user, clock=clock))
     await db.commit()
@@ -1471,7 +1534,7 @@ async def uygunsuzluk_duzenle(
     clock: ClockDep,
     user: Onaylayici,
 ) -> dict[str, Any]:
-    so = await _pb(db, user, so_id)
+    so = await _bakim_isi(db, user, so_id)
     kayit = await _uygunsuzluk(db, so, uygunsuzluk_id)
     govde = payload.model_dump(exclude_unset=True)
     _surum(kayit, govde.pop("version"))
@@ -1488,7 +1551,7 @@ async def uygunsuzluk_duzenle(
 async def uygunsuzluk_ariza_isi(
     so_id: int, uygunsuzluk_id: int, db: DbDep, clock: ClockDep, user: ArizaAcan
 ) -> dict[str, Any]:
-    so = await _pb(db, user, so_id)
+    so = await _bakim_isi(db, user, so_id)
     kayit = await _uygunsuzluk(db, so, uygunsuzluk_id)
     ariza = await _cagir(bakim_formu.uygunsuzluk_ariza_isi(db, kayit, user=user, clock=clock))
     await db.commit()
@@ -1506,7 +1569,7 @@ async def uygunsuzluk_kapat(
     clock: ClockDep,
     user: Onaylayici,
 ) -> dict[str, Any]:
-    so = await _pb(db, user, so_id)
+    so = await _bakim_isi(db, user, so_id)
     kayit = await _uygunsuzluk(db, so, uygunsuzluk_id)
     await _cagir(bakim_formu.uygunsuzluk_kapat(db, kayit, payload.not_, user=user, clock=clock))
     await db.commit()

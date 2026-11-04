@@ -199,7 +199,8 @@ async def test_sure_kaydi_eksik_kutusu(client, db, veri):
     once = _kutular(
         (await client.get("/api/teknik-servis/panel", params={"donem": "son30"})).json()
     )
-    assert once["sure_eksik"]["deger"] == 2
+    # Rol testi tur 2 (§7.10): tanım EKSİK ∪ KISMİ; telefonla çözülen iş süre beklemez.
+    assert once["sure_eksik"]["deger"] == 1
     db.add(
         ServiceTimeEntry(
             service_order_id=veri["tamam"].id,
@@ -215,7 +216,7 @@ async def test_sure_kaydi_eksik_kutusu(client, db, veri):
     sonra = _kutular(
         (await client.get("/api/teknik-servis/panel", params={"donem": "son30"})).json()
     )
-    assert sonra["sure_eksik"]["deger"] == 1
+    assert sonra["sure_eksik"]["deger"] == 0
 
 
 async def test_tekrar_ariza_ayni_seri(client, db, servis_isi_ac, kullanici_ac):
@@ -231,8 +232,10 @@ async def test_tekrar_ariza_ayni_seri(client, db, servis_isi_ac, kullanici_ac):
     assert await _liste_toplami(client, "tekrar_ariza") == 1
 
 
-async def test_rbac_ve_bilinmeyen_kpi(client, veri):
-    await _giris(client, "satis")
+async def test_rbac_ve_bilinmeyen_kpi(client, veri, kullanici_ac):
+    # SATIS artık servis.gor taşır (kendi müşterileri, §7.8); izinsiz örnek DEPO.
+    await kullanici_ac("depo_p", "DEPO")
+    await _giris(client, "depo_p")
     assert (await client.get("/api/teknik-servis/panel")).status_code == 403
     await _giris(client, "sef_a")
     r = await client.get("/api/teknik-servis/isler", params={"kpi": "uydurma"})

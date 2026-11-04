@@ -42,10 +42,11 @@ def test_maliyet_gorunurlugu_varsayilan_kapali():
     değişiklik o yanlışa dönüş demektir."""
     gorenler = {r for r in ROLES if "maliyet.gor" in permissions_of(r)}
     # FINANS_YONETICI: KARARLAR 2026-11-04 §3 ("maliyet/fiyat görür").
+    # G4.4 (KARARLAR 2026-11-04 §7.7): TS yöneticisi görür, finans uzmanı görmez.
     assert gorenler == {
         "ADMIN",
         "SATIS_MUDURU",
-        "MUHASEBE_DESTEK",
+        "SERVIS_YONETICI",
         "YONETIM",
         "FINANS_YONETICI",
     }
@@ -130,6 +131,9 @@ def test_servis_rollerinde_mobilite_finans_ve_yazma_izni_yok():
             if p.split(".")[0] in {"isemri", "hakedis", "tahsilat", "maliyet"}
             or p in {"rapor.gor", "rapor.disaaktar", "hesap.yaz"}
         }
+        # Tek istisna: TS yöneticisi maliyet GÖRÜR (G4.4; KARARLAR 2026-11-04 §7.7).
+        if rol == "SERVIS_YONETICI":
+            yasak -= {"maliyet.gor"}
         assert yasak == set(), f"{rol}: {sorted(yasak)}"
 
 
@@ -274,7 +278,7 @@ def test_musteri_karti_yalniz_yetkili_rollerde_g10_2():
 
 def test_yalniz_ofis_rolleri_g3_8():
     """G3.8: muhasebe rolü yalnız ofis ağından; saha ve yönetim her yerden."""
-    assert YALNIZ_OFIS_ROLLERI == {"MUHASEBE_DESTEK"}
+    assert YALNIZ_OFIS_ROLLERI == {"MUHASEBE_DESTEK", "FINANS_YONETICI"}  # §7.18
     assert YALNIZ_OFIS_ROLLERI <= set(ROLES)
     assert "ADMIN" not in YALNIZ_OFIS_ROLLERI
     assert set(SERVIS_ROLLERI) & YALNIZ_OFIS_ROLLERI == set()

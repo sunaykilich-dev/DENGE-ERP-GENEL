@@ -172,7 +172,7 @@ async def kayda_erisebilir_mi(db: AsyncSession, user: User, kod: str, kayit) -> 
             return not await accounts.kapsam_disinda_mi(db, user, musteri)
         return True
     if kod == "teklif":
-        return not quotes.teklif_kapsam_disinda_mi(user, kayit)
+        return not await quotes.teklif_erisimi_yok_mu(db, user, kayit)
     if kod == "hesap":
         return not await accounts.kapsam_disinda_mi(db, user, kayit.id)
     if kod == "servis_isi":

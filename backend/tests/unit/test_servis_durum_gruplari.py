@@ -51,7 +51,8 @@ def test_kapanis_hedefleri_yalniz_kendi_kaynaklarinda() -> None:
 
     assert kaynaklar("TAMAMLANDI") == {"sonuc", "uzaktan", "atolye", "bakim_formu"}
     assert kaynaklar("KAPATILDI") == {"kapat"}
-    assert kaynaklar("PLANLANDI") == {"planla", "sayac", "bekleme"}
+    # yola_cikis_geri_al: yönetici YOLA_CIKILDI → PLANLANDI (KARARLAR 2026-11-04 §7.4).
+    assert kaynaklar("PLANLANDI") == {"planla", "sayac", "bekleme", "yola_cikis_geri_al"}
     assert "BEKLEMEDE" not in is_emirleri.UC_HEDEFLERI["genel"]
 
 

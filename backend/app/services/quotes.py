@@ -474,8 +474,13 @@ def _kapsam_kosulu(user: User) -> ColumnElement[bool] | None:
     if kapsam == SCOPE_ALL:
         return None
     if kapsam == SCOPE_OWN_CUSTOMERS:
-        # Canlı kural aynen: satış temsilcisi yalnız kendi tekliflerini görür.
-        return Quote.owner_id == user.id
+        # Satış temsilcisi kendi tekliflerini VE kendi müşterilerinin tekliflerini
+        # (ör. satış destek'in hazırladığı servis teklifi) görür — rol testi tur 2
+        # O12 (KARARLAR 2026-11-04 §7.8). Yazma yalnız kendi teklifinde kalır
+        # (`teklif_yazilabilir_mi`); şirket süzgeci ayrıca uygulanır.
+        from app.services.accounts import kendi_hesaplari
+
+        return or_(Quote.owner_id == user.id, Quote.customer_id.in_(kendi_hesaplari(user)))
     if kapsam in (SCOPE_OWN_UNITS, SCOPE_OWN_JOBS):
         # Birimsiz satış teklifleri birimli kullanıcıya GÖRÜNMEZ (E07-02).
         birimler = kullanici_birimleri(user)
@@ -534,11 +539,26 @@ async def teklif_al(db: AsyncSession, teklif_id: int, user: User, *, yazma: bool
     t = await db.get(Quote, teklif_id)
     if t is None or t.is_deleted:
         raise TeklifKapsamDisi("Teklif bulunamadı")
-    if teklif_kapsam_disinda_mi(user, t):
+    if await teklif_erisimi_yok_mu(db, user, t):
         raise TeklifKapsamDisi("Teklif bulunamadı")
     if yazma and not teklif_yazilabilir_mi(user, t):
         raise TeklifKapsamDisi("Teklif bulunamadı")
     return t
+
+
+async def teklif_erisimi_yok_mu(db: AsyncSession, user: User, t: Quote) -> bool:
+    """OKUMA için tek kayıt kapsamı (`teklif_kapsami` ile aynı kural).
+
+    `teklif_kapsam_disinda_mi` senkron ve dardır (KENDI_MUSTERILERI'de yalnız
+    kendi teklifi — yazma kuralı); okumada satış temsilcisi kendi müşterisinin
+    teklifini de görür (rol testi tur 2 O12)."""
+    if not teklif_kapsam_disinda_mi(user, t):
+        return False
+    if _sirket_disinda_mi(user, t) or _kapsam(user) != SCOPE_OWN_CUSTOMERS:
+        return True
+    from app.services import accounts
+
+    return await accounts.kapsam_disinda_mi(db, user, t.customer_id)
 
 
 # --- Etkin durum ve KPI süzgeçleri (TS-148) ---------------------------------------------
@@ -986,6 +1006,16 @@ async def baslik_dogrula(
     (boşsa) irtibat İŞTEN alınır — istemcinin gönderdiği değer esas değildir."""
     musteri = await db.get(Account, g.customer_id)
     if musteri is None or musteri.is_deleted:
+        raise TeklifGirdiHatasi("Müşteri bulunamadı")
+    # Rol testi tur 2 (6_satis 1.1, KARARLAR 2026-11-04 §7.8): satış temsilcisi
+    # BAŞKA temsilcinin müşterisine teklif açamaz; yanıt "yok" ile aynı (varlık
+    # sızmasın). Sahipsiz (temsilcisi atanmamış) müşteri canlı satış akışındaki
+    # gibi açık kalır — yeni müşteriye ilk teklif engellenmesin.
+    if (
+        _kapsam(user) == SCOPE_OWN_CUSTOMERS
+        and musteri.sales_rep_id is not None
+        and musteri.sales_rep_id != user.id
+    ):
         raise TeklifGirdiHatasi("Müşteri bulunamadı")
     so: ServiceOrder | None = None
     if g.service_order_id is not None:

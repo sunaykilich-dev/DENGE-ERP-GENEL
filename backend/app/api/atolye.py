@@ -26,7 +26,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import (
     ClockDep,
@@ -90,6 +90,13 @@ Aktarici = Annotated[User, Depends(require_permission("atolye.gor", "servis_rapo
 EXCEL_UST_SINIR = 20_000
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 TELSIZ_TIPLERI = ("TELSIZ", "ROLE_TEKRARLAYICI", "TELSIZ_DIGER")
+# Rol testi tur 2 (B12): atölye kabulünde birime göre tip ve marka listesi.
+TELSIZ_BIRIMLERI = frozenset({"HABERLESME", "POC"})
+BIRIM_EKIPMAN_TIPLERI: dict[str, tuple[str, ...]] = {
+    "HABERLESME": TELSIZ_TIPLERI,
+    "POC": TELSIZ_TIPLERI,
+    "GUVENLIK": ("XRAY", "KAPI_DEDEKTORU", "EL_DEDEKTORU", "DIGER_GUVENLIK", "DIGER"),
+}
 
 
 # --- Şemalar ---------------------------------------------------------------------------
@@ -99,8 +106,12 @@ class EkipmanIn(BaseModel):
     """Kabul edilen cihaz: kütükten `ekipman_id` ya da tip + marka + seri (bul-veya-aç)."""
 
     ekipman_id: int | None = None
-    tip: Literal[EKIPMAN_TIPLERI] = "TELSIZ"  # type: ignore[valid-type]
-    marka: Literal[ATOLYE_MARKALARI] | None = None  # type: ignore[valid-type]
+    # None: kabul biriminin varsayılan tipi (`BIRIM_EKIPMAN_TIPLERI` ilk öğe).
+    tip: Literal[EKIPMAN_TIPLERI] | None = None  # type: ignore[valid-type]
+    # Telsiz birimlerinde (HABERLESME/POC) `ATOLYE_MARKALARI` sözlüğünden; diğer
+    # birimlerde serbest metin (rol testi tur 2 B12: güvenlik cihazı kabulünde
+    # yalnız telsiz markaları vardı).
+    marka: str | None = Field(default=None, max_length=60)
     # Marka "DIGER" ise gerçek marka adı (kütükte serbest metin).
     marka_diger: str | None = Field(default=None, max_length=60)
     model: str | None = Field(default=None, max_length=80)
@@ -117,7 +128,9 @@ class AksesuarIn(BaseModel):
 
 
 class KabulOrtakIn(BaseModel):
-    birim: str = Field(default="HABERLESME", min_length=1, max_length=20)
+    # None: kullanıcının birimi (birincil birim ya da görebildiği tek birim; rol
+    # testi tur 2 B12 — eskiden sabit HABERLESME'ydi). Belirsizse 400.
+    birim: str | None = Field(default=None, min_length=1, max_length=20)
     customer_id: int
     address_id: int | None = None
     contact_id: int | None = None
@@ -313,19 +326,25 @@ async def _kapsamli(db, user: User, so_id: int) -> tuple[ServiceOrder, WorkshopR
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
-def _marka(e: EkipmanIn) -> str | None:
-    if e.marka == "DIGER":
+def _marka(e: EkipmanIn, birim: str) -> str | None:
+    marka = (e.marka or "").strip() or None
+    if marka == "DIGER":
         if not (e.marka_diger or "").strip():
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "'Diğer' markada marka adı zorunlu")
         return e.marka_diger.strip()
-    return e.marka
+    if marka is not None and birim in TELSIZ_BIRIMLERI and marka not in ATOLYE_MARKALARI:
+        raise HTTPException(
+            422,
+            f"Bilinmeyen marka: {marka} (listede yoksa 'DIGER' seçip marka adını yazın)",
+        )
+    return marka
 
 
-def _secim(e: EkipmanIn) -> atolye.EkipmanSecimi:
+def _secim(e: EkipmanIn, birim: str) -> atolye.EkipmanSecimi:
     return atolye.EkipmanSecimi(
         ekipman_id=e.ekipman_id,
-        tip=e.tip,
-        marka=_marka(e) if e.ekipman_id is None else None,
+        tip=e.tip or BIRIM_EKIPMAN_TIPLERI.get(birim, ("DIGER",))[0],
+        marka=_marka(e, birim) if e.ekipman_id is None else None,
         model=e.model,
         seri=e.seri,
         warranty_start=e.warranty_start,
@@ -340,15 +359,30 @@ def _aksesuarlar(satirlar: list[AksesuarIn]) -> list[atolye.AksesuarGirdisi]:
     ]
 
 
-def _ortak(p: KabulOrtakIn) -> atolye.KabulGirdisi:
-    if p.birim not in BIRIM_KODLARI:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {p.birim}")
+def varsayilan_birim(user: User, birim: str | None) -> str:
+    """Kabul/form birimi: verilen birim; yoksa kullanıcının birincil birimi (görebildiği
+    birimlerdeyse), görebildiği tek birim ya da (geri uyum) HABERLESME. Belirsizse 400."""
+    if birim:
+        if birim not in BIRIM_KODLARI:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {birim}")
+        return birim
+    gorunur = kapsam.gorunur_birimler(user)
+    if user.birincil_birim and user.birincil_birim in gorunur:
+        return user.birincil_birim
+    if len(gorunur) == 1:
+        return gorunur[0]
+    if "HABERLESME" in gorunur:
+        return "HABERLESME"
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kabul birimini seçin")
+
+
+def _ortak(p: KabulOrtakIn, birim: str) -> atolye.KabulGirdisi:
     return atolye.KabulGirdisi(
         customer_id=p.customer_id,
         service_type=p.service_type,
         receive_type=p.receive_type,
         customer_complaint=p.customer_complaint,
-        birim=p.birim,
+        birim=birim,
         address_id=p.address_id,
         contact_id=p.contact_id,
         oncelik=p.oncelik,
@@ -741,10 +775,30 @@ async def seri_gecmisi(
 
 
 @router.get("/form-verileri", response_model=None)
-async def form_verileri(db: DbDep, user: Okuyucu, birim: str = "HABERLESME") -> dict[str, Any]:
-    """Sözlükler + birimin arıza nedeni kataloğu (tek kaynak: model sabitleri)."""
-    if birim not in BIRIM_KODLARI:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {birim}")
+async def form_verileri(db: DbDep, user: Okuyucu, birim: str | None = None) -> dict[str, Any]:
+    """Sözlükler + birimin arıza nedeni kataloğu (tek kaynak: model sabitleri).
+
+    Rol testi tur 2 (B12): `birim` verilmezse kullanıcının birimi (kabul ile aynı
+    kural, yanıtta `birim`); marka ve ekipman tipi listesi birime göre: telsiz
+    birimlerinde marka sözlüğü, diğerlerinde birimin kütüğündeki markalar + DIGER."""
+    birim = varsayilan_birim(user, birim)
+    if birim in TELSIZ_BIRIMLERI:
+        markalar = list(ATOLYE_MARKALARI)
+    else:
+        kutuk = (
+            await db.scalars(
+                select(ServiceEquipment.brand)
+                .where(
+                    ServiceEquipment.birim == birim,
+                    ServiceEquipment.is_deleted.is_(False),
+                    ServiceEquipment.brand.is_not(None),
+                )
+                .group_by(ServiceEquipment.brand)
+                .order_by(func.count().desc(), ServiceEquipment.brand)
+                .limit(50)
+            )
+        ).all()
+        markalar = [m for m in kutuk if m and m != "DIGER"] + ["DIGER"]
     nedenler = (
         await db.scalars(
             select(ServiceFaultReason)
@@ -757,8 +811,9 @@ async def form_verileri(db: DbDep, user: Okuyucu, birim: str = "HABERLESME") -> 
         "servis_turleri": [
             {"kod": t, "ad": atolye_rapor.SERVIS_TURU_ADLARI[t]} for t in ATOLYE_SERVIS_TURLERI
         ],
-        "markalar": list(ATOLYE_MARKALARI),
-        "ekipman_tipleri": list(TELSIZ_TIPLERI),
+        "birim": birim,
+        "markalar": markalar,
+        "ekipman_tipleri": list(BIRIM_EKIPMAN_TIPLERI.get(birim, ("DIGER",))),
         "teslim_tipleri": [
             {"kod": t, "ad": atolye.TESLIM_TIPI_ADLARI[t]} for t in ATOLYE_TESLIM_TIPLERI
         ],
@@ -785,8 +840,9 @@ async def kabul(
     payload: KabulIn, request: Request, db: DbDep, clock: ClockDep, user: Kabulcu
 ) -> dict[str, Any]:
     """Cihaz kabulü: servis işi (ATOLYE) + atölye kaydı + aksesuarlar tek transaction."""
-    veri = _ortak(payload)
-    veri.ekipman = _secim(payload.ekipman)
+    birim = varsayilan_birim(user, payload.birim)
+    veri = _ortak(payload, birim)
+    veri.ekipman = _secim(payload.ekipman, birim)
     veri.aksesuarlar = _aksesuarlar(payload.aksesuarlar)
     try:
         kayit = await atolye.kabul(db, veri, user=user, clock=clock, ip=client_ip(request))
@@ -802,9 +858,11 @@ async def toplu_kabul(
     payload: TopluKabulIn, request: Request, db: DbDep, clock: ClockDep, user: Kabulcu
 ) -> dict[str, Any]:
     """N cihaz → N kayıt + N servis işi, ortak kabul grubu; hepsi ya da hiçbiri."""
-    ortak = _ortak(payload)
+    birim = varsayilan_birim(user, payload.birim)
+    ortak = _ortak(payload, birim)
     cihazlar = [
-        (_secim(c), _aksesuarlar(c.aksesuarlar), c.customer_complaint) for c in payload.cihazlar
+        (_secim(c, birim), _aksesuarlar(c.aksesuarlar), c.customer_complaint)
+        for c in payload.cihazlar
     ]
     try:
         kayitlar = await atolye.toplu_kabul(
@@ -881,10 +939,15 @@ async def guncelle(
     so_id: int, payload: KayitPatch, request: Request, db: DbDep, clock: ClockDep, user: Yazici
 ) -> dict[str, Any]:
     """Teşhis/onarım/test/onay/dış servis/genel alanlar; `version` uyuşmazlığı 409.
-    `repair_amount` `maliyet.gor` yoksa SESSİZCE yok sayılır."""
+    `repair_amount` `maliyet.gor` olmadan DOLU gönderilirse 403 (rol testi tur 2
+    B11; bakım ücreti kuralıyla aynı — eskiden sessizce yok sayılıyordu)."""
     so, kayit = await _kapsamli(db, user, so_id)
     degisiklik = payload.model_dump(exclude_unset=True)
     degisiklik.pop("version", None)
+    if degisiklik.get("repair_amount") is not None and not sees_cost(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Tamir bedeli alanı için yetkiniz yok (maliyet.gor)"
+        )
     try:
         await atolye.guncelle(
             db,

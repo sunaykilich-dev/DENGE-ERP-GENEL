@@ -22,7 +22,7 @@ async def _giris(client, username: str):
 
 async def _kurulum(client, kullanici_ac, db):
     await kullanici_ac("patron", "ADMIN")  # hassas (ADMIN)
-    await kullanici_ac("finans", "MUHASEBE_DESTEK")  # hassas (maliyet.gor)
+    await kullanici_ac("finans", "FINANS_YONETICI")  # hassas (maliyet.gor; §7.7)
     istisnali = await kullanici_ac("istisnali", "DEPO")  # sapma
     db.add(
         UserPermission(user_id=istisnali.id, permission_code="rma.yaz", allow=True, gerekce="test")

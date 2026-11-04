@@ -501,7 +501,9 @@ def test_yurt_disi_il_kabul_edilir() -> None:
 
 
 async def test_finans_uzmani_servis_sozluklerini_okur(client, kullanici_ac) -> None:
-    await kullanici_ac("f_uzm", "MUHASEBE_DESTEK")
+    # Finans uzmanı G4.4 ile `maliyet.gor`'u kaybetti (§7.7); kural "yalnız
+    # maliyet.gor sahibi sözlüğü okur" satış müdürüyle sınanır.
+    await kullanici_ac("f_uzm", "SATIS_MUDURU")
     await giris(client, "f_uzm")
     r = await client.get(f"{TS}/isler/form-verileri")
     assert r.status_code == 200, r.text

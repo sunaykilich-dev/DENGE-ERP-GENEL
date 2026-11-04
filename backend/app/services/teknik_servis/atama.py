@@ -100,6 +100,19 @@ def _uyari_ekle(uyarilar: Sequence[str]) -> None:
             liste.append(u)
 
 
+# Rol testi tur 2 (5_teknisyen B7): yalnız saha sorumlusu (`servis.tamamla` yok)
+# tayin edilen iş ekipçe tamamlanamaz. Tayin engellenmez (saha sorumlusu işi
+# izler); uyarı döner, sonucu `servis.tamamla` sahibi şef/yönetici girer.
+SONUC_GIREN_YOK_UYARISI = (
+    "Ekipte sonuç girebilecek (servis.tamamla) kimse yok; işi şef ya da yönetici tamamlar."
+)
+
+
+async def _sonuc_girebilen_var(db: AsyncSession, kimlikler: Sequence[int]) -> bool:
+    kisiler = (await db.scalars(select(User).where(User.id.in_(list(kimlikler))))).all()
+    return any(k.has("servis.tamamla") for k in kisiler)
+
+
 def _satirlari_dogrula(atamalar: Sequence[AtamaSatiri]) -> list[AtamaSatiri]:
     kimlikler = [a.user_id for a in atamalar]
     if len(kimlikler) != len(set(kimlikler)):
@@ -149,8 +162,21 @@ async def _sirket_disi_kisiler(db: AsyncSession, birim: str, kimlikler: set[int]
     return kimlikler - bagli
 
 
-async def _atanabilirlik_dogrula(db: AsyncSession, birim: str, kimlikler: set[int]) -> None:
-    """TS-009 ölçütü; ihlalin türüne göre okunur mesaj ve kod."""
+def _atolye_ustasi_mi(kisi: User) -> bool:
+    """Atölye işine saha rolü olmadan tayin edilebilen kişi: atölye yazma izni
+    olan (atölye ustası). Rol testi tur 2 (5_teknisyen B5): usta kendi kaydına
+    tayin olup ATÖLYE/TEST süresi giremiyordu; atölye işleri hep "süre eksik"
+    kapanıyordu. Saha işlerinde kural değişmez (saha rolü şart)."""
+    return kisi.has("atolye.yaz")
+
+
+async def _atanabilirlik_dogrula(
+    db: AsyncSession, birim: str, kimlikler: set[int], *, atolye: bool = False
+) -> None:
+    """TS-009 ölçütü; ihlalin türüne göre okunur mesaj ve kod.
+
+    `atolye=True` (iş kategorisi ATOLYE): saha rolü olmayan atölye ustası da
+    tayin edilebilir (`_atolye_ustasi_mi`)."""
     if not kimlikler:
         return
     kisiler = {
@@ -165,7 +191,9 @@ async def _atanabilirlik_dogrula(db: AsyncSession, birim: str, kimlikler: set[in
             raise ServisGirdiHatasi(f"Kullanıcı bulunamadı (#{kimlik})")
         if not kisi.is_active or kisi.ayrilis_tarihi is not None:
             raise ServisGirdiHatasi(f"{kisi.full_name} ayrılmış/pasif; tayin edilemez")
-        if kisi.saha_rolu not in ATANABILIR_SAHA_ROLLERI:
+        if kisi.saha_rolu not in ATANABILIR_SAHA_ROLLERI and not (
+            atolye and _atolye_ustasi_mi(kisi)
+        ):
             raise ServisGirdiHatasi(f"{kisi.full_name} saha personeli değil; tayin edilemez")
         if birim not in kisi.birim_kodlari:
             raise AtamaHatasi(f"{kisi.full_name} bu işin biriminde değil")
@@ -217,7 +245,10 @@ async def _uygula(
     if not cikan and not degisen and not eklenen:
         return mevcut, False
     await _atanabilirlik_dogrula(
-        db, so.birim, {a.user_id for a in eklenen} | {a.user_id for a in degisen}
+        db,
+        so.birim,
+        {a.user_id for a in eklenen} | {a.user_id for a in degisen},
+        atolye=so.kategori == "ATOLYE",
     )
     await kancalar.ekip_degisiyor(db, so, [a.user_id for a in cikan])
 
@@ -262,6 +293,8 @@ async def _uygula(
         veri["yetkinlik_uyarisi"] = True
         veri["uyari_sayisi"] = len(uyarilar)
         _uyari_ekle(uyarilar)
+    if atamalar and not await _sonuc_girebilen_var(db, [a.user_id for a in atamalar]):
+        _uyari_ekle([SONUC_GIREN_YOK_UYARISI])
     await gecmis.olay_yaz(db, so, "ATAMA", ozet, user=user, clock=clock, veri=veri)
     await kancalar.ekip_degisti(db, so, atamalar, clock)
     await db.refresh(so, attribute_names=["atamalar"])
@@ -337,7 +370,12 @@ async def toplu_ata(
             + ", ".join(sorted(birimler))
             + ")"
         )
-    await _atanabilirlik_dogrula(db, next(iter(birimler)), {a.user_id for a in satirlar})
+    await _atanabilirlik_dogrula(
+        db,
+        next(iter(birimler)),
+        {a.user_id for a in satirlar},
+        atolye=all(so.kategori == "ATOLYE" for so in isler),
+    )
 
     yeni_sorumlu = next((a.user_id for a in satirlar if a.is_lead), None)
     for so in isler:

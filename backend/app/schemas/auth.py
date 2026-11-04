@@ -47,12 +47,18 @@ class UserOut(BaseModel):
     # listesi) yanıtta `aktif_sirket` boş, `sirketler` ham üyeliktir.
     aktif_sirket: str | None = None
     sirketler: list[str] = []
+    # Rol testi tur 2 (2_menu B-12, KARARLAR 2026-11-04 §7.17): etkin şirkette
+    # kullanıcının görebildiği birimler (`kapsam.gorunur_birimler`; TUMU =
+    # şirketin bütün birimleri). Menü/kart birime bağlı bölümleri buna göre
+    # gizler (POC yalnız TELEKOM'da). Oturum dışı yanıtta boş.
+    gorunur_birimler: list[str] = []
 
     model_config = {"from_attributes": True}
 
     @classmethod
     def of(cls, user) -> "UserOut":
         from app.services import sirketler as sirket_svc
+        from app.services.teknik_servis import kapsam as ts_kapsam
 
         codes = user.etkin_izinler()
         secilebilir = getattr(user, "_uye_sirketler", None)
@@ -68,6 +74,9 @@ class UserOut(BaseModel):
             birincil_birim=user.birincil_birim,
             aktif_sirket=sirket_svc.aktif_sirket(user),
             sirketler=list(secilebilir) if secilebilir is not None else user.sirket_kodlari,
+            gorunur_birimler=ts_kapsam.gorunur_birimler(user)
+            if sirket_svc.aktif_sirket(user) is not None
+            else [],
             mfa_enabled=user.mfa_enabled,
             # GİRİŞ yanıtı da bunu taşımak ZORUNDA: arayüz girişten sonra
             # kullanıcıyı bu yanıttan kuruyor, /auth/me'yi yalnız sayfa

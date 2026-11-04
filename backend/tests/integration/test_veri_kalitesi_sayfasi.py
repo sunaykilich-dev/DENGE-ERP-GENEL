@@ -210,7 +210,7 @@ async def _kullanici(db, ad):
 
 
 async def test_cihaz_servis_isleri_rbac(kullanici_ac, giris, cihaz_ac) -> None:
-    await kullanici_ac("vk_satis", "SATIS")
+    await kullanici_ac("vk_satis", "DEPO")  # cihaz.gor var, servis.gor yok
     satis = await giris("vk_satis")
     cihaz = await cihaz_ac(imei="490154203237518")
     r = await satis.get("/api/teknik-servis/cihaz-servis-isleri", params={"cihaz_id": cihaz.id})

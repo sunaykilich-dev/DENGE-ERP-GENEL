@@ -56,7 +56,7 @@ async def _ofis_agi(db, *aglar: str) -> None:
 
 async def test_seed_muhasebe_rolunu_ofise_baglar(seeded) -> None:
     roller = {r.code: r.yalniz_ofis for r in (await seeded.scalars(select(Role))).all()}
-    assert {k for k, v in roller.items() if v} == {"MUHASEBE_DESTEK"}
+    assert {k for k, v in roller.items() if v} == {"MUHASEBE_DESTEK", "FINANS_YONETICI"}  # §7.18
 
 
 async def test_liste_bossa_muhasebe_her_yerden_girer(client, kullanici_ac) -> None:

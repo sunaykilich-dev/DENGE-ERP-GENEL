@@ -363,7 +363,9 @@ async def is_karti(db: AsyncSession, user: User, clock: Clock, so: ServiceOrder)
         "telefon_maskeli": not telefon_acik,
         "seriler": [s.seri_no for s in so.seriler if s.is_active],
         "equipment_id": so.equipment_id,
-        "bakim_formu": so.tur == "PB",
+        # Rol testi tur 2 (B2): sözleşmesiz bakımda da form (cihazı bağlıysa).
+        "bakim_formu": so.tur == "PB"
+        or (so.tur == "PLANSIZ_BAKIM" and so.equipment_id is not None),
         "plan": (
             {
                 "plan_tarihi": plan.plan_date,
