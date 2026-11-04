@@ -23,14 +23,19 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api, ApiError, type Kullanici, type Rol } from "../api/client";
+import { personelApi } from "../api/personel";
 import { kapsamEtiketi, kapsamKataloguSorgusu, useAuth } from "../auth/AuthContext";
 import IzinIstisnalari from "../components/IzinIstisnalari";
 import RolDuzenle from "../components/RolDuzenle";
 import RolYetkileri from "../components/RolYetkileri";
 import Statistic from "../components/Statistic";
 
-/** Liste satırı: kullanıcı + giriş/birim bilgisi + rolünden sapma (E13-10). */
-type KullaniciSatiri = Kullanici & {
+/**
+ * Liste satırı: kullanıcı + giriş/birim bilgisi + rolünden sapma (E13-10).
+ * Liste yanıtında `sirketler` ham üyelik KODLARIDIR (oturumdaki nesne değil).
+ */
+type KullaniciSatiri = Omit<Kullanici, "sirketler"> & {
+  sirketler?: string[];
   giris_acik?: boolean;
   birimler?: string[];
   birincil_birim?: string | null;
@@ -304,6 +309,12 @@ export default function UsersPage() {
     value: b.kod,
     label: b.ad,
   }));
+  // Rol testi B-03 (KARARLAR 2026-11-04 §1, §5.1): admin kullanıcıyı şirkete üye yapar.
+  const sirketSecenekleri = (katalog.data?.sirketler ?? []).map((s) => ({ value: s.kod, label: s.ad }));
+  const sirketAdi = (kod: string) => katalog.data?.sirketler?.find((s) => s.kod === kod)?.ad ?? kod;
+  // Birim üyeliği personel kartı ucundan yazılır (`personel.yaz`); kişi kendi birimini değiştiremez.
+  const birimYazabilir = yetkili("personel.yaz");
+  const [kaydediliyor, setKaydediliyor] = useState(false);
 
   const yenile = () => {
     void qc.invalidateQueries({ queryKey: ["kullanicilar"] });
@@ -331,6 +342,9 @@ export default function UsersPage() {
         full_name: duzenlenen.full_name,
         email: duzenlenen.email ?? undefined,
         role_code: duzenlenen.role.code,
+        sirketler: duzenlenen.sirketler ?? [],
+        birimler: duzenlenen.birimler ?? [],
+        birincil_birim: duzenlenen.birincil_birim ?? undefined,
         giris_acik: duzenlenen.giris_acik ?? true,
         password: undefined,
         parola_sifirla: false,
@@ -485,6 +499,11 @@ export default function UsersPage() {
                     {katalog.data?.birimler.find((x) => x.kod === b)?.ad ?? b}
                   </Tag>
                 ))}
+                {(k.sirketler ?? []).map((s) => (
+                  <Tag key={`s:${s}`} color="cyan">
+                    {sirketAdi(s)}
+                  </Tag>
+                ))}
                 {(k.sapma_sayisi ?? 0) > 0 && (
                   <Tag color="orange">Rolünden farklı ({k.sapma_sayisi})</Tag>
                 )}
@@ -528,7 +547,7 @@ export default function UsersPage() {
           },
           {
             title: "Aktif",
-            render: (_, k: Kullanici) => (
+            render: (_, k: KullaniciSatiri) => (
               <Switch
                 checked={k.is_active}
                 loading={guncelle.isPending}
@@ -540,7 +559,7 @@ export default function UsersPage() {
           },
           {
             title: "",
-            render: (_, k: Kullanici) => (
+            render: (_, k: KullaniciSatiri) => (
               <Button size="small" onClick={() => setDuzenlenen(k)}>
                 Düzenle
               </Button>
@@ -567,7 +586,17 @@ export default function UsersPage() {
         okText="Aç"
         cancelText="Vazgeç"
       >
-        <Form form={form} layout="vertical" onFinish={(v) => olustur.mutate(v)}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(v: Record<string, unknown>) => {
+            // Boş şirket listesi = sunucu birimlerden türetsin (alanı hiç gönderme).
+            const { sirketler, ...geri } = v;
+            olustur.mutate(
+              Array.isArray(sirketler) && sirketler.length ? { ...geri, sirketler } : geri,
+            );
+          }}
+        >
           <Form.Item name="full_name" label="Ad Soyad" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
@@ -617,6 +646,13 @@ export default function UsersPage() {
               </Form.Item>
             </>
           )}
+          <Form.Item
+            name="sirketler"
+            label="Şirketler"
+            extra="Kullanıcının çalışabileceği şirketler. Boş bırakılırsa birimlerinden türetilir."
+          >
+            <Select mode="multiple" allowClear options={sirketSecenekleri} placeholder="Birimlerden türetilsin" />
+          </Form.Item>
           <Divider style={{ margin: "4px 0 12px" }}>Erişim ve izinler</Divider>
           <RolYetkileri rolKodu={yeniRol} />
         </Form>
@@ -627,7 +663,7 @@ export default function UsersPage() {
         open={duzenlenen !== null}
         onCancel={() => setDuzenlenen(null)}
         onOk={() => duzenleForm.submit()}
-        confirmLoading={guncelle.isPending}
+        confirmLoading={guncelle.isPending || kaydediliyor}
         okText="Kaydet"
         cancelText="Vazgeç"
         destroyOnHidden
@@ -635,8 +671,33 @@ export default function UsersPage() {
         <Form
           form={duzenleForm}
           layout="vertical"
-          onFinish={(v) => {
+          onFinish={async (v) => {
             if (!duzenlenen) return;
+            // Birim üyeliği önce yazılır: birim kapsamlı role geçişte sunucu
+            // birimsiz hesabı 400 ile reddeder (personel kartı ucu, TS-002).
+            const yeniBirimler: string[] = v.birimler ?? [];
+            const eskiBirimler = duzenlenen.birimler ?? [];
+            const birimDegisti =
+              birimYazabilir &&
+              duzenlenen.id !== kendisi?.id &&
+              (yeniBirimler.length !== eskiBirimler.length ||
+                yeniBirimler.some((b) => !eskiBirimler.includes(b)) ||
+                (v.birincil_birim ?? null) !== (duzenlenen.birincil_birim ?? null));
+            if (birimDegisti) {
+              const birincil = yeniBirimler.includes(v.birincil_birim) ? v.birincil_birim : yeniBirimler[0];
+              setKaydediliyor(true);
+              try {
+                await personelApi.birimleriYaz(
+                  duzenlenen.id,
+                  yeniBirimler.map((b) => ({ birim: b, birincil: b === birincil })),
+                );
+              } catch (e) {
+                message.error(`Birimler kaydedilemedi: ${(e as Error).message}`);
+                return;
+              } finally {
+                setKaydediliyor(false);
+              }
+            }
             // Boş bırakılan parola "parolayı silme" değil "dokunma" demek.
             const gonderilecek: Record<string, unknown> = {
               id: duzenlenen.id,
@@ -647,6 +708,14 @@ export default function UsersPage() {
               giris_acik: v.giris_acik,
               reset_mfa: v.reset_mfa || undefined,
             };
+            const yeniSirketler: string[] = v.sirketler ?? [];
+            const eskiSirketler = duzenlenen.sirketler ?? [];
+            if (
+              yeniSirketler.length !== eskiSirketler.length ||
+              yeniSirketler.some((s) => !eskiSirketler.includes(s))
+            ) {
+              gonderilecek.sirketler = yeniSirketler;
+            }
             if (v.password) gonderilecek.password = v.password;
             else if (v.parola_sifirla) gonderilecek.parola_sifirla = true;
             guncelle.mutate(gonderilecek as { id: number } & Record<string, unknown>);
@@ -670,6 +739,28 @@ export default function UsersPage() {
               options={(roller.data ?? []).map((r) => ({ value: r.code, label: rolEtiketi(r) }))}
             />
           </Form.Item>
+          <Form.Item
+            name="sirketler"
+            label="Şirketler"
+            rules={[{ required: (duzenlenen?.sirketler?.length ?? 0) > 0, message: "En az bir şirket seçin" }]}
+            extra="Kullanıcı yalnız üye olduğu şirketleri seçebilir; çıkarılan şirkette açık oturumu varsa kendiliğinden başka şirkete geçer."
+          >
+            <Select mode="multiple" options={sirketSecenekleri} />
+          </Form.Item>
+          {birimYazabilir && duzenlenen?.id !== kendisi?.id && (
+            <>
+              <Form.Item
+                name="birimler"
+                label="Birimler"
+                extra="Birim kapsamlı rolde kullanıcı yalnız bu birimlerin kayıtlarını görür. Değişince açık oturumları düşer."
+              >
+                <Select mode="multiple" allowClear options={birimSecenekleri} />
+              </Form.Item>
+              <Form.Item name="birincil_birim" label="Birincil birim" extra="Boş bırakılırsa ilk birim birincil olur.">
+                <Select allowClear options={birimSecenekleri} />
+              </Form.Item>
+            </>
+          )}
           <Form.Item
             name="giris_acik"
             label="Oturum açabilir"

@@ -11,6 +11,16 @@
  * Uç henüz yoksa (404/405, arka uç paketi gelmeden) `destekleniyor=false`:
  * seçici gizlenir, menü şirket süzgeçsiz çizilir. Bu yalnız görsel
  * kısıtlamadır; veri ayrımını sunucu kapsamı yapar.
+ *
+ * Rol testi B-05: yanıt gelene kadar `yukleniyor=true` — kabuk menü ve
+ * kırıntı yerine iskelet çizer (bütün şirketlerin bölümleri bir an bile
+ * görünmesin). Uç başka bir hatayla düşerse birimli bölümler GİZLENİR
+ * (fail-closed, boş birim kümesi).
+ *
+ * `menuBirimleri` (B-12/Set Bariyer): etkin şirketin birimleri ∩ kullanıcının
+ * kapsamındaki birimler. Birim kapsamlı rolde (KENDI_BIRIMI/KENDI_ISLERI)
+ * kullanıcının üye olmadığı birimin bölümü menüde çizilmez; sunucu o bölümün
+ * listesini zaten boş döndürür (sayı = liste).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App } from "antd";
@@ -18,7 +28,6 @@ import { createContext, useCallback, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { ApiError, api } from "../api/client";
-import { ANA_PANEL_YOLU } from "../fiori/menu";
 import { useAuth } from "./AuthContext";
 
 export interface Sirket {
@@ -39,11 +48,21 @@ interface SirketDurumu {
   aktif: Sirket | null;
   /** Menü süzgeci; null = şirket süzgeci uygulanmaz. */
   aktifBirimler: ReadonlySet<string> | null;
+  /** Menüde çizilecek birimler: şirket ∩ kullanıcı kapsamı; null = süzgeç yok. */
+  menuBirimleri: ReadonlySet<string> | null;
+  /** Şirket bilgisi henüz gelmedi (menü/kırıntı iskelet çizer). */
+  yukleniyor: boolean;
   degistir: (kod: string) => void;
   degisiyor: boolean;
 }
 
 const SORGU_ANAHTARI = "oturum-sirketler";
+
+/**
+ * Birim kapsamlı roller (sunucu: `permissions.BIRIM_KAPSAMLARI`). Bu
+ * kapsamlarda kullanıcı yalnız üyesi olduğu birimlerin kayıtlarını görür.
+ */
+const BIRIM_KAPSAMLARI = new Set(["KENDI_BIRIMI", "KENDI_ISLERI"]);
 
 /** Şirketi ayırt eden renk (üst çubuktaki küçük işaret). */
 const SIRKET_RENKLERI: Record<string, string> = {
@@ -101,7 +120,8 @@ export function SirketProvider({ children }: { children: React.ReactNode }) {
   const degisim = useMutation({
     mutationFn: (kod: string) => api.put<SirketYaniti>("/api/oturum/aktif-sirket", { kod }),
     onSuccess: async (veri) => {
-      navigate(ANA_PANEL_YOLU);
+      // Açılış sayfası yeni şirketin menüsüne göre seçilir (B-01).
+      navigate("/");
       // Önceki şirketin bütün önbelleği silinir; açık sorgular yeniden çekilir.
       await qc.resetQueries({ predicate: (q) => q.queryKey[0] !== SORGU_ANAHTARI });
       qc.setQueryData(anahtar, veri);
@@ -122,20 +142,35 @@ export function SirketProvider({ children }: { children: React.ReactNode }) {
     [mutate, sorgu.data?.aktif],
   );
 
+  const kapsam = kullanici?.role.scope;
+  const kullaniciBirimleri = kullanici?.birimler;
   const deger = useMemo<SirketDurumu>(() => {
     const veri = sorgu.data ?? null;
     const sirketler = veri?.sirketler ?? [];
     const aktif = sirketler.find((s) => s.kod === veri?.aktif) ?? null;
+    // Uç yok (null) → süzgeç yok; uç hata verdi → birimli bölümler gizli
+    // (fail-closed); etkin şirket biliniyorsa onun birimleri.
+    const aktifBirimler: ReadonlySet<string> | null = aktif
+      ? new Set(aktif.birimler)
+      : sorgu.isError
+        ? new Set<string>()
+        : null;
+    let menuBirimleri = aktifBirimler;
+    if (kapsam && BIRIM_KAPSAMLARI.has(kapsam) && kullaniciBirimleri) {
+      const uye = new Set(kullaniciBirimleri);
+      menuBirimleri = new Set([...(aktifBirimler ?? uye)].filter((b) => uye.has(b)));
+    }
     return {
       destekleniyor: !!veri && sirketler.length > 0,
       sirketler,
       aktif,
-      // Etkin şirketi bilinmiyorsa süzme yok (boş menü göstermektense sunucuya bırak).
-      aktifBirimler: aktif ? new Set(aktif.birimler) : null,
+      aktifBirimler,
+      menuBirimleri,
+      yukleniyor: !!kullanici && sorgu.isPending,
       degistir,
       degisiyor: degisim.isPending,
     };
-  }, [sorgu.data, degistir, degisim.isPending]);
+  }, [sorgu.data, sorgu.isError, sorgu.isPending, kullanici, kapsam, kullaniciBirimleri, degistir, degisim.isPending]);
 
   return <Ctx.Provider value={deger}>{children}</Ctx.Provider>;
 }

@@ -28,6 +28,11 @@ export class ApiError extends Error {
   get cakisma() {
     return this.status === 409;
   }
+
+  /** Ekran etkin şirkette kullanılamaz (403 `SIRKET_DISI`). */
+  get sirketDisi() {
+    return this.status === 403 && sirketDisiMi(this.govde);
+  }
 }
 
 /**
@@ -40,6 +45,28 @@ function yapisalMesaj(detail: unknown): string | undefined {
     if (typeof m === "string") return m;
   }
   return undefined;
+}
+
+/**
+ * Şirket kapısı (KARARLAR 2026-11-04 §1): sunucu, etkin şirkette kullanılamayan
+ * ekranın ucunu 403 `{detail: {kod: "SIRKET_DISI", mesaj}}` ile kapatır.
+ * İstemci bunu tek yerde tanır: hata `sirketDisi` bayrağını taşır ve bir SAYFA
+ * verisi (GET) bu yüzden gelmediyse pencereye `SIRKET_DISI_OLAYI` yayılır;
+ * kabuktaki rota kapısı boş tablo ("Veri Yok") yerine "bu sayfa bu şirkette
+ * kullanılamaz — şirket seçiciden değiştirin" sonucunu çizer (sızıntı S4, B-06).
+ */
+export const SIRKET_DISI_OLAYI = "denge:sirket-disi";
+
+export function sirketDisiMi(govde: unknown): boolean {
+  const d = (govde as { detail?: unknown } | null)?.detail;
+  return !!d && typeof d === "object" && (d as { kod?: unknown }).kod === "SIRKET_DISI";
+}
+
+function sirketDisiBildir(status: number, govde: unknown, mesaj: string, yontem: string | undefined) {
+  if (status !== 403 || (yontem ?? "GET").toUpperCase() !== "GET" || !sirketDisiMi(govde)) return;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent<string>(SIRKET_DISI_OLAYI, { detail: mesaj }));
+  }
 }
 
 async function istek<T>(yol: string, init: RequestInit = {}): Promise<T> {
@@ -65,6 +92,7 @@ async function istek<T>(yol: string, init: RequestInit = {}): Promise<T> {
     } catch {
       /* gövde JSON değil — varsayılan mesaj kalsın */
     }
+    sirketDisiBildir(res.status, govde, mesaj, init.method);
     throw new ApiError(res.status, mesaj, govde);
   }
 
@@ -89,13 +117,17 @@ async function getSayfa<T>(yol: string): Promise<Sayfa<T>> {
   });
   if (!res.ok) {
     let mesaj = `Beklenmeyen hata (${res.status})`;
+    let govde: unknown;
     try {
-      const govde = await res.json();
-      if (typeof govde?.detail === "string") mesaj = govde.detail;
+      govde = await res.json();
+      const d = (govde as { detail?: unknown } | null)?.detail;
+      if (typeof d === "string") mesaj = d;
+      else mesaj = yapisalMesaj(d) ?? mesaj;
     } catch {
       /* gövde JSON değil */
     }
-    throw new ApiError(res.status, mesaj);
+    sirketDisiBildir(res.status, govde, mesaj, "GET");
+    throw new ApiError(res.status, mesaj, govde);
   }
   const kayitlar = (await res.json()) as T[];
   const baslik = res.headers.get("X-Toplam-Kayit");

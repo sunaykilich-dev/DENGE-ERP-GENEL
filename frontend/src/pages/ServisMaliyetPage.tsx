@@ -39,7 +39,10 @@ import {
   type Tarife,
 } from "../api/servisMaliyet";
 import { teknikServisApi } from "../api/teknikServis";
+import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
+import { SERVIS_TUR_ETIKETLERI } from "../fiori/etiketler";
 import Statistic from "../components/Statistic";
 
 /**
@@ -80,6 +83,35 @@ interface Hesap {
   title: string;
 }
 
+/**
+ * Süzgeç sözlüğü (birim, tür). Rol testi B-07: `form-verileri` ucu `servis.gor`
+ * ister; Finans Uzmanı gibi yalnız `maliyet.gor` sahibi rolde istek atılmaz
+ * (403 yerine) ve etkin şirketin birimleri yerel etiketlerden gelir.
+ */
+function useMaliyetSozlugu(): { data?: { birimler: { kod: string; ad: string }[]; turler: { kod: string; ad: string }[] } } {
+  const { yetkili } = useAuth();
+  const { aktifBirimler } = useSirket();
+  const servisGor = yetkili("servis.gor");
+  const sorgu = useQuery({
+    queryKey: ["ts-form-verileri"],
+    queryFn: teknikServisApi.formVerileri,
+    staleTime: 5 * 60_000,
+    enabled: servisGor,
+  });
+  return useMemo(() => {
+    if (servisGor) return { data: sorgu.data };
+    return {
+      data: {
+        birimler: BIRIM_KODLARI.filter((b) => !aktifBirimler || aktifBirimler.has(b)).map((b) => ({
+          kod: b,
+          ad: BIRIM_ETIKETLERI[b] ?? b,
+        })),
+        turler: Object.entries(SERVIS_TUR_ETIKETLERI).map(([kod, e]) => ({ kod, ad: e.ad })),
+      },
+    };
+  }, [servisGor, sorgu.data, aktifBirimler]);
+}
+
 function AnalizSekmesi() {
   const { yetkili } = useAuth();
   const [donem, setDonem] = useState<Dayjs | null>(dayjs().startOf("month"));
@@ -91,11 +123,7 @@ function AnalizSekmesi() {
   const [durum, setDurum] = useState<string>();
   const [seciliIs, setSeciliIs] = useState<number | null>(null);
 
-  const formVerileri = useQuery({
-    queryKey: ["ts-form-verileri"],
-    queryFn: teknikServisApi.formVerileri,
-    staleTime: 5 * 60_000,
-  });
+  const formVerileri = useMaliyetSozlugu();
   const musteriler = useQuery({
     queryKey: ["maliyet-musteri", musteriArama],
     queryFn: () =>
@@ -555,11 +583,7 @@ function TarifeSekmesi() {
   const [acik, setAcik] = useState(false);
   const [form] = Form.useForm();
 
-  const formVerileri = useQuery({
-    queryKey: ["ts-form-verileri"],
-    queryFn: teknikServisApi.formVerileri,
-    staleTime: 5 * 60_000,
-  });
+  const formVerileri = useMaliyetSozlugu();
   const tarifeler = useQuery({
     queryKey: ["iscilik-tarifeleri", birim],
     queryFn: () => servisMaliyetApi.tarifeler(birim),

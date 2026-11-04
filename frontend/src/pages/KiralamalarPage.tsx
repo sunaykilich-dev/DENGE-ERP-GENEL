@@ -60,6 +60,7 @@ import {
 } from "../api/kiralama";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import { CakismaVazgecildi, useCakismaOnayi } from "../components/KiralamaCakismaOnayi";
 import KiralamaDegisimPenceresi from "../components/KiralamaDegisimPenceresi";
 import {
@@ -159,11 +160,13 @@ export default function KiralamalarPage() {
   };
 
   const ekran = Grid.useBreakpoint();
+  const { aktifBirimler } = useSirket();
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((r) => r.id === secili[0]) ?? null;
   const ac = (r: KiralamaSatiri) => git(`/kiralamalar/${r.id}${yolEki}`);
+  // Rol testi B-13: şerit yalnız etkin şirketin birimlerini gösterir.
   const kategoriler = kategorilerOlustur(
-    KIRALAMA_BIRIMLERI.map((b) => ({ kod: b, ad: BIRIM_ETIKETLERI[b] ?? b })),
+    KIRALAMA_BIRIMLERI.filter((b) => !aktifBirimler || aktifBirimler.has(b)).map((b) => ({ kod: b, ad: BIRIM_ETIKETLERI[b] ?? b })),
     () => "yesil",
     () => <ShoppingCartOutlined />,
   );

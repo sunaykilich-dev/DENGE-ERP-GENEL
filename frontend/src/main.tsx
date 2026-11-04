@@ -3,11 +3,13 @@ import { App as AntApp, ConfigProvider } from "antd";
 import trTR from "antd/locale/tr_TR";
 import dayjs from "dayjs";
 import "dayjs/locale/tr";
-import { StrictMode, Suspense, lazy } from "react";
+import { StrictMode, Suspense, lazy, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { useSirket } from "./auth/SirketContext";
+import { MENU_AGACI, acilisYolu, gorunurMenu } from "./fiori/menu";
 import AppLayout from "./components/AppLayout";
 import BaslangicPage from "./pages/BaslangicPage";
 import AtolyePage from "./pages/AtolyePage";
@@ -91,6 +93,22 @@ function PanelKapisi() {
   return <PanelPage />;
 }
 
+/**
+ * Açılış (`/`, `/baslangic`; rol testi B-01): Ana Panel izni (`servis.gor`)
+ * olana Ana Panel, olmayana (satış, finans uzmanı, mobilite depo…) etkin
+ * şirketin menüsündeki ilk yetkili sayfa. Kabuk bunu şirket bilgisi
+ * yüklendikten sonra çizer; menüyle aynı süzgeç kullanılır.
+ */
+function Acilis() {
+  const { yetkili } = useAuth();
+  const { menuBirimleri } = useSirket();
+  const hedef = useMemo(
+    () => acilisYolu(gorunurMenu(MENU_AGACI, { yetkili, aktifBirimler: menuBirimleri })),
+    [yetkili, menuBirimleri],
+  );
+  return <Navigate to={hedef} replace />;
+}
+
 function AnaPanel() {
   return (
     <Suspense fallback={null}>
@@ -112,11 +130,12 @@ function KorumaliUygulama() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        {/* KARARLAR 2026-11-04 §2/§4: açılış Ana Panel; launchpad "Sistem ›
+        {/* KARARLAR 2026-11-04 §2/§4: açılış Ana Panel (izni olana; yoksa
+            menüdeki ilk yetkili sayfa — B-01); launchpad "Sistem ›
             Uygulamalar (kutucuklar)" altında `/uygulamalar` yolunda kalır. */}
-        <Route path="/" element={<AnaPanel />} />
+        <Route path="/" element={<Acilis />} />
         <Route path="/ana-panel" element={<AnaPanel />} />
-        <Route path="/baslangic" element={<AnaPanel />} />
+        <Route path="/baslangic" element={<Acilis />} />
         <Route path="/uygulamalar" element={<BaslangicPage />} />
         <Route path="/panel" element={<PanelKapisi />} />
         <Route path="/gorevler" element={<GorevlerPage />} />

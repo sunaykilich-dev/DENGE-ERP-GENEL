@@ -60,6 +60,7 @@ import {
   type PersonelSuzgeci,
 } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import {
   Aciklama,
   AltNot,
@@ -666,9 +667,11 @@ export default function PersonelPage() {
 
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((r) => r.id === isaretli[0]) ?? null;
+  const { aktifBirimler } = useSirket();
+  // Rol testi B-13: şerit yalnız etkin şirketin birimlerini gösterir.
   const kategoriler = [
     TUMU_KATEGORISI,
-    ...birimSecenekleri.map((b) => ({ kod: b.value, ad: buyuk(b.label), ipucu: b.label, renk: "yesil" as const, ikon: <TeamOutlined /> })),
+    ...birimSecenekleri.filter((b) => !aktifBirimler || aktifBirimler.has(b.value)).map((b) => ({ kod: b.value, ad: buyuk(b.label), ipucu: b.label, renk: "yesil" as const, ikon: <TeamOutlined /> })),
     { kod: "__YOK", ad: "BİRİMSİZ", renk: "kirmizi" as const, ikon: <TeamOutlined /> },
   ];
   const sutunlar: ColumnsType<Personel> = [
