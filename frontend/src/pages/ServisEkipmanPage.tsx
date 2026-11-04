@@ -190,7 +190,8 @@ export default function ServisEkipmanPage() {
   const ekran = Grid.useBreakpoint();
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = secili.length === 1 ? (seciliSatirlar[secili[0]] ?? kayitlar.find((r) => r.id === secili[0])) : null;
-  const secimVar = yazabilir || aktarabilir || yetkili("servis.yaz") || yetkili("bakim.yaz");
+  const servisAcabilir = yetkili("servis.yaz") || yetkili("servis.kurulum_ac");
+  const secimVar = yazabilir || aktarabilir || servisAcabilir || yetkili("bakim.yaz");
   const kategoriler = kategorilerOlustur(
     EKIPMAN_TIPLERI.map((t) => ({ kod: t, ad: TIP_ETIKETLERI[t] ?? t })),
     (t) => (t === "XRAY" || t.includes("DEDEKTOR") || t === "DIGER_GUVENLIK" ? "kirmizi" : "yesil"),
@@ -440,7 +441,7 @@ export default function ServisEkipmanPage() {
             Süzgeci temizle
           </Button>
         )}
-        {secili.length > 0 && (yazabilir || yetkili("servis.yaz") || yetkili("bakim.yaz")) && (
+        {secili.length > 0 && (yazabilir || servisAcabilir || yetkili("bakim.yaz")) && (
           <>
             <Typography.Text>{secili.length} ekipman seçili</Typography.Text>
             <EkipmanTopluIslemleri

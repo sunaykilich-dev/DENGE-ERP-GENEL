@@ -406,8 +406,8 @@ function AtamaPenceresi({
     >
       <Space orientation="vertical" style={{ width: "100%" }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {BIRIM_ETIKETLERI[birim] ?? birim} biriminin tayin edilebilir saha personeli. Sorumlu yalnız
-          teknisyen olabilir; açık sayacı olan kişi ekipten çıkarılamaz.
+          {BIRIM_ETIKETLERI[birim] ?? birim} biriminin tayin edilebilir saha personeli. Sorumlu
+          teknisyen ya da şef olabilir; açık sayacı olan kişi ekipten çıkarılamaz.
         </Typography.Text>
         {toplu && (
           <Radio.Group
@@ -435,10 +435,10 @@ function AtamaPenceresi({
         <Select
           allowClear
           style={{ width: "100%" }}
-          placeholder="Sorumlu teknisyen"
+          placeholder="Sorumlu (teknisyen ya da şef)"
           value={sorumlu}
           onChange={setSorumlu}
-          options={secenekler.filter((s) => kisiler.includes(s.value) && rolu(s.value) === "TEKNISYEN")}
+          options={secenekler.filter((s) => kisiler.includes(s.value))}
         />
       </Space>
     </Modal>
@@ -1804,8 +1804,11 @@ export function ServisIsListesi({
   const seciliGrup = durumGrubuBul(durumGruplari, suzgec.durum);
   const planlayabilir = yetkili("servis.planla");
   const yazabilir = yetkili("servis.yaz");
+  // Yeni iş: `servis.yaz` ya da yalnız KURULUM açan satış destek
+  // (`servis.kurulum_ac`, KARARLAR 2026-11-04 §6.5; tür formda daralır).
+  const acabilir = yazabilir || yetkili("servis.kurulum_ac");
   // "+ Hızlı oluştur" → `?yeni=1`: yeni iş penceresi açılır.
-  useYeniParametresi(() => setYeniAcik(true), yeniKayit && yazabilir);
+  useYeniParametresi(() => setYeniAcik(true), yeniKayit && acabilir);
   const secebilir = yazabilir || planlayabilir;
   const ac = (id: number) => detayAc(id);
 
@@ -2105,7 +2108,7 @@ export function ServisIsListesi({
       ikon: <PlusOutlined />,
       vurgulu: true,
       kisalt: true,
-      gizli: !yeniKayit || !yazabilir,
+      gizli: !yeniKayit || !acabilir,
       onClick: () => setYeniAcik(true),
     },
   ];
@@ -2304,7 +2307,7 @@ export function ServisIsListesi({
           ) : (
             <BosListeMesaji
               suzgecli={ekSuzgecSayisi > 0 || !!suzgec.durum?.length || !!suzgec.q || !!suzgec.kpi || !!suzgec.tur}
-              yeniAcabilir={yeniKayit && yazabilir}
+              yeniAcabilir={yeniKayit && acabilir}
               temizle={() => {
                 setAramaMetni("");
                 setHatirlandi(false);

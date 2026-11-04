@@ -26,6 +26,7 @@ import {
   SLA_TAKVIM_SECENEKLERI,
 } from "../api/anaVeri";
 import { useAuth } from "../auth/AuthContext";
+import IlSecici from "./IlSecici";
 
 /**
  * Lokasyon (tesis) penceresi — HEM yeni HEM düzenleme (KartPenceresi kalıbı).
@@ -257,9 +258,9 @@ export default function LokasyonPenceresi({
             name="city"
             label="İl"
             style={{ minWidth: 160 }}
-            rules={tur === "TESIS" ? [{ required: true, message: "İl girin" }] : []}
+            rules={tur === "TESIS" ? [{ required: true, message: "İl seçin" }] : []}
           >
-            <Input />
+            <IlSecici />
           </Form.Item>
         </Space>
         <Form.Item

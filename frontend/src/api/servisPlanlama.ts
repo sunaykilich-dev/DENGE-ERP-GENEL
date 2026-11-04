@@ -6,7 +6,10 @@
  * - grup anahtarı (havuz) sunucuda üretilir, istemci normalizasyon YAZMAZ;
  * - KPI sayısı = `/kpi-liste?kod=` `X-Toplam-Kayit`;
  * - irtibat alanları izinsiz kullanıcıya `null` gelir;
- * - çakışma 409'u `ApiError.govde.kod === "PLAN_CAKISMA"` ile ayırt edilir.
+ * - çakışma 409'u `ApiError.govde.kod === "PLAN_CAKISMA"` ile ayırt edilir;
+ * - geçmiş tarihe gerekçesiz plan 409 `kod=GECMIS_TARIH` (tekli/toplu/yeniden;
+ *   KARARLAR 2026-11-04 §6.9): aynı istek `gecmis_tarih_gerekcesi` (≥10
+ *   karakter) ile yinelenince kabul edilir.
  */
 import { api, ApiError, type Sayfa } from "./client";
 
@@ -163,6 +166,8 @@ export interface PlanGirdisi {
   degisim_nedeni?: string | null;
   degisim_notu?: string | null;
   cakisma_gerekcesi?: string | null;
+  /** Geçmiş tarihe plan gerekçesi (≥10 karakter); yoksa 409 `GECMIS_TARIH`. */
+  gecmis_tarih_gerekcesi?: string | null;
   beklenen_aktif_plan_id?: number | null;
 }
 
@@ -216,6 +221,16 @@ export function planCakismasi(e: unknown): Cakisma[] | null {
   const g = e.govde as { kod?: string; cakismalar?: Cakisma[] } | undefined;
   return g?.kod === "PLAN_CAKISMA" ? (g.cakismalar ?? []) : null;
 }
+
+/** 409 `GECMIS_TARIH` mı? Sunucunun mesajını döner (gerekçeyle geçilir); değilse null. */
+export function gecmisTarihHatasi(e: unknown): string | null {
+  if (!(e instanceof ApiError) || e.status !== 409) return null;
+  const g = e.govde as { kod?: string; detail?: string } | undefined;
+  return g?.kod === "GECMIS_TARIH" ? (g.detail ?? e.message) : null;
+}
+
+/** En az uzunluk: geçmiş tarih ve çakışma gerekçesi (sunucuyla aynı). */
+export const GEREKCE_ALT = 10;
 
 /** Toplu işlemde kurala takılan işlerin numaraları (409 `PLAN_KURAL`). */
 export function sorunluIsler(e: unknown): string[] {

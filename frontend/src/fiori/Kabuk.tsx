@@ -195,6 +195,14 @@ function HizliOlustur({ mobil }: { mobil: boolean }) {
       label: "Yeni servis işi",
       yol: () => servisYolu({}),
     },
+    // Satış destek yalnız KURULUM işi açar (`servis.kurulum_ac`, KARARLAR 2026-11-04 §6.5).
+    !yetkili("servis.yaz") &&
+      yetkili("servis.kurulum_ac") && {
+        key: "kurulum",
+        icon: <ToolOutlined />,
+        label: "Yeni kurulum işi",
+        yol: () => servisYolu({ tur: "KURULUM" }),
+      },
     yetkili("servis.yaz") && {
       key: "bakim-isi",
       icon: <FileProtectOutlined />,

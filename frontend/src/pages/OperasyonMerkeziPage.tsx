@@ -158,10 +158,10 @@ function TopluAtama({
         <Select
           allowClear
           style={{ width: "100%" }}
-          placeholder="Sorumlu teknisyen"
+          placeholder="Sorumlu (teknisyen ya da şef)"
           value={sorumlu}
           onChange={setSorumlu}
-          options={secenekler.filter((s) => kisiler.includes(s.value) && rolu(s.value) === "TEKNISYEN")}
+          options={secenekler.filter((s) => kisiler.includes(s.value))}
         />
       </Space>
     </Modal>

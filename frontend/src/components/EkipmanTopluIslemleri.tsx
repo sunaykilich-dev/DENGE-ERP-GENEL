@@ -2,7 +2,9 @@
  * Ekipman kütüğü toplu işlemleri (E03-11 / TS-053 T2): "Servis işi aç" ve
  * "Sözleşmeye bağla".
  *
- * - Servis işi aç (`servis.yaz` + `ekipman.gor`): seçili her ekipman için bir
+ * - Servis işi aç (`servis.yaz` | `servis.kurulum_ac`, + `ekipman.gor`; yalnız
+ *   `servis.kurulum_ac` olan satış destek yalnız KURULUM seçer — KARARLAR
+ *   2026-11-04 §6.5): seçili her ekipman için bir
  *   iş; birim, müşteri, lokasyon, seri ve kayıtlı irtibat ekipmandan gelir.
  *   Sunucu tek transaction'da açar; açık işte aynı seri varsa 409 `MUKERRER`
  *   döner ve kullanıcı listeyi görüp "yine de aç" der.
@@ -44,7 +46,8 @@ export default function EkipmanTopluIslemleri({
   const [sozlesmeId, setSozlesmeId] = useState<number | null>(null);
   const [form] = Form.useForm<IsFormu>();
 
-  const isAcabilir = yetkili("servis.yaz", "ekipman.gor");
+  const yalnizKurulum = !yetkili("servis.yaz") && yetkili("servis.kurulum_ac");
+  const isAcabilir = yetkili("ekipman.gor") && (yetkili("servis.yaz") || yalnizKurulum);
   const baglayabilir = yetkili("bakim.yaz");
   const musteriler = [...new Set(secili.map((e) => e.account_id))];
   const tekMusteri = musteriler.length === 1 && musteriler[0] != null ? musteriler[0] : null;
@@ -159,13 +162,14 @@ export default function EkipmanTopluIslemleri({
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ tur: "ARIZA", talep_kanali: "TELEFON", oncelik: "NORMAL" }}
+          initialValues={{ tur: yalnizKurulum ? "KURULUM" : "ARIZA", talep_kanali: "TELEFON", oncelik: "NORMAL" }}
           onFinish={(v) => isAc.mutate({ v, gec: false })}
         >
           <Form.Item name="tur" label="İş türü" rules={[{ required: true }]}>
             <Select
+              disabled={yalnizKurulum}
               options={(formVerileri.data?.turler ?? [])
-                .filter((t) => t.ekrandan)
+                .filter((t) => t.ekrandan && (!yalnizKurulum || t.kod === "KURULUM"))
                 .map((t) => ({ value: t.kod, label: t.ad }))}
             />
           </Form.Item>

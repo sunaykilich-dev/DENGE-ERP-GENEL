@@ -267,10 +267,10 @@ function AtamaPenceresi({
         <Select
           allowClear
           style={{ width: "100%" }}
-          placeholder="Sorumlu usta"
+          placeholder="Sorumlu (usta ya da şef)"
           value={sorumlu}
           onChange={setSorumlu}
-          options={secenekler.filter((s) => kisiler.includes(s.value) && rolu(s.value) === "TEKNISYEN")}
+          options={secenekler.filter((s) => kisiler.includes(s.value))}
         />
       </Space>
     </Modal>
@@ -1137,6 +1137,9 @@ export default function AtolyePage() {
   const { id } = useParams();
   const [arama, setArama] = useSearchParams();
   const yazabilir = yetkili("atolye.yaz");
+  // Kabul (tekli/toplu): atölye ustası ya da yalnız kabul yapan operasyon
+  // (`atolye.kabul`, KARARLAR 2026-11-04 §6.5); teşhis/onarım `atolye.yaz`'da.
+  const kabulEdebilir = yazabilir || yetkili("atolye.kabul");
   const atayabilir = yetkili("atolye.yaz", "servis.planla");
   const aktarabilir = yetkili("atolye.gor", "servis_rapor.disaaktar");
   const bedelGorur = !!kullanici?.sees_cost;
@@ -1402,7 +1405,7 @@ export default function AtolyePage() {
       ikon: <PlusOutlined />,
       vurgulu: true,
       kisalt: true,
-      gizli: !yazabilir,
+      gizli: !kabulEdebilir,
       onClick: () => setKabulAcik(true),
     },
   ];
