@@ -331,8 +331,9 @@ async def tamamlama_sonucu_dogrula(
 async def yeniden_acilista_gecersiz_kil(
     db: AsyncSession, so: ServiceOrder, onceki: str, hedef: str, kaynak: str, clock: Clock
 ) -> None:
-    """`durum_degisti`: TEKRAR_ACILDI'da geçerli sonuç geçersiz kılınır (silinmez)."""
-    if hedef != "TEKRAR_ACILDI":
+    """`durum_degisti`: TEKRAR_ACILDI'da ve kalite reddinde (rol testi tur 2) geçerli
+    sonuç geçersiz kılınır (silinmez); düzeltilen iş yeni sonuçla tamamlanır."""
+    if hedef != "TEKRAR_ACILDI" and kaynak != "kalite_red":
         return
     simdi = clock.now()
     for satir in (

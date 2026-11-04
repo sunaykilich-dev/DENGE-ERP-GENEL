@@ -72,6 +72,17 @@ BAKIM_FORM_DURUMLARI = ("TASLAK", "TAMAMLANDI")
 KONTROL_SONUCLARI = ("BEKLIYOR", "UYGUN", "UYGUNSUZ", "KONTROL_EDILEMEDI")
 BAKIM_ZIYARET_TURLERI = ("TAMAMLAMA", "YENIDEN_ACMA")
 UYGUNSUZLUK_AKSIYONLARI = ("YERINDE_GIDERILDI", "TEKLIF", "ARIZA_IS_EMRI", "MUSTERI_KAYNAKLI")
+# Uygunsuzluk önemi (rol testi tur 2, 5_teknisyen B3): servis işi öncelik
+# sözlüğüyle hizalı + DUSUK; KRİTİK bulgudan açılan arıza işi KRİTİK öncelikli.
+UYGUNSUZLUK_ONEMLERI = ("DUSUK", "NORMAL", "YUKSEK", "KRITIK")
+# Bakım formu ölçüm alanları (opsiyonel, sayısal, birimli): alan → (etiket, birim).
+BAKIM_OLCUMLERI: dict[str, tuple[str, str]] = {
+    "olcum_kv": ("Jeneratör gerilimi", "kV"),
+    "olcum_ma": ("Jeneratör akımı", "mA"),
+    "olcum_penetrasyon_mm": ("Penetrasyon", "mm"),
+    "olcum_doz_usv": ("Doz (yüzey/tünel)", "µSv/h"),
+    "olcum_voltaj_v": ("Besleme voltajı (AC)", "V"),
+}
 UYGUNSUZLUK_DURUMLARI = ("ACIK", "KAPALI")
 KAPSAM_DISI_NEDENLERI = ("SOKULMUS", "ERISIM_YOK", "TASINMIS", "MUSTERI_IPTAL")
 KAPSAM_DISI_DURUMLARI = ("TALEP", "ONAYLANDI", "REDDEDILDI")
@@ -292,6 +303,12 @@ class MaintenanceForm(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin
             "status <> 'TAMAMLANDI' OR (bakim_sonucu IS NOT NULL AND completed_at IS NOT NULL)",
             name="ck_mf_tamamlama",
         ),
+        CheckConstraint(
+            "coalesce(olcum_kv, 0) >= 0 AND coalesce(olcum_ma, 0) >= 0 "
+            "AND coalesce(olcum_penetrasyon_mm, 0) >= 0 AND coalesce(olcum_doz_usv, 0) >= 0 "
+            "AND coalesce(olcum_voltaj_v, 0) >= 0",
+            name="ck_mf_olcum_negatif",
+        ),
     )
 
     service_order_id: Mapped[int] = mapped_column(
@@ -313,6 +330,13 @@ class MaintenanceForm(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Ölçümler (f3a000000001; opsiyonel, NULL = ölçülmedi, 0 değil). Birimler
+    # `BAKIM_OLCUMLERI`'nde; negatif değer `ck_mf_olcum_negatif` ile reddedilir.
+    olcum_kv: Mapped[float | None] = mapped_column(Numeric(7, 2))
+    olcum_ma: Mapped[float | None] = mapped_column(Numeric(7, 2))
+    olcum_penetrasyon_mm: Mapped[float | None] = mapped_column(Numeric(7, 2))
+    olcum_doz_usv: Mapped[float | None] = mapped_column(Numeric(9, 3))
+    olcum_voltaj_v: Mapped[float | None] = mapped_column(Numeric(7, 2))
 
 
 class MaintenanceFormCheck(Base, PkMixin, TimestampMixin, VersionedMixin):
@@ -327,6 +351,7 @@ class MaintenanceFormCheck(Base, PkMixin, TimestampMixin, VersionedMixin):
             "OR length(trim(coalesce(note, ''))) > 0",
             name="ck_mfc_not_zorunlu",
         ),
+        CheckConstraint(_in("onem", UYGUNSUZLUK_ONEMLERI, bos=True), name="ck_mfc_onem"),
     )
 
     form_id: Mapped[int] = mapped_column(
@@ -343,6 +368,8 @@ class MaintenanceFormCheck(Base, PkMixin, TimestampMixin, VersionedMixin):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Uygunsuz maddenin önemi (f3a000000001); tamamlamada aksiyona kopyalanır.
+    onem: Mapped[str | None] = mapped_column(String(10))
 
 
 class MaintenanceVisit(Base, PkMixin, TimestampMixin, ActorMixin):
@@ -385,6 +412,8 @@ class MaintenanceVisit(Base, PkMixin, TimestampMixin, ActorMixin):
         BigInteger, ForeignKey("service_approvals.id", ondelete="SET NULL")
     )
     gerekce: Mapped[str | None] = mapped_column(Text)
+    # Tamamlama anındaki ölçümler (değişmez kanıt; f3a000000001). NULL = ölçüm yok.
+    olcumler: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class MaintenanceNonconformity(
@@ -396,6 +425,7 @@ class MaintenanceNonconformity(
     __table_args__ = (
         CheckConstraint(_in("action_type", UYGUNSUZLUK_AKSIYONLARI, bos=True), name="ck_mnc_tur"),
         CheckConstraint(_in("status", UYGUNSUZLUK_DURUMLARI), name="ck_mnc_durum"),
+        CheckConstraint(_in("onem", UYGUNSUZLUK_ONEMLERI, bos=True), name="ck_mnc_onem"),
         CheckConstraint(
             "status <> 'KAPALI' OR (closing_note IS NOT NULL AND closed_by IS NOT NULL "
             "AND closed_at IS NOT NULL)",
@@ -413,6 +443,8 @@ class MaintenanceNonconformity(
     check_code: Mapped[str] = mapped_column(String(30))
     check_label: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text)
+    # Bulgunun önemi (f3a000000001); KRİTİK → bağlı arıza işi KRİTİK öncelik.
+    onem: Mapped[str | None] = mapped_column(String(10))
     action_type: Mapped[str | None] = mapped_column(String(20))
     responsible_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")

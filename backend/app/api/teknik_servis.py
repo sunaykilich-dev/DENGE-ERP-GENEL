@@ -220,9 +220,20 @@ class BagliIsIn(BaseModel):
     # None = önceki işin aktif serileri; [] = cihazsız.
     seriler: list[str] | None = Field(default=None, max_length=50)
     mukerrer_gec: bool = False
+    # Rol testi tur 2 (5_teknisyen B8): bağın türü (iliskili_is_id = önceki iş).
+    # Verilmezse yalnız `onceki_is_id` bağı kurulur (eski davranış).
+    iliski_turu: Literal["TEKRAR_ARIZA", "BAKIM_BULGUSU", "DEVAM"] | None = None
 
     model_config = {
-        "json_schema_extra": {"examples": [{"konu": "Arıza tekrarladı", "talep_kanali": "TELEFON"}]}
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "konu": "Arıza tekrarladı",
+                    "talep_kanali": "TELEFON",
+                    "iliski_turu": "TEKRAR_ARIZA",
+                }
+            ]
+        }
     }
 
 
@@ -231,6 +242,51 @@ class KaliteOnayIn(BaseModel):
     not_: str | None = Field(default=None, max_length=500, alias="not")
 
     model_config = {"populate_by_name": True, "json_schema_extra": {"examples": [{"version": 1}]}}
+
+
+class KaliteRedIn(BaseModel):
+    """Kalite reddi (rol testi tur 2): gerekçe ≥10 karakter; `hedef` ISLEMDE
+    (kayıt/sonuç düzeltmesi) ya da PLANLAMADA (yeniden ziyaret, varsayılan)."""
+
+    version: int
+    gerekce: str = Field(max_length=500)
+    hedef: Literal["ISLEMDE", "PLANLAMADA"] = "PLANLAMADA"
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"version": 3, "gerekce": "Etiket eksik, fotoğraf yok", "hedef": "ISLEMDE"}
+            ]
+        }
+    }
+
+
+class KaliteTopluSatir(BaseModel):
+    id: int
+    version: int
+
+
+class KaliteTopluIn(BaseModel):
+    """Toplu kalite onayı: her iş kendi `version`'ıyla (iyimser kilit)."""
+
+    isler: list[KaliteTopluSatir] = Field(min_length=1, max_length=200)
+    not_: str | None = Field(default=None, max_length=500, alias="not")
+
+    model_config = {
+        "populate_by_name": True,
+        "json_schema_extra": {"examples": [{"isler": [{"id": 1, "version": 4}]}]},
+    }
+
+
+class YolaCikisGeriAlIn(BaseModel):
+    """Yönetici yola çıkışı geri alır (YOLA_CIKILDI → PLANLANDI); gerekçe ≥10."""
+
+    version: int
+    gerekce: str = Field(min_length=10, max_length=500)
+
+    model_config = {
+        "json_schema_extra": {"examples": [{"version": 5, "gerekce": "Yanlış işe basıldı"}]}
+    }
 
 
 class IliskiIn(BaseModel):
@@ -873,6 +929,7 @@ async def mukerrer_kontrol(
 def _filtre(
     birim, kategori, tur, durum, durum_grubu_, oncelik, musteri_id, adres_id, teknisyen_id,
     atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite=None, sef_id=None,
+    sonuc_=None,
 ) -> is_emirleri.ListeFiltresi:  # fmt: skip
     return is_emirleri.ListeFiltresi(
         birim=birim,
@@ -894,6 +951,7 @@ def _filtre(
         siralama=siralama,
         kalite=kalite,
         sef_id=sef_id,
+        sonuc=sonuc_,
     )
 
 
@@ -933,6 +991,7 @@ async def listele(
     siralama: str = "yeni",
     kalite: str | None = Query(default=None, max_length=10),
     sef_id: int | None = None,
+    sonuc_: Annotated[str | None, Query(alias="sonuc", max_length=20)] = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict[str, Any]]:
@@ -940,11 +999,12 @@ async def listele(
 
     Parametresiz: açık işler + son 90 günde kapananlar. `kpi=<kod>` panel
     kutusunun AYNI süzgecidir (sayı = liste). `kalite=BEKLEYEN` kalite onayı
-    bekleyen tamamlanmış işler (Faz A).
+    bekleyen tamamlanmış işler (Faz A). `sonuc=TEKLIF_SUNULACAK` geçerli sonucu
+    "teklif sunulacak" olan işler (rol testi tur 2, satış destek listesi).
     """
     f = _filtre(
         birim, kategori, tur, durum, durum_grubu, oncelik, musteri_id, adres_id, teknisyen_id,
-        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite, sef_id,
+        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite, sef_id, sonuc_,
     )  # fmt: skip
     stmt = _sorgu(user, f, clock)
     satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
@@ -1006,6 +1066,7 @@ async def disa_aktar(
     donem: str | None = Query(default=None, max_length=20),
     siralama: str = "yeni",
     kalite: str | None = Query(default=None, max_length=10),
+    sonuc_: Annotated[str | None, Query(alias="sonuc", max_length=20)] = None,
 ) -> Response:
     """Ekrandaki süzgecin AYNISIYLA Excel (Servis İşleri + Durum Özeti).
 
@@ -1015,7 +1076,7 @@ async def disa_aktar(
     """
     f = _filtre(
         birim, kategori, tur, durum, durum_grubu, oncelik, musteri_id, adres_id, teknisyen_id,
-        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite,
+        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite, sonuc_=sonuc_,
     )  # fmt: skip
     stmt = _sorgu(user, f, clock)
     toplam = await db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
@@ -1421,6 +1482,54 @@ async def toplu_atama(
     }
 
 
+@router.post("/isler/toplu-kalite-onayi", response_model=None)
+async def toplu_kalite_onayi(
+    payload: KaliteTopluIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: KaliteOnaylayici,
+) -> dict[str, Any]:
+    """Toplu kalite onayı (rol testi tur 2 O3, G1.9). Her iş tekli onayın
+    kuralıyla (iyimser kilit, görevler ayrılığı, tamamlanmış iş) ayrı ayrı
+    sınanır; uygun olanlar onaylanır, olmayanlar nedeniyle `atlanan`da döner
+    (kısmi sonuç bilinçli: kalite onayı mali işaret değildir, bir işin engeli
+    diğer 44 işi bekletmesin). Kapsam dışı/bulunamayan iş "bulunamadı" olarak
+    atlanır (iş no verilmez). Her onay ayrı denetim satırıdır."""
+    onaylanan: list[dict[str, Any]] = []
+    atlanan: list[dict[str, Any]] = []
+    for satir in {s.id: s for s in payload.isler}.values():
+        so = await db.get(ServiceOrder, satir.id)
+        if so is None or so.is_deleted or await kapsam.is_erisimi_yok_mu(db, user, so):
+            atlanan.append({"id": satir.id, "so_no": None, "neden": "Servis işi bulunamadı"})
+            continue
+        try:
+            async with db.begin_nested():
+                await is_emirleri.kalite_onayla(
+                    db, so, user=user, clock=clock, version=satir.version, notu=payload.not_
+                )
+        except _HATALAR as exc:
+            await db.refresh(so)
+            atlanan.append({"id": so.id, "so_no": so.so_no, "neden": str(exc)})
+            continue
+        await audit.log(
+            db,
+            "service_orders",
+            "kalite_onayi",
+            entity_id=so.id,
+            new_value={
+                "kalite_onay_at": so.kalite_onay_at.isoformat(),
+                "not": so.kalite_notu,
+                "toplu": True,
+            },
+            user_id=user.id,
+            ip=client_ip(request),
+        )
+        onaylanan.append({"id": so.id, "so_no": so.so_no})
+    await db.commit()
+    return {"onaylanan": onaylanan, "atlanan": atlanan}
+
+
 async def _onay_isleri(db, user: User, is_idler: list[int]) -> list[ServiceOrder]:
     isler = []
     for so_id in dict.fromkeys(is_idler):
@@ -1600,6 +1709,9 @@ async def bagli_yeni_is(
     uyarilar = await _acilis_on_kontrol(db, acilis, user)
     girdi = _girdi(acilis)
     girdi.equipment_id = varsayilan.equipment_id
+    if payload.iliski_turu is not None:
+        girdi.iliskili_is_id = onceki.id
+        girdi.iliski_turu = payload.iliski_turu
     try:
         so = await is_emirleri.bagli_yeni_is(db, onceki, girdi, user=user, clock=clock)
     except _HATALAR as exc:
@@ -1669,6 +1781,92 @@ async def kalite_onayi(
         "kalite_onayi",
         entity_id=so.id,
         new_value={"kalite_onay_at": so.kalite_onay_at.isoformat(), "not": so.kalite_notu},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return await _detay(db, so, user, clock)
+
+
+@router.post("/isler/{so_id}/kalite-reddi", response_model=None)
+async def kalite_reddi(
+    so_id: int,
+    payload: KaliteRedIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: KaliteOnaylayici,
+) -> dict[str, Any]:
+    """Kalite reddi / geri gönderme (rol testi tur 2 Y5, KARARLAR 2026-11-04 §7.3).
+
+    Tamamlanmış (kapatılmamış) işi gerekçeyle (≥10 karakter, 400) İŞLEMDE ya da
+    PLANLAMADA'ya döndürür; sonuç geçersizleşir, bakım formu taslağa döner. Zilde
+    `kalite_reddedilen` uyarısı ekibe/şefe düşer. Görevler ayrılığı onayla aynı
+    (403); eski `version`, onaylı/faturalanmış/atölye işi 409."""
+    so = await _kapsamli_is(db, so_id, user)
+    try:
+        await is_emirleri.kalite_reddet(
+            db,
+            so,
+            user=user,
+            clock=clock,
+            version=payload.version,
+            gerekce=payload.gerekce,
+            hedef=payload.hedef,
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await audit.log(
+        db,
+        "service_orders",
+        "kalite_reddi",
+        entity_id=so.id,
+        new_value={"hedef": payload.hedef, "gerekce": so.kalite_red_gerekcesi},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return await _detay(db, so, user, clock)
+
+
+@router.post("/isler/{so_id}/yola-cikis-geri-al", response_model=None)
+async def yola_cikis_geri_al(
+    so_id: int,
+    payload: YolaCikisGeriAlIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Planlayici,
+) -> dict[str, Any]:
+    """Yönetici/şef yanlış "Yola Çıktım"ı geri alır (rol testi tur 2 Y6): iş
+    YOLA_CIKILDI → PLANLANDI, ekibin bu işteki açık YOL sayaçları gerekçeyle
+    iptal edilir (kişi-saate girmez). Gerekçe zorunlu (≥10), eski `version` 409,
+    yola çıkılmamış iş 409. Denetim izine ve iş geçmişine yazılır."""
+    so = await _kapsamli_is(db, so_id, user)
+    if payload.version != so.version:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Kayıt başka biri tarafından değiştirildi; sayfayı yenileyin"
+        )
+    if so.status != "YOLA_CIKILDI":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Yola çıkış yalnız 'Yola Çıkıldı' durumundaki işte geri alınır",
+        )
+    from app.services.teknik_servis import zaman
+
+    try:
+        iptaller = await zaman.yola_cikisi_geri_al(
+            db, so, gerekce=payload.gerekce, user=user, clock=clock
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await audit.log(
+        db,
+        "service_orders",
+        "yola_cikis_geri_al",
+        entity_id=so.id,
+        old_value={"status": "YOLA_CIKILDI"},
+        new_value={"status": so.status, "gerekce": payload.gerekce, "iptal_bolum": iptaller},
         user_id=user.id,
         ip=client_ip(request),
     )

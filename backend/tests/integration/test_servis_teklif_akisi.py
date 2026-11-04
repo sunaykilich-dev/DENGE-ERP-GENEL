@@ -364,7 +364,8 @@ class TestServisIsiKopru:
         r = await ortam["sef"].post(f"/api/teklifler/{t['id']}/karar", json={"kabul": True})
         assert r.status_code == 200, r.text
         so = await _yenile(db, ServiceOrder, so.id)
-        assert so.status == "ISLEMDE"
+        # Teklif kararı işi planlama kuyruğuna döndürür (KARARLAR 2026-11-04 §7.1).
+        assert so.status == "PLANLAMADA"
         await db.refresh(bekleme)
         assert bekleme.released_at is not None
 

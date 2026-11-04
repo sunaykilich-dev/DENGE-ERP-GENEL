@@ -164,7 +164,7 @@ async def _sayi_liste_esit(client, govde: dict) -> int:
 
 
 async def test_izinsiz_403(client, kullanici_ac) -> None:
-    await kullanici_ac("satis_x", "SATIS")
+    await kullanici_ac("satis_x", "DEPO")  # SATIS artık servis.gor taşır (§7.8)
     await giris(client, "satis_x")
     r = await client.get(YOL)
     assert r.status_code == 403
@@ -247,7 +247,8 @@ async def test_kapsam_baska_birimin_isi_sayilmaz(client, veri) -> None:
     k = _kpi(govde)
     assert k["acik_is"]["deger"] == 5
     assert k["acil_ariza"]["deger"] == 1  # HABERLESME kritiği sayılmaz
-    assert k["poc_acik"]["deger"] == 0
+    # Rol testi tur 2 (B-12): POC kapsamda değilse kart hiç dönmez.
+    assert "poc_acik" not in k
     assert (k["sahadaki_ekip"]["deger"], k["sahadaki_ekip"]["toplam"]) == (1, 2)
     assert [b["birim"] for b in govde["birim_ozeti"]] == ["GUVENLIK"]
     guv = govde["birim_ozeti"][0]
@@ -310,6 +311,8 @@ async def test_fatura_devri_bekleyen_tutarsiz_aksiyon(client, db, kullanici_ac, 
             gelir_notu="test",
         )
     )
+    # Kalite kapısı (KARARLAR 2026-11-04 §7.2): yalnız kalite onaylı iş devre düşer.
+    tamam.kalite_onay_at = tamam.completed_at
     await db.commit()
     await kullanici_ac("yonetim", "YONETIM")
     await giris(client, "yonetim")

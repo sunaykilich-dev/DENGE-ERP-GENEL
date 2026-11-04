@@ -12,17 +12,19 @@ TUMU gibi davranır (plan §1.2).
   (birimsiz kayıt, ör. ortak depo, görünür; birimsiz personel görünmez).
 - KENDI_ISLERI: işler = aktif ataması veya aktif plan üyeliği olanlar; diğer
   varlıklar `birim ∈ user_units`.
-- KENDI_MUSTERILERI: işler = `kapsam_musteri(customer_id)` ∧ birim kesişimi;
+- KENDI_MUSTERILERI: işler = kendi müşterisi ∧ (birim üyeliği ya da etkin şirket);
   diğer varlıklar `user_units` kesişimi (genelde boş → hiçbiri).
 
 **Fail-closed (KD-04):** kapsamı TUMU olmayan kullanıcının birim üyeliği
 yoksa liste boş, tek kayıt 404. Bilinmeyen kapsam dizesi = red. "Boş = hepsi"
 yorumu, birimi girilmemiş yeni bir şefe bütün birimlerin işlerini açardı.
 
-**KENDI_MUSTERILERI kararı:** satış temsilcisine istisnayla servis izni
-verilirse yalnız kendi müşterilerinin VE kendi birimlerinin işlerini görür;
-birimi olmadığı için pratikte hiçbirini (TS-003 kabulü). Müşteri süzgeci
-tek başına bırakılsaydı servis kaydı birim sınırı olmadan açılırdı.
+**KENDI_MUSTERILERI kararı (rol testi tur 2 ile güncellendi, KARARLAR
+2026-11-04 §7.8):** satış temsilcisi (`servis.gor` artık rolde) yalnız kendi
+müşterilerinin işlerini görür; birim sınırı birim üyeliği varsa o, yoksa etkin
+şirketin birimleridir (şirket ayrımı sürer). Müşterisiz iş görünmez. Diğer
+servis varlıkları (ekipman, sözleşme, personel) için birimsiz satışçı yine
+hiçbir şey görmez (fail-closed).
 
 **Sayı = sızıntı:** liste, KPI sayısı, uyarı sayısı, Excel ve arama AYNI
 fonksiyonları kullanır. Tek kayıt yardımcıları liste süzgecinden türetilir ki
@@ -207,7 +209,11 @@ def katalog_birim_yasak_mi(user: User, birim: str | None) -> bool:
 
 
 def _kendi_isleri(user: User):
-    """Aktif ataması VEYA aktif plan üyeliği olan iş kimlikleri (alt sorgu)."""
+    """Aktif ataması VEYA aktif plan üyeliği olan iş kimlikleri VEYA kişinin
+    kendi açtığı BAĞLI iş (rol testi tur 2, 5_teknisyen B8: teknisyen kapanmış
+    işten bağlı iş açınca hemen 404 alıyordu; tayin edilene kadar şefin
+    kuyruğunda bekleyen işi açan kişi izleyebilir). Yalnız bağlı iş
+    (`onceki_is_id` dolu): genel açılış kapsamı değişmez."""
     atanan = select(ServiceOrderAssignment.service_order_id).where(
         ServiceOrderAssignment.user_id == user.id,
         ServiceOrderAssignment.removed_at.is_(None),
@@ -221,7 +227,10 @@ def _kendi_isleri(user: User):
             ServicePlan.is_deleted.is_(False),
         )
     )
-    return atanan.union(planli)
+    acilan_bagli = select(ServiceOrder.id).where(
+        ServiceOrder.created_by == user.id, ServiceOrder.onceki_is_id.is_not(None)
+    )
+    return atanan.union(planli, acilan_bagli)
 
 
 def _is_kosulu(user: User) -> ColumnElement[bool] | None:
@@ -232,6 +241,8 @@ def _is_kosulu(user: User) -> ColumnElement[bool] | None:
         if sirket is None:
             return None
         return ServiceOrder.birim.in_(sorted(sirket)) if sirket else false()
+    if kapsam == SCOPE_OWN_CUSTOMERS:
+        return _kendi_musteri_kosulu(user, sirket)
     if kapsam is None or not kullanici_birimleri(user):
         return false()
     if kapsam == SCOPE_OWN_UNITS:
@@ -242,15 +253,28 @@ def _is_kosulu(user: User) -> ColumnElement[bool] | None:
         # seçiliyken görünür).
         kendi = ServiceOrder.id.in_(_kendi_isleri(user))
         return kendi if sirket is None else and_(kendi, ServiceOrder.birim.in_(sorted(sirket)))
-    if kapsam == SCOPE_OWN_CUSTOMERS:
-        return and_(
-            _birim_kosulu(user, ServiceOrder.birim, birimsiz_gorunur=False),
-            or_(
-                ServiceOrder.customer_id.is_(None),
-                ServiceOrder.customer_id.in_(kendi_hesaplari(user)),
-            ),
-        )
     return false()  # pragma: no cover - SCOPES dışı değer _kapsam'da elendi
+
+
+def _kendi_musteri_kosulu(user: User, sirket: frozenset[str] | None) -> ColumnElement[bool]:
+    """KENDI_MUSTERILERI (satış temsilcisi) iş koşulu — rol testi tur 2 (6_satis
+    Y8/O12, KARARLAR 2026-11-04 §7.8).
+
+    İş müşterisi kullanıcının portföyünde (`accounts.sales_rep_id`) olmalı;
+    müşterisiz (göç) iş görünmez. Birim sınırı: kullanıcının birim üyeliği varsa
+    o birimler, yoksa etkin şirketin birimleri (satış temsilcisinin servis
+    birimi yoktur; eski "birim üyeliği şart" kuralı onu her işten kesiyordu).
+    Şirket ayrımı her durumda sürer (birim üyeliği zaten şirkete kesişiktir).
+    """
+    musteri = ServiceOrder.customer_id.in_(kendi_hesaplari(user))
+    birimler = kullanici_birimleri(user)
+    if birimler:
+        return and_(ServiceOrder.birim.in_(sorted(birimler)), musteri)
+    if sirket is None:
+        return musteri
+    if not sirket:
+        return false()
+    return and_(ServiceOrder.birim.in_(sorted(sirket)), musteri)
 
 
 def kapsam_isler(stmt: Select, user: User, so_id_sutunu) -> Select:

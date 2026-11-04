@@ -39,8 +39,13 @@ async def ortam(db, kullanici_ac, birimli_kullanici_ac, rol_ac):
     }
 
 
-async def _gelirli_is(db, servis_isi_ac, *, birim="GUVENLIK", durum="TAMAMLANDI", gelir="1000"):
-    so = await servis_isi_ac(birim=birim, durum=durum, completed_at=_AN)
+async def _gelirli_is(
+    db, servis_isi_ac, *, birim="GUVENLIK", durum="TAMAMLANDI", gelir="1000", kalite=True
+):
+    # Kalite kapısı (KARARLAR 2026-11-04 §7.2): devre yalnız kalite onaylı iş düşer.
+    so = await servis_isi_ac(
+        birim=birim, durum=durum, completed_at=_AN, kalite_onay_at=_AN if kalite else None
+    )
     db.add(
         ServiceOrderFinancial(
             service_order_id=so.id,
@@ -56,7 +61,9 @@ async def _gelirli_is(db, servis_isi_ac, *, birim="GUVENLIK", durum="TAMAMLANDI"
 async def test_fatura_devri_akisi_kilit_ve_geri_alma(client, db, ortam, servis_isi_ac):
     client.clock.set(datetime(2026, 2, 3, 10, tzinfo=UTC))
     so1 = await _gelirli_is(db, servis_isi_ac)
-    so2 = await servis_isi_ac(birim="GUVENLIK", durum="KAPATILDI", completed_at=_AN)
+    so2 = await servis_isi_ac(
+        birim="GUVENLIK", durum="KAPATILDI", completed_at=_AN, kalite_onay_at=_AN
+    )
     db.add(
         Quote(
             quote_no="TKF-DEVIR-1",
@@ -68,6 +75,7 @@ async def test_fatura_devri_akisi_kilit_ve_geri_alma(client, db, ortam, servis_i
     )
     await db.commit()
     await servis_isi_ac(birim="GUVENLIK", durum="TAMAMLANDI")  # gelirsiz: listede yok
+    await _gelirli_is(db, servis_isi_ac, kalite=False)  # kalite onaysız: listede yok
     await _gelirli_is(db, servis_isi_ac, durum="ISLEMDE")  # açık: listede yok
     yabanci = await _gelirli_is(db, servis_isi_ac, birim="HABERLESME")
 

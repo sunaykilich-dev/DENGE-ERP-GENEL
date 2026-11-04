@@ -74,7 +74,7 @@ async def ortam(client, db, birimli_kullanici_ac, kullanici_ac, servis_isi_ac):
         "sef": await birimli_kullanici_ac("sef", "SERVIS_SEF", ["GUVENLIK"]),
         "sef_b": await birimli_kullanici_ac("sef_b", "SERVIS_SEF", ["HABERLESME"]),
         "yonetim": await kullanici_ac("yonetim", "YONETIM"),
-        "satis": await kullanici_ac("satis", "SATIS"),
+        "satis": await kullanici_ac("satis", "DEPO"),  # servis.gor yok
     }
     isi = await servis_isi_ac(birim="GUVENLIK", durum="ISLEMDE", atananlar=[kisiler["tek"]])
     return {"k": kisiler, "is": isi}

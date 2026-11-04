@@ -164,6 +164,14 @@ def _s_sla_riskli(stmt, user=None, clock=None, donem=None):
     )
 
 
+def _s_servis_isleri(stmt, user=None, clock=None, donem=None):
+    """Tek "açık iş" tanımı (rol testi tur 2, 2_menu B-08 / 6_satis D3): Ana
+    Panel'in durum dağılımı, bölüm iş yükü ve aktif işler tablosu "Açık İş
+    Emirleri" KPI'sıyla (`acik`) AYNI tabanı kullanır — PB hariç. Planlı bakım
+    kendi kartında/grafiğinde (`bakim_bu_ay_planli`)."""
+    return stmt.where(ServiceOrder.is_deleted.is_(False), ServiceOrder.tur != "PB")
+
+
 def _s_onay_bekleyen(stmt, user=None, clock=None, donem=None):
     """Kapanış onayı (TAMAMLANDI) ya da kalite onayı bekleyen işler; PB hariç
     (`kapanis_bekleyen` ile aynı taban)."""
@@ -177,6 +185,7 @@ def _s_onay_bekleyen(stmt, user=None, clock=None, donem=None):
 for _t in (
     panel.KpiTanimi("sla_riskli", "SLA riski olan işler", "Çözüm hedefinin risk eşiği dolmuş ya da hedefi geçmiş açık işler (SLA riskte + aşıldı); PB hariç.", _s_sla_riskli, grup="ANA_PANEL", vurgu="kritik"),  # noqa: E501
     panel.KpiTanimi("onay_bekleyen", "Bekleyen onaylar", "Şef kapanışı (TAMAMLANDI) ya da kalite onayı bekleyen işler; PB hariç.", _s_onay_bekleyen, grup="ANA_PANEL", vurgu="uyari"),  # noqa: E501
+    panel.KpiTanimi("servis_isleri", "Servis işleri", "Silinmemiş servis işleri; PB hariç (Ana Panel dağılımlarının tabanı).", _s_servis_isleri, grup="ANA_PANEL"),  # noqa: E501
 ):  # fmt: skip
     panel.kpi_kaydet(_t)
 
@@ -412,7 +421,10 @@ async def kpiler(
         ),
     ]  # fmt: skip
     # POC kartı = `acik` KPI'sı + birim POC. Başka birim süzülmüşse POC işi yoktur.
-    if s.birim in (None, "POC"):
+    # Rol testi tur 2 (2_menu B-12): POC birimi etkin şirkette (kapsamda) yoksa
+    # kart HİÇ dönmez (ELEKTRONİK/MOBİLİTE'de "0" kartı yanıltıcıydı).
+    poc_gorunur = not kapsam.birim_disinda_mi(user, "POC", birimsiz_gorunur=False)
+    if poc_gorunur and s.birim in (None, "POC"):
         sonuc.append(
             await _kpi(
                 db, user, clock, s, "poc_acik", "POC Açık Talep", "acik", birim="POC",
@@ -420,7 +432,7 @@ async def kpiler(
                 karsilastirma=donem_basi,
             )
         )  # fmt: skip
-    else:
+    elif poc_gorunur:
         sonuc.append(
             {
                 "kod": "poc_acik",
@@ -530,7 +542,7 @@ def _ekipman_metni(tip: str | None, marka: str | None, model: str | None) -> str
 async def aktif_isler(
     db: AsyncSession, user: User, clock: Clock, s: AnaPanelSuzgeci
 ) -> dict[str, Any]:
-    p = _parametreler(s, durum_grubu=s.durum_grubu or "ACIK")
+    p = _parametreler(s, durum_grubu=s.durum_grubu or "ACIK", kpi="servis_isleri")
     stmt = (
         _sorgu(user, clock, p)
         .where(ServiceOrder.status.in_(_ACIK))
@@ -866,6 +878,7 @@ async def bekleyen_aksiyonlar(
                 # `fatura_devri.uygun_kosulu` gelir kolonlarını JOIN'li sorgu için
                 # yazar; burada JOIN yok → gelir koşulu EXISTS içinde (aynı tanım).
                 ServiceOrder.status.in_(_COZULDU),
+                fatura_devri.kalite_kapisi(),
                 or_(
                     fatura_devri._kabul_teklif_var(),  # noqa: SLF001 - tek tanım
                     exists().where(
@@ -927,8 +940,13 @@ async def bekleyen_aksiyonlar(
 async def grafikler(
     db: AsyncSession, user: User, clock: Clock, s: AnaPanelSuzgeci
 ) -> dict[str, Any]:
+    # Tek "açık" tanımı (B-08): dağılım, iş yükü ve aktif işler PB hariç
+    # (`servis_isleri` KPI süzgeci; liste yolu da aynı süzgeci taşır).
+    taban = "servis_isleri"
     durumlar = await _grupla(
-        db, _sorgu(user, clock, _parametreler(s, kapali_dahil=True)), ServiceOrder.status
+        db,
+        _sorgu(user, clock, _parametreler(s, kapali_dahil=True, kpi=taban)),
+        ServiceOrder.status,
     )
     gosterilen = [d for d in SERVIS_DURUMLARI if d in DURUM_GRUPLARI["ACIK"] or d == "TAMAMLANDI"]
     durum_dagilimi = [
@@ -936,14 +954,16 @@ async def grafikler(
             "kod": d,
             "ad": is_emirleri.DURUM_ADLARI[d],
             "deger": durumlar.get(d, 0),
-            "liste_yolu": liste_yolu(_parametreler(s, durum=[d])),
+            "liste_yolu": liste_yolu(_parametreler(s, durum=[d], kpi=taban)),
         }
         for d in gosterilen
     ]
 
     yuk_grubu = s.durum_grubu or "ACIK"
     yuk = await _grupla(
-        db, _sorgu(user, clock, _parametreler(s, durum_grubu=yuk_grubu)), ServiceOrder.birim
+        db,
+        _sorgu(user, clock, _parametreler(s, durum_grubu=yuk_grubu, kpi=taban)),
+        ServiceOrder.birim,
     )
     birimler = gorunur_birimler(user, s) + [b for b in yuk if b not in gorunur_birimler(user, s)]
     bolum_is_yuku = [
@@ -951,7 +971,7 @@ async def grafikler(
             "birim": b,
             "ad": BIRIMLER.get(b, b),
             "deger": yuk.get(b, 0),
-            "liste_yolu": liste_yolu(_parametreler(s, durum_grubu=yuk_grubu, birim=b)),
+            "liste_yolu": liste_yolu(_parametreler(s, durum_grubu=yuk_grubu, birim=b, kpi=taban)),
         }
         for b in birimler
     ]

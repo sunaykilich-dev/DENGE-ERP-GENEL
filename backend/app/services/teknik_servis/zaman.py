@@ -694,7 +694,72 @@ async def geri_al(
     bolum.updated_by = user.id
     await db.flush()
     await _denetle(db, bolum, "geri_al", user=user, eski=eski)
+    await _sayac_durumunu_geri_al(db, bolum, user=user, clock=clock)
     return bolum
+
+
+async def _sayac_durumunu_geri_al(
+    db: AsyncSession, bolum: ServiceTimeEntry, *, user: User, clock: Clock
+) -> None:
+    """Rol testi tur 2 (5_teknisyen B1): "Yanlış başlattım" ile geri alınan YOL
+    bölümü işi YOLA_CIKILDI'ya taşımışsa ve işte başka geçerli bölüm kalmadıysa
+    iş PLANLANDI'ya döner (makinedeki "yanlış basış" kenarı, `kaynak='sayac'`).
+    Başka biri yola çıkmış ya da kayıt girmişse durum korunur."""
+    if bolum.faaliyet != "YOL":
+        return
+    so = await db.get(ServiceOrder, bolum.service_order_id)
+    if so is None or so.status != "YOLA_CIKILDI":
+        return
+    kalan = await db.scalar(
+        select(ServiceTimeEntry.id)
+        .where(ServiceTimeEntry.service_order_id == so.id, gecerli_bolum())
+        .limit(1)
+    )
+    if kalan is not None:
+        return
+    from app.services.teknik_servis import is_emirleri
+
+    await is_emirleri.durum_degistir(db, so, "PLANLANDI", kaynak="sayac", user=user, clock=clock)
+
+
+async def yola_cikisi_geri_al(
+    db: AsyncSession, so: ServiceOrder, *, gerekce: str, user: User, clock: Clock
+) -> list[int]:
+    """Yönetici/şef yola çıkışı geri alır (rol testi tur 2 Y6): işin açık YOL
+    sayaçları gerekçeyle iptal edilir (`yonetici_kapat`, kişi-saate girmez),
+    iş YOLA_CIKILDI → PLANLANDI (`kaynak='yola_cikis_geri_al'`, gerekçe DURUM
+    olayına yazılır). Açık SAHA/diğer sayaç varsa 409: o kişi sahadadır."""
+    gerekce = (gerekce or "").strip()
+    if len(gerekce) < 10:
+        raise ZamanGirdiHatasi("Yola çıkışı geri almak için gerekçe yazın (en az 10 karakter)")
+    acik = list(
+        (
+            await db.scalars(
+                select(ServiceTimeEntry).where(
+                    ServiceTimeEntry.service_order_id == so.id,
+                    ServiceTimeEntry.ended_at.is_(None),
+                    gecerli_bolum(),
+                )
+            )
+        ).all()
+    )
+    diger = [b for b in acik if b.faaliyet != "YOL"]
+    if diger:
+        raise ZamanHatasi(
+            "Bu işte yol dışında açık sayaç var; kişi sahada görünüyor. Önce o sayacı kapatın."
+        )
+    iptaller: list[int] = []
+    for bolum in acik:
+        await yonetici_kapat(
+            db, bolum, None, f"Yola çıkış geri alındı: {gerekce}", user=user, clock=clock
+        )
+        iptaller.append(bolum.id)
+    from app.services.teknik_servis import is_emirleri
+
+    await is_emirleri.durum_degistir(
+        db, so, "PLANLANDI", kaynak="yola_cikis_geri_al", user=user, clock=clock, gerekce=gerekce
+    )
+    return iptaller
 
 
 async def unuttum(

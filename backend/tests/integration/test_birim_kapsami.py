@@ -181,12 +181,14 @@ async def test_kendi_isleri_birimsizse_atansa_da_goremez(db, kisi_ac, isler):
     assert await _gorunen(db, tekn) == set()
 
 
-async def test_kendi_musterileri_servis_izni_istisnasiyla_bos(db, kisi_ac, isler):
-    """Satış temsilcisine istisnayla servis izni verilse de birimi olmadığı
-    için servis işi görmez (TS-003 kabulü)."""
+async def test_kendi_musterileri_birimsizse_kendi_musterisinin_isleri(db, kisi_ac, isler):
+    """KARARLAR 2026-11-04 §7.8 (TS-003 kabulünün yerine): birimsiz satış
+    temsilcisi kendi müşterisinin işlerini görür (şirket ayrımı ayrıca sınanır),
+    başka müşterinin işini görmez."""
     satisci = await db.scalar(select(User).where(User.username == "satisci"))
-    assert await _gorunen(db, satisci) == set()
-    assert await kapsam.is_erisimi_yok_mu(db, satisci, isler["SRV-1"])
+    assert await _gorunen(db, satisci) == {"SRV-1", "SRV-2"}
+    assert not await kapsam.is_erisimi_yok_mu(db, satisci, isler["SRV-1"])
+    assert await kapsam.is_erisimi_yok_mu(db, satisci, isler["SRV-3"])
 
 
 async def test_kendi_musterileri_birimliyse_yalniz_kendi_musterisinin_birimindeki_is(

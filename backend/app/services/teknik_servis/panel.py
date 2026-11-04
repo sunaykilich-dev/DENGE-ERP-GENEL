@@ -348,8 +348,39 @@ def _sure_kaydi_yok():
 
 
 def _s_sure_eksik(stmt, user=None, clock=None, donem=None):
-    """Dönemde tamamlanan ve HİÇ süre kaydı olmayan iş: "0 saat" değil "eksik"."""
-    return _s_tamamlanan(stmt, user, clock, donem).where(_sure_kaydi_yok())
+    """Dönemde tamamlanan ve süre kaydı EKSİK ya da KISMİ iş ("0 saat" değil "eksik").
+
+    Rol testi tur 2 (5_teknisyen B4): tanım Zaman Takibi KPI'sı, iş detayı ve
+    kapanış uyarısıyla AYNI (`zaman.sure_eksik_ifadesi` = EKSIK ∪ KISMI); eskiden
+    yalnız hiç kaydı olmayanı sayıyordu ve 3 kişilik ekipte 1 kişinin süresi
+    eksik kapanan iş panelde görünmüyordu."""
+    from app.services.teknik_servis.zaman import sure_eksik_ifadesi
+
+    return _s_tamamlanan(stmt, user, clock, donem).where(sure_eksik_ifadesi())
+
+
+def _s_planlamaya_donen(stmt, user=None, clock=None, donem=None):
+    """Teklif kararı ya da parça gelişiyle saha durumundan planlama kuyruğuna
+    dönmüş, henüz yeniden planlanmamış işler (rol testi tur 2, Y1/O5)."""
+    from app.services.teknik_servis.bekletme import PLANLAMAYA_DONEN_NEDENLER, SAHA_DURUMLARI
+
+    return _servis(stmt).where(
+        ServiceOrder.status == "PLANLAMADA",
+        exists().where(
+            ServiceHold.service_order_id == ServiceOrder.id,
+            ServiceHold.released_at.is_not(None),
+            ServiceHold.otomatik_kapandi.is_(False),
+            ServiceHold.neden.in_(sorted(PLANLAMAYA_DONEN_NEDENLER)),
+            ServiceHold.onceki_durum.in_(sorted(SAHA_DURUMLARI)),
+        ),
+    )
+
+
+def _s_kalite_reddedilen(stmt, user=None, clock=None, donem=None):
+    """Kalitesi reddedilip düzeltme için açık duruma dönmüş işler (Y5)."""
+    return _acik(stmt.where(ServiceOrder.is_deleted.is_(False))).where(
+        ServiceOrder.kalite_red_at.is_not(None)
+    )
 
 
 # Bakım (yalnız PB)
@@ -412,11 +443,13 @@ for _t in (
     KpiTanimi("kritik_atanmamis", "Tayin edilmemiş kritik iş", "Önceliği KRİTİK olup aktif teknisyen tayini olmayan açık işler.", _s_kritik_atanmamis, grup="UYARI", vurgu="kritik"),  # noqa: E501
     KpiTanimi("kapanis_gecikmis", "Kapanışı gecikmiş iş", f"{KAPANIS_BEKLEME_UYARI_GUN} günden uzun süredir TAMAMLANDI durumunda bekleyen işler.", _s_kapanis_gecikmis, grup="UYARI", vurgu="uyari"),  # noqa: E501
     KpiTanimi("uzun_beklemede", "Uzun süredir beklemede", f"{BEKLEME_UYARI_GUN} günden uzun süredir beklemede olan işler.", _s_uzun_beklemede, grup="UYARI", vurgu="uyari"),  # noqa: E501
+    KpiTanimi("planlamaya_donen", "Yeniden planlanacak iş", "Teklif kararı ya da parça gelişiyle planlama kuyruğuna dönmüş, henüz planlanmamış işler; PB hariç.", _s_planlamaya_donen, grup="UYARI", vurgu="uyari"),  # noqa: E501
+    KpiTanimi("kalite_reddedilen", "Kalitesi reddedilen iş", "Kalite onayı reddedilip düzeltme için açık duruma dönmüş işler.", _s_kalite_reddedilen, grup="UYARI", vurgu="uyari"),  # noqa: E501
     # Dönemsel
     KpiTanimi("tamamlanan", "Tamamlanan", "Seçilen dönemde tamamlanan/kapatılan işler (son tamamlanma anı).", _s_tamamlanan, grup="DONEM", donemsel=True),  # noqa: E501
     KpiTanimi("uzaktan_cozulen", "Telefon/uzaktan çözülen", "Dönemde tamamlanan ve çözüm kanalı TELEFON ya da UZAKTAN olan işler.", _s_uzaktan_cozulen, grup="DONEM", donemsel=True),  # noqa: E501
     KpiTanimi("tekrar_ariza", "Tekrar arıza", f"Dönemde açılan; TEKRAR ARIZA bağı olan ya da aynı seri ile son {TEKRAR_ARIZA_GUN} günde başka iş açılmış işler.", _s_tekrar_ariza, grup="DONEM", donemsel=True, vurgu="uyari"),  # noqa: E501
-    KpiTanimi("sure_eksik", "Süre kaydı eksik", "Dönemde tamamlanan ve hiç süre kaydı olmayan işler (0 saat sayılmaz).", _s_sure_eksik, grup="DONEM", donemsel=True, vurgu="uyari"),  # noqa: E501
+    KpiTanimi("sure_eksik", "Süre kaydı eksik", "Dönemde tamamlanan ve süre kaydı eksik (hiç yok) ya da kısmi (ekipte süresi olmayan teknisyen var) işler; 0 saat sayılmaz.", _s_sure_eksik, grup="DONEM", donemsel=True, vurgu="uyari"),  # noqa: E501
     # Bakım (yalnız PB)
     KpiTanimi("bakim_acik", "Açık bakım", "Açık planlı bakım (PB) işleri.", _s_bakim_acik, grup="BAKIM"),  # noqa: E501
     KpiTanimi("bakim_bu_ay_planli", "Bu ay planlı bakım", "Aktif planı bu aya düşen PB işleri.", _s_bakim_bu_ay_planli, grup="BAKIM"),  # noqa: E501
@@ -607,6 +640,16 @@ _UYARI_KPI = (
         f"Tamamlanan iş {KAPANIS_BEKLEME_UYARI_GUN} günden uzun süredir şef kapanışı bekliyor.",
     ),
     ("uzun_beklemede", "uyari", f"İş {BEKLEME_UYARI_GUN} günden uzun süredir beklemede."),
+    (
+        "planlamaya_donen",
+        "uyari",
+        "Teklif kabul/red ya da parça gelişiyle iş planlama kuyruğuna döndü; yeniden planlayın.",
+    ),
+    (
+        "kalite_reddedilen",
+        "uyari",
+        "Kalite onayı reddedilen iş düzeltme bekliyor; gerekçe iş geçmişinde.",
+    ),
 )
 
 

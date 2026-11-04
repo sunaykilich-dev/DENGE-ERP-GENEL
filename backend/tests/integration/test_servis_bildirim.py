@@ -39,7 +39,7 @@ async def veri(client, db, kullanici_ac, birimli_kullanici_ac, servis_isi_ac):
     await birimli_kullanici_ac("sef_a", "SERVIS_SEF", ["GUVENLIK"])
     await birimli_kullanici_ac("sef_b", "SERVIS_SEF", ["HABERLESME"])
     await kullanici_ac("mudur", "SERVIS_YONETICI")
-    await kullanici_ac("satis", "SATIS")
+    await kullanici_ac("satis", "DEPO")  # servis.gor yok (SATIS §7.8 ile görür)
     return {
         "g1": await servis_isi_ac(durum="ISLEMDE", atananlar=[tek], **_sla(13)),
         "g2": await servis_isi_ac(durum="PLANLAMADA", **_sla(14)),

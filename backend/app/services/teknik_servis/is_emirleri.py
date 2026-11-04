@@ -38,6 +38,7 @@ from app.models import (
     ServiceOrderSerial,
     ServicePlan,
     ServicePlanMember,
+    ServiceResult,
     ServiceTimeEntry,
 )
 from app.models.rbac import BIRIM_KODLARI
@@ -47,6 +48,7 @@ from app.models.teknik_servis import (
     ONCELIKLER,
     SERVIS_DURUMLARI,
     SERVIS_KATEGORILERI,
+    SERVIS_SONUCLARI,
     TALEP_KANALLARI,
 )
 from app.permissions import SCOPE_OWN_JOBS
@@ -151,6 +153,10 @@ UC_HEDEFLERI: dict[str, frozenset[str]] = {
     "kapat": frozenset({"KAPATILDI"}),
     "iptal": frozenset({"IPTAL"}),
     "kiralama": frozenset({"IPTAL"}),
+    # Kalite reddi: TAMAMLANDI → düzeltme durumu (rol testi tur 2, §7.3).
+    "kalite_red": frozenset({"ISLEMDE", "PLANLAMADA"}),
+    # Yönetici "yola çıkışı geri al" (rol testi tur 2, §7.4): YOLA_CIKILDI → PLANLANDI.
+    "yola_cikis_geri_al": frozenset({"PLANLANDI"}),
 }
 
 # Hedef → ekranda kullanılacak uç (arayüz düğmeleri `gecis_secenekleri`'nden).
@@ -173,10 +179,14 @@ _KAYNAK_IZNI: dict[str, str] = {
     "iptal": "servis.kapat",
     "sonuc": "servis.tamamla",
     "uzaktan": "servis.uzaktan_coz",
+    "kalite_red": "servis.kalite_onay",
+    "yola_cikis_geri_al": "servis.planla",
 }
 
 # Gerekçesi zorunlu kaynaklar (iptal gerekçesi ayrıca `ck_so_iptal_gerekce`).
-_GEREKCE_ZORUNLU = frozenset({"iptal", "kapsam_disi", "kiralama"})
+_GEREKCE_ZORUNLU = frozenset(
+    {"iptal", "kapsam_disi", "kiralama", "kalite_red", "yola_cikis_geri_al"}
+)
 
 # M1.7 kullanıcı mesajı (API'nin eski `yeniden-ac` ucu da bunu döner).
 YENIDEN_ACMA_YOK = "Kapanmış iş yeniden açılamaz; bu işe bağlı yeni iş açın"
@@ -530,6 +540,16 @@ async def durum_degistir(
         raise IsEmriHatasi(
             f"'{DURUM_ADLARI[hedef]}' durumuna bu işlemle geçilemez; ilgili işlemi kullanın"
         )
+    # Tamamlanmış işten geri dönüş YALNIZ kalite reddiyle (makine kenarı tek kapıdan).
+    if onceki == "TAMAMLANDI" and hedef != "KAPATILDI" and kaynak != "kalite_red":
+        raise IsEmriHatasi(
+            "Tamamlanmış iş yalnız kalite reddiyle düzeltmeye döner; "
+            "kapanmış işin devamı için bağlı yeni iş açın"
+        )
+    if kaynak == "kalite_red" and onceki != "TAMAMLANDI":
+        raise IsEmriHatasi("Kalite reddi yalnız tamamlanmış (kapatılmamış) işe uygulanır")
+    if kaynak == "yola_cikis_geri_al" and onceki != "YOLA_CIKILDI":
+        raise IsEmriHatasi("Yola çıkış yalnız 'Yola Çıkıldı' durumundaki işte geri alınır")
     # Bekleme kaynağı beklemeden ÇIKIŞ yalnız BEKLEMEDE'deki işte sürer.
     if kaynak == "bekleme" and hedef != "BEKLEMEDE" and onceki != "BEKLEMEDE":
         raise IsEmriHatasi("İş beklemede değil")
@@ -597,14 +617,22 @@ def sonraki_durumlar(so: ServiceOrder) -> list[str]:
     hedefler = set(SERVIS_IS_EMRI.sonraki(so.status))
     if so.status == "BEKLEMEDE":
         hedefler &= {"IPTAL", "PLANLANDI", "SAHADA", "ISLEMDE", "ATOLYEDE", "PLANLAMADA"}
+    if so.status == "TAMAMLANDI":
+        # Kalite reddi kendi ucundan (`kalite-reddi`); genel geçiş düğmesi olmaz.
+        hedefler &= {"KAPATILDI"}
     return [d for d in SERVIS_DURUMLARI if d in hedefler]
 
 
 def gecis_secenekleri(so: ServiceOrder, user: User) -> list[dict[str, Any]]:
-    """Her geçerli hedef için hangi uç ve izin; kullanıcının yetkisi var mı."""
+    """Her geçerli hedef için hangi uç ve izin; kullanıcının yetkisi var mı.
+
+    Yola çıkılmış işte PLANLANDI'ya dönüş `yola-cikis-geri-al` ucudur (rol testi
+    tur 2 Y6: eskiden "planla" vaat ediliyordu ama planla durumu değiştirmiyordu)."""
     sonuc = []
     for hedef in sonraki_durumlar(so):
         uc, izin = _HEDEF_UCU[hedef]
+        if so.status == "YOLA_CIKILDI" and hedef == "PLANLANDI":
+            uc, izin = "yola_cikis_geri_al", "servis.planla"
         sonuc.append(
             {"hedef": hedef, "ad": DURUM_ADLARI[hedef], "uc": uc, "yetkili": user.has(izin)}
         )
@@ -1171,6 +1199,97 @@ async def kalite_onayla(
     return so
 
 
+# --- Kalite reddi (rol testi tur 2 Y5, KARARLAR 2026-11-04 §7.3) -------------------
+
+KALITE_RED_HEDEFLERI = ("ISLEMDE", "PLANLAMADA")
+KALITE_RED_GEREKCE_ASGARI = 10
+
+
+async def kalite_reddet(
+    db: AsyncSession,
+    so: ServiceOrder,
+    *,
+    user: User,
+    clock: Clock,
+    version: int,
+    gerekce: str | None,
+    hedef: str = "PLANLAMADA",
+) -> ServiceOrder:
+    """Tamamlanmış işin kalitesini reddeder ve işi düzeltmeye geri alır.
+
+    `hedef`: ISLEMDE (kayıt/sonuç düzeltmesi, yeniden ziyaret yok) ya da
+    PLANLAMADA (yeniden ziyaret planlanacak). Geçerli sonuç geçersiz kılınır
+    (`sonuc` kancası), bakım formu varsa TASLAK'a döner ve YENIDEN_ACMA ziyaret
+    satırı yazılır (`bakim_formu` kancası). SLA ilk tamamlanmada dondurulduğu
+    için değişmez. Kurallar: gerekçe ≥10 karakter (400); `servis.kalite_onay`
+    ve görevler ayrılığı (403, onayla aynı); sürüm, tamamlanmamış/kapatılmış
+    iş, verilmiş kalite onayı, faturaya iletilmiş iş ve atölye işi 409.
+    """
+    if version != so.version:
+        raise IsEmriHatasi("Kayıt başka biri tarafından değiştirildi; sayfayı yenileyin")
+    if not user.has(KALITE_IZNI):
+        raise IsEmriYetkiHatasi(f"Kalite reddi için yetkiniz yok ({KALITE_IZNI})")
+    if so.is_deleted:
+        raise IsEmriHatasi("Silinmiş işin kalitesi reddedilemez")
+    if hedef not in KALITE_RED_HEDEFLERI:
+        raise ServisGirdiHatasi(f"Geçersiz dönüş durumu: {hedef} (İşlemde ya da Planlamada)")
+    gerekce = _bos(gerekce)
+    if gerekce is None or len(gerekce) < KALITE_RED_GEREKCE_ASGARI:
+        raise ServisGirdiHatasi(
+            f"Kalite reddinde gerekçe zorunlu (en az {KALITE_RED_GEREKCE_ASGARI} karakter)"
+        )
+    if len(gerekce) > 500:
+        raise ServisGirdiHatasi("Gerekçe en çok 500 karakter olabilir")
+    if so.status != "TAMAMLANDI":
+        raise IsEmriHatasi(
+            "Kalite reddi yalnız tamamlanmış ve henüz kapatılmamış işe verilir; "
+            "kapatılmış işte bağlı yeni iş açın"
+        )
+    if so.kalite_onay_at is not None:
+        raise IsEmriHatasi("Bu işin kalite onayı verilmiş; reddedilemez")
+    if so.kategori == "ATOLYE":
+        raise IsEmriHatasi(
+            "Atölye işinin kalitesi atölye kaydından düzeltilir (teslime hazır → onarımda "
+            "geri alma); kapanmışsa bağlı yeni iş açın"
+        )
+    engel = await kalite_engeli(db, so, user)
+    if engel is not None:
+        raise IsEmriYetkiHatasi(
+            engel.replace("kalite onayını veremezsiniz", "kaliteyi reddedemezsiniz")
+        )
+    from app.models.servis_maliyet import ServiceOrderFinancial
+
+    iletildi = await db.scalar(
+        select(ServiceOrderFinancial.fatura_iletildi_at).where(
+            ServiceOrderFinancial.service_order_id == so.id
+        )
+    )
+    if iletildi is not None:
+        raise IsEmriHatasi("İş faturaya iletilmiş; önce fatura devrini geri alın")
+    await durum_degistir(
+        db, so, hedef, kaynak="kalite_red", user=user, clock=clock, gerekce=gerekce
+    )
+    so.kalite_red_at = clock.now()
+    so.kalite_red_by = user.id
+    so.kalite_red_gerekcesi = gerekce
+    so.updated_by = user.id
+    await db.flush()
+    try:
+        await gecmis.olay_yaz(
+            db,
+            so,
+            "KALITE",
+            f"Kalite onayı reddedildi, iş {DURUM_ADLARI[hedef]} durumuna döndü — "
+            f"gerekçe: {gerekce}",
+            user=user,
+            clock=clock,
+            veri={"karar": "RED", "hedef": hedef},
+        )
+    except gecmis.KisiselVeriHatasi as exc:
+        raise ServisGirdiHatasi("Gerekçeye irtibat adı veya telefonu yazılamaz") from exc
+    return so
+
+
 def kalite_kosulu(suzgec: str) -> Any:
     """Liste süzgeci: BEKLEYEN = tamamlanmış/kapatılmış, onaysız ve göç
     kaydı olmayan iş (eski sistemden gelen kapalı işler onay kuyruğunu
@@ -1309,6 +1428,9 @@ class ListeFiltresi:
     # Ana Panel (2026-11-04 §4): aktif ŞEF tayini olan işler (`teknisyen_id`
     # rol ayırmaz; şef süzgeci yalnız SEF rolüne bakar).
     sef_id: int | None = None
+    # Rol testi tur 2 (6_satis O11): geçerli sonucu bu olan işler (ör.
+    # `TEKLIF_SUNULACAK` = satış destek "teklif hazırlanacak" listesi).
+    sonuc: str | None = None
 
 
 SIRALAMALAR = ("yeni", "eski", "oncelik", "no")
@@ -1333,6 +1455,8 @@ def _filtre_dogrula(f: ListeFiltresi) -> None:
         raise ServisGirdiHatasi(f"Bilinmeyen sıralama: {f.siralama}")
     if f.kalite is not None and f.kalite not in KALITE_SUZGECLERI:
         raise ServisGirdiHatasi(f"Bilinmeyen kalite süzgeci: {f.kalite}")
+    if f.sonuc is not None and f.sonuc not in SERVIS_SONUCLARI:
+        raise ServisGirdiHatasi(f"Bilinmeyen sonuç: {f.sonuc}")
     if f.bas is not None and f.bit is not None and f.bit < f.bas:
         raise ServisGirdiHatasi("Bitiş tarihi başlangıçtan önce olamaz")
 
@@ -1382,6 +1506,14 @@ def liste_sorgusu(user: User, f: ListeFiltresi, clock: Clock) -> Select:
         )
     if f.atanmamis:
         stmt = stmt.where(tayinsiz_is_kosulu())
+    if f.sonuc:
+        stmt = stmt.where(
+            exists().where(
+                ServiceResult.service_order_id == ServiceOrder.id,
+                ServiceResult.gecersiz_at.is_(None),
+                ServiceResult.sonuc == f.sonuc,
+            )
+        )
     if f.bas is not None:
         stmt = stmt.where(ServiceOrder.created_at >= yerel_gun_araligi(f.bas)[0])
     if f.bit is not None:

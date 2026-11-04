@@ -125,10 +125,43 @@ async def beklet(
     return bekleme
 
 
-def _donus_durumu(onceki: str) -> str:
+# Rol testi tur 2 (6_satis Y1/Y2/O5, KARARLAR 2026-11-04 §7.1): teklif kararı
+# (kabul/red) ve parça gelişi işi sahaya YENİDEN gidilecek noktaya getirir.
+# Saha durumundan (yola çıkıldı/sahada/işlemde) bekletilmiş iş bu nedenlerle
+# İŞLEMDE'ye değil planlama kuyruğuna (PLANLAMADA) döner: "Plan bekleyen"
+# KPI'sında ve planlama havuzunda görünür, zilde `planlamaya_donen` uyarısı
+# sorumluya/şefe düşer. İstisna: beklemeyi işin AKTİF ekibinden biri bitiriyorsa
+# (ör. teknisyen kendi araç deposundan parçayı çıkarıp işi sürdürüyor) iş önceki
+# durumuna döner — kişi zaten sahadadır, yeniden plan gereksiz adım olurdu.
+PLANLAMAYA_DONEN_NEDENLER = frozenset({"TEKLIF", "MALZEME"})
+SAHA_DURUMLARI = frozenset({"YOLA_CIKILDI", "SAHADA", "ISLEMDE"})
+
+
+def _donus_durumu(onceki: str, neden: str | None = None, *, ekip_ici: bool = False) -> str:
+    """Beklemeden dönülecek durum (tek kural; `beklemeyi_bitir` çağırır)."""
+    if neden in PLANLAMAYA_DONEN_NEDENLER and onceki in SAHA_DURUMLARI and not ekip_ici:
+        return "PLANLAMADA"
     if SERVIS_IS_EMRI.izinli_mi("BEKLEMEDE", onceki):
         return onceki
     return "PLANLAMADA"
+
+
+async def _ekip_ici_mi(db: AsyncSession, so: ServiceOrder, user: User | None) -> bool:
+    if user is None:
+        return False
+    from app.models import ServiceOrderAssignment
+
+    return (
+        await db.scalar(
+            select(ServiceOrderAssignment.id)
+            .where(
+                ServiceOrderAssignment.service_order_id == so.id,
+                ServiceOrderAssignment.user_id == user.id,
+                ServiceOrderAssignment.removed_at.is_(None),
+            )
+            .limit(1)
+        )
+    ) is not None
 
 
 async def beklemeyi_bitir(
@@ -144,7 +177,9 @@ async def beklemeyi_bitir(
     if not_ is not None and len(not_) > 200:
         raise ServisGirdiHatasi("Kapanış notu en çok 200 karakter olabilir")
     simdi = clock.now()
-    hedef = _donus_durumu(bekleme.onceki_durum)
+    hedef = _donus_durumu(
+        bekleme.onceki_durum, bekleme.neden, ekip_ici=await _ekip_ici_mi(db, so, user)
+    )
     # Önce bekleme kapanır: `durum_degisti` kancası aktif bekleme bulmasın.
     bekleme.released_at = simdi
     bekleme.released_by = user.id if user is not None else None
@@ -157,7 +192,9 @@ async def beklemeyi_bitir(
         select(ServiceHoldReason).where(ServiceHoldReason.kod == bekleme.neden)
     )
     ozet = f"Bekleme bitti: {katalog.ad if katalog else bekleme.neden} ({bekleme.sure_dk} dk)"
-    if hedef != bekleme.onceki_durum:
+    if hedef == "PLANLAMADA" and bekleme.neden in PLANLAMAYA_DONEN_NEDENLER:
+        ozet += "; iş yeniden planlanmak üzere planlama kuyruğuna döndü"
+    elif hedef != bekleme.onceki_durum:
         ozet += (
             f"; önceki duruma ({is_emirleri.DURUM_ADLARI[bekleme.onceki_durum]}) dönülemediği "
             f"için {is_emirleri.DURUM_ADLARI[hedef]}"

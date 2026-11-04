@@ -82,7 +82,7 @@ async def ortam(client, db, kullanici_ac):
 
 class TestYetki:
     async def test_servis_gor_olmayan_403(self, client, kullanici_ac, ortam):
-        await kullanici_ac("satisci", "SATIS")
+        await kullanici_ac("satisci", "DEPO")  # servis.gor yok (SATIS §7.8 ile görür)
         await _giris(client, "satisci")
         cevap = await client.get("/api/personel/atanabilir", params={"birim": "GUVENLIK"})
         assert cevap.status_code == 403

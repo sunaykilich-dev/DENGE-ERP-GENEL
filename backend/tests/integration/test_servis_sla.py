@@ -444,7 +444,7 @@ async def test_pb_isine_sla_damgalanamaz(db, servis_isi_ac, sozlesme_ac) -> None
 
 async def test_rbac_sla_uclari(client, db, mudur, kullanici_ac) -> None:
     """Yeni uçların 403/2xx'i (matris dışında maddeye özgü)."""
-    await kullanici_ac("satis1", "SATIS")
+    await kullanici_ac("satis1", "DEPO")  # servis.gor yok (SATIS §7.8 ile görür)
     so = await is_ac(client, mudur)
     await giris(client, "satis1")
     assert (await client.get(f"{TS}/operasyon/isler/{so['id']}/sla")).status_code == 403

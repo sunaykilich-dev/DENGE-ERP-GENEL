@@ -2,7 +2,8 @@
 
 **Logo entegrasyonu DEĞİLDİR.** Muhasebe devri bir işarettir: kabul edilmiş
 birimli teklifi olan ya da elle/sözleşme/teklif kaynaklı geliri (> 0) olan
-kapanmış (Tamamlandı/Kapatıldı) servis işi "bekleyen" listesine düşer;
+kapanmış (Tamamlandı/Kapatıldı) ve KALİTE ONAYLI (rol testi tur 2; göç kaydı
+hariç, `kalite_kapisi`) servis işi "bekleyen" listesine düşer;
 `tahsilat.yaz` sahibi işaretleyince `service_order_financials.fatura_iletildi_at/by`
 yazılır ve iş listeden düşer, "İletilenler"de kim/ne zaman bilgisiyle görünür.
 
@@ -90,13 +91,29 @@ def _gelirli():
     )
 
 
-def uygun_kosulu():
-    """Devre uygun iş: kapanmış ve (kabul teklifli ya da gelirli)."""
+def kalite_kapisi():
+    """Kalite kapısı (rol testi tur 2 Y3, §3.1/§5.9; KARARLAR 2026-11-04 §7.2):
+    yalnız kalite onaylı iş faturaya devredilir. Kalite kuyruğuna hiç girmeyen
+    göç kayıtları (`source_system` dolu; `is_emirleri.kalite_kosulu` ile aynı
+    istisna) kapıya takılmaz — eski sistemde kapanmış işler devirde kalmasın.
+    Bütün iş türleri (PB dahil) kalite onayı gerektirir: kalite kuyruğu tür
+    ayırmaz. Ana Panel "Mali İşler" satırı aynı kapıyı kullanır (sayı = liste)."""
+    return or_(ServiceOrder.kalite_onay_at.is_not(None), ServiceOrder.source_system.is_not(None))
+
+
+def _devir_tabani():
+    """Kapanmış ve (kabul teklifli ya da gelirli) iş — "iletilenler" listesinin
+    tabanı (kalite kapısından önce iletilmiş işler listeden düşmesin)."""
     return and_(
         ServiceOrder.is_deleted.is_(False),
         ServiceOrder.status.in_(_COZULDU),
         or_(_kabul_teklif_var(), _gelirli()),
     )
+
+
+def uygun_kosulu():
+    """Devre uygun (bekleyen) iş: devir tabanı ∧ kalite onaylı."""
+    return and_(_devir_tabani(), kalite_kapisi())
 
 
 @dataclass
@@ -138,12 +155,12 @@ def liste_sorgusu(user: User, s: DevirSuzgeci) -> Select:
         .outerjoin(Account, Account.id == ServiceOrder.customer_id)
         .outerjoin(ServiceOrderFinancial, ServiceOrderFinancial.service_order_id == ServiceOrder.id)
         .outerjoin(iletti, iletti.c.id == ServiceOrderFinancial.fatura_iletildi_by)
-        .where(uygun_kosulu())
+        .where(_devir_tabani())
     )
     if s.durum == "bekleyen":
-        stmt = stmt.where(ServiceOrderFinancial.fatura_iletildi_at.is_(None)).order_by(
-            _kapanis_ani(), ServiceOrder.id
-        )
+        stmt = stmt.where(
+            kalite_kapisi(), ServiceOrderFinancial.fatura_iletildi_at.is_(None)
+        ).order_by(_kapanis_ani(), ServiceOrder.id)
         zaman = _kapanis_ani()
     else:
         stmt = stmt.where(ServiceOrderFinancial.fatura_iletildi_at.is_not(None)).order_by(

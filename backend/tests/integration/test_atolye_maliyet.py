@@ -45,9 +45,9 @@ async def test_maliyetsiz_kullanici_anahtari_hic_gormez_ve_yazamaz(
     detay = (await client.get(f"{ONEK}/{so_id}")).json()
     assert "repair_amount" not in detay
     assert all("repair_amount" not in s for s in (await client.get(ONEK)).json())
-    # Sessizce yok sayılır.
-    r = await duzelt(client, so_id, repair_amount="999")
-    assert "repair_amount" not in r.json()
+    # İzinsiz gönderim 403 (rol testi tur 2 B11; eskiden sessizce yok sayılıyordu).
+    r = await duzelt(client, so_id, beklenen=403, repair_amount="999")
+    assert "maliyet.gor" in r.json()["detail"]
     kayit = await db.scalar(
         select(WorkshopRecord)
         .where(WorkshopRecord.service_order_id == so_id)

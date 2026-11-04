@@ -510,6 +510,15 @@ class ServiceOrder(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL", name="fk_so_kalite_onaylayan")
     )
     kalite_notu: Mapped[str | None] = mapped_column(String(500))
+    # Kalite reddi (f3a000000001, rol testi tur 2 Y5): son reddin anı, kişisi ve
+    # gerekçesi. Ret işi düzeltme için açık duruma döndürür; ayrıntı geçmişte
+    # (KALITE olayı) ve denetimde. Açık iş ∧ `kalite_red_at` = "kalitesi
+    # reddedilip düzeltme bekleyen" (zil KPI'sı `kalite_reddedilen`).
+    kalite_red_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    kalite_red_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL", name="fk_so_kalite_red_by")
+    )
+    kalite_red_gerekcesi: Mapped[str | None] = mapped_column(String(500))
 
     # --- Bağlar -------------------------------------------------------------
     iliskili_is_id: Mapped[int | None] = mapped_column(
