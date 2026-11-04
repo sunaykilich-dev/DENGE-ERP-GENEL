@@ -1957,6 +1957,22 @@ export function ServisIsListesi({
       ),
     },
     {
+      // Rol testi 1 B13: müşteri ayrı ve varsayılan görünür sütun (telefon
+      // genişliği hariç); müşterisiz açılan iş "girilmedi" diye işaretlenir.
+      title: "Müşteri",
+      key: "musteri",
+      width: 200,
+      responsive: ["sm"],
+      render: (_, r) =>
+        r.musteri?.title || r.customer_name_raw ? (
+          <span className="fl-kucuk" style={{ fontWeight: 600 }} title={r.musteri?.title ?? r.customer_name_raw ?? ""}>
+            {r.musteri?.title ?? r.customer_name_raw}
+          </span>
+        ) : (
+          <span className="fl-kucuk-gri">Müşteri girilmedi</span>
+        ),
+    },
+    {
       title: "Ekipman",
       dataIndex: "seriler",
       width: 130,
@@ -1972,16 +1988,12 @@ export function ServisIsListesi({
       width: 200,
       align: "center",
       responsive: ["md"],
-      render: (_, r) => (
-        <>
-          <span className="fl-kucuk" style={{ fontWeight: 600 }}>
-            {r.musteri?.title ?? r.customer_name_raw ?? "—"}
-          </span>
-          {r.lokasyon && (
-            <span className="fl-kucuk">{[r.lokasyon.ad, r.lokasyon.il].filter(Boolean).join(" · ")}</span>
-          )}
-        </>
-      ),
+      render: (_, r) =>
+        r.lokasyon ? (
+          <span className="fl-kucuk">{[r.lokasyon.ad, r.lokasyon.il].filter(Boolean).join(" · ") || "—"}</span>
+        ) : (
+          <span className="fl-kucuk-gri">—</span>
+        ),
     },
     {
       title: "Sistem",
@@ -2369,7 +2381,7 @@ export function ServisIsListesi({
         }
         // Gizlenen (responsive) sütunlar kadar daralır: 375 px'te yalnız
         // durum, no, açıklama ve personel kalır, tablo kendi içinde kayar.
-        scrollX={ekran.xl ? 1340 : ekran.lg ? 1180 : ekran.md ? 1010 : ekran.sm ? 860 : 720}
+        scrollX={ekran.xl ? 1540 : ekran.lg ? 1380 : ekran.md ? 1210 : ekran.sm ? 1060 : 720}
         secimModu={cokluSecim ? "coklu" : "tek"}
         secili={secili}
         onSecim={(k) => setSecili(k as number[])}

@@ -92,6 +92,13 @@ export interface Uygulama {
    * sayfa olarak kullanılmaz.
    */
   ek?: boolean;
+  /**
+   * Sunucuda yalnız DENGE MOBİLİTE etkinken açılan ekran (`MOBILITE_KAPISI`,
+   * KARARLAR 2026-11-04 §1). Başka şirketteyken rota kapısı "bu sayfa bu
+   * şirkette kullanılamaz" der; boş tablo/"Veri Yok" çizilmez (sızıntı S4).
+   * Hesaplar, Ürün Kataloğu ve Teklifler grup ortaktır, kapısı yoktur.
+   */
+  yalnizMobilite?: boolean;
 }
 
 export type GrupKodu =
@@ -125,6 +132,17 @@ export const GRUPLAR: Grup[] = [
 
 export const UYGULAMALAR: Uygulama[] = [
   // --- Teknik Servis Uygulamaları ------------------------------------------
+  {
+    // KARARLAR 2026-11-04 §4: ana sayfa. Sunucu ucu `servis.gor` ister; izni
+    // olmayan rolün açılışı menüdeki ilk yetkili sayfadır (rol testi B-01).
+    id: "/ana-panel",
+    baslik: "Ana Panel",
+    altBaslik: "Operasyon özeti",
+    ikon: DashboardOutlined,
+    yol: "/ana-panel",
+    izin: "servis.gor",
+    grup: "servis",
+  },
   {
     id: "/servis-isleri",
     baslik: "Servis İşleri",
@@ -390,22 +408,22 @@ export const UYGULAMALAR: Uygulama[] = [
     grup: "ik",
   },
   // --- Mobilite (canlı ekranlar; adlar değişmez) ---------------------------
-  { id: "/panel", baslik: "Panel", altBaslik: "Mobilite özeti", ikon: PieChartOutlined, yol: "/panel", izin: "rapor.gor", grup: "mobilite" },
+  { id: "/panel", baslik: "Panel", altBaslik: "Mobilite özeti", ikon: PieChartOutlined, yol: "/panel", izin: "rapor.gor", grup: "mobilite", yalnizMobilite: true },
   { id: "/hesaplar", baslik: "Hesaplar", ikon: TeamOutlined, yol: "/hesaplar", izin: "hesap.gor", grup: "mobilite" },
   { id: "/urunler", baslik: "Ürün Kataloğu", ikon: ContainerOutlined, yol: "/urunler", izin: "urun.gor", grup: "mobilite" },
-  { id: "/cihazlar", baslik: "Cihazlar", ikon: HddOutlined, yol: "/cihazlar", izin: "cihaz.gor", grup: "mobilite" },
-  { id: "/stok", baslik: "Stok ve Transfer", ikon: ContainerOutlined, yol: "/stok", izin: "cihaz.gor", grup: "mobilite" },
-  { id: "/hatlar", baslik: "Hatlar (SIM)", ikon: WifiOutlined, yol: "/hatlar", izin: "hat.gor", grup: "mobilite" },
-  { id: "/araclar", baslik: "Araçlar", ikon: CarOutlined, yol: "/araclar", izin: "arac.gor", grup: "mobilite" },
-  { id: "/is-emirleri", baslik: "İş Emirleri", ikon: UnorderedListOutlined, yol: "/is-emirleri", izin: "isemri.gor", grup: "mobilite" },
-  { id: "/hakedis", baslik: "Hak Ediş", ikon: DollarOutlined, yol: "/hakedis", izin: "hakedis.gor", grup: "mobilite" },
+  { id: "/cihazlar", baslik: "Cihazlar", ikon: HddOutlined, yol: "/cihazlar", izin: "cihaz.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/stok", baslik: "Stok ve Transfer", ikon: ContainerOutlined, yol: "/stok", izin: "cihaz.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/hatlar", baslik: "Hatlar (SIM)", ikon: WifiOutlined, yol: "/hatlar", izin: "hat.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/araclar", baslik: "Araçlar", ikon: CarOutlined, yol: "/araclar", izin: "arac.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/is-emirleri", baslik: "İş Emirleri", ikon: UnorderedListOutlined, yol: "/is-emirleri", izin: "isemri.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/hakedis", baslik: "Hak Ediş", ikon: DollarOutlined, yol: "/hakedis", izin: "hakedis.gor", grup: "mobilite", yalnizMobilite: true },
   { id: "/teklifler", baslik: "Teklifler", ikon: FileTextOutlined, yol: "/teklifler", izin: "teklif.gor", grup: "mobilite" },
-  { id: "/siparisler", baslik: "Siparişler", ikon: ShoppingCartOutlined, yol: "/siparisler", izin: "siparis.gor", grup: "mobilite" },
-  { id: "/abonelikler", baslik: "Abonelikler", ikon: SyncOutlined, yol: "/abonelikler", izin: "abonelik.gor", grup: "mobilite" },
-  { id: "/rma", baslik: "RMA / Servis", ikon: SolutionOutlined, yol: "/rma", izin: "rma.gor", grup: "mobilite" },
-  { id: "/satinalma", baslik: "Satın Alma", ikon: ShoppingOutlined, yol: "/satinalma", izin: "satinalma.gor", grup: "mobilite" },
-  { id: "/tahsilat", baslik: "Tahsilat", ikon: DollarOutlined, yol: "/tahsilat", izin: "tahsilat.gor", grup: "mobilite" },
-  { id: "/raporlar", baslik: "Raporlar", ikon: BarChartOutlined, yol: "/raporlar", izin: "rapor.gor", grup: "mobilite" },
+  { id: "/siparisler", baslik: "Siparişler", ikon: ShoppingCartOutlined, yol: "/siparisler", izin: "siparis.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/abonelikler", baslik: "Abonelikler", ikon: SyncOutlined, yol: "/abonelikler", izin: "abonelik.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/rma", baslik: "RMA / Servis", ikon: SolutionOutlined, yol: "/rma", izin: "rma.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/satinalma", baslik: "Satın Alma", ikon: ShoppingOutlined, yol: "/satinalma", izin: "satinalma.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/tahsilat", baslik: "Tahsilat", ikon: DollarOutlined, yol: "/tahsilat", izin: "tahsilat.gor", grup: "mobilite", yalnizMobilite: true },
+  { id: "/raporlar", baslik: "Raporlar", ikon: BarChartOutlined, yol: "/raporlar", izin: "rapor.gor", grup: "mobilite", yalnizMobilite: true },
   // --- Sistem Yönetimi -----------------------------------------------------
   {
     id: "/ice-aktarma",

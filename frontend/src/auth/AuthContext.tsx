@@ -32,6 +32,8 @@ export const KAPSAM_ETIKETLERI: Record<string, string> = {
 export interface KapsamKatalogu {
   kapsamlar: { kod: string; ad: string; aciklama: string; birim_zorunlu: boolean }[];
   birimler: { kod: string; ad: string }[];
+  /** Kullanıcı formundaki şirket üyeliği seçenekleri (KARARLAR 2026-11-04 §1). */
+  sirketler?: { kod: string; ad: string; birimler: string[] }[];
 }
 
 export const kapsamKataloguSorgusu = {

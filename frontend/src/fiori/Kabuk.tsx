@@ -27,7 +27,7 @@ import {
   SearchOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
-import { Drawer, Dropdown, Modal, Tag } from "antd";
+import { Drawer, Dropdown, Modal, Skeleton, Spin, Tag } from "antd";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -37,9 +37,10 @@ import { sirketRengi, useSirket } from "../auth/SirketContext";
 import AktifSayacBandi from "../components/AktifSayacBandi";
 import BildirimTercihleriPenceresi, { BILDIRIM_TERCIHLERI_ETKIN } from "../components/BildirimTercihleri";
 import GlobalSearch, { type AranabilirMenuOgesi } from "../components/GlobalSearch";
+import RotaKapisi from "../components/RotaKapisi";
 import UyariZili from "../components/UyariZili";
 import ParolaDegistirPage from "../pages/ParolaDegistirPage";
-import { ANA_PANEL_YOLU, MENU_AGACI, aktifYaprak, gorunurMenu, yapraklar, type MenuYapragi } from "./menu";
+import { KPI_ADLARI, MENU_AGACI, aktifYaprak, gorunurMenu, yapraklar, type MenuYapragi } from "./menu";
 import YanMenu from "./YanMenu";
 import { yerelOku, yerelYaz } from "./yerelDepo";
 import "./kabuk.css";
@@ -108,12 +109,27 @@ function useMenuDurumu(kullaniciId: number | undefined) {
   return { daraltilmis, setDaraltilmis, acik, bolumDegistir, favoriler, favoriDegistir, son, sonaEkle };
 }
 
+/** "DENGE MOBİLİTE" → "MOBİLİTE" (dar ekran etiketi). */
+function kisaAd(ad: string): string {
+  return ad.replace(/^DENGE\s+/i, "") || ad;
+}
+
+/** Şirket bilgisi gelene kadar menü yerine iskelet (B-05: başka şirketin bölümü görünmesin). */
+function MenuIskeleti() {
+  return (
+    <div className="dk-menu" aria-busy="true" aria-label="Menü yükleniyor" style={{ padding: 16 }}>
+      <Skeleton active title={false} paragraph={{ rows: 8, width: ["80%", "65%", "75%", "60%", "70%", "55%", "72%", "62%"] }} />
+    </div>
+  );
+}
+
 /** Üst çubukta şirket seçici; tek şirkette sabit etiket, uç yoksa hiç çizilmez. */
 function SirketSecici({ mobil }: { mobil: boolean }) {
   const { destekleniyor, sirketler, aktif, degistir, degisiyor } = useSirket();
   if (!destekleniyor) return null;
   const isaret = <span className="dk-sirket-isaret" style={{ background: sirketRengi(aktif?.kod) }} aria-hidden />;
-  const ad = aktif ? (mobil ? aktif.kod : aktif.ad) : "Şirket seçin";
+  // B-15: mobilde kod ("MOBILITE") değil, Türkçe kısa ad ("MOBİLİTE").
+  const ad = aktif ? (mobil ? kisaAd(aktif.ad) : aktif.ad) : "Şirket seçin";
   if (sirketler.length <= 1) {
     return (
       <span className="dk-sirket sabit" title={aktif?.ad}>
@@ -222,7 +238,7 @@ function HizliOlustur({ mobil }: { mobil: boolean }) {
 
 export default function Kabuk() {
   const { kullanici, cikisYap, yetkili } = useAuth();
-  const { aktif: aktifSirket, aktifBirimler } = useSirket();
+  const { aktif: aktifSirket, menuBirimleri, yukleniyor: sirketYukleniyor } = useSirket();
   const konum = useLocation();
   const mobil = useMobil();
   const [bildirimAcik, setBildirimAcik] = useState(false);
@@ -235,7 +251,10 @@ export default function Kabuk() {
   const menu = useMenuDurumu(kullanici?.id);
   const { sonaEkle, bolumDegistir, setDaraltilmis } = menu;
 
-  const gorunur = useMemo(() => gorunurMenu(MENU_AGACI, { yetkili, aktifBirimler }), [yetkili, aktifBirimler]);
+  const gorunur = useMemo(
+    () => gorunurMenu(MENU_AGACI, { yetkili, aktifBirimler: menuBirimleri }),
+    [yetkili, menuBirimleri],
+  );
   const aktif = useMemo(
     () => aktifYaprak(gorunur, konum.pathname, konum.search),
     [gorunur, konum.pathname, konum.search],
@@ -259,7 +278,10 @@ export default function Kabuk() {
 
   const aktifAnahtar = aktif?.yaprak.anahtar;
   const aktifBolum = aktif?.atalar[0]?.anahtar;
-  const sayfaBasligi = aktif?.yaprak.baslik ?? "Denge ERP";
+  // B-11: Ana Panel KPI bağlantısı (`?kpi=acik`) menüde yaprak değilse kırıntıya KPI adı eklenir.
+  const kpi = new URLSearchParams(konum.search).get("kpi");
+  const kpiAdi = kpi && !aktif?.yaprak.yol.includes(`kpi=${kpi}`) ? KPI_ADLARI[kpi] : undefined;
+  const sayfaBasligi = kpiAdi ?? aktif?.yaprak.baslik ?? "Denge ERP";
 
   // Etkin sayfa: başlık, son açılanlar ve bölümünün açık olması.
   useEffect(() => {
@@ -340,7 +362,9 @@ export default function Kabuk() {
     },
   ];
 
-  const yanMenu = (
+  const yanMenu = sirketYukleniyor ? (
+    <MenuIskeleti />
+  ) : (
     <YanMenu
       agac={gorunur}
       aktifAnahtar={aktifAnahtar}
@@ -370,7 +394,7 @@ export default function Kabuk() {
         >
           {mobil ? <MenuOutlined /> : menu.daraltilmis ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
         </button>
-        <Link to={ANA_PANEL_YOLU} className="dk-logo" title="Ana Panel" aria-label="Ana Panel">
+        <Link to="/" className="dk-logo" title="Açılış sayfası" aria-label="Açılış sayfası">
           <img src="/brand/favicon.png" alt="" />
           {!mobil && <span className="dk-logo-metin">Denge ERP</span>}
         </Link>
@@ -443,15 +467,25 @@ export default function Kabuk() {
                   {aktifSirket.ad}
                 </li>
               )}
-              {aktif?.atalar.map((a) => <li key={a.anahtar}>{a.baslik}</li>)}
-              <li aria-current="page">{sayfaBasligi}</li>
+              {!sirketYukleniyor && aktif?.atalar.map((a) => <li key={a.anahtar}>{a.baslik}</li>)}
+              {kpiAdi && aktif && <li>{aktif.yaprak.baslik}</li>}
+              <li aria-current="page">{sirketYukleniyor ? "Yükleniyor…" : sayfaBasligi}</li>
             </ol>
           </nav>
           {/* TS-077: açık sayaç her sayfada görünür; `zaman.yaz` yoksa ne çizer ne istek atar. */}
           <div className="fiori-sayac-bandi">
             <AktifSayacBandi />
           </div>
-          <Outlet />
+          {sirketYukleniyor ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: 48 }}>
+              <Spin />
+              <span style={{ color: "#6a6d70" }}>Şirket bilgisi yükleniyor…</span>
+            </div>
+          ) : (
+            <RotaKapisi>
+              <Outlet />
+            </RotaKapisi>
+          )}
         </main>
       </div>
 

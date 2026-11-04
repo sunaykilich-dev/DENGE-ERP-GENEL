@@ -38,6 +38,7 @@ import {
 } from "../api/anaPanel";
 import { SLA_RENKLERI, sureMetni } from "../api/servisOperasyon";
 import { DURUM_RENKLERI, ONCELIK_RENKLERI } from "../api/teknikServis";
+import { useSirket } from "../auth/SirketContext";
 import { TAYIN } from "../fiori/etiketler";
 import "./anaPanel.css";
 
@@ -677,6 +678,11 @@ export default function AnaPanelPage() {
   });
   const veri = panel.data;
   const sec = veri?.secenekler;
+  // Rol testi B-12: POC birimi etkin şirkette yoksa (yalnız TELEKOM'da) kart çizilmez.
+  const { aktifBirimler } = useSirket();
+  const kpiler = (veri?.kpiler ?? []).filter(
+    (k) => k.kod !== "poc_acik" || !aktifBirimler || aktifBirimler.has("POC"),
+  );
 
   const degistir = (yeni: Partial<AnaPanelSuzgeci>) => {
     const p = anaPanelParametreleri({ ...suzgec, ...yeni });
@@ -746,7 +752,10 @@ export default function AnaPanelPage() {
           />
         </div>
         <div className="ap-suzgec-alan">
-          <span>Dönem</span>
+          {/* B-14: dönemin neyi etkilediği ekranda yazsın. */}
+          <Tooltip title="Açık iş, askıdaki ve SLA sayıları anlıktır; dönem yalnız tamamlanan işleri ve önceki döneme göre karşılaştırmayı etkiler.">
+            <span style={{ cursor: "help", textDecoration: "underline dotted" }}>Dönem</span>
+          </Tooltip>
           <DatePicker.RangePicker
             size="small"
             format="DD.MM.YYYY"
@@ -803,7 +812,7 @@ export default function AnaPanelPage() {
       ) : (
         <>
           <div className="ap-kpiler">
-            {veri.kpiler.map((k) => (
+            {kpiler.map((k) => (
               <KpiKarti key={k.kod} k={k} />
             ))}
           </div>

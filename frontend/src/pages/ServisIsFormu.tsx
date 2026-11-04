@@ -30,6 +30,7 @@ import {
   Row,
   Select,
   Space,
+  Spin,
   Switch,
   Typography,
 } from "antd";
@@ -199,10 +200,15 @@ export default function ServisIsFormu({
     };
   }, [mevcut, formVerileri, kullanici, onerilenBirim, onerilenTur]);
 
+  // Rol testi B11: yeni işte sözlük (`form-verileri`) gelmeden form çizilmez;
+  // yoksa ilk anda birim/tür boş, talep kanalı ham kod görünüyordu.
+  const sozlukBekleniyor = !mevcut && !formVerileri;
+
   useEffect(() => {
+    if (sozlukBekleniyor) return;
     form.resetFields();
     form.setFieldsValue(baslangic);
-  }, [baslangic, form]);
+  }, [baslangic, form, sozlukBekleniyor]);
 
   // Canlı mükerrer uyarısı (yalnız uyarı; asıl kontrol kayıtta sunucuda).
   useEffect(() => {
@@ -392,6 +398,15 @@ export default function ServisIsFormu({
   }
 
   const turler = (formVerileri?.turler ?? []).filter((t) => t.ekrandan || t.kod === mevcut?.tur);
+
+  if (sozlukBekleniyor) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: 48 }}>
+        <Spin />
+        <Typography.Text type="secondary">Form hazırlanıyor (birim ve iş türleri yükleniyor)…</Typography.Text>
+      </div>
+    );
+  }
 
   return (
     <Form<FormDegeri> form={form} layout="vertical" onFinish={(v) => void gonder(v)} disabled={gonderiliyor}>

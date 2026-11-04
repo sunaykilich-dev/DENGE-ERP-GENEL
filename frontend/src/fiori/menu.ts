@@ -14,7 +14,10 @@
  * kapsamı etkin şirketin birimleriyle ayrıca süzer.
  *
  * Ekranı henüz olmayan dallar (Satış akışları, Frekans/Setra) bilerek YOK —
- * boş ekran göstermemek için (KARARLAR §2). `scripts/menu-kontrol.mjs`
+ * boş ekran göstermemek için (KARARLAR §2). "Satış ve Müşteri" bölümü
+ * (rol testi B-02) yalnız MEVCUT ekranları açar: grup ortak müşteri kartları,
+ * servis teklifleri, sonuçlanan arıza işleri, kurulum işleri ve kurulum
+ * bekleyen ekipman. Mobilite modülünün kendi yaprakları yalnız MOBİLİTE'de. `scripts/menu-kontrol.mjs`
  * her yaprağın `main.tsx`'te gerçek bir rotaya gittiğini ve katalogdaki her
  * sayfanın menüde bulunduğunu derlemeden önce denetler.
  */
@@ -24,8 +27,8 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   CalendarOutlined,
+  ShopOutlined,
   CarOutlined,
-  DashboardOutlined,
   DatabaseOutlined,
   FieldTimeOutlined,
   FileProtectOutlined,
@@ -70,9 +73,11 @@ export interface MenuGrubu {
 
 export type MenuOgesi = MenuYapragi | MenuGrubu;
 
-/** Ana Panel: herkese açık (kendi verisini sunucu süzer). `/` ve `/baslangic` de onu açar. */
+/**
+ * Ana Panel (`servis.gor`). `/` ve `/baslangic` açılış sayfasını açar: izni
+ * olana Ana Panel, olmayana menüdeki ilk yetkili sayfa (rol testi B-01).
+ */
 export const ANA_PANEL_YOLU = "/ana-panel";
-const ANA_PANEL_ESLERI = new Set(["/", "/baslangic"]);
 
 const KATALOG = new Map(UYGULAMALAR.map((u) => [u.id, u]));
 
@@ -112,15 +117,8 @@ const mobiliteSayfalari = SAYFALAR.filter((u) => u.grup === "mobilite").map((u) 
 
 /** Menü ağacı (sıra = ekrandaki sıra). */
 export const MENU_AGACI: MenuOgesi[] = [
-  {
-    tur: "yaprak",
-    anahtar: "ana-panel",
-    baslik: "Ana Panel",
-    yol: ANA_PANEL_YOLU,
-    // Ana Panel herkese açık; içindeki sayıları sunucu kapsam/şirketle süzer.
-    uygulama: null,
-    ikon: DashboardOutlined,
-  },
+  // Anahtar eski favori/son açılan kayıtları bozulmasın diye "ana-panel".
+  sayfa(ANA_PANEL_YOLU, undefined, "ana-panel"),
   { ...sayfa("/benim-islerim"), ikon: FieldTimeOutlined },
 
   // --- Birim bölümleri (şirkete göre) ---------------------------------------
@@ -154,7 +152,6 @@ export const MENU_AGACI: MenuOgesi[] = [
         servis("HABERLESME", "ARIZA", "Arıza"),
         servis("HABERLESME", "PLANSIZ_BAKIM", "Bakım"),
       ]),
-      grup("haberlesme:poc", "POC", [servis("POC", null, "POC işleri")]),
     ],
     { ikon: WifiOutlined, birimler: ["HABERLESME"] },
   ),
@@ -162,7 +159,8 @@ export const MENU_AGACI: MenuOgesi[] = [
     "poc",
     "POC",
     [
-      { ...servis("POC", null, "Tüm işler"), anahtar: "servis:POC:TUMU:poc" },
+      // B-10: POC tek bölümde; Haberleşme altındaki yinelenen yaprak kaldırıldı.
+      servis("POC", null, "Tüm işler"),
       servis("POC", "ARIZA", "Arıza"),
       servis("POC", "KURULUM", "Kurulum"),
     ],
@@ -190,6 +188,33 @@ export const MENU_AGACI: MenuOgesi[] = [
       servis("BARIYER", "TASIMA", "Taşıma"),
     ],
     { ikon: AlertOutlined, birimler: ["BARIYER"] },
+  ),
+
+  // Satış / Satış Destek (B-02): ELEKTRONİK ve TELEKOM'da (birimli şirketler).
+  // Müşteri kartları ve servis teklifleri grup ortaktır; servis görünümlerini
+  // sunucu kullanıcının birim kapsamıyla süzer.
+  grup(
+    "satis",
+    "Satış ve Müşteri",
+    [
+      sayfa("/hesaplar", "Müşteri Kartları", "satis:hesaplar"),
+      sayfa("/teklifler", "Teklifler", "satis:teklifler"),
+      suzgecli(
+        "satis:ariza-sonuclanan",
+        "Sonuçlanan Arıza İşleri",
+        "/servis-isleri?tur=ARIZA&durum_grubu=COZULDU",
+        "/servis-isleri",
+      ),
+      suzgecli("satis:kurulum", "Kurulum İşleri", "/servis-isleri?tur=KURULUM", "/servis-isleri"),
+      suzgecli(
+        "satis:kurulum-bekleyen",
+        "Kurulum Bekleyen Ekipman",
+        "/servis-ekipman?durum=KURULUM_BEKLIYOR",
+        "/servis-ekipman",
+      ),
+      sayfa("/urunler", "Ürün Kataloğu", "satis:urunler"),
+    ],
+    { ikon: ShopOutlined, birimler: ["GUVENLIK", "BARIYER", "HABERLESME", "POC"] },
   ),
 
   // --- Ortak bölümler (her şirkette) ----------------------------------------
@@ -317,7 +342,7 @@ export function aktifYaprak(
   adresYolu: string,
   search: string,
 ): { yaprak: MenuYapragi; atalar: MenuGrubu[] } | undefined {
-  const pathname = ANA_PANEL_ESLERI.has(adresYolu) ? ANA_PANEL_YOLU : adresYolu;
+  const pathname = adresYolu;
   const adres = new URLSearchParams(search);
   let en: { yaprak: MenuYapragi; atalar: MenuGrubu[] } | undefined;
   let enPuan = -1;
@@ -341,3 +366,33 @@ export function aktifYaprak(
   }
   return en;
 }
+
+/**
+ * Açılış sayfası (B-01): görünür menüdeki ilk yaprak — Ana Panel izni olana
+ * Ana Panel, olmayana (satış, finans uzmanı, mobilite depo…) izni ve şirketi
+ * tutan ilk anlamlı ekran. Kutucuk ekranı (`/uygulamalar`) son çaredir.
+ */
+export function acilisYolu(gorunur: MenuOgesi[]): string {
+  const ilk = yapraklar(gorunur).find(({ yaprak }) => yaprak.yol !== "/uygulamalar");
+  return ilk?.yaprak.yol ?? "/uygulamalar";
+}
+
+/**
+ * Menüde yaprağı olmayan liste görünümleri (Ana Panel KPI bağlantıları): kırıntı
+ * ve sekme başlığı genel "Tüm Servis İşleri" yerine KPI adını gösterir (B-11).
+ */
+export const KPI_ADLARI: Record<string, string> = {
+  acik: "Açık İş Emirleri",
+  kritik_acik: "Kritik Açık İşler",
+  sla_riskli: "SLA Riski Olan İşler",
+  bakim_bu_ay_planli: "Bu Ay Planlı Bakım",
+  onay_bekleyen: "Onay Bekleyen İşler",
+  plan_bekleyen: "Plan Bekleyen İşler",
+  planlandi: "Planlanan İşler",
+  sahada: "Sahadaki İşler",
+  atolyede: "Atölyedeki İşler",
+  bugun_acilan: "Bugün Açılan İşler",
+  bugun_planli: "Bugün Planlı İşler",
+  tamamlanan: "Tamamlanan İşler",
+  poc_acik: "POC Açık Talepler",
+};
