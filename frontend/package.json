@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/menu-kontrol.mjs && tsc -b && vite build",
+    "menu-kontrol": "node scripts/menu-kontrol.mjs",
     "preview": "vite preview",
     "lint": "oxlint src"
   },

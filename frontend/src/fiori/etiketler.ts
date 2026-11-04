@@ -98,6 +98,8 @@ export const SERVIS_TUR_ETIKETLERI: Record<string, { ad: string; renk: KategoriR
   TOPLAMA: { ad: "TOPLAMA", renk: "yesil" },
   DEMONTAJ: { ad: "DEMONTAJ", renk: "yesil" },
   ATOLYE: { ad: "ATÖLYE", renk: "yesil" },
+  // KARARLAR 2026-11-04 §2: Set Bariyer taşıma işi (yeni tür kodu).
+  TASIMA: { ad: "TAŞIMA", renk: "yesil" },
   PB: { ad: "PLANLI BAKIM", renk: "yesil" },
 };
 
@@ -110,6 +112,7 @@ export const SERVIS_KATEGORI_SIRASI = [
   "KESIF",
   "TOPLAMA",
   "DEMONTAJ",
+  "TASIMA",
   "ATOLYE",
 ] as const;
 

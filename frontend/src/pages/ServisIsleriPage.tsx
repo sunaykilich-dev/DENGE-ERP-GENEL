@@ -99,6 +99,8 @@ import {
   type FioriDurumGrubu,
 } from "../fiori/etiketler";
 import ListeRaporu, { type FioriEylem, type FioriKategori } from "../fiori/ListeRaporu";
+import { useYeniParametresi } from "../fiori/useYeniParametresi";
+import { yerelOku, yerelYaz } from "../fiori/yerelDepo";
 import EkYukleyici from "../components/EkYukleyici";
 import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
@@ -1643,6 +1645,67 @@ export interface ServisIsListesiProps {
   noRozeti?: boolean;
   /** Yeni kayıt düğmesi (Planlı Bakım'da PB elle açılmaz). */
   yeniKayit?: boolean;
+  /**
+   * Verilirse kişisel süzgeçler (durum, öncelik, sıralama, onay kutuları)
+   * kullanıcı başına bu adla hatırlanır (KARARLAR 2026-11-04 §5).
+   */
+  hatirlaAnahtari?: string;
+}
+
+/**
+ * Hatırlanan süzgeç alanları. Birim/tür/kpi HATIRLANMAZ: onlar menüden
+ * seçilen "nereye baktığım"dır (Güvenlik › Kurulum); hatırlansaydı "Tüm
+ * Servis İşleri" tıklaması eski birimi açardı.
+ */
+const HATIRLANAN_SUZGECLER = [
+  "durum",
+  "oncelik",
+  "siralama",
+  "atanmamis",
+  "kapali_dahil",
+  "kalite",
+  "teknisyen_id",
+] as const;
+const hatirlananAlan = (k: string) => (HATIRLANAN_SUZGECLER as readonly string[]).includes(k);
+
+/**
+ * Boş liste: ne yapılacağını söyler (KARARLAR 2026-11-04 §5). Süzgeç varsa
+ * temizleme, yoksa ilk kaydı açma yolunu gösterir.
+ */
+function BosListeMesaji({
+  suzgecli,
+  yeniAcabilir,
+  temizle,
+  yeni,
+}: {
+  suzgecli: boolean;
+  yeniAcabilir: boolean;
+  temizle: () => void;
+  yeni: () => void;
+}) {
+  return (
+    <Empty
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description={
+        suzgecli
+          ? "Bu süzgeçle eşleşen servis işi yok. Süzgeci temizleyin ya da durum çubuğundan başka bir durum seçin."
+          : "Burada henüz servis işi yok."
+      }
+    >
+      <Space wrap style={{ justifyContent: "center" }}>
+        {suzgecli && (
+          <Button size="small" onClick={temizle}>
+            Süzgeci temizle
+          </Button>
+        )}
+        {yeniAcabilir && (
+          <Button size="small" type="primary" icon={<PlusOutlined />} onClick={yeni}>
+            Yeni servis işi aç
+          </Button>
+        )}
+      </Space>
+    </Empty>
+  );
 }
 
 export function ServisIsListesi({
@@ -1654,6 +1717,7 @@ export function ServisIsListesi({
   sabitParametreler,
   noRozeti = true,
   yeniKayit = true,
+  hatirlaAnahtari,
 }: ServisIsListesiProps) {
   const { yetkili, kullanici } = useAuth();
   const { message } = App.useApp();
@@ -1671,6 +1735,36 @@ export function ServisIsListesi({
   const [ziyaretAcik, setZiyaretAcik] = useState(false);
   const [istek, setIstek] = useState<PencereIstegi | null>(null);
   const [aramaMetni, setAramaMetni] = useState(urlSuzgeci.q ?? "");
+  const [hatirlandi, setHatirlandi] = useState(false);
+
+  // Kişisel süzgeç hatırlama: ilk açılışta adreste kişisel süzgeç (ve panel
+  // kpi'si) yoksa son kullanılan eklenir; sonra her değişiklik kaydedilir.
+  const ilkAcilis = useRef(true);
+  useEffect(() => {
+    if (!hatirlaAnahtari || !kullanici) return;
+    const ad = `suzgec.${hatirlaAnahtari}`;
+    if (ilkAcilis.current) {
+      ilkAcilis.current = false;
+      const kisiselVar = HATIRLANAN_SUZGECLER.some((k) => arama.has(k));
+      const kayitli = yerelOku<string>(kullanici.id, ad, "");
+      if (!kisiselVar && !arama.has("kpi") && kayitli) {
+        const p = new URLSearchParams(arama);
+        new URLSearchParams(kayitli).forEach((v, k) => {
+          if (hatirlananAlan(k)) p.append(k, v);
+        });
+        if (p.toString() !== arama.toString()) {
+          setHatirlandi(true);
+          setArama(p, { replace: true });
+          return;
+        }
+      }
+    }
+    const kayit = new URLSearchParams();
+    arama.forEach((v, k) => {
+      if (hatirlananAlan(k)) kayit.append(k, v);
+    });
+    yerelYaz(kullanici.id, ad, kayit.toString());
+  }, [arama, hatirlaAnahtari, kullanici, setArama]);
 
   // Kategori: URL'deki tur/kpi'ye birebir uyan öğe; yoksa varsayılan uygulanır.
   const kategoriUyar = (k: ServisKategorisi, s: IsSuzgeci) =>
@@ -1770,6 +1864,8 @@ export function ServisIsListesi({
   const seciliGrup = durumGrubuBul(durumGruplari, suzgec.durum);
   const planlayabilir = yetkili("servis.planla");
   const yazabilir = yetkili("servis.yaz");
+  // "+ Hızlı oluştur" → `?yeni=1`: yeni iş penceresi açılır.
+  useYeniParametresi(() => setYeniAcik(true), yeniKayit && yazabilir);
   const secebilir = yazabilir || planlayabilir;
   const ac = (id: number) => detayAc(id);
 
@@ -2177,6 +2273,25 @@ export function ServisIsListesi({
           Liste panel kutusunun süzgeciyle açıldı (sayı = liste).
         </Typography.Text>
       </Space>
+    ) : hatirlandi && HATIRLANAN_SUZGECLER.some((k) => arama.has(k)) ? (
+      <Space wrap>
+        <Tag
+          color="gold"
+          closable
+          onClose={(e) => {
+            e.preventDefault();
+            setHatirlandi(false);
+            const yeni: IsSuzgeci = { ...urlSuzgeci };
+            for (const k of HATIRLANAN_SUZGECLER) delete yeni[k];
+            suzgecDegistir(yeni);
+          }}
+        >
+          Son kullandığınız süzgeç uygulandı
+        </Tag>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Kaldırmak için etiketi kapatın.
+        </Typography.Text>
+      </Space>
     ) : suzgec.musteri_id || suzgec.adres_id ? (
       <Tag
         closable
@@ -2231,7 +2346,23 @@ export function ServisIsListesi({
         veri={kayitlar}
         satirAnahtari="id"
         yukleniyor={liste.isFetching}
-        bosMetin={liste.isError ? (liste.error as Error).message : "Veri yok"}
+        bosMetin={
+          liste.isError ? (
+            (liste.error as Error).message
+          ) : (
+            <BosListeMesaji
+              suzgecli={ekSuzgecSayisi > 0 || !!suzgec.durum?.length || !!suzgec.q || !!suzgec.kpi || !!suzgec.tur}
+              yeniAcabilir={yeniKayit && yazabilir}
+              temizle={() => {
+                setAramaMetni("");
+                setHatirlandi(false);
+                // Menüden gelen birim korunur (Güvenlik › Kurulum → Güvenlik).
+                suzgecDegistir({ birim: urlSuzgeci.birim });
+              }}
+              yeni={() => setYeniAcik(true)}
+            />
+          )
+        }
         // Gizlenen (responsive) sütunlar kadar daralır: 375 px'te yalnız
         // durum, no, açıklama ve personel kalır, tablo kendi içinde kayar.
         scrollX={ekran.xl ? 1340 : ekran.lg ? 1180 : ekran.md ? 1010 : ekran.sm ? 860 : 720}
@@ -2264,6 +2395,7 @@ export function ServisIsListesi({
       >
         <ServisIsFormu
           formVerileri={sozluk.data}
+          varsayilan={{ birim: suzgec.birim, tur: suzgec.tur }}
           onKaydedildi={(d) => {
             setYeniAcik(false);
             void qc.invalidateQueries({ queryKey: ["servis-isleri"] });
@@ -2340,6 +2472,7 @@ export default function ServisIsleriPage() {
   const yolEki = arama.toString() ? `?${arama.toString()}` : "";
   return (
     <ServisIsListesi
+      hatirlaAnahtari="servis-isleri"
       detayId={id ? Number(id) : null}
       detayAc={(x) => git(x ? `/servis-isleri/${x}${yolEki}` : `/servis-isleri${yolEki}`)}
     />

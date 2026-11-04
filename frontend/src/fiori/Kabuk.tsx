@@ -1,39 +1,52 @@
 /**
- * Fiori kabuğu (Shell Bar) — rehber §1. Tüm oturumlu sayfaları sarar.
+ * Uygulama kabuğu — Logo CRM kurgusu (KARARLAR 2026-11-04 §1, §2, §5).
  *
- * Sol: geri ok (uygulama içindeyken), Denge kare logosu, uygulama başlığı ▾
- * (açılır menü: aynı gruptaki uygulamalar + Başlangıç sayfası + tüm gruplar).
- * Orta: yuvarlatılmış arama ("Arama yeri: "Uygulamalar""). Sağ: uyarı zili
- * ve kullanıcı baş harfleri dairesi (rol, bildirim tercihleri, parola
- * değiştir, çıkış). Sol kenar menüsü YOK; gezinme launchpad ve başlık menüsüyle.
- * 375 px'te arama ikona düşer ve dokununca başlığın altında tam genişlik açılır.
+ * Üst çubuk (koyu lacivert): menü daralt/aç, Denge logosu, ŞİRKET SEÇİCİ
+ * (renkli işaretle), genel arama (Ctrl+K), "+ Hızlı oluştur", uyarı zili,
+ * kullanıcı menüsü. Sol: akordeon ana menü (`YanMenu`), mobilde çekmece.
+ * İçerik: ekmek kırıntısı (Şirket › Bölüm › Alt bölüm › Sayfa), açık sayaç
+ * bandı, sayfa. Fiori liste ekranlarının iç düzeni değişmez; yalnız çerçeve.
+ *
+ * Eski Fiori kabuğu (başlık ▾ menüsü + launchpad açılışı) kaldırıldı: ana
+ * sayfa Ana Panel'dir, launchpad "Sistem › Uygulamalar (kutucuklar)" altında.
  */
 import {
-  AppstoreOutlined,
   BellOutlined,
+  CheckOutlined,
   CloseOutlined,
   DownOutlined,
-  HomeOutlined,
+  FileProtectOutlined,
+  InboxOutlined,
   KeyOutlined,
-  LeftOutlined,
   LogoutOutlined,
+  MenuFoldOutlined,
+  MenuOutlined,
+  MenuUnfoldOutlined,
+  PlusOutlined,
+  ScheduleOutlined,
   SearchOutlined,
+  ToolOutlined,
 } from "@ant-design/icons";
-import { Dropdown, Modal, Tag } from "antd";
+import { Drawer, Dropdown, Modal, Tag } from "antd";
 import type { MenuProps } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { kapsamEtiketi, useAuth } from "../auth/AuthContext";
+import { sirketRengi, useSirket } from "../auth/SirketContext";
 import AktifSayacBandi from "../components/AktifSayacBandi";
 import BildirimTercihleriPenceresi, { BILDIRIM_TERCIHLERI_ETKIN } from "../components/BildirimTercihleri";
-import GlobalSearch from "../components/GlobalSearch";
+import GlobalSearch, { type AranabilirMenuOgesi } from "../components/GlobalSearch";
 import UyariZili from "../components/UyariZili";
 import ParolaDegistirPage from "../pages/ParolaDegistirPage";
-import { GRUPLAR, SAYFALAR, gorunurGruplar, uygulamaYetkili, yoldanUygulama } from "./uygulamalar";
+import { ANA_PANEL_YOLU, MENU_AGACI, aktifYaprak, gorunurMenu, yapraklar, type MenuYapragi } from "./menu";
+import YanMenu from "./YanMenu";
+import { yerelOku, yerelYaz } from "./yerelDepo";
+import "./kabuk.css";
 
-const LAUNCHPAD_YOLLARI = new Set(["/", "/baslangic"]);
-const BASLANGIC = "Başlangıç sayfası";
+const LAUNCHPAD_YOLU = "/uygulamalar";
+const ARAMA_KIMLIGI = "dk-genel-arama";
+const SON_ACILAN_SAYISI = 5;
 
 /** Ad ve soyadın baş harfleri, Türkçe büyük harfle (ör. "ışık öz" → "IÖ"). */
 function basHarfler(ad: string | undefined): string {
@@ -44,64 +57,247 @@ function basHarfler(ad: string | undefined): string {
   return `${ilk}${son}`.toLocaleUpperCase("tr");
 }
 
-export default function Kabuk() {
-  const { kullanici, cikisYap, yetkili } = useAuth();
+const MOBIL_SORGU = "(max-width: 767px)";
+
+/** Dar ekran (mobil çekmece) — matchMedia, sunucusuz ortamda masaüstü. */
+function useMobil(): boolean {
+  return useSyncExternalStore(
+    (dinle) => {
+      const m = window.matchMedia?.(MOBIL_SORGU);
+      m?.addEventListener("change", dinle);
+      return () => m?.removeEventListener("change", dinle);
+    },
+    () => window.matchMedia?.(MOBIL_SORGU).matches ?? false,
+    () => false,
+  );
+}
+
+/** Menü durumu: açık bölümler, daraltma, favoriler, son açılanlar (kullanıcı başına). */
+function useMenuDurumu(kullaniciId: number | undefined) {
+  const [daraltilmis, setDaraltilmis] = useState(() => yerelOku(kullaniciId, "menu.daraltilmis", false));
+  const [acik, setAcik] = useState<Set<string>>(
+    () => new Set(yerelOku<string[]>(kullaniciId, "menu.acik", [])),
+  );
+  const [favoriler, setFavoriler] = useState<string[]>(() => yerelOku(kullaniciId, "menu.favoriler", []));
+  const [son, setSon] = useState<string[]>(() => yerelOku(kullaniciId, "menu.son", []));
+
+  useEffect(() => yerelYaz(kullaniciId, "menu.daraltilmis", daraltilmis), [kullaniciId, daraltilmis]);
+  useEffect(() => yerelYaz(kullaniciId, "menu.acik", [...acik]), [kullaniciId, acik]);
+  useEffect(() => yerelYaz(kullaniciId, "menu.favoriler", favoriler), [kullaniciId, favoriler]);
+  useEffect(() => yerelYaz(kullaniciId, "menu.son", son), [kullaniciId, son]);
+
+  const bolumDegistir = useCallback((anahtar: string, istenen?: boolean) => {
+    setAcik((eski) => {
+      const acilsin = istenen ?? !eski.has(anahtar);
+      if (acilsin === eski.has(anahtar)) return eski;
+      const yeni = new Set(eski);
+      if (acilsin) yeni.add(anahtar);
+      else yeni.delete(anahtar);
+      return yeni;
+    });
+  }, []);
+
+  const favoriDegistir = useCallback((anahtar: string) => {
+    setFavoriler((f) => (f.includes(anahtar) ? f.filter((x) => x !== anahtar) : [...f, anahtar]));
+  }, []);
+
+  const sonaEkle = useCallback((anahtar: string) => {
+    setSon((s) => (s[0] === anahtar ? s : [anahtar, ...s.filter((x) => x !== anahtar)].slice(0, SON_ACILAN_SAYISI)));
+  }, []);
+
+  return { daraltilmis, setDaraltilmis, acik, bolumDegistir, favoriler, favoriDegistir, son, sonaEkle };
+}
+
+/** Üst çubukta şirket seçici; tek şirkette sabit etiket, uç yoksa hiç çizilmez. */
+function SirketSecici({ mobil }: { mobil: boolean }) {
+  const { destekleniyor, sirketler, aktif, degistir, degisiyor } = useSirket();
+  if (!destekleniyor) return null;
+  const isaret = <span className="dk-sirket-isaret" style={{ background: sirketRengi(aktif?.kod) }} aria-hidden />;
+  const ad = aktif ? (mobil ? aktif.kod : aktif.ad) : "Şirket seçin";
+  if (sirketler.length <= 1) {
+    return (
+      <span className="dk-sirket sabit" title={aktif?.ad}>
+        {isaret}
+        <span className="dk-sirket-ad">{ad}</span>
+      </span>
+    );
+  }
+  const items: MenuProps["items"] = [
+    { key: "baslik", type: "group", label: "Çalışılacak şirket" },
+    ...sirketler.map((s) => ({
+      key: s.kod,
+      label: (
+        <span className="dk-sirket-secenek">
+          <span className="dk-sirket-isaret" style={{ background: sirketRengi(s.kod) }} aria-hidden />
+          {s.ad}
+          {s.kod === aktif?.kod && <CheckOutlined style={{ marginInlineStart: 8, color: "#0a6ed1" }} />}
+        </span>
+      ),
+    })),
+  ];
+  return (
+    <Dropdown
+      menu={{ items, onClick: ({ key }) => degistir(String(key)), selectable: false }}
+      trigger={["click"]}
+      placement="bottomLeft"
+      disabled={degisiyor}
+    >
+      <button
+        type="button"
+        className="dk-sirket"
+        aria-haspopup="menu"
+        aria-label={`Etkin şirket: ${aktif?.ad ?? "seçilmedi"}. Değiştirmek için açın.`}
+        title="Şirket değiştir"
+        style={{ borderColor: sirketRengi(aktif?.kod) }}
+      >
+        {isaret}
+        <span className="dk-sirket-ad">{ad}</span>
+        <DownOutlined style={{ fontSize: 10 }} />
+      </button>
+    </Dropdown>
+  );
+}
+
+/** "+ Hızlı oluştur": mevcut oluşturma pencerelerini açar (yetkiye göre). */
+function HizliOlustur({ mobil }: { mobil: boolean }) {
+  const { yetkili } = useAuth();
   const konum = useLocation();
   const navigate = useNavigate();
+
+  // Servis listesindeyken mevcut süzgeç korunur; yeni iş birim/türü oradan alır.
+  const servisYolu = (ek: Record<string, string>) => {
+    const p = new URLSearchParams(konum.pathname === "/servis-isleri" ? konum.search : "");
+    for (const [k, v] of Object.entries(ek)) p.set(k, v);
+    p.set("yeni", "1");
+    return `/servis-isleri?${p.toString()}`;
+  };
+
+  const secenekler = [
+    yetkili("servis.yaz") && {
+      key: "servis",
+      icon: <ToolOutlined />,
+      label: "Yeni servis işi",
+      yol: () => servisYolu({}),
+    },
+    yetkili("servis.yaz") && {
+      key: "bakim-isi",
+      icon: <FileProtectOutlined />,
+      label: "Yeni bakım işi",
+      yol: () => servisYolu({ tur: "PLANSIZ_BAKIM" }),
+    },
+    yetkili("bakim.yaz") && {
+      key: "sozlesme",
+      icon: <ScheduleOutlined />,
+      label: "Yeni bakım sözleşmesi",
+      yol: () => "/bakim?sekme=sozlesmeler&yeni=1",
+    },
+    yetkili("kiralama.yaz") && {
+      key: "kiralama",
+      icon: <InboxOutlined />,
+      label: "Yeni kiralama",
+      yol: () => "/kiralamalar?yeni=1",
+    },
+  ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string; yol: () => string }[];
+
+  if (!secenekler.length) return null;
+  return (
+    <Dropdown
+      trigger={["click"]}
+      placement="bottomRight"
+      menu={{
+        items: secenekler.map(({ key, icon, label }) => ({ key, icon, label })),
+        onClick: ({ key }) => {
+          const s = secenekler.find((x) => x.key === key);
+          if (s) navigate(s.yol());
+        },
+      }}
+    >
+      <button type="button" className="dk-hizli" aria-haspopup="menu" aria-label="Hızlı oluştur">
+        <PlusOutlined />
+        {!mobil && <span>Hızlı oluştur</span>}
+      </button>
+    </Dropdown>
+  );
+}
+
+export default function Kabuk() {
+  const { kullanici, cikisYap, yetkili } = useAuth();
+  const { aktif: aktifSirket, aktifBirimler } = useSirket();
+  const konum = useLocation();
+  const mobil = useMobil();
   const [bildirimAcik, setBildirimAcik] = useState(false);
   const [parolaAcik, setParolaAcik] = useState(false);
   const [aramaAcik, setAramaAcik] = useState(false);
+  const [cekmeceAcik, setCekmeceAcik] = useState(false);
   // TS-200: pencere bayrakla açılır; yalnız servis kullanıcısı.
   const bildirimTercihi = BILDIRIM_TERCIHLERI_ETKIN && yetkili("servis.gor");
 
-  const launchpadda = LAUNCHPAD_YOLLARI.has(konum.pathname);
-  const uygulama = launchpadda ? undefined : yoldanUygulama(konum.pathname);
-  const baslik = launchpadda ? BASLANGIC : (uygulama?.baslik ?? "Denge ERP");
+  const menu = useMenuDurumu(kullanici?.id);
+  const { sonaEkle, bolumDegistir, setDaraltilmis } = menu;
 
-  useEffect(() => {
-    document.title = `${baslik} – Denge ERP`;
-  }, [baslik]);
-
-  // Sayfa değişince mobil arama satırı kapansın.
-  useEffect(() => setAramaAcik(false), [konum.pathname]);
-
-  const baslikMenusu = useMemo<NonNullable<MenuProps["items"]>>(() => {
-    const gruplar = gorunurGruplar(yetkili);
-    const tumGruplar: NonNullable<MenuProps["items"]> = gruplar.map(({ grup, uygulamalar }) => ({
-      key: `grup:${grup.kod}`,
-      label: grup.baslik,
-      children: uygulamalar
-        .filter((u) => u.kpi?.tur !== "uyari")
-        .map((u) => ({
-        key: `${grup.kod}|${u.id}`,
-        label: <Link to={u.yol}>{u.baslik}</Link>,
+  const gorunur = useMemo(() => gorunurMenu(MENU_AGACI, { yetkili, aktifBirimler }), [yetkili, aktifBirimler]);
+  const aktif = useMemo(
+    () => aktifYaprak(gorunur, konum.pathname, konum.search),
+    [gorunur, konum.pathname, konum.search],
+  );
+  const gorunurYapraklar = useMemo(() => yapraklar(gorunur), [gorunur]);
+  const yaprakBul = useCallback(
+    (anahtar: string): MenuYapragi | undefined => gorunurYapraklar.find((x) => x.yaprak.anahtar === anahtar)?.yaprak,
+    [gorunurYapraklar],
+  );
+  const favoriListesi = menu.favoriler.map(yaprakBul).filter((y): y is MenuYapragi => !!y);
+  const sonListesi = menu.son.map(yaprakBul).filter((y): y is MenuYapragi => !!y);
+  const aranabilir = useMemo<AranabilirMenuOgesi[]>(
+    () =>
+      gorunurYapraklar.map(({ yaprak, atalar }) => ({
+        baslik: yaprak.baslik,
+        yol: yaprak.yol,
+        ust: atalar.map((a) => a.baslik).join(" › "),
       })),
-    }));
-    const giris = {
-      key: "baslangic",
-      icon: <HomeOutlined />,
-      label: <Link to="/">{BASLANGIC}</Link>,
+    [gorunurYapraklar],
+  );
+
+  const aktifAnahtar = aktif?.yaprak.anahtar;
+  const aktifBolum = aktif?.atalar[0]?.anahtar;
+  const sayfaBasligi = aktif?.yaprak.baslik ?? "Denge ERP";
+
+  // Etkin sayfa: başlık, son açılanlar ve bölümünün açık olması.
+  useEffect(() => {
+    document.title = `${sayfaBasligi} – Denge ERP`;
+  }, [sayfaBasligi]);
+  useEffect(() => {
+    if (aktifAnahtar) sonaEkle(aktifAnahtar);
+  }, [aktifAnahtar, sonaEkle]);
+  useEffect(() => {
+    if (aktifBolum) bolumDegistir(aktifBolum, true);
+  }, [aktifBolum, bolumDegistir]);
+
+  // Sayfa değişince mobil arama satırı ve menü çekmecesi kapansın.
+  useEffect(() => {
+    setAramaAcik(false);
+    setCekmeceAcik(false);
+  }, [konum.pathname, konum.search]);
+
+  // Ctrl+K / ⌘K: genel arama.
+  useEffect(() => {
+    const dinle = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLocaleLowerCase("tr") === "k") {
+        e.preventDefault();
+        if (mobil) setAramaAcik(true);
+        else document.getElementById(ARAMA_KIMLIGI)?.focus();
+      }
     };
-    if (!uygulama) return [giris, { type: "divider" as const }, ...tumGruplar];
-    const grupAdi = GRUPLAR.find((g) => g.kod === uygulama.grup)?.baslik;
-    const kardesler = SAYFALAR.filter(
-      (u) => u.grup === uygulama.grup && uygulamaYetkili(u, yetkili),
-    ).map((u) => ({
-      key: `kardes|${u.id}`,
-      label: <Link to={u.yol}>{u.baslik}</Link>,
-    }));
-    return [
-      { key: "grup-baslik", type: "group" as const, label: grupAdi, children: kardesler },
-      { type: "divider" as const },
-      giris,
-      {
-        key: "tum",
-        icon: <AppstoreOutlined />,
-        label: "Tüm uygulamalar",
-        children: tumGruplar,
-      },
-    ];
-  }, [uygulama, yetkili]);
+    window.addEventListener("keydown", dinle);
+    return () => window.removeEventListener("keydown", dinle);
+  }, [mobil]);
+
+  const genislet = useCallback(
+    (bolum: string) => {
+      setDaraltilmis(false);
+      bolumDegistir(bolum, true);
+    },
+    [setDaraltilmis, bolumDegistir],
+  );
 
   const kapsam = kapsamEtiketi(kullanici?.role.scope);
   const kullaniciMenusu: NonNullable<MenuProps["items"]> = [
@@ -115,6 +311,7 @@ export default function Kabuk() {
             {kullanici?.role.name}
             {kapsam && <Tag style={{ marginInlineStart: 8 }}>{kapsam}</Tag>}
           </div>
+          {aktifSirket && <div style={{ fontSize: 12, color: "#6a6d70" }}>{aktifSirket.ad}</div>}
         </div>
       ),
     },
@@ -143,74 +340,120 @@ export default function Kabuk() {
     },
   ];
 
+  const yanMenu = (
+    <YanMenu
+      agac={gorunur}
+      aktifAnahtar={aktifAnahtar}
+      acikBolumler={menu.acik}
+      bolumDegistir={bolumDegistir}
+      daraltilmis={!mobil && menu.daraltilmis}
+      genislet={genislet}
+      favoriler={favoriListesi}
+      sonAcilanlar={sonListesi}
+      favoriMi={(a) => menu.favoriler.includes(a)}
+      favoriDegistir={menu.favoriDegistir}
+      secildi={mobil ? () => setCekmeceAcik(false) : undefined}
+    />
+  );
+
+  const launchpadda = konum.pathname === LAUNCHPAD_YOLU;
+
   return (
-    <div className="fiori-uygulama">
-      <header className="fiori-kabuk">
-        <div className="fiori-kabuk-sol">
-          {!launchpadda && (
-            <button
-              type="button"
-              className="fiori-kabuk-dugme"
-              aria-label="Geri"
-              title="Geri"
-              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}
-            >
-              <LeftOutlined />
-            </button>
-          )}
-          <Link to="/" className="fiori-kabuk-logo" title={BASLANGIC} aria-label={BASLANGIC}>
-            <img src="/brand/favicon.png" alt="Denge" />
-          </Link>
-          <Dropdown menu={{ items: baslikMenusu }} trigger={["click"]} placement="bottomLeft">
-            <button type="button" className="fiori-kabuk-baslik" aria-haspopup="menu">
-              <span className="fiori-kabuk-baslik-metin">{baslik}</span>
-              <DownOutlined style={{ fontSize: 11 }} />
-            </button>
-          </Dropdown>
-        </div>
+    <div className="dk-uygulama">
+      <header className="dk-ust" style={{ ["--dk-sirket" as string]: sirketRengi(aktifSirket?.kod) }}>
+        <button
+          type="button"
+          className="dk-ust-dugme"
+          aria-label={mobil ? "Menüyü aç" : menu.daraltilmis ? "Menüyü genişlet" : "Menüyü daralt"}
+          title={mobil ? "Menü" : menu.daraltilmis ? "Menüyü genişlet" : "Menüyü daralt"}
+          onClick={() => (mobil ? setCekmeceAcik(true) : setDaraltilmis((d) => !d))}
+        >
+          {mobil ? <MenuOutlined /> : menu.daraltilmis ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+        </button>
+        <Link to={ANA_PANEL_YOLU} className="dk-logo" title="Ana Panel" aria-label="Ana Panel">
+          <img src="/brand/favicon.png" alt="" />
+          {!mobil && <span className="dk-logo-metin">Denge ERP</span>}
+        </Link>
+        <SirketSecici mobil={mobil} />
 
-        <div className="fiori-kabuk-orta">
-          <GlobalSearch />
-        </div>
+        <div className="dk-ust-bosluk" />
 
-        <div className="fiori-kabuk-sag">
+        {!mobil && (
+          <div className="dk-ust-arama">
+            <GlobalSearch kimlik={ARAMA_KIMLIGI} menuOgeleri={aranabilir} />
+          </div>
+        )}
+        {mobil && (
           <button
             type="button"
-            className="fiori-kabuk-dugme fiori-kabuk-arama-ikon"
+            className="dk-ust-dugme"
             aria-label={aramaAcik ? "Aramayı kapat" : "Ara"}
             onClick={() => setAramaAcik((a) => !a)}
           >
             {aramaAcik ? <CloseOutlined /> : <SearchOutlined />}
           </button>
-          <span className="fiori-kabuk-dugme">
-            <UyariZili />
-          </span>
-          <Dropdown menu={{ items: kullaniciMenusu }} trigger={["click"]} placement="bottomRight">
-            <button
-              type="button"
-              className="fiori-kabuk-avatar"
-              aria-label={`Kullanıcı menüsü: ${kullanici?.full_name ?? ""}`}
-              title={kullanici?.full_name}
-            >
-              {basHarfler(kullanici?.full_name)}
-            </button>
-          </Dropdown>
-        </div>
+        )}
+        <HizliOlustur mobil={mobil} />
+        <span className="dk-ust-dugme dk-zil">
+          <UyariZili renk="#e6edf5" />
+        </span>
+        <Dropdown menu={{ items: kullaniciMenusu }} trigger={["click"]} placement="bottomRight">
+          <button
+            type="button"
+            className="dk-kullanici"
+            aria-label={`Kullanıcı menüsü: ${kullanici?.full_name ?? ""}`}
+            title={kullanici?.full_name}
+          >
+            <span className="dk-avatar">{basHarfler(kullanici?.full_name)}</span>
+            {!mobil && <span className="dk-kullanici-ad">{kullanici?.full_name}</span>}
+            {!mobil && <DownOutlined style={{ fontSize: 10 }} />}
+          </button>
+        </Dropdown>
       </header>
 
-      {aramaAcik && (
-        <div className="fiori-kabuk-mobil-arama">
-          <GlobalSearch otomatikOdak onSecildi={() => setAramaAcik(false)} />
+      {mobil && aramaAcik && (
+        <div className="dk-mobil-arama">
+          <GlobalSearch otomatikOdak menuOgeleri={aranabilir} onSecildi={() => setAramaAcik(false)} />
         </div>
       )}
 
-      <main className={launchpadda ? "fiori-icerik fiori-icerik-lp" : "fiori-icerik"}>
-        {/* TS-077: açık sayaç her sayfada görünür; `zaman.yaz` yoksa ne çizer ne istek atar. */}
-        <div className="fiori-sayac-bandi">
-          <AktifSayacBandi />
-        </div>
-        <Outlet />
-      </main>
+      <div className="dk-govde">
+        {!mobil && <aside className={`dk-yan${menu.daraltilmis ? " daraltilmis" : ""}`}>{yanMenu}</aside>}
+        {mobil && (
+          <Drawer
+            open={cekmeceAcik}
+            onClose={() => setCekmeceAcik(false)}
+            placement="left"
+            size={300}
+            title={null}
+            closable={false}
+            className="dk-cekmece"
+            styles={{ body: { padding: 0 } }}
+          >
+            {yanMenu}
+          </Drawer>
+        )}
+
+        <main className={launchpadda ? "fiori-icerik fiori-icerik-lp dk-icerik" : "fiori-icerik dk-icerik"}>
+          <nav className={`dk-kirinti${launchpadda ? " lp" : ""}`} aria-label="Bulunduğunuz yer">
+            <ol>
+              {aktifSirket && (
+                <li>
+                  <span className="dk-sirket-isaret" style={{ background: sirketRengi(aktifSirket.kod) }} aria-hidden />
+                  {aktifSirket.ad}
+                </li>
+              )}
+              {aktif?.atalar.map((a) => <li key={a.anahtar}>{a.baslik}</li>)}
+              <li aria-current="page">{sayfaBasligi}</li>
+            </ol>
+          </nav>
+          {/* TS-077: açık sayaç her sayfada görünür; `zaman.yaz` yoksa ne çizer ne istek atar. */}
+          <div className="fiori-sayac-bandi">
+            <AktifSayacBandi />
+          </div>
+          <Outlet />
+        </main>
+      </div>
 
       {bildirimTercihi && (
         <BildirimTercihleriPenceresi acik={bildirimAcik} kapat={() => setBildirimAcik(false)} />

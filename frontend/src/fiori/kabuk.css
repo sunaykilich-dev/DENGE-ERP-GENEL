@@ -1,0 +1,322 @@
+/* Uygulama kabuğu — Logo CRM kurgusu (KARARLAR 2026-11-04 §2, §5).
+   Sınıf öneki `dk-` (Denge kabuğu). Koyu lacivert üst çubuk + sol akordeon
+   menü; içerik Fiori açık gri zemininde kalır (liste ekranları değişmez).
+   Pencere kaydırılır (iç kaydırma kabı yok) ki Fiori'nin yapışkan alt eylem
+   çubuğu ve launchpad sekme çubuğu (top: 52px) aynen çalışsın.
+   Dokunma hedefleri ≥ 40 px. */
+
+.dk-uygulama {
+  --dk-ust: #1c2a3a;
+  --dk-yan: #22364b;
+  --dk-yan-koyu: #1b2c3e;
+  --dk-yan-hover: #2c4560;
+  --dk-yan-aktif: #2f5378;
+  --dk-yan-yazi: #dbe5ef;
+  --dk-yan-soluk: #8fa4b8;
+  --dk-sirket: #8c99a6;
+  min-height: 100vh;
+  background: #f7f7f7;
+}
+
+/* --- Üst çubuk --------------------------------------------------------------- */
+.dk-ust {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 6px;
+  background: var(--dk-ust);
+  color: #fff;
+  box-shadow: inset 0 -3px 0 var(--dk-sirket), 0 1px 3px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+}
+.dk-ust-bosluk { flex: 1 1 auto; min-width: 0; }
+
+.dk-ust-dugme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e6edf5;
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.dk-ust-dugme:hover { background: rgba(255, 255, 255, 0.1); }
+.dk-ust button:focus-visible,
+.dk-ust a:focus-visible { outline: 2px solid #8cc4ff; outline-offset: 1px; }
+
+.dk-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 4px;
+  color: #fff;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.dk-logo:hover { color: #fff; }
+.dk-logo img { width: 30px; height: 30px; border-radius: 4px; display: block; background: #fff; }
+.dk-logo-metin { font-size: 16px; font-weight: 700; letter-spacing: 0.2px; white-space: nowrap; }
+
+/* Şirket seçici: renkli işaret + ad (Logo CRM'deki "2-DENGE TELEKOM"). */
+.dk-sirket {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 260px;
+  height: 40px;
+  margin-inline-start: 6px;
+  padding: 0 14px;
+  border: 1px solid var(--dk-sirket);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  flex-shrink: 1;
+}
+.dk-sirket:hover { background: rgba(255, 255, 255, 0.14); }
+.dk-sirket.sabit { cursor: default; border-color: transparent; }
+.dk-sirket.sabit:hover { background: rgba(255, 255, 255, 0.06); }
+.dk-sirket-ad { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-sirket-isaret {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+.dk-sirket-secenek { display: inline-flex; align-items: center; gap: 8px; min-height: 28px; }
+.dk-sirket-secenek .dk-sirket-isaret { box-shadow: none; }
+
+.dk-ust-arama { width: min(380px, 32vw); min-width: 200px; }
+.dk-ust-arama .fiori-arama .ant-input-affix-wrapper {
+  height: 36px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.95);
+  border-color: transparent;
+}
+
+.dk-hizli {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--dk-ust);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.dk-hizli:hover { background: #e8f1fb; }
+
+.dk-zil { cursor: default; }
+.dk-zil .ant-badge { display: inline-flex; }
+
+.dk-kullanici {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 220px;
+}
+.dk-kullanici:hover { background: rgba(255, 255, 255, 0.1); }
+.dk-kullanici-ad { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e6edf5;
+  color: var(--dk-ust);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.dk-mobil-arama {
+  position: sticky;
+  top: 52px;
+  z-index: 99;
+  padding: 8px 12px;
+  background: #fff;
+  border-bottom: 1px solid #d9d9d9;
+}
+
+/* --- Gövde: sol menü + içerik --------------------------------------------- */
+.dk-govde { display: flex; align-items: flex-start; min-width: 0; }
+.dk-yan {
+  position: sticky;
+  top: 52px;
+  flex: 0 0 256px;
+  width: 256px;
+  height: calc(100vh - 52px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--dk-yan);
+  scrollbar-width: thin;
+  scrollbar-color: #3c5875 transparent;
+  transition: width 0.15s, flex-basis 0.15s;
+}
+.dk-yan.daraltilmis { flex-basis: 60px; width: 60px; }
+.dk-icerik { flex: 1 1 auto; min-width: 0; }
+
+/* --- Menü ---------------------------------------------------------------- */
+.dk-menu { padding: 6px 0 24px; color: var(--dk-yan-yazi); font-size: 14px; }
+.dk-cekmece .ant-drawer-body { background: var(--dk-yan, #22364b); }
+.dk-cekmece .dk-menu { --dk-yan-yazi: #dbe5ef; --dk-yan-soluk: #8fa4b8; --dk-yan-hover: #2c4560; --dk-yan-aktif: #2f5378; --dk-yan-koyu: #1b2c3e; }
+.dk-menu-liste { list-style: none; margin: 0; padding: 0; }
+
+.dk-menu-bolum-baslik,
+.dk-menu-baglanti {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--dk-yan-yazi);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.dk-menu-bolum-baslik { font-weight: 600; }
+.dk-menu-bolum-baslik:hover,
+.dk-menu-baglanti:hover { background: var(--dk-yan-hover); color: #fff; }
+.dk-menu-bolum-baslik.etkin { color: #fff; }
+.dk-menu-bolum.acik > .dk-menu-bolum-baslik { background: var(--dk-yan-koyu); }
+.dk-menu-bolum.acik > .dk-menu-liste { background: var(--dk-yan-koyu); padding-bottom: 6px; }
+.dk-menu-ikon { font-size: 16px; flex: 0 0 auto; width: 20px; display: inline-flex; justify-content: center; }
+.dk-menu-metin { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-menu-ok { font-size: 10px; color: var(--dk-yan-soluk); flex: 0 0 auto; }
+
+.dk-menu-yaprak { position: relative; display: flex; align-items: center; }
+.dk-menu-yaprak .dk-menu-baglanti { padding-inline-end: 40px; }
+.dk-menu-yaprak.derinlik-1 .dk-menu-baglanti { padding-inline-start: 46px; }
+.dk-menu-yaprak.derinlik-2 .dk-menu-baglanti { padding-inline-start: 60px; font-size: 13.5px; }
+.dk-menu-yaprak.aktif .dk-menu-baglanti {
+  background: var(--dk-yan-aktif);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: inset 4px 0 0 var(--dk-sirket, #8cc4ff);
+}
+
+.dk-menu-altgrup-baslik {
+  padding: 8px 12px 2px 46px;
+  color: var(--dk-yan-soluk);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+/* Favori yıldızı: üzerine gelince (dokunmatikte her zaman) görünür. */
+.dk-menu-yildiz {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dk-yan-soluk);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.dk-menu-yaprak:hover .dk-menu-yildiz,
+.dk-menu-yaprak:focus-within .dk-menu-yildiz,
+.dk-menu-yildiz.dolu { opacity: 1; }
+.dk-menu-yildiz.dolu { color: #f5c542; }
+.dk-menu-yildiz:hover { color: #f5c542; background: rgba(255, 255, 255, 0.08); }
+@media (hover: none) { .dk-menu-yildiz { opacity: 1; } }
+
+.dk-menu-hizli { margin: 0 0 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.dk-menu-hizli-baslik {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 4px;
+  color: var(--dk-yan-soluk);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.dk-menu-hizli-ikon { font-size: 12px; }
+.dk-menu-hizli .dk-menu-yaprak.derinlik-1 .dk-menu-baglanti { padding-inline-start: 36px; }
+
+.dk-menu :focus-visible { outline: 2px solid #8cc4ff; outline-offset: -2px; }
+
+/* Daraltılmış menü: yalnız ikonlar. */
+.dk-menu.daraltilmis .dk-menu-metin,
+.dk-menu.daraltilmis .dk-menu-ok,
+.dk-menu.daraltilmis .dk-menu-yildiz { display: none; }
+.dk-menu.daraltilmis .dk-menu-bolum-baslik,
+.dk-menu.daraltilmis .dk-menu-baglanti { justify-content: center; padding: 0; min-height: 44px; }
+.dk-menu.daraltilmis .dk-menu-bolum-baslik.etkin { box-shadow: inset 4px 0 0 var(--dk-sirket, #8cc4ff); background: var(--dk-yan-aktif); }
+
+/* --- Ekmek kırıntısı ------------------------------------------------------ */
+.dk-kirinti { margin: -4px 0 10px; min-width: 0; }
+.dk-kirinti.lp { padding: 12px 24px 0; margin: 0; }
+.dk-kirinti ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  color: #6a6d70;
+}
+.dk-kirinti li { display: inline-flex; align-items: center; gap: 6px; }
+.dk-kirinti li + li::before { content: "›"; margin: 0 8px; color: #a0a5aa; }
+.dk-kirinti li[aria-current="page"] { color: #32363a; font-weight: 700; }
+.dk-kirinti .dk-sirket-isaret { box-shadow: none; width: 8px; height: 8px; }
+
+@media (max-width: 767px) {
+  .dk-ust { gap: 2px; padding: 0 6px 0 2px; }
+  .dk-sirket { margin-inline-start: 2px; padding: 0 10px; max-width: 120px; font-size: 12px; }
+  .dk-hizli { width: 40px; height: 40px; padding: 0; justify-content: center; font-size: 16px; }
+  .dk-kullanici { padding: 0 4px; }
+  .dk-kirinti { margin: -2px 0 8px; }
+  .dk-kirinti.lp { padding: 10px 16px 0; }
+  .dk-kirinti ol { font-size: 12px; }
+}

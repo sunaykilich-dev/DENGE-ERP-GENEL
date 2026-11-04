@@ -36,12 +36,26 @@ const kucuk = (s: string) => s.toLocaleLowerCase("tr");
  * ICCID, şase, firma, ürün (kabul kriteri 1). Modüller geldikçe sunucu
  * tarafında yeni kaynak eklenir; bu bileşen değişmez.
  */
+/** Menüden aranabilir öğe (KARARLAR 2026-11-04 §5): "Kurulum" yazınca menü yolu gelir. */
+export interface AranabilirMenuOgesi {
+  baslik: string;
+  yol: string;
+  /** "Güvenlik › Teknik Servis" gibi üst yol. */
+  ust: string;
+}
+
 export default function GlobalSearch({
   otomatikOdak = false,
   onSecildi,
+  kimlik,
+  menuOgeleri = [],
 }: {
   otomatikOdak?: boolean;
   onSecildi?: () => void;
+  /** Ctrl+K kısayolunun odaklayacağı giriş kimliği. */
+  kimlik?: string;
+  /** Kullanıcının görebildiği menü yaprakları (şirket ve izinle süzülmüş). */
+  menuOgeleri?: AranabilirMenuOgesi[];
 }) {
   const { yetkili } = useAuth();
   const [secenekler, setSecenekler] = useState<Secenek[]>([]);
@@ -52,13 +66,33 @@ export default function GlobalSearch({
   function uygulamaSonuclari(terim: string): Secenek[] {
     const t = kucuk(terim.trim());
     if (!t) return [];
-    return UYGULAMALAR.filter(
+    const menudenler = menuOgeleri
+      .filter((m) => kucuk(m.baslik).includes(t) || kucuk(m.ust).includes(t))
+      // Aynı yol iki dalda olabilir (Haberleşme › POC ile POC bölümü): bir kez.
+      .filter((m, i, d) => d.findIndex((x) => x.yol === m.yol) === i)
+      .slice(0, 6);
+    const menuYollari = new Set(menudenler.map((m) => m.yol));
+    const menuSecenekleri: Secenek[] = menudenler.map((m) => ({
+      value: m.yol,
+      label: (
+        <Space size={6}>
+          <AppstoreOutlined style={{ color: "#0a6ed1" }} />
+          <span>{m.baslik}</span>
+          {m.ust && <span style={{ opacity: 0.6, fontSize: 12 }}>{m.ust}</span>}
+        </Space>
+      ),
+    }));
+    // Menü verildiyse (kabuk) yalnız o aranır: menü her sayfayı içerir ve
+    // izin + etkin şirketle süzülmüştür (Telekom çalışanı Mobilite'yi bulamaz).
+    if (menuOgeleri.length) return menuSecenekleri;
+    return [...menuSecenekleri, ...UYGULAMALAR.filter(
       (u) =>
         u.kpi?.tur !== "uyari" &&
         uygulamaYetkili(u, yetkili) &&
+        !menuYollari.has(u.yol) &&
         (kucuk(u.baslik).includes(t) || kucuk(u.altBaslik ?? "").includes(t)),
     )
-      .slice(0, 6)
+      .slice(0, Math.max(0, 8 - menuSecenekleri.length))
       .map((u) => ({
         value: u.yol,
         label: (
@@ -68,7 +102,7 @@ export default function GlobalSearch({
             {u.altBaslik && <span style={{ opacity: 0.6, fontSize: 12 }}>{u.altBaslik}</span>}
           </Space>
         ),
-      }));
+      }))];
   }
 
   async function ara(terim: string) {
@@ -114,9 +148,10 @@ export default function GlobalSearch({
       popupMatchSelectWidth={420}
     >
       <Input
+        id={kimlik}
         autoFocus={otomatikOdak}
         suffix={<SearchOutlined style={{ color: "#0a6ed1" }} />}
-        placeholder='Arama yeri: "Uygulamalar"'
+        placeholder="Menü, IMEI, plaka, firma ara… (Ctrl+K)"
         aria-label="Uygulama, IMEI, plaka, ICCID, şase, firma ara"
         title="Uygulama adı, IMEI, plaka, ICCID, şase ya da firma"
       />

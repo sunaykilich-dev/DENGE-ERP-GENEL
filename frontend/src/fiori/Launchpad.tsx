@@ -15,6 +15,7 @@ import { api } from "../api/client";
 import { servisZaman } from "../api/servisZaman";
 import { teknikServisApi } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import { fiori } from "../theme";
 import { type GrupKodu, type Uygulama, gorunurGruplar } from "./uygulamalar";
 
@@ -213,7 +214,16 @@ export const grupBolumKimligi = (kod: GrupKodu) => `fiori-grup-${kod}`;
  */
 export default function Launchpad({ ilkGrup }: { ilkGrup?: GrupKodu | null }) {
   const { yetkili } = useAuth();
-  const gruplar = useMemo(() => gorunurGruplar(yetkili), [yetkili]);
+  const { aktifBirimler } = useSirket();
+  // KARARLAR 2026-11-04 §1: Mobilite modülü yalnız DENGE MOBİLİTE etkinken görünür
+  // (sol menüyle aynı kural; şirket ucu yoksa süzme yok).
+  const gruplar = useMemo(
+    () =>
+      gorunurGruplar(yetkili).filter(
+        (g) => g.grup.kod !== "mobilite" || !aktifBirimler || aktifBirimler.has("MOBILITE"),
+      ),
+    [yetkili, aktifBirimler],
+  );
   const tumKutucuklar = useMemo(() => gruplar.flatMap((g) => g.uygulamalar), [gruplar]);
   const kpi = useKpiler(tumKutucuklar);
   const [aktif, setAktif] = useState<GrupKodu | undefined>(gruplar[0]?.grup.kod);

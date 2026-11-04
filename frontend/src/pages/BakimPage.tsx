@@ -77,6 +77,7 @@ import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "../components
 import PlanPenceresi from "../components/PlanPenceresi";
 import { BAKIM_DURUM_GRUPLARI, TAYIN } from "../fiori/etiketler";
 import { KpiKutucugu } from "../fiori/ListeRaporu";
+import { useYeniParametresi } from "../fiori/useYeniParametresi";
 import BakimFormu from "./BakimFormu";
 import BakimRaporlari from "./BakimRaporlari";
 import { ServisIsListesi, type ServisKategorisi } from "./ServisIsleriPage";
@@ -243,6 +244,8 @@ function SozlesmelerSekmesi() {
   const suresiDoluyor = params.get("suresi_doluyor") === "1";
   const secili = params.get("sozlesme") ? Number(params.get("sozlesme")) : null;
   const [pencere, setPencere] = useState<Sozlesme | "yeni" | null>(null);
+  // "+ Hızlı oluştur › Yeni bakım sözleşmesi" (`?sekme=sozlesmeler&yeni=1`).
+  useYeniParametresi(() => setPencere("yeni"), yetkili("bakim.yaz"));
 
   const liste = useQuery({
     queryKey: ["bakim", "sozlesmeler", durum, suresiDoluyor, q, sayfa],

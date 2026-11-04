@@ -3,7 +3,7 @@ import { App as AntApp, ConfigProvider } from "antd";
 import trTR from "antd/locale/tr_TR";
 import dayjs from "dayjs";
 import "dayjs/locale/tr";
-import { StrictMode } from "react";
+import { StrictMode, Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
@@ -62,6 +62,9 @@ import { theme } from "./theme";
 
 dayjs.locale("tr");
 
+// Ana Panel ayrı pakette yazılıyor (KARARLAR 2026-11-04 §4); tembel yüklenir.
+const AnaPanelPage = lazy(() => import("./pages/AnaPanelPage"));
+
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
 });
@@ -88,6 +91,14 @@ function PanelKapisi() {
   return <PanelPage />;
 }
 
+function AnaPanel() {
+  return (
+    <Suspense fallback={null}>
+      <AnaPanelPage />
+    </Suspense>
+  );
+}
+
 function KorumaliUygulama() {
   const { kullanici, yukleniyor } = useAuth();
   if (yukleniyor) return null;
@@ -101,9 +112,12 @@ function KorumaliUygulama() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        {/* Açılış artık Fiori launchpad; rol bazlı açılış ilgili sekmeye kaydırır. */}
-        <Route path="/" element={<BaslangicPage />} />
-        <Route path="/baslangic" element={<BaslangicPage />} />
+        {/* KARARLAR 2026-11-04 §2/§4: açılış Ana Panel; launchpad "Sistem ›
+            Uygulamalar (kutucuklar)" altında `/uygulamalar` yolunda kalır. */}
+        <Route path="/" element={<AnaPanel />} />
+        <Route path="/ana-panel" element={<AnaPanel />} />
+        <Route path="/baslangic" element={<AnaPanel />} />
+        <Route path="/uygulamalar" element={<BaslangicPage />} />
         <Route path="/panel" element={<PanelKapisi />} />
         <Route path="/gorevler" element={<GorevlerPage />} />
         <Route path="/raporlar" element={<RaporlarPage />} />
