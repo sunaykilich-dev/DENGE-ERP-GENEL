@@ -203,6 +203,8 @@ export interface IsSuzgeci {
   musteri_id?: number;
   adres_id?: number;
   teknisyen_id?: number;
+  /** Ana Panel: aktif ŞEF tayini olan işler. */
+  sef_id?: number;
   atanmamis?: boolean;
   bas?: string;
   bit?: string;

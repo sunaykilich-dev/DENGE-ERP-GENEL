@@ -808,7 +808,7 @@ async def mukerrer_kontrol(
 
 def _filtre(
     birim, kategori, tur, durum, durum_grubu_, oncelik, musteri_id, adres_id, teknisyen_id,
-    atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite=None,
+    atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite=None, sef_id=None,
 ) -> is_emirleri.ListeFiltresi:  # fmt: skip
     return is_emirleri.ListeFiltresi(
         birim=birim,
@@ -829,6 +829,7 @@ def _filtre(
         donem=donem,
         siralama=siralama,
         kalite=kalite,
+        sef_id=sef_id,
     )
 
 
@@ -867,6 +868,7 @@ async def listele(
     donem: str | None = Query(default=None, max_length=20),
     siralama: str = "yeni",
     kalite: str | None = Query(default=None, max_length=10),
+    sef_id: int | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict[str, Any]]:
@@ -878,7 +880,7 @@ async def listele(
     """
     f = _filtre(
         birim, kategori, tur, durum, durum_grubu, oncelik, musteri_id, adres_id, teknisyen_id,
-        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite,
+        atanmamis, bas, bit, q, kapali_dahil, kpi, donem, siralama, kalite, sef_id,
     )  # fmt: skip
     stmt = _sorgu(user, f, clock)
     satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
