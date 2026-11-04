@@ -70,9 +70,13 @@ export interface KodAd {
 }
 
 export interface FormVerileri {
+  /** Sözlüğün birimi (sunucunun seçtiği ya da istenen); kabul bu birimle gönderilir. */
+  birim?: string;
   durumlar: KodAd[];
   servis_turleri: KodAd[];
+  /** Telsiz birimlerinde marka sözlüğü; diğerlerinde kütükteki markalar + DIGER. */
   markalar: string[];
+  /** Birimin ekipman tipleri; ilk öğe tipsiz kabulün varsayılanı. */
   ekipman_tipleri: string[];
   teslim_tipleri: KodAd[];
   aksesuar_turleri: KodAd[];
@@ -429,8 +433,14 @@ export function suzgecParametreleri(s: AtolyeSuzgeci): URLSearchParams {
 }
 
 export const atolyeApi = {
-  formVerileri: (birim = "HABERLESME") =>
-    api.get<FormVerileri>(`${URL_}/form-verileri?${new URLSearchParams({ birim })}`),
+  /**
+   * Birim verilmezse sunucu kullanıcının birimini seçer (birincil / tek görünür
+   * birim; belirsizse 400) ve yanıtta `birim` döner (rol testi tur 2 B12).
+   */
+  formVerileri: (birim?: string) =>
+    api.get<FormVerileri>(
+      `${URL_}/form-verileri${birim ? `?${new URLSearchParams({ birim })}` : ""}`,
+    ),
   liste: (s: AtolyeSuzgeci, limit: number, offset: number): Promise<Sayfa<AtolyeSatiri>> => {
     const p = suzgecParametreleri(s);
     p.set("limit", String(limit));

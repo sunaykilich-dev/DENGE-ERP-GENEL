@@ -13,6 +13,15 @@
  *
  * Toplu kabulde her cihaz ayrı kayıt + ayrı servis işi olur, ortak kabul
  * grubu numarası ve tek fiş üretilir; bir cihaz hatalıysa hiçbiri açılmaz.
+ *
+ * Rol testi tur 2 (B12, KARARLAR 2026-11-04 §7.15): kabul birimi sabit
+ * HABERLESME değildir. `form-verileri` birimsiz sorulur; sunucu kullanıcının
+ * birimini seçip yanıtta `birim` döner ve kabul o birimle gönderilir. Birden
+ * çok görünür birimi olan kullanıcı birimi pencerede seçebilir (atölye
+ * listesindeki birim süzgeci varsayılandır). Telsiz birimlerinde (HABERLESME,
+ * POC) marka sözlükten, diğerlerinde serbest metindir (kütükteki markalar
+ * öneri olarak gelir). Ekipman tipi zorunlu değil: boşsa sunucu birimin
+ * varsayılan tipini kullanır.
  */
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -23,6 +32,7 @@ import {
   Col,
   DatePicker,
   Divider,
+  AutoComplete,
   Form,
   Input,
   InputNumber,
@@ -40,6 +50,9 @@ import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 
+import { ApiError } from "../api/client";
+import { BIRIM_ETIKETLERI } from "../api/personel";
+import { useSirket } from "../auth/SirketContext";
 import {
   AtolyeHatasi,
   atolyeApi,
@@ -58,8 +71,11 @@ import MusteriLokasyonSecici, {
   type SahaOnerisi,
 } from "./MusteriLokasyonSecici";
 
+/** Marka sözlüğü kullanılan telsiz birimleri (sunucu: `atolye.TELSIZ_BIRIMLERI`). */
+const TELSIZ_BIRIMLERI = new Set(["HABERLESME", "POC"]);
+
 interface CihazSatiri {
-  tip: string;
+  tip?: string;
   marka?: string;
   marka_diger?: string;
   model?: string;
@@ -100,8 +116,9 @@ const tarih = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY") : "—")
 
 function ekipmanGovdesi(c: CihazSatiri): EkipmanGirdisi {
   return {
-    tip: c.tip,
-    marka: c.marka ?? null,
+    // Boş tip gönderilmez: sunucu birimin varsayılan tipini kullanır.
+    ...(c.tip ? { tip: c.tip } : {}),
+    marka: c.marka?.trim() || null,
     marka_diger: c.marka === "DIGER" ? (c.marka_diger ?? null) : null,
     model: c.model || null,
     seri: c.seri || null,
@@ -170,14 +187,18 @@ function CihazAlanlari({
   kompakt?: boolean;
 }) {
   const marka = Form.useWatch([...(kok ?? ad), "marka"]);
-  const tipler = sozluk?.ekipman_tipleri ?? ["TELSIZ", "ROLE_TEKRARLAYICI", "TELSIZ_DIGER"];
+  const tipler = sozluk?.ekipman_tipleri ?? [];
   const markalar = sozluk?.markalar ?? Object.keys(MARKA_ADLARI);
+  // Telsiz birimi değilse marka serbest metin; kütükteki markalar öneri.
+  const telsiz = !sozluk?.birim || TELSIZ_BIRIMLERI.has(sozluk.birim);
+  const varsayilanTip = tipler[0] ? (TIP_ETIKETLERI[tipler[0]] ?? tipler[0]) : null;
   return (
     <Row gutter={8}>
       <Col xs={12} md={kompakt ? 4 : 6}>
-        <Form.Item name={[...ad, "tip"]} label={kompakt ? undefined : "Tip"} rules={[{ required: true }]}>
+        <Form.Item name={[...ad, "tip"]} label={kompakt ? undefined : "Tip"}>
           <Select
-            placeholder="Tip"
+            allowClear
+            placeholder={varsayilanTip ? `Tip (boşsa ${varsayilanTip})` : "Tip"}
             options={tipler.map((t) => ({ value: t, label: TIP_ETIKETLERI[t] ?? t }))}
           />
         </Form.Item>
@@ -186,15 +207,26 @@ function CihazAlanlari({
         <Form.Item
           name={[...ad, "marka"]}
           label={kompakt ? undefined : "Marka"}
-          rules={[{ required: true, message: "Marka zorunlu" }]}
+          rules={[{ required: true, whitespace: true, message: "Marka zorunlu" }]}
         >
-          <Select
-            placeholder="Marka"
-            options={markalar.map((m) => ({ value: m, label: MARKA_ADLARI[m] ?? m }))}
-          />
+          {telsiz ? (
+            <Select
+              placeholder="Marka"
+              options={markalar.map((m) => ({ value: m, label: MARKA_ADLARI[m] ?? m }))}
+            />
+          ) : (
+            <AutoComplete
+              placeholder="Marka (yazın)"
+              maxLength={60}
+              options={markalar.filter((m) => m !== "DIGER").map((m) => ({ value: m }))}
+              filterOption={(girdi, o) =>
+                String(o?.value ?? "").toLocaleLowerCase("tr").includes(girdi.toLocaleLowerCase("tr"))
+              }
+            />
+          )}
         </Form.Item>
       </Col>
-      {marka === "DIGER" && (
+      {telsiz && marka === "DIGER" && (
         <Col xs={12} md={4}>
           <Form.Item
             name={[...ad, "marka_diger"]}
@@ -292,9 +324,12 @@ export default function AtolyeKabulPenceresi({
   acik,
   kapat,
   bitti,
+  birim,
 }: {
   acik: boolean;
   kapat: () => void;
+  /** Varsayılan kabul birimi (atölye listesindeki birim süzgeci); yoksa sunucu seçer. */
+  birim?: string;
   /** Tek kabulde yeni kaydın detayı; toplu kabulde grup numarası ve servis işi kimlikleri. */
   bitti: (sonuc: { detay?: AtolyeDetay; grup?: number; soIdler: number[] }) => void;
 }) {
@@ -306,13 +341,20 @@ export default function AtolyeKabulPenceresi({
     { id: number; marka: string | null; model: string | null; seri: string | null; account_id: number | null }[]
   >([]);
   const [hata, setHata] = useState<string | null>(null);
+  const [secilenBirim, setSecilenBirim] = useState<string | undefined>(birim);
+  const { menuBirimleri } = useSirket();
 
+  // Birim verilmezse sunucu kullanıcının birimini seçer ve yanıtta `birim` döner;
+  // belirsizse 400 "Kabul birimini seçin" → pencerede birim seçici gösterilir.
   const sozluk = useQuery({
-    queryKey: ["atolye-form-verileri"],
-    queryFn: () => atolyeApi.formVerileri(),
+    queryKey: ["atolye-kabul-form-verileri", secilenBirim ?? null],
+    queryFn: () => atolyeApi.formVerileri(secilenBirim),
     enabled: acik,
     staleTime: 5 * 60_000,
+    retry: (n, e) => !(e instanceof ApiError && e.status === 400) && n < 2,
   });
+  const birimSecenekleri = [...(menuBirimleri ?? [])].map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] ?? b }));
+  const birimSecilmeli = sozluk.error instanceof ApiError && sozluk.error.status === 400;
 
   const tekCihaz = Form.useWatch("cihaz", form);
   const [sorgulananSeri, setSorgulananSeri] = useState<{ tip: string; marka: string; seri: string } | null>(
@@ -321,14 +363,16 @@ export default function AtolyeKabulPenceresi({
   useEffect(() => {
     if (mod !== "TEK") return;
     const seri = tekCihaz?.seri?.trim();
-    const marka = tekCihaz?.marka === "DIGER" ? tekCihaz?.marka_diger?.trim() : tekCihaz?.marka;
-    if (!seri || !marka || !tekCihaz?.tip) {
+    const marka = (tekCihaz?.marka === "DIGER" ? tekCihaz?.marka_diger : tekCihaz?.marka)?.trim();
+    // Tip boşsa birimin varsayılan tipi (sunucu kabulde de aynısını kullanır).
+    const tip = tekCihaz?.tip ?? sozluk.data?.ekipman_tipleri[0];
+    if (!seri || !marka || !tip) {
       setSorgulananSeri(null);
       return;
     }
-    const t = setTimeout(() => setSorgulananSeri({ tip: tekCihaz.tip, marka, seri }), 400);
+    const t = setTimeout(() => setSorgulananSeri({ tip, marka, seri }), 400);
     return () => clearTimeout(t);
-  }, [mod, tekCihaz?.tip, tekCihaz?.marka, tekCihaz?.marka_diger, tekCihaz?.seri]);
+  }, [mod, tekCihaz?.tip, tekCihaz?.marka, tekCihaz?.marka_diger, tekCihaz?.seri, sozluk.data]);
 
   const gecmis = useQuery({
     queryKey: ["atolye-seri-gecmisi", sorgulananSeri],
@@ -339,17 +383,21 @@ export default function AtolyeKabulPenceresi({
   useEffect(() => {
     if (acik) {
       form.resetFields();
+      setSecilenBirim(birim);
       setMod("TEK");
       setAdaylar([]);
       setHata(null);
       setIrtibatlar([]);
     }
-  }, [acik, form]);
+    // Pencere her açılışta listedeki birimle başlar.
+  }, [acik, form, birim]);
 
   const gonder = useMutation({
     mutationFn: async (args: { v: FormDegeri; ekipmanId?: number }) => {
       const { v, ekipmanId } = args;
       const ortak: KabulOrtak = {
+        // Sözlüğün (marka/tip listesi) birimiyle aynı birim gönderilir.
+        ...(sozluk.data?.birim ? { birim: sozluk.data.birim } : {}),
         customer_id: v.musteri!.musteriId!,
         address_id: v.musteri?.lokasyonId ?? null,
         contact_id: v.contact_id ?? null,
@@ -372,7 +420,7 @@ export default function AtolyeKabulPenceresi({
       }));
       if (mod === "TEK") {
         const ekipman = ekipmanId
-          ? { ekipman_id: ekipmanId, tip: v.cihaz.tip }
+          ? { ekipman_id: ekipmanId, ...(v.cihaz.tip ? { tip: v.cihaz.tip } : {}) }
           : ekipmanGovdesi(v.cihaz);
         const detay = await atolyeApi.kabul({ ...ortak, ekipman, aksesuarlar });
         return { detay, soIdler: [detay.so_id] };
@@ -410,6 +458,10 @@ export default function AtolyeKabulPenceresi({
       message.error("Müşteri seçin");
       return;
     }
+    if (!sozluk.data) {
+      message.error(birimSecilmeli ? "Kabul birimini seçin" : "Form verileri yüklenemedi");
+      return;
+    }
     if (mod === "TOPLU" && !(v.cihazlar ?? []).length) {
       message.error("En az bir cihaz girin");
       return;
@@ -445,6 +497,27 @@ export default function AtolyeKabulPenceresi({
             { value: "TOPLU", label: "Toplu kabul (aynı müşteri)" },
           ]}
         />
+        {(birimSecenekleri.length > 1 || birimSecilmeli) && (
+          <Space wrap>
+            <Typography.Text>Kabul birimi:</Typography.Text>
+            <Select
+              size="small"
+              style={{ minWidth: 180 }}
+              placeholder="Birim seçin"
+              status={birimSecilmeli ? "error" : undefined}
+              value={secilenBirim ?? sozluk.data?.birim}
+              options={birimSecenekleri}
+              onChange={(b: string) => {
+                setSecilenBirim(b);
+                // Tip/marka listesi birime göre değişir; girilen cihaz alanları sıfırlanır.
+                form.setFieldsValue({ cihaz: {}, cihazlar: [{}] });
+              }}
+            />
+          </Space>
+        )}
+        {birimSecilmeli && (
+          <Alert type="warning" showIcon title="Kabul birimini seçin" description={(sozluk.error as Error).message} />
+        )}
         {hata && <Alert type="error" showIcon title={hata} />}
         {adaylar.length > 0 && (
           <Alert
@@ -482,8 +555,8 @@ export default function AtolyeKabulPenceresi({
             service_type: "ARIZA_ONARIMI",
             receive_type: "ELDEN",
             oncelik: "NORMAL",
-            cihaz: { tip: "TELSIZ" },
-            cihazlar: [{ tip: "TELSIZ" }],
+            cihaz: {},
+            cihazlar: [{}],
             aksesuarlar: [],
           }}
         >
@@ -600,7 +673,7 @@ export default function AtolyeKabulPenceresi({
                     size="small"
                     icon={<PlusOutlined />}
                     disabled={alanlar.length >= 100}
-                    onClick={() => add({ tip: "TELSIZ" })}
+                    onClick={() => add({})}
                   >
                     Cihaz ekle
                   </Button>

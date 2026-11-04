@@ -19,6 +19,33 @@ interface Ozet {
   uyarilar: Uyari[];
 }
 
+/**
+ * Rol testi tur 2 (KARARLAR 2026-11-04 §7.1, §7.3): yeni servis uyarı
+ * türlerinin okunur adı ve gideceği liste. Ad ve yol sunucudan gelir (tek
+ * kaynak: KPI tanımı); bu tablo yalnız sunucu boş/ham kod döndürürse yedektir.
+ * Yol KPI listesidir (sayı = liste); liste başlığı `KPI_ADLARI`'ndan okunur.
+ */
+const UYARI_YEDEK: Record<string, { baslik: string; yol: string }> = {
+  "servis.planlamaya_donen": {
+    baslik: "Yeniden planlanacak iş",
+    yol: "/servis-isleri?kpi=planlamaya_donen",
+  },
+  "servis.kalite_reddedilen": {
+    baslik: "Kalitesi reddedilen iş",
+    yol: "/servis-isleri?kpi=kalite_reddedilen",
+  },
+};
+
+function okunur(u: Uyari): Uyari {
+  const y = UYARI_YEDEK[u.kod];
+  if (!y) return u;
+  return {
+    ...u,
+    baslik: u.baslik && u.baslik !== u.kod ? u.baslik : y.baslik,
+    yol: u.yol || y.yol,
+  };
+}
+
 const RENK: Record<string, string> = {
   kritik: "red",
   uyari: "orange",
@@ -46,7 +73,7 @@ export default function UyariZili({ renk = "#556b82" }: { renk?: string } = {}) 
     staleTime: 30_000,
   });
 
-  const uyarilar = data?.uyarilar ?? [];
+  const uyarilar = (data?.uyarilar ?? []).map(okunur);
   const kritikVar = uyarilar.some((u) => u.onem === "kritik");
 
   const items = uyarilar.length

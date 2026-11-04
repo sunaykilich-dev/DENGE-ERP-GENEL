@@ -222,6 +222,12 @@ export interface Kullanici {
   /** Şirket ayrımı (KARARLAR 2026-11-04 §1): etkin şirket kodu ve üyelikler. */
   aktif_sirket?: string | null;
   sirketler?: { kod: string; ad: string; birimler: string[] }[];
+  /**
+   * Etkin şirkette görülebilen birimler (rol testi tur 2, KARARLAR 2026-11-04
+   * §7.17; sunucu `kapsam.gorunur_birimler`). Oturum dışı ya da birim üyeliği
+   * olmayan satış kapsamında boş gelir — boşsa ekran eski türetmeye düşer.
+   */
+  gorunur_birimler?: string[];
 }
 
 export interface GirisSonucu {

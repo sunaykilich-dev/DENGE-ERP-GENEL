@@ -227,6 +227,11 @@ export interface IsSuzgeci {
   siralama?: string;
   /** Faz A: "BEKLEYEN" = kalite onayı bekleyenler, "ONAYLI". */
   kalite?: string;
+  /**
+   * Geçerli sonuç süzgeci (rol testi tur 2 O11): `TEKLIF_SUNULACAK` = sonucu
+   * "teklif sunulacak" olan işler (satış destek "teklif hazırlanacak" listesi).
+   */
+  sonuc?: string;
 }
 
 export function suzgecParametreleri(s: IsSuzgeci): URLSearchParams {
@@ -279,6 +284,22 @@ export interface BagliIsGirdisi {
   contact_id?: number | null;
   seriler?: string[];
   mukerrer_gec?: boolean;
+  /** Bağın türü (rol testi tur 2 B8); verilmezse yalnız "devamı" bağı kurulur. */
+  iliski_turu?: BagliIsIliskisi | null;
+}
+
+/** Bağlı yeni işin önceki işle ilişkisi (`BagliIsIn.iliski_turu`). */
+export type BagliIsIliskisi = "TEKRAR_ARIZA" | "BAKIM_BULGUSU" | "DEVAM";
+export const BAGLI_IS_ILISKILERI: { kod: BagliIsIliskisi; ad: string; ipucu: string }[] = [
+  { kod: "TEKRAR_ARIZA", ad: "Tekrar arıza", ipucu: "Aynı arıza yeniden oluştu (tekrar arıza raporuna girer)" },
+  { kod: "BAKIM_BULGUSU", ad: "Bakım bulgusu", ipucu: "Bakımda görülen bulgu için açılan iş" },
+  { kod: "DEVAM", ad: "Devam işi", ipucu: "Önceki işin devamı (ek ziyaret, kalan iş)" },
+];
+
+/** Toplu kalite onayı yanıtı: kısmi sonuç bilinçli (atlananlar nedeniyle). */
+export interface TopluKaliteSonucu {
+  onaylanan: { id: number; so_no: string }[];
+  atlanan: { id: number; so_no: string | null; neden: string }[];
 }
 
 export interface UzaktanGirdisi extends IsGirdisi {
@@ -419,6 +440,13 @@ export const KPI_ADLARI: Record<string, string> = {
   kritik_atanmamis: "Tayin edilmemiş kritik iş",
   kapanis_gecikmis: "Kapanışı gecikmiş iş",
   uzun_beklemede: "Uzun süredir beklemede",
+  // Rol testi tur 2 (KARARLAR 2026-11-04 §7.1, §7.3): zil uyarıları.
+  planlamaya_donen: "Yeniden planlanacak iş (teklif/parça sonrası)",
+  kalite_reddedilen: "Kalitesi reddedilen iş",
+  // Ana Panel tabanları (§7.16): "açık iş" PB hariç; durum grubuyla birlikte gelir.
+  servis_isleri: "Servis işleri (planlı bakım hariç)",
+  sla_riskli: "SLA riski olan işler",
+  onay_bekleyen: "Bekleyen onaylar (kapanış / kalite)",
   tamamlanan: "Tamamlanan",
   uzaktan_cozulen: "Telefon/uzaktan çözülen",
   tekrar_ariza: "Tekrar arıza",
@@ -517,6 +545,19 @@ export const teknikServisApi = {
   /** D3.4/G4.6: tamamlanan işe kalite onayı (kendi çalıştığı işe verilemez). */
   kaliteOnayi: (id: number, version: number, not?: string) =>
     api.post<IsDetayi>(`${isYolu(id)}/kalite-onayi`, { version, not }),
+  /**
+   * Kalite reddi / geri gönderme (§7.3): gerekçe ≥10; iş İŞLEMDE (kayıt
+   * düzeltmesi) ya da PLANLAMADA (yeniden ziyaret) döner. 400 kısa gerekçe,
+   * 403 görevler ayrılığı, 409 sürüm/onaylı/faturalı/atölye işi.
+   */
+  kaliteReddi: (id: number, version: number, gerekce: string, hedef: "ISLEMDE" | "PLANLAMADA") =>
+    api.post<IsDetayi>(`${isYolu(id)}/kalite-reddi`, { version, gerekce, hedef }),
+  /** Toplu kalite onayı (§7.3): her iş kendi `version`'ıyla; uymayanlar `atlanan`da. */
+  topluKaliteOnayi: (isler: { id: number; version: number }[], not?: string) =>
+    api.post<TopluKaliteSonucu>(`${TS}/isler/toplu-kalite-onayi`, { isler, not }),
+  /** Yönetici/şef yanlış "Yola çıktım"ı geri alır (§7.4): YOLA_CIKILDI → PLANLANDI. */
+  yolaCikisGeriAl: (id: number, version: number, gerekce: string) =>
+    api.post<IsDetayi>(`${isYolu(id)}/yola-cikis-geri-al`, { version, gerekce }),
   beklet: (id: number, g: { neden: string; aciklama?: string; beklenen_bitis_at?: string | null }) =>
     api.post<IsDetayi>(`${isYolu(id)}/bekleme`, g),
   beklemeyiBitir: (id: number, not?: string) =>

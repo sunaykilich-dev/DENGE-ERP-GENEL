@@ -21,6 +21,11 @@
  * kapsamındaki birimler. Birim kapsamlı rolde (KENDI_BIRIMI/KENDI_ISLERI)
  * kullanıcının üye olmadığı birimin bölümü menüde çizilmez; sunucu o bölümün
  * listesini zaten boş döndürür (sayı = liste).
+ *
+ * Rol testi tur 2 (KARARLAR 2026-11-04 §7.17): `/auth/me` `gorunur_birimler`
+ * doluysa ve etkin şirketle uyumluysa `menuBirimleri` doğrudan ondan kurulur
+ * (sunucu kapsamıyla tek tanım); boşsa (ör. birim üyeliği olmayan satış
+ * temsilcisi, sunucuda "etkin şirketin bütün birimleri") eski türetme sürer.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App } from "antd";
@@ -144,6 +149,8 @@ export function SirketProvider({ children }: { children: React.ReactNode }) {
 
   const kapsam = kullanici?.role.scope;
   const kullaniciBirimleri = kullanici?.birimler;
+  const gorunurBirimler = kullanici?.gorunur_birimler;
+  const oturumSirketi = kullanici?.aktif_sirket;
   const deger = useMemo<SirketDurumu>(() => {
     const veri = sorgu.data ?? null;
     const sirketler = veri?.sirketler ?? [];
@@ -156,7 +163,13 @@ export function SirketProvider({ children }: { children: React.ReactNode }) {
         ? new Set<string>()
         : null;
     let menuBirimleri = aktifBirimler;
-    if (kapsam && BIRIM_KAPSAMLARI.has(kapsam) && kullaniciBirimleri) {
+    if (gorunurBirimler?.length && aktif && oturumSirketi === aktif.kod) {
+      // Rol testi tur 2 (§7.17): sunucunun `gorunur_birimler`'i tek kaynak. Yalnız
+      // /auth/me'nin etkin şirketi bugünkü şirketle aynıysa kullanılır (şirket
+      // değişince /auth/me yeniden okunmaz; eski şirketin birimleri uygulanmasın).
+      const gorunur = new Set(gorunurBirimler);
+      menuBirimleri = new Set([...(aktifBirimler ?? gorunur)].filter((b) => gorunur.has(b)));
+    } else if (kapsam && BIRIM_KAPSAMLARI.has(kapsam) && kullaniciBirimleri) {
       const uye = new Set(kullaniciBirimleri);
       menuBirimleri = new Set([...(aktifBirimler ?? uye)].filter((b) => uye.has(b)));
     }
@@ -170,7 +183,18 @@ export function SirketProvider({ children }: { children: React.ReactNode }) {
       degistir,
       degisiyor: degisim.isPending,
     };
-  }, [sorgu.data, sorgu.isError, sorgu.isPending, kullanici, kapsam, kullaniciBirimleri, degistir, degisim.isPending]);
+  }, [
+    sorgu.data,
+    sorgu.isError,
+    sorgu.isPending,
+    kullanici,
+    kapsam,
+    kullaniciBirimleri,
+    gorunurBirimler,
+    oturumSirketi,
+    degistir,
+    degisim.isPending,
+  ]);
 
   return <Ctx.Provider value={deger}>{children}</Ctx.Provider>;
 }
