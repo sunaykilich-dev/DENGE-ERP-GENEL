@@ -4,8 +4,14 @@
  * - Müşteri → lokasyon seçimi `MusteriLokasyonSecici` ile SUNUCUDA aranır
  *   (300 ms gecikmeli); seçilen lokasyonun birincil irtibatı forma önerilir,
  *   kullanıcı değiştirebilir. Kart IBAN/VKN göstermez. Hızlı müşteri ekleme
- *   `servis.yaz + hesap.kart_yaz|hesap.yaz` olana görünür (G10.2; seçicinin
- *   kendi kuralı), diğerlerine "Müşteri İlişkileri'nden kart isteyin" notu.
+ *   `hesap.kart_yaz|hesap.yaz` olana görünür (KARARLAR 2026-11-04 §6.5;
+ *   seçicinin kendi kuralı), diğerlerine "Müşteri İlişkileri'nden kart isteyin" notu.
+ * - Yalnız `servis.kurulum_ac` olan (satış destek, `servis.yaz` yok) yalnız
+ *   KURULUM türü seçer; sunucu diğer türü 403 ile reddeder (§6.5).
+ * - "Geçmiş kayıt (geçiş)" yalnız `servis.gecis_kaydi` olana (TS müdürü)
+ *   görünür: seçilince bildirim anındaki 7 gün sınırı kalkar, gerekçe (≥10
+ *   karakter) zorunlu; iş SLA dışı (GECIS) doğar (§6.11).
+ * - "Aynı lokasyonda açık iş" uyarısı tek kayıttır (`adet` + `isler`, §6.10).
  * - Seri girildikçe açık işte aynı seri sorulur (yalnız uyarı); kayıtta
  *   sunucu 409 `MUKERRER` dönerse kullanıcı listeyi görüp "yine de aç" der.
  * - "Telefonla/uzaktan çözüldü" (`servis.uzaktan_coz`): açılış + sonuç tek
@@ -21,6 +27,7 @@ import {
   Alert,
   App,
   Button,
+  Checkbox,
   Col,
   DatePicker,
   Divider,
@@ -36,11 +43,13 @@ import {
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import {
   ONCELIK_ADLARI,
   teknikServisApi,
+  type AcilisUyarisi,
   type FormVerileri,
   type IsDetayi,
   type IsGirdisi,
@@ -73,7 +82,13 @@ interface FormDegeri {
   gerekce?: string;
   /** Yalnız düzenlemede ve `servis.kapat` ile (E01-16; gerekçe zorunlu). */
   kategori?: string;
+  /** Geçiş/içe aktarma kaydı (`servis.gecis_kaydi`): 7 gün sınırı yok, SLA ölçülmez. */
+  gecis_kaydi?: boolean;
+  gecis_gerekcesi?: string;
 }
+
+const GECIS_GEREKCE_ALT = 10;
+const KURULUM = "KURULUM";
 
 const KAPALI = ["TAMAMLANDI", "KAPATILDI", "IPTAL"];
 
@@ -98,7 +113,16 @@ function MukerrerUyarisi({ m }: { m: MukerrerSonucu | null }) {
         <Alert
           type="info"
           showIcon
-          message={`Bu müşteri ve lokasyonda açık iş var: ${m.ayni_lokasyon.map((x) => x.so_no).join(", ")}`}
+          message={`Bu lokasyonda ${m.ayni_lokasyon.length} açık iş var`}
+          description={
+            <Space size={[8, 0]} wrap>
+              {m.ayni_lokasyon.map((x) => (
+                <Link key={x.id} to={`/servis-isleri/${x.id}`} target="_blank" rel="noopener">
+                  {x.so_no}
+                </Link>
+              ))}
+            </Space>
+          }
         />
       )}
     </Space>
@@ -126,7 +150,8 @@ export default function ServisIsFormu({
   /** 409 (başkası değiştirdi): çağıran kaydı yeniden yükler. */
   onCakisma?: () => void;
 }) {
-  const { message, modal } = App.useApp();
+  const { message, modal, notification } = App.useApp();
+  const navigate = useNavigate();
   const { kullanici, yetkili } = useAuth();
   const [form] = Form.useForm<FormDegeri>();
   const [gonderiliyor, setGonderiliyor] = useState(false);
@@ -138,6 +163,9 @@ export default function ServisIsFormu({
   const musteriDuzeltebilir = !duzenleme || (yetkili("servis.planla") && mevcut?.tur !== "PB");
   const uzaktanYetkili = yetkili("servis.uzaktan_coz");
   const kategoriDuzeltebilir = duzenleme && yetkili("servis.kapat") && mevcut?.tur !== "PB";
+  // Yalnız kurulum açan (satış destek): `servis.kurulum_ac` var, `servis.yaz` yok.
+  const yalnizKurulum = !duzenleme && !yetkili("servis.yaz") && yetkili("servis.kurulum_ac");
+  const gecisYetkili = !duzenleme && yetkili("servis.gecis_kaydi");
 
   const birim = Form.useWatch("birim", form);
   const uzaktan = Form.useWatch("uzaktan", form);
@@ -145,6 +173,7 @@ export default function ServisIsFormu({
   const musteri = Form.useWatch("musteri", form);
   const kategoriDegeri = Form.useWatch("kategori", form);
   const turDegeri = Form.useWatch("tur", form);
+  const gecis = !!Form.useWatch("gecis_kaydi", form) && gecisYetkili;
   const tekCihaz =
     formVerileri?.turler.find((t) => t.kod === turDegeri)?.kategori === "GUNLUK_SERVIS" ||
     turDegeri === "PB";
@@ -186,8 +215,11 @@ export default function ServisIsFormu({
       birimler.find((b) => b.kod === onerilenBirim)?.kod ??
       birimler.find((b) => b.kod === kullanici?.birincil_birim)?.kod ??
       (birimler.length === 1 ? birimler[0].kod : undefined);
-    const varsayilanTur =
-      onerilenTur && onerilenTur !== "PB" ? formVerileri?.turler.find((t) => t.kod === onerilenTur)?.kod : undefined;
+    const varsayilanTur = yalnizKurulum
+      ? KURULUM
+      : onerilenTur && onerilenTur !== "PB"
+        ? formVerileri?.turler.find((t) => t.kod === onerilenTur)?.kod
+        : undefined;
     return {
       birim: varsayilanBirim,
       ...(varsayilanTur ? { tur: varsayilanTur } : {}),
@@ -198,7 +230,7 @@ export default function ServisIsFormu({
       seriler: [],
       uzaktan: false,
     };
-  }, [mevcut, formVerileri, kullanici, onerilenBirim, onerilenTur]);
+  }, [mevcut, formVerileri, kullanici, onerilenBirim, onerilenTur, yalnizKurulum]);
 
   // Rol testi B11: yeni işte sözlük (`form-verileri`) gelmeden form çizilmez;
   // yoksa ilk anda birim/tür boş, talep kanalı ham kod görünüyordu.
@@ -275,7 +307,36 @@ export default function ServisIsFormu({
       sistem: v.sistem?.trim() || null,
       aciklama: v.aciklama?.trim() || null,
       seriler: (v.seriler ?? []).map((s) => s.trim()).filter(Boolean),
+      ...(gecisYetkili && v.gecis_kaydi
+        ? { gecis_kaydi: true, gecis_gerekcesi: (v.gecis_gerekcesi ?? "").trim() }
+        : {}),
     };
+  }
+
+  /** "Aynı lokasyonda açık iş" (tek uyarı: `adet` + `isler`; eski biçimde yalnız ilk iş). */
+  function ayniLokasyonBildir(u: AcilisUyarisi) {
+    const isler = u.isler?.length ? u.isler : [{ id: u.id, so_no: u.so_no }];
+    const adet = u.adet ?? isler.length;
+    notification.info({
+      message: `Bu lokasyonda ${adet} açık iş var`,
+      description: (
+        <Space size={[8, 0]} wrap>
+          {isler.map((x) => (
+            <a
+              key={x.id}
+              href={`/servis-isleri/${x.id}`}
+              onClick={(e) => {
+                e.preventDefault();
+                navigate(`/servis-isleri/${x.id}`);
+              }}
+            >
+              {x.so_no}
+            </a>
+          ))}
+        </Space>
+      ),
+      duration: 10,
+    });
   }
 
   async function yeniKaydet(v: FormDegeri, mukerrerGec = false) {
@@ -292,7 +353,7 @@ export default function ServisIsFormu({
           : await teknikServisApi.ac(govde);
       message.success(`${sonuc.so_no} açıldı`);
       for (const u of sonuc.uyarilar ?? []) {
-        if (u.kod === "AYNI_LOKASYON") message.info(`Aynı lokasyonda açık iş: ${u.so_no}`);
+        if (u.kod === "AYNI_LOKASYON") ayniLokasyonBildir(u);
       }
       onKaydedildi(sonuc);
     } catch (e) {
@@ -397,7 +458,9 @@ export default function ServisIsFormu({
     }
   }
 
-  const turler = (formVerileri?.turler ?? []).filter((t) => t.ekrandan || t.kod === mevcut?.tur);
+  const turler = (formVerileri?.turler ?? []).filter(
+    (t) => (t.ekrandan || t.kod === mevcut?.tur) && (!yalnizKurulum || t.kod === KURULUM),
+  );
 
   if (sozlukBekleniyor) {
     return (
@@ -430,7 +493,7 @@ export default function ServisIsFormu({
         <Col xs={24} sm={12}>
           <Form.Item name="tur" label="İş türü" rules={[{ required: true, message: "Tür seçin" }]}>
             <Select
-              disabled={mevcut?.tur === "PB"}
+              disabled={mevcut?.tur === "PB" || yalnizKurulum}
               options={turler.map((t) => ({ value: t.kod, label: t.ad }))}
             />
           </Form.Item>
@@ -549,12 +612,18 @@ export default function ServisIsFormu({
 
       <Row gutter={12} style={{ marginTop: 12 }}>
         <Col xs={24} sm={12}>
-          <Form.Item name="reported_at" label="Bildirim anı" extra="En çok 7 gün geriye girilebilir.">
+          <Form.Item
+            name="reported_at"
+            label="Bildirim anı"
+            extra={gecis ? "Geçiş kaydı: kaynaktaki asıl tarih girilir." : "En çok 7 gün geriye girilebilir."}
+          >
             <DatePicker
               showTime={{ format: "HH:mm" }}
               format="DD.MM.YYYY HH:mm"
               style={{ width: "100%" }}
-              disabledDate={(d) => d.isAfter(dayjs(), "day") || d.isBefore(dayjs().subtract(7, "day"), "day")}
+              disabledDate={(d) =>
+                d.isAfter(dayjs(), "day") || (!gecis && d.isBefore(dayjs().subtract(7, "day"), "day"))
+              }
             />
           </Form.Item>
         </Col>
@@ -569,6 +638,30 @@ export default function ServisIsFormu({
           </Form.Item>
         </Col>
       </Row>
+
+      {gecisYetkili && (
+        <>
+          <Form.Item name="gecis_kaydi" valuePropName="checked" style={{ marginBottom: gecis ? 8 : undefined }}>
+            <Checkbox>Geçmiş kayıt (geçiş) — eski bildirim tarihi korunur, SLA ölçülmez</Checkbox>
+          </Form.Item>
+          {gecis && (
+            <Form.Item
+              name="gecis_gerekcesi"
+              label="Geçiş gerekçesi"
+              rules={[
+                {
+                  validator: (_, v: string | undefined) =>
+                    (v ?? "").trim().length >= GECIS_GEREKCE_ALT
+                      ? Promise.resolve()
+                      : Promise.reject(new Error(`Gerekçe zorunlu (en az ${GECIS_GEREKCE_ALT} karakter)`)),
+                },
+              ]}
+            >
+              <Input maxLength={500} placeholder="Ör. Eski talep listesinden aktarım (Excel, Ekim 2026)" />
+            </Form.Item>
+          )}
+        </>
+      )}
 
       {!duzenleme && uzaktanYetkili && (
         <>

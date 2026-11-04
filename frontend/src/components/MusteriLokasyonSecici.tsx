@@ -10,6 +10,7 @@ import {
 } from "../api/anaVeri";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import IlSecici from "./IlSecici";
 
 export interface MusteriLokasyonSecimi {
   musteriId: number | null;
@@ -55,9 +56,10 @@ function useGecikmeli(deger: string, ms = 300) {
  * Servis formlarının müşteri → lokasyon seçicisi (TS-015; form entegrasyonu TS-034).
  *
  * Arama SUNUCUDA (`/musteri-ara`, `servis.gor`): yanıt yalnız ad + il +
- * doğrulama rozeti taşır, VKN/IBAN/telefon göstermez. "Hızlı ekle" yalnız
- * `servis.yaz` + (`hesap.kart_yaz` | `hesap.yaz`) olanda görünür (G10.2: müşteri
- * kartını Mİ / satış destek / muhasebe / yönetici açar); yetkisi olmayana
+ * doğrulama rozeti taşır, VKN/IBAN/telefon göstermez. "Hızlı ekle"
+ * `hesap.kart_yaz` | `hesap.yaz` olanda görünür (sunucu ucu yalnız bunu ister;
+ * `servis.yaz` şartı kalktı — KARARLAR 2026-11-04 §6.5: satış destek ve
+ * operasyon da hızlı kart açar, kart doğrulanmamış doğar); yetkisi olmayana
  * "Müşteri İlişkileri'nden kart açmasını isteyin" yönlendirmesi gösterilir.
  * Benzer kayıt varsa sunucu
  * 409 + aday listesi döner ve kullanıcıya "Bunu mu demek istediniz?" sorulur.
@@ -80,8 +82,7 @@ export default function MusteriLokasyonSecici({
 }) {
   const { message } = App.useApp();
   const { yetkili } = useAuth();
-  const hizliEkleyebilir =
-    yetkili("servis.yaz") && (yetkili("hesap.kart_yaz") || yetkili("hesap.yaz"));
+  const hizliEkleyebilir = yetkili("hesap.kart_yaz") || yetkili("hesap.yaz");
   // Lokasyon kartını görebilen izin (sunucu da aynısını ister; teknisyen kimlik
   // tarayarak tesis irtibatı okuyamasın).
   const kartGorur = yetkili("hesap.gor") || yetkili("lokasyon.yaz");
@@ -248,8 +249,8 @@ export default function MusteriLokasyonSecici({
           <Form.Item name="unvan" label="Unvan" rules={[{ required: true, whitespace: true, min: 2, max: 200 }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="il" label="İl" rules={[{ required: true, whitespace: true }]}>
-            <Input placeholder="Ör. İstanbul" />
+          <Form.Item name="il" label="İl" rules={[{ required: true, whitespace: true, message: "İl seçin" }]}>
+            <IlSecici />
           </Form.Item>
           <Form.Item name="tesis_adi" label="Tesis adı (isteğe bağlı)">
             <Input placeholder="Ör. Akyaka AVM" />

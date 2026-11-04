@@ -13,6 +13,14 @@
  * - **Çakışma (409 `PLAN_CAKISMA`):** liste + gerekçe (≥10 karakter) ile
  *   "Gerekçeyle Kaydet". Kapsam dışı çakışan iş "başka birim işi" olarak
  *   maskeli gelir. Diğer 409'larda iş no listesi ya da "yenileyin" mesajı.
+ * - **Geçmiş tarih (409 `GECMIS_TARIH`, KARARLAR 2026-11-04 §6.9):** engel
+ *   değil uyarı; kısa gerekçe (≥10 karakter) sorulur ve aynı istek
+ *   `gecmis_tarih_gerekcesi` ile yinelenir (göç/geriye dönük kayıt meşru).
+ * - **Sahada kimse yok:** ekip gönderilen planda en az bir teknisyen ya da
+ *   sahaya giden şef gerekir (tekli ve toplu aynı kural, §6.9); pencere
+ *   göndermeden önce aynı kuralı alan hatası olarak gösterir.
+ * - **Sorumlu:** ekipteki teknisyen ya da şef olabilir (§6.6); seçilmezse
+ *   sunucu ilk teknisyeni, teknisyen yoksa sahaya giden ilk şefi seçer.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -40,6 +48,8 @@ import type { ApiError } from "../api/client";
 import { personelApi } from "../api/personel";
 import {
   type Cakisma,
+  GEREKCE_ALT,
+  gecmisTarihHatasi,
   PLAN_NEDENLERI,
   type Plan,
   type PlanGirdisi,
@@ -98,6 +108,8 @@ const ALAN_ADLARI: Record<string, string> = {
   irtibat_adi: "Saha yetkilisi",
   irtibat_telefon: "Telefon",
 };
+const SAHADA_KIMSE_YOK =
+  "Sahada kimse yok: en az bir teknisyen seçin ya da \"Şef sahaya gidiyor\" kutusunu işaretleyin.";
 const CAKISMA_TURLERI: Record<string, string> = {
   KISI: "Personel",
   ARAC: "Araç",
@@ -121,6 +133,9 @@ export default function PlanPenceresi({
   const [cakismalar, setCakismalar] = useState<Cakisma[] | null>(null);
   const [gerekce, setGerekce] = useState("");
   const [bekleyen, setBekleyen] = useState<PlanGirdisi | null>(null);
+  // 409 GECMIS_TARIH: sunucunun mesajı (null = pencere kapalı) ve gerekçe.
+  const [gecmisMesaji, setGecmisMesaji] = useState<string | null>(null);
+  const [gecmisGerekce, setGecmisGerekce] = useState("");
 
   const kisiler = useQuery({
     queryKey: ["atanabilir", birim],
@@ -143,6 +158,8 @@ export default function PlanPenceresi({
     if (!acik) return;
     setCakismalar(null);
     setGerekce("");
+    setGecmisMesaji(null);
+    setGecmisGerekce("");
     form.resetFields();
     const sefler = mevcut?.ekip.filter((u) => u.rol === "SEF") ?? [];
     form.setFieldsValue({
@@ -201,13 +218,31 @@ export default function PlanPenceresi({
         });
       }
       setCakismalar(null);
+      setGecmisMesaji(null);
       onKaydedildi();
     },
     onError: (e: ApiError, g) => {
+      const gecmis = gecmisTarihHatasi(e);
+      if (gecmis) {
+        // Gerekçe sorulur; çakışma penceresi açıksa kapanır (yanıt sırası sunucuda).
+        setBekleyen(g);
+        setCakismalar(null);
+        setGecmisMesaji(gecmis);
+        return;
+      }
       const liste = planCakismasi(e);
       if (liste) {
         setBekleyen(g);
+        setGecmisMesaji(null);
         setCakismalar(liste);
+        return;
+      }
+      if (/sahada kimse yok/i.test(e.message)) {
+        // Sunucu reddi (tekli/toplu aynı kural): ilgili alanın altında da göster.
+        setCakismalar(null);
+        setGecmisMesaji(null);
+        form.setFields([{ name: "teknisyen_idler", errors: [SAHADA_KIMSE_YOK] }]);
+        message.error(SAHADA_KIMSE_YOK);
         return;
       }
       const isler = sorunluIsler(e);
@@ -237,7 +272,11 @@ export default function PlanPenceresi({
                 sef_idler: sefler,
                 sahaya_giden_sefler: v.sef_sahada ? sefler : [],
                 teknisyen_idler: teknisyenler,
-                sorumlu_id: v.sorumlu_id ?? null,
+                // Ekipten çıkarılmış kişi sorumlu gönderilmez (sunucu 400 verirdi).
+                sorumlu_id:
+                  v.sorumlu_id != null && (teknisyenler.includes(v.sorumlu_id) || sefler.includes(v.sorumlu_id))
+                    ? v.sorumlu_id
+                    : null,
               }
             : null,
       arac_id: v.arac_id ?? null,
@@ -252,7 +291,13 @@ export default function PlanPenceresi({
 
   const gonder = async () => {
     const v = await form.validateFields();
-    kaydet.mutate(girdiUret(v));
+    const g = girdiUret(v);
+    // Ekip gönderiliyorsa sahada en az bir kişi (sunucuyla aynı kural, §6.9).
+    if (g.ekip && !g.ekip.teknisyen_idler.length && !g.ekip.sahaya_giden_sefler.length) {
+      form.setFields([{ name: "teknisyen_idler", errors: [SAHADA_KIMSE_YOK] }]);
+      return;
+    }
+    kaydet.mutate(g);
   };
 
   const sefSecenekleri = (kisiler.data ?? [])
@@ -268,6 +313,11 @@ export default function PlanPenceresi({
     label: a.birim ? a.plaka : `${a.plaka} (ortak havuz)`,
   }));
   const secilenTeknisyenler: number[] = Form.useWatch("teknisyen_idler", form) ?? [];
+  const secilenSefler: number[] = Form.useWatch("sef_idler", form) ?? [];
+  // Sorumlu: ekipteki teknisyen ya da şef (§6.6).
+  const sorumluAdaylari = [...secilenTeknisyenler, ...secilenSefler.filter((id) => !secilenTeknisyenler.includes(id))];
+  const secilenTarih: Dayjs | undefined = Form.useWatch("plan_tarihi", form);
+  const gecmisTarih = !!secilenTarih && secilenTarih.isBefore(dayjs(), "day");
   const nedenGerekli = mod === "yeniden" || (mod === "tekli" && !!mevcut);
   const lokasyonOnerisi = (oneri.data?.alanlar ?? []).filter((a) => a.alan in ALAN_ADLARI);
 
@@ -315,7 +365,12 @@ export default function PlanPenceresi({
         <Form form={form} layout="vertical" requiredMark="optional">
           <Row gutter={12}>
             <Col xs={24} sm={8}>
-              <Form.Item name="plan_tarihi" label="Plan tarihi" rules={[{ required: true }]}>
+              <Form.Item
+                name="plan_tarihi"
+                label="Plan tarihi"
+                rules={[{ required: true }]}
+                extra={gecmisTarih ? "Geçmiş tarih: kayıtta kısa gerekçe sorulur." : undefined}
+              >
                 <DatePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
               </Form.Item>
             </Col>
@@ -336,7 +391,7 @@ export default function PlanPenceresi({
           </Row>
           <Row gutter={12}>
             <Col xs={24} sm={12}>
-              <Form.Item name="sef_idler" label="Tayin edilecek şef (sorumlu)">
+              <Form.Item name="sef_idler" label="Tayin edilecek şef">
                 <Select
                   mode="multiple"
                   allowClear
@@ -354,14 +409,16 @@ export default function PlanPenceresi({
               <Form.Item
                 name="teknisyen_idler"
                 label="Tayin edilecek teknisyenler"
+                dependencies={["sef_idler", "sef_sahada"]}
                 rules={
                   mod === "toplu"
                     ? [
                         ({ getFieldValue }) => ({
                           validator: (_, v: number[] | undefined) =>
-                            (v?.length ?? 0) > 0 || (getFieldValue("sef_idler")?.length ?? 0) > 0
+                            (v?.length ?? 0) > 0 ||
+                            ((getFieldValue("sef_idler")?.length ?? 0) > 0 && !!getFieldValue("sef_sahada"))
                               ? Promise.resolve()
-                              : Promise.reject(new Error("Toplu planda en az bir kişi tayin edin")),
+                              : Promise.reject(new Error(SAHADA_KIMSE_YOK)),
                         }),
                       ]
                     : []
@@ -376,12 +433,15 @@ export default function PlanPenceresi({
                   maxCount={30}
                 />
               </Form.Item>
-              {secilenTeknisyenler.length > 1 && (
-                <Form.Item name="sorumlu_id" label="Sorumlu teknisyen">
+              {sorumluAdaylari.length > 1 && (
+                <Form.Item name="sorumlu_id" label="Sorumlu (teknisyen ya da şef)">
                   <Select
                     allowClear
-                    placeholder="İlk seçilen"
-                    options={secilenTeknisyenler.map((id) => ({ value: id, label: kisiAdi(id) }))}
+                    placeholder="İlk teknisyen (yoksa sahaya giden şef)"
+                    options={sorumluAdaylari.map((id) => ({
+                      value: id,
+                      label: secilenSefler.includes(id) ? `${kisiAdi(id)} (şef)` : kisiAdi(id),
+                    }))}
                   />
                 </Form.Item>
               )}
@@ -444,7 +504,7 @@ export default function PlanPenceresi({
         onCancel={() => setCakismalar(null)}
         okText="Gerekçeyle Kaydet"
         cancelText="Vazgeç"
-        okButtonProps={{ disabled: gerekce.trim().length < 10, loading: kaydet.isPending }}
+        okButtonProps={{ disabled: gerekce.trim().length < GEREKCE_ALT, loading: kaydet.isPending }}
         onOk={() => bekleyen && kaydet.mutate({ ...bekleyen, cakisma_gerekcesi: gerekce.trim() })}
         style={{ maxWidth: "calc(100vw - 16px)" }}
       >
@@ -475,6 +535,28 @@ export default function PlanPenceresi({
           value={gerekce}
           onChange={(e) => setGerekce(e.target.value)}
           placeholder="Çakışmaya rağmen kaydetme gerekçesi (en az 10 karakter)"
+          maxLength={500}
+          autoSize={{ minRows: 2, maxRows: 4 }}
+        />
+      </Modal>
+
+      <Modal
+        open={gecmisMesaji !== null}
+        title="Geçmiş tarihe plan"
+        onCancel={() => setGecmisMesaji(null)}
+        okText="Gerekçeyle Kaydet"
+        cancelText="Vazgeç"
+        okButtonProps={{ disabled: gecmisGerekce.trim().length < GEREKCE_ALT, loading: kaydet.isPending }}
+        onOk={() =>
+          bekleyen && kaydet.mutate({ ...bekleyen, gecmis_tarih_gerekcesi: gecmisGerekce.trim() })
+        }
+        style={{ maxWidth: "calc(100vw - 16px)" }}
+      >
+        <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={gecmisMesaji} />
+        <Input.TextArea
+          value={gecmisGerekce}
+          onChange={(e) => setGecmisGerekce(e.target.value)}
+          placeholder={`Neden geçmiş tarihe planlanıyor? (en az ${GEREKCE_ALT} karakter; denetim izine yazılır)`}
           maxLength={500}
           autoSize={{ minRows: 2, maxRows: 4 }}
         />

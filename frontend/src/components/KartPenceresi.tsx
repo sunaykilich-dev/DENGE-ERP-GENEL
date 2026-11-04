@@ -19,6 +19,7 @@ import { Link } from "react-router-dom";
 
 import { api, type Kullanici } from "../api/client";
 import {
+  baglantiErisimYok,
   gorevApi,
   ONCELIK_ETIKET,
   type Kart,
@@ -288,7 +289,9 @@ export default function KartPenceresi({
         <Divider style={{ margin: "4px 0 12px" }}>İlgili ERP kaydı</Divider>
         {!yeni && kart.baglanti && (
           <div style={{ marginBottom: 10 }}>
-            {kart.baglanti.var ? (
+            {baglantiErisimYok(kart.baglanti) ? (
+              <Tag>{kart.baglanti.ad}: Erişim yok</Tag>
+            ) : kart.baglanti.var && kart.baglanti.yol ? (
               <Link to={kart.baglanti.yol}>
                 <Tag color="blue">
                   {kart.baglanti.ad}: {kart.baglanti.etiket}

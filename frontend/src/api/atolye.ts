@@ -4,7 +4,8 @@
  * Sunucu: `backend/app/api/atolye.py`. Tek kayıt uçları kaydı SERVİS İŞİ
  * kimliğiyle adresler (`/{so_id}`); ekran bağlantısı `/atolye/{so_id}`.
  *
- * İzinler: okuma `atolye.gor`, yazma `atolye.yaz`; iptal/geri alma ayrıca
+ * İzinler: okuma `atolye.gor`, yazma `atolye.yaz`; kabul (tekli/toplu) `atolye.yaz` |
+ * `atolye.kabul` (operasyon, KARARLAR 2026-11-04 §6.5); iptal/geri alma ayrıca
  * `servis.kapat`; tayin (uç: ata) `atolye.yaz` + `servis.planla`; Excel `atolye.gor` +
  * `servis_rapor.disaaktar`. `repair_amount` yalnız `maliyet.gor` sahibine
  * gelir (anahtar hiç yoktur) — istemci tutarı hesaplamaz, yalnız gösterir.

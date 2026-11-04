@@ -190,7 +190,19 @@ export interface IsDetayi extends Omit<IsSatiri, "seriler"> {
   sonraki_durumlar: string[];
   gecisler: Gecis[];
   updated_at: string;
-  uyarilar?: { kod: string; so_no: string; id: number }[];
+  /**
+   * Açılış uyarıları. `AYNI_LOKASYON` tek kayıt döner: `adet` + `isler`
+   * (KARARLAR 2026-11-04 §6.10); `so_no`/`id` ilk iş (geri uyum).
+   */
+  uyarilar?: AcilisUyarisi[];
+}
+
+export interface AcilisUyarisi {
+  kod: string;
+  so_no: string;
+  id: number;
+  adet?: number;
+  isler?: { id: number; so_no: string }[];
 }
 
 export interface IsSuzgeci {
@@ -246,6 +258,12 @@ export interface IsGirdisi {
   iliskili_is_id?: number | null;
   iliski_turu?: string | null;
   mukerrer_gec?: boolean;
+  /**
+   * Geçiş/içe aktarma kaydı (`servis.gecis_kaydi`, KARARLAR 2026-11-04 §6.11):
+   * bildirim tarihi 7 günden eski olabilir, SLA ölçülmez; gerekçe ≥10 karakter.
+   */
+  gecis_kaydi?: boolean;
+  gecis_gerekcesi?: string | null;
 }
 
 /** Kapanmış işe bağlı yeni iş (M1.7); verilmeyen alan önceki işten gelir. */

@@ -19,7 +19,7 @@ import {
 import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 
-import { gorevApi, ONCELIK_ETIKET, ONCELIK_RENK, type Kart } from "../api/gorevler";
+import { baglantiErisimYok, gorevApi, ONCELIK_ETIKET, ONCELIK_RENK, type Kart } from "../api/gorevler";
 import { useAuth } from "../auth/AuthContext";
 import EtiketYonetimi from "../components/EtiketYonetimi";
 import KartPenceresi from "../components/KartPenceresi";
@@ -423,13 +423,18 @@ export default function GorevlerPage() {
                           {ONCELIK_ETIKET[kart.oncelik]}
                         </Tag>
                       )}
-                      {kart.baglanti && (
-                        <Tooltip title={`${kart.baglanti.ad}: ${kart.baglanti.etiket}`}>
-                          <Tag color={kart.baglanti.var ? "blue" : "red"}>
-                            {kart.baglanti.etiket.slice(0, 18)}
-                          </Tag>
-                        </Tooltip>
-                      )}
+                      {kart.baglanti &&
+                        (baglantiErisimYok(kart.baglanti) ? (
+                          <Tooltip title={`${kart.baglanti.ad}: bu kaydı görme yetkiniz yok`}>
+                            <Tag>Erişim yok</Tag>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={`${kart.baglanti.ad}: ${kart.baglanti.etiket}`}>
+                            <Tag color={kart.baglanti.var ? "blue" : "red"}>
+                              {kart.baglanti.etiket.slice(0, 18)}
+                            </Tag>
+                          </Tooltip>
+                        ))}
                       {kart.due_date && (
                         <Tag
                           color={

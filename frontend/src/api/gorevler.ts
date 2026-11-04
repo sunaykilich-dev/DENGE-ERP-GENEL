@@ -41,6 +41,16 @@ export interface Baglanti {
   var: boolean;
 }
 
+/**
+ * Bağlı kaydı kullanıcı göremiyor mu? Sunucu etiketi yalnız kaydı görebilene
+ * döner; göremeyene `var=false`, `yol=""`, etiket "erişim yok" (KARARLAR
+ * 2026-11-04 §6.1). Silinmiş kayıttan ("kaynak kayıt silinmiş") ayrılır:
+ * erişim yok gri ve bağlantısız, silinmiş kırmızı gösterilir.
+ */
+export function baglantiErisimYok(b: Baglanti): boolean {
+  return !b.var && !b.yol && b.etiket.trim().toLocaleLowerCase("tr") === "erişim yok";
+}
+
 export type Oncelik = "DUSUK" | "NORMAL" | "YUKSEK" | "ACIL";
 
 export interface Kart {
