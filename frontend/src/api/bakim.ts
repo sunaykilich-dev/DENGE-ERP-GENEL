@@ -37,6 +37,13 @@ export const BAKIM_SONUCLARI: Record<string, string> = {
   TEKRAR_GIDILECEK: "Tekrar Gidilecek",
 };
 
+/** Kapsam dışı talebi durumu (sunucu `KAPSAM_DISI_DURUMLARI`). */
+export const KAPSAM_DISI_DURUMLARI: Record<string, string> = {
+  TALEP: "Talep",
+  ONAYLANDI: "Onaylandı",
+  REDDEDILDI: "Reddedildi",
+};
+
 export const KAPSAM_DISI_NEDENLERI: Record<string, string> = {
   SOKULMUS: "Cihaz sökülmüş",
   ERISIM_YOK: "Erişim yok",

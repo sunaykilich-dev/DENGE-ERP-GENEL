@@ -274,19 +274,19 @@ export default function SayacDugmeleri({
       )}
       <Space wrap size={4}>
         {dugmeler.has("DEGISTIR") && (
-          <Button type="link" size="small" disabled={kilitli} onClick={() => setDegistirAcik(true)}>
+          <Button type="link" style={BUYUK} disabled={kilitli} onClick={() => setDegistirAcik(true)}>
             Faaliyeti değiştir
           </Button>
         )}
         {dugmeler.has("UNUTTUM") && (
-          <Button type="link" size="small" disabled={kilitli} onClick={() => setUnuttumAcik(true)}>
+          <Button type="link" style={BUYUK} disabled={kilitli} onClick={() => setUnuttumAcik(true)}>
             Unuttum, gerçek bitişi gir
           </Button>
         )}
         {geriAlinabilir && (
           <Button
             type="link"
-            size="small"
+            style={BUYUK}
             danger
             disabled={kilitli}
             onClick={() => yap(() => servisZaman.geriAl(acik), "Sayaç geri alındı")}

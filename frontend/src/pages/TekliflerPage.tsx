@@ -30,6 +30,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import Statistic from "../components/Statistic";
+import { TEKLIF_DURUM_ADLARI } from "../fiori/etiketlerEk";
 import TeklifDonusumu from "./TeklifDonusumu";
 import TeklifFormu from "./TeklifFormu";
 
@@ -168,19 +169,7 @@ const tl = (v: number | null | undefined, para = "TRY") =>
         para === "TRY" ? "₺" : para
       }`;
 
-const DURUM_ADLARI: Record<string, string> = {
-  TASLAK: "Taslak",
-  ONAY_BEKLIYOR: "Onay bekliyor",
-  ONAYLANDI: "Onaylandı",
-  GONDERILDI: "Gönderildi",
-  GORUNTULENDI: "Görüntülendi",
-  REVIZE_EDILDI: "Revize edildi",
-  KABUL: "Kabul",
-  RED: "Ret",
-  SURESI_DOLDU: "Süresi doldu",
-  SIPARISE_DONUSTU: "Siparişe dönüştü",
-  IPTAL: "İptal",
-};
+const DURUM_ADLARI = TEKLIF_DURUM_ADLARI;
 
 const DURUM_RENGI: Record<string, string> = {
   TASLAK: "default",

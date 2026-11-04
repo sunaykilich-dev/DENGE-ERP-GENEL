@@ -42,6 +42,7 @@ import SlaEtiketi from "../components/SlaEtiketi";
 import Statistic from "../components/Statistic";
 import {
   FAALIYET_ADLARI,
+  KAYNAK_ADLARI,
   SURE_DURUMU_ADLARI,
   servisZaman,
   sureMetni,
@@ -169,7 +170,7 @@ function Islerim() {
         {liste.isLoading ? (
           <Spin />
         ) : sayi === 0 ? (
-          <Empty description={gruplar.length && (durumGrubu || kategori !== TUMU_KATEGORISI.kod) ? "Veri yok" : "Açık işiniz yok"} />
+          <Empty description={gruplar.length && (durumGrubu || kategori !== TUMU_KATEGORISI.kod) ? "Seçili süzgeçte iş yok" : "Açık işiniz yok"} />
         ) : (
           <div className="fm-liste">
             {gorunen.map((g) => (
@@ -248,7 +249,7 @@ function Bugunum() {
                     actions={[
                       <Button
                         key="elle"
-                        size="small"
+                        style={{ minHeight: 44 }}
                         icon={<EditOutlined />}
                         onClick={() => setElle({ id: i.id, so_no: i.so_no })}
                       >
@@ -285,7 +286,7 @@ function Bugunum() {
                       {FAALIYET_ADLARI[b.faaliyet]} · {b.so_no}
                       {b.sure_dk !== null && ` · ${sureMetni(b.sure_dk)}`}
                       {b.kaynak !== "CANLI" && (
-                        <Tag style={{ marginInlineStart: 6 }}>{b.kaynak.replaceAll("_", " ").toLowerCase()}</Tag>
+                        <Tag style={{ marginInlineStart: 6 }}>{(KAYNAK_ADLARI[b.kaynak] ?? b.kaynak.replaceAll("_", " ")).toLocaleLowerCase("tr")}</Tag>
                       )}
                       {b.iptal_turu && <Tag>{b.iptal_turu === "GERI_ALINDI" ? "geri alındı" : "iptal"}</Tag>}
                     </div>

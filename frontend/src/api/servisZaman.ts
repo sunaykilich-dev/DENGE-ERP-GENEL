@@ -48,6 +48,14 @@ export const BEKLEME_NEDENLERI: { kod: string; ad: string }[] = [
   { kod: "DIGER", ad: "Diğer" },
 ];
 
+/** Süre kaydının kaynağı (ekranda ham kod yerine). */
+export const KAYNAK_ADLARI: Record<string, string> = {
+  CANLI: "Canlı",
+  MANUEL: "Manuel",
+  KULLANICI_DUZELTMESI: "Kullanıcı düzeltmesi",
+  YONETICI_DUZELTMESI: "Yönetici düzeltmesi",
+};
+
 export const SURE_DURUMU_ADLARI: Record<string, string> = {
   TAM: "Tam",
   KISMI: "Kısmi",

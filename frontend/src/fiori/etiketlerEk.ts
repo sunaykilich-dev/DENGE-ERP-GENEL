@@ -8,6 +8,23 @@
  */
 import type { FioriDurumGrubu, KategoriRengi } from "./etiketler";
 
+// --- Teklif (sunucu teklif durum kataloğu) -----------------------------------
+
+/** Teklif durum kodu → ad (Teklifler ve atölye ayrıntısındaki bağlı teklifler). */
+export const TEKLIF_DURUM_ADLARI: Record<string, string> = {
+  TASLAK: "Taslak",
+  ONAY_BEKLIYOR: "Onay bekliyor",
+  ONAYLANDI: "Onaylandı",
+  GONDERILDI: "Gönderildi",
+  GORUNTULENDI: "Görüntülendi",
+  REVIZE_EDILDI: "Revize edildi",
+  KABUL: "Kabul",
+  RED: "Ret",
+  SURESI_DOLDU: "Süresi doldu",
+  SIPARISE_DONUSTU: "Siparişe dönüştü",
+  IPTAL: "İptal",
+};
+
 // --- Atölye (ATOLYE_DURUMLARI, ATOLYE_SERVIS_TURLERI) -------------------------
 
 /** Atölye durum çubuğu: YENİ · İŞLEM · ASKIDA · TAMAMLANDI · YAPILAMADI. */

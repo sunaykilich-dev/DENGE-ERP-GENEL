@@ -39,6 +39,7 @@ import {
   type IsParcaHareketi,
   type IsParcaOzeti,
   parcaApi,
+  olcuBirimiAdi,
   parcaHatasi,
   TALEP_DURUM_ADLARI,
   type Talep,
@@ -103,7 +104,7 @@ export default function ServisParcalari({
   const yonetebilir = !saltOkunur && yetkili("parca.yonet");
   const iadeSecenekleri = (veri?.ozet ?? [])
     .filter((o) => o.net > 0)
-    .map((o) => ({ value: o.product_id, label: `${o.kod} — ${o.ad} (net ${o.net} ${o.birim})` }));
+    .map((o) => ({ value: o.product_id, label: `${o.kod} — ${o.ad} (net ${o.net} ${olcuBirimiAdi(o.birim)})` }));
 
   const gerekceSor = (baslikMetni: string, onay: (metin: string) => void) => {
     let metin = "";
@@ -139,7 +140,7 @@ export default function ServisParcalari({
       title: "Net adet",
       key: "net",
       align: "right" as const,
-      render: (_: unknown, o: IsParcaOzeti) => `${o.net} ${o.birim}`,
+      render: (_: unknown, o: IsParcaOzeti) => `${o.net} ${olcuBirimiAdi(o.birim)}`,
     },
     ...(maliyetli
       ? [
@@ -333,7 +334,8 @@ export default function ServisParcalari({
   );
 }
 
-function TalepPenceresi({ acik, soId, onKapat }: { acik: boolean; soId: number; onKapat: () => void }) {
+/** Parça talebi penceresi (iş ayrıntısı ve mobil sonuç akışı). */
+export function TalepPenceresi({ acik, soId, onKapat }: { acik: boolean; soId: number; onKapat: () => void }) {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [form] = Form.useForm<{ product_id: number; adet: number; notes?: string; isi_beklet?: boolean }>();

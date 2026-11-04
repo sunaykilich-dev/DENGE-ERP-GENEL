@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Form, Input, InputNumber, Modal, Select, Space } from "antd";
 import { useEffect, useMemo, useState } from "react";
 
-import { type Depo, parcaApi, parcaHatasi, type SatirGirdisi } from "../api/yedekParca";
+import { type Depo, olcuBirimiAdi, parcaApi, parcaHatasi, type SatirGirdisi } from "../api/yedekParca";
 
 export type ParcaHareketTuru = "GIRIS" | "ZAYI" | "TRANSFER" | "CIKIS" | "IADE";
 
@@ -48,7 +48,7 @@ export function ParcaSecici({
     secenekler ??
     (sorgu.data ?? []).map((p) => ({
       value: p.id,
-      label: `${p.code} — ${p.name} (stok: ${p.toplam} ${p.birim})`,
+      label: `${p.code} — ${p.name} (stok: ${p.toplam} ${olcuBirimiAdi(p.birim)})`,
     }));
   return (
     <Select

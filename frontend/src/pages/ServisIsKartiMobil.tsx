@@ -9,6 +9,12 @@
  *
  * Açık sayaç bu işteyken "Sonuç Gir" önce sayacı bitirmeyi önerir: açık
  * sayaçlı iş tamamlanamaz (sunucu 409, TS-073).
+ *
+ * Rol testi 2026-11-04 (B6, B10, B13): "Sonuç Gir" masaüstü listeye gitmez;
+ * kartın üstünde parça → müşteri onayı/imza → sonuç akışını açar
+ * (`MobilSonucCekmecesi`). Dokunma hedefleri ≥ 44 px. Kapalı işte sonuç
+ * düğmesi yoktur; elle süre yalnız süre kaydı eksikse "Eksik süreyi tamamla"
+ * olarak kalır (sunucu kapalı işe elle kaydı kabul eder, iptale etmez).
  */
 import {
   ArrowLeftOutlined,
@@ -23,6 +29,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import EkYukleyici from "../components/EkYukleyici";
+import MobilSonucCekmecesi from "../components/MobilSonucCekmecesi";
 import SayacDugmeleri, { ManuelKayitPenceresi } from "../components/SayacDugmeleri";
 import SlaEtiketi from "../components/SlaEtiketi";
 import { SURE_DURUMU_ADLARI, servisZaman, sureMetni } from "../api/servisZaman";
@@ -35,6 +42,7 @@ export default function ServisIsKartiMobil() {
   const navigate = useNavigate();
   const { yetkili } = useAuth();
   const [elle, setElle] = useState(false);
+  const [sonucAcik, setSonucAcik] = useState(false);
 
   const kart = useQuery({
     queryKey: ["mobil-kart", isId],
@@ -52,7 +60,11 @@ export default function ServisIsKartiMobil() {
   if (kart.isError || !kart.data) {
     return (
       <Space orientation="vertical">
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("/benim-islerim")}>
+        <Button
+          icon={<ArrowLeftOutlined />}
+          style={{ minHeight: 44 }}
+          onClick={() => navigate("/benim-islerim")}
+        >
           Benim İşlerim
         </Button>
         <Empty description={(kart.error as Error | null)?.message ?? "İş bulunamadı"} />
@@ -71,13 +83,17 @@ export default function ServisIsKartiMobil() {
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adresMetni)}`
     : null;
   const ozet = k.sure_ozeti;
+  const kapali = ["TAMAMLANDI", "KAPATILDI", "IPTAL"].includes(k.durum);
+  const sureEksik = ["EKSIK", "KISMI"].includes(ozet.sure_durumu);
+  // Kapalı işte elle süre yalnız eksik kaydı tamamlamak içindir; iptal işe kayıt girilmez.
+  const elleGosterilir = k.bana_atanmis && (!kapali || (sureEksik && k.durum !== "IPTAL"));
 
   return (
     <div className="fm-sayfa" style={{ maxWidth: 760, gap: 0 }}>
       <Button
         type="link"
         icon={<ArrowLeftOutlined />}
-        style={{ paddingInline: 0 }}
+        style={{ paddingInline: 0, minHeight: 44, alignSelf: "flex-start" }}
         onClick={() => navigate("/benim-islerim")}
       >
         Benim İşlerim
@@ -103,7 +119,15 @@ export default function ServisIsKartiMobil() {
             <Typography.Paragraph
               type="secondary"
               style={{ fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-              ellipsis={{ rows: 4, expandable: true, symbol: "devamı" }}
+              ellipsis={{
+                rows: 4,
+                expandable: true,
+                symbol: (
+                  <span style={{ display: "inline-block", minHeight: 44, minWidth: 44, lineHeight: "44px", paddingInline: 8 }}>
+                    devamı
+                  </span>
+                ),
+              }}
             >
               {k.aciklama}
             </Typography.Paragraph>
@@ -207,15 +231,15 @@ export default function ServisIsKartiMobil() {
               <Descriptions.Item label="Kaydı eksik">{ozet.eksik_kisiler.join(", ")}</Descriptions.Item>
             )}
           </Descriptions>
-          {k.bana_atanmis && (
-            <Button size="small" onClick={() => setElle(true)}>
-              Elle süre gir
+          {elleGosterilir && (
+            <Button block size="large" style={{ minHeight: 44, marginTop: 8 }} onClick={() => setElle(true)}>
+              {kapali ? "Eksik süreyi tamamla" : "Elle süre gir"}
             </Button>
           )}
         </FioriBolum>
 
         <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-          {k.acik_bolum_bu_iste && (
+          {!kapali && k.acik_bolum_bu_iste && (
             <Alert
               type="warning"
               showIcon
@@ -223,12 +247,10 @@ export default function ServisIsKartiMobil() {
               description="Açık sayaçlı iş tamamlanamaz."
             />
           )}
-          {yetkili("servis.tamamla") && (
-            <Link to={`/servis-isleri/${k.id}`}>
-              <Button type="primary" block size="large" style={{ minHeight: 44 }}>
-                Sonuç Gir
-              </Button>
-            </Link>
+          {yetkili("servis.tamamla") && !kapali && (
+            <Button type="primary" block size="large" style={{ minHeight: 44 }} onClick={() => setSonucAcik(true)}>
+              Sonuç Gir
+            </Button>
           )}
           {k.bakim_formu && (
             <Link to={`/bakim?is=${k.id}`}>
@@ -245,12 +267,22 @@ export default function ServisIsKartiMobil() {
           kind="SERVIS_SONRASI"
           baslik="Fotoğraf / ek"
           aciklama="Kamera ile çekip doğrudan yükleyebilirsiniz."
-          yazabilir={k.bana_atanmis && yetkili("servis.yaz")}
+          yazabilir={k.bana_atanmis && !kapali && yetkili("servis.yaz")}
           yalnizTur={false}
           accept="image/*,application/pdf"
           capture="environment"
+          buyukDugme
         />
       </Space>
+      {yetkili("servis.tamamla") && (
+        <MobilSonucCekmecesi
+          isId={k.id}
+          soNo={k.so_no}
+          birim={k.birim}
+          acik={sonucAcik}
+          onKapat={() => setSonucAcik(false)}
+        />
+      )}
       <ManuelKayitPenceresi
         acik={elle}
         isId={k.id}

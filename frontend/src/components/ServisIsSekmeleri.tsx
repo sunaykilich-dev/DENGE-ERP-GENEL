@@ -18,6 +18,7 @@ import { useState } from "react";
 import { DEGISIM_ETIKETLERI, PLAN_NEDENLERI, planlamaApi } from "../api/servisPlanlama";
 import {
   FAALIYET_ADLARI,
+  KAYNAK_ADLARI,
   SURE_DURUMU_ADLARI,
   servisZaman,
   sureMetni,
@@ -107,7 +108,7 @@ export function ZamanSekmesi({ isId, soNo }: { isId: number; soNo: string }) {
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {zaman(b.started_at)} → {b.ended_at ? zaman(b.ended_at) : "sürüyor"}
                 {b.sure_dk != null ? ` · ${b.sure_dk} dk` : ""}
-                {b.kaynak !== "CANLI" ? ` · ${b.kaynak.replaceAll("_", " ").toLowerCase()}` : ""}
+                {b.kaynak !== "CANLI" ? ` · ${(KAYNAK_ADLARI[b.kaynak] ?? b.kaynak.replaceAll("_", " ")).toLocaleLowerCase("tr")}` : ""}
               </Typography.Text>
               <KonumMetni etiket="Başlangıç konumu" k={b.bas_konum} />
               <KonumMetni etiket="Bitiş konumu" k={b.bit_konum} />

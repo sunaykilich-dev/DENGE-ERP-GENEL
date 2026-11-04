@@ -72,7 +72,12 @@ import AtolyeKpiRaporu from "../components/AtolyeKpiRaporu";
 import EkYukleyici from "../components/EkYukleyici";
 import ServisParcalari from "../components/ServisParcalari";
 import { TAYIN, durumGrubuBul } from "../fiori/etiketler";
-import { ATOLYE_DURUM_ETIKETLERI, ATOLYE_DURUM_GRUPLARI, ATOLYE_TUR_RENGI } from "../fiori/etiketlerEk";
+import {
+  ATOLYE_DURUM_ETIKETLERI,
+  ATOLYE_DURUM_GRUPLARI,
+  ATOLYE_TUR_RENGI,
+  TEKLIF_DURUM_ADLARI,
+} from "../fiori/etiketlerEk";
 import {
   Aciklama,
   AltNot,
@@ -456,7 +461,7 @@ function KayitBilgileri({
       </Form.Item>
       {d.teklifler.length > 0 && (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          Bağlı teklifler: {d.teklifler.map((t) => `${t.quote_no} (${t.status})`).join(", ")} — kabul
+          Bağlı teklifler: {d.teklifler.map((t) => `${t.quote_no} (${TEKLIF_DURUM_ADLARI[t.status] ?? t.status})`).join(", ")} — kabul
           edilmiş teklif onay sayılır.
         </Typography.Text>
       )}
