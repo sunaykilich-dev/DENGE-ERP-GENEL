@@ -35,7 +35,7 @@ const RENK: Record<string, string> = {
  * Sayılar sunucuda, kullanıcının İZİNLERİNE GÖRE hesaplanır: göremeyeceği
  * modülün uyarısını görmez, yoksa uyarı sayısının kendisi sızıntı olurdu.
  */
-export default function UyariZili() {
+export default function UyariZili({ renk = "#556b82" }: { renk?: string } = {}) {
   const navigate = useNavigate();
   const { data } = useQuery({
     queryKey: ["uyarilar"],
@@ -87,11 +87,8 @@ export default function UyariZili() {
           toplamı "99+" olarak çıkıyordu ve üç satırlık bir liste için
           yanıltıcıydı. Kayıt adedi her satırın kendi etiketinde. */}
       <Badge count={uyarilar.length} overflowCount={99} color={kritikVar ? "red" : "orange"}>
-        {/* Fiori kabuğu açık zeminli: zil koyu gri (eskiden lacivert bardaydı, beyazdı). */}
-        <BellOutlined
-          style={{ color: "#556b82", fontSize: 18, cursor: "pointer" }}
-          aria-label="Uyarılar"
-        />
+        {/* Rengi çağıran verir: koyu üst çubukta (Logo CRM kurgusu) açık renk. */}
+        <BellOutlined style={{ color: renk, fontSize: 18, cursor: "pointer" }} aria-label="Uyarılar" />
       </Badge>
     </Dropdown>
   );

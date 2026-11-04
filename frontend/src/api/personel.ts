@@ -16,6 +16,8 @@ export const BIRIM_ETIKETLERI: Record<string, string> = {
   POC: "POC",
   MOBILITE: "Mobilite",
   ARAC_TAKIP: "Araç Takip",
+  // KARARLAR 2026-11-04 §1: yeni birim (DENGE ELEKTRONİK).
+  BARIYER: "Set Bariyer",
 };
 export const BIRIM_KODLARI = Object.keys(BIRIM_ETIKETLERI);
 

@@ -78,6 +78,7 @@ import {
   tekliGruplar,
 } from "../fiori/ListeOgeleri";
 import ListeRaporu, { KpiKutucugu, type FioriEylem } from "../fiori/ListeRaporu";
+import { useYeniParametresi } from "../fiori/useYeniParametresi";
 import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "../components/MusteriLokasyonSecici";
 
 const SAYFA_BOYU = 50;
@@ -130,6 +131,11 @@ export default function KiralamalarPage() {
   const [secili, setSecili] = useState<number[]>([]);
 
   const yazabilir = yetkili("kiralama.yaz");
+  // "+ Hızlı oluştur › Yeni kiralama" (`?yeni=1`).
+  useYeniParametresi(() => {
+    setDuzenlenen(null);
+    setFormAcik(true);
+  }, yazabilir);
   const aktarabilir = yetkili("kiralama.gor", "servis_rapor.disaaktar");
   const yolEki = arama.toString() ? `?${arama.toString()}` : "";
 

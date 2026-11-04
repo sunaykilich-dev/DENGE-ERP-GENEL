@@ -110,9 +110,15 @@ export default function ServisIsFormu({
   onKaydedildi,
   onVazgec,
   onCakisma,
+  varsayilan,
 }: {
   /** Verilirse düzenleme; yoksa yeni iş. */
   is?: IsDetayi | null;
+  /**
+   * Yeni işte önerilen birim/tür (liste hangi süzgeçle açıksa, ör. Güvenlik ›
+   * Kurulum). Kullanıcının seçebileceği değer değilse yok sayılır.
+   */
+  varsayilan?: { birim?: string; tur?: string };
   formVerileri?: FormVerileri;
   onKaydedildi: (d: IsDetayi) => void;
   onVazgec: () => void;
@@ -148,6 +154,8 @@ export default function ServisIsFormu({
     enabled: !!birim && !!uzaktan,
   });
 
+  const onerilenBirim = varsayilan?.birim;
+  const onerilenTur = varsayilan?.tur;
   const baslangic = useMemo<Partial<FormDegeri>>(() => {
     if (mevcut) {
       return {
@@ -174,10 +182,14 @@ export default function ServisIsFormu({
     }
     const birimler = formVerileri?.birimler ?? [];
     const varsayilanBirim =
+      birimler.find((b) => b.kod === onerilenBirim)?.kod ??
       birimler.find((b) => b.kod === kullanici?.birincil_birim)?.kod ??
       (birimler.length === 1 ? birimler[0].kod : undefined);
+    const varsayilanTur =
+      onerilenTur && onerilenTur !== "PB" ? formVerileri?.turler.find((t) => t.kod === onerilenTur)?.kod : undefined;
     return {
       birim: varsayilanBirim,
+      ...(varsayilanTur ? { tur: varsayilanTur } : {}),
       oncelik: "NORMAL",
       talep_kanali: "TELEFON",
       reported_at: dayjs(),
@@ -185,7 +197,7 @@ export default function ServisIsFormu({
       seriler: [],
       uzaktan: false,
     };
-  }, [mevcut, formVerileri, kullanici]);
+  }, [mevcut, formVerileri, kullanici, onerilenBirim, onerilenTur]);
 
   useEffect(() => {
     form.resetFields();
