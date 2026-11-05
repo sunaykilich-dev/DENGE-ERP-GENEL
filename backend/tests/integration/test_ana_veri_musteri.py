@@ -186,7 +186,8 @@ class TestHafifArama:
         assert r.json() == []
 
     async def test_servis_izni_olmayan_403(self, client, kullanici_ac):
-        await _giris(client, kullanici_ac, "satis", "SATIS")
+        # SATIS §7.8 ile servis.gor aldı; servis izni olmayan rol: finans uzmanı.
+        await _giris(client, kullanici_ac, "finans_uzm", "MUHASEBE_DESTEK")
         assert (await client.get(f"{ANA}/musteri-ara", params={"q": "abc"})).status_code == 403
 
     async def test_yanitta_fiyat_anahtari_yok(self, client, kullanici_ac, db):

@@ -245,10 +245,15 @@ async def test_servis_karti_ucret_yalniz_maliyet_gorende(
 ) -> None:
     h = await _hesap(db, "Ücret Müşterisi")
     await sozlesme_ac(musteri=h, fee_per_visit=100)
+    # Şef maliyet görmez; TS Yöneticisi G4.4 / §7.7 ile görür.
+    await birimli_kullanici_ac("av_s2", "SERVIS_SEF", ["GUVENLIK"], saha_rolu="SEF")
+    s = await giris("av_s2")
+    kart = (await s.get(f"{ANA}/musteriler/{h.id}/servis-karti")).json()
+    assert kart["sozlesmeler"] and "ucret" not in kart["sozlesmeler"][0]
     await birimli_kullanici_ac("av_y2", "SERVIS_YONETICI", ["GUVENLIK"])
     y = await giris("av_y2")
     kart = (await y.get(f"{ANA}/musteriler/{h.id}/servis-karti")).json()
-    assert kart["sozlesmeler"] and "ucret" not in kart["sozlesmeler"][0]
+    assert kart["sozlesmeler"][0]["ucret"] == 100.0
     await kullanici_ac("av_admin", "ADMIN")
     adm = await giris("av_admin")
     kart = (await adm.get(f"{ANA}/musteriler/{h.id}/servis-karti")).json()

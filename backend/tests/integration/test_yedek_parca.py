@@ -97,8 +97,9 @@ async def parca_ac(db):
 
 @pytest.fixture
 async def ortam(birimli_kullanici_ac, kullanici_ac, giris, depo_ac, parca_ac, servis_isi_ac):
-    """Depocu (SERVIS_DEPO, GUVENLIK), yönetici (TUMU, maliyet görmez), admin
-    (maliyet görür), GUVENLIK ortak depo, bir parça, açık bir servis işi."""
+    """Depocu (SERVIS_DEPO, GUVENLIK; maliyet görmez), yönetici (TUMU; G4.4 /
+    §7.7 ile maliyet görür), admin (maliyet görür), GUVENLIK ortak depo, bir parça,
+    açık bir servis işi."""
     depocu = await birimli_kullanici_ac("depocu", "SERVIS_DEPO", ["GUVENLIK"])
     await kullanici_ac("yonetici", "SERVIS_YONETICI")
     await kullanici_ac("admin_p", "ADMIN")
@@ -751,17 +752,19 @@ async def test_maliyet_dondurulur_ve_yalniz_gorene_doner(ortam, db) -> None:
     await _giris(ortam.depocu, ortam.depo, ortam.urun, 2, unit_cost="20")
     await _giris(ortam.depocu, ortam.depo, ortam.urun, 2)  # maliyetsiz: ortalamaya girmez
     assert await svc.birim_maliyet(db, ortam.urun.id) == Decimal("15.0000")
-    # Maliyet görmeyen (SERVIS_YONETICI) yanıtında anahtar YOK.
-    r = await _cikis(ortam.yonetici, ortam.so, ortam.depo, ortam.urun, 1)
+    # Maliyet görmeyen (SERVIS_DEPO) yanıtında anahtar YOK.
+    r = await _cikis(ortam.depocu, ortam.so, ortam.depo, ortam.urun, 1)
     assert r.status_code == 201 and "unit_cost" not in r.json()[0] and "tutar" not in r.json()[0]
     h = await db.get(StockMovement, r.json()[0]["id"])
     assert h.unit_cost == Decimal("15.0000")
-    liste = (await ortam.yonetici.get(f"{URL}/hareketler")).json()
+    liste = (await ortam.depocu.get(f"{URL}/hareketler")).json()
     assert all("unit_cost" not in x and "tutar" not in x for x in liste)
-    parcalar = (await ortam.yonetici.get(f"{URL}/isler/{ortam.so.id}/parcalar")).json()
+    parcalar = (await ortam.depocu.get(f"{URL}/isler/{ortam.so.id}/parcalar")).json()
     assert all("unit_cost" not in x for x in parcalar["hareketler"])
     assert all("tutar" not in x for x in parcalar["ozet"])
-    # Admin (maliyet.gor) görür.
+    # TS Yöneticisi (§7.7) ve admin (maliyet.gor) görür.
+    liste = (await ortam.yonetici.get(f"{URL}/hareketler", params={"tur": "CIKIS_SERVIS"})).json()
+    assert liste[0]["unit_cost"] == 15.0
     liste = (await ortam.admin.get(f"{URL}/hareketler", params={"tur": "CIKIS_SERVIS"})).json()
     assert liste[0]["unit_cost"] == 15.0 and liste[0]["tutar"] == 15.0
     parcalar = (await ortam.admin.get(f"{URL}/isler/{ortam.so.id}/parcalar")).json()

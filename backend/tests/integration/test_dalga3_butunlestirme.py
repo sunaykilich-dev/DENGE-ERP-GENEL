@@ -102,8 +102,12 @@ async def test_fatura_devri_excel_tutar_yalniz_yetkilide(
     await rol_ac("T_DEVIR_X", ["tahsilat.gor", "servis_rapor.disaaktar"], "KENDI_BIRIMI")
     await birimli_kullanici_ac("devir_x", "T_DEVIR_X", ["GUVENLIK"])
     await kullanici_ac("adm_x", "ADMIN")
+    # Fatura devri yalnız kalite onaylı işi alır (§7, kalite kapısı).
     so = await servis_isi_ac(
-        birim="GUVENLIK", durum="TAMAMLANDI", completed_at=datetime(2026, 1, 1, 8, tzinfo=UTC)
+        birim="GUVENLIK",
+        durum="TAMAMLANDI",
+        completed_at=datetime(2026, 1, 1, 8, tzinfo=UTC),
+        kalite_onay_at=datetime(2026, 1, 1, 9, tzinfo=UTC),
     )
     db.add(
         ServiceOrderFinancial(

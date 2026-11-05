@@ -10,8 +10,9 @@ Elle yazılmış uç listesi yeni uçları kaçırırdı; bu tarama uçları
 test kırmızıdır.
 
 Kurallar:
-- `MALIYET_ANAHTARLARI` hiçbir teknik servis rolünde görünmez — servis
-  rollerinin hiçbirinde `maliyet.gor` yok (`SERVIS_ROLLERI`, unit testle kilitli).
+- `MALIYET_ANAHTARLARI` `maliyet.gor` olmayan hiçbir teknik servis rolünde
+  görünmez. Servis rollerinde `maliyet.gor` tek istisna TS Yöneticisidir
+  (G4.4, KARARLAR 2026-11-04 §7.7); başka servis rolü alırsa test kırmızı.
 - `FIYAT_ANAHTARLARI` (teklif tutarları) yalnız `teklif.gor` sahibine görünür.
 - Taranamayan GET ucu (hiçbir rolde 200 alınamayan) `TARANMAYAN` beyaz
   listesinde gerekçesiyle durmak zorunda; yeni uç kendiliğinden taramaya girer.
@@ -87,6 +88,13 @@ TARANMAYAN: dict[str, str] = {
 # uç → ortamdan sorgu listesi (birden çok değer = her KPI/kontrol ayrı taranır).
 SORGU: dict[str, Any] = {
     "/api/personel/atanabilir": lambda o: [{"birim": "GUVENLIK"}],
+    # Dönem zorunlu; §7.7 ile TS Yöneticisi (maliyet.gor) bu uçları tarar.
+    "/api/teknik-servis/maliyet/analiz": lambda o: [
+        {"baslangic": "2026-01-01", "bitis": "2026-12-31"}
+    ],
+    "/api/teknik-servis/maliyet/analiz.xlsx": lambda o: [
+        {"baslangic": "2026-01-01", "bitis": "2026-12-31"}
+    ],
     "/api/teknik-servis/maliyet/teklif-donusumu": lambda o: [{"birim": "GUVENLIK"}],
     "/api/teknik-servis/maliyet/teklif-donusumu.xlsx": lambda o: [{"birim": "GUVENLIK"}],
     "/api/teknik-servis/zaman/isler": lambda o: [{"kpi": "sure_eksik"}, {"kpi": "farkli_is"}],
@@ -173,10 +181,17 @@ def yasak_anahtarlar(veri: Any, yasak: frozenset[str], yol: str = "$") -> list[s
     return bulunan
 
 
+# Servis rollerinde `maliyet.gor` tek istisnası (G4.4, §7.7).
+MALIYET_GOREN_SERVIS_ROLLERI = frozenset({"SERVIS_YONETICI"})
+
+
 def rol_yasaklari(rol: str) -> frozenset[str]:
     izinler = set(ROLES[rol][1])
-    assert "maliyet.gor" not in izinler, f"{rol} maliyet.gor almış (KD-11)"
-    return MALIYET_ANAHTARLARI | (frozenset() if "teklif.gor" in izinler else FIYAT_ANAHTARLARI)
+    fiyat = frozenset() if "teklif.gor" in izinler else FIYAT_ANAHTARLARI
+    if "maliyet.gor" in izinler:
+        assert rol in MALIYET_GOREN_SERVIS_ROLLERI, f"{rol} maliyet.gor almış (KD-11, §7.7)"
+        return fiyat
+    return MALIYET_ANAHTARLARI | fiyat
 
 
 @dataclass
@@ -435,9 +450,12 @@ async def test_teknik_servis_get_uclarinda_maliyet_anahtari_yok(ortam) -> None:
 
 
 async def test_maliyet_uclari_servis_rollerine_kapali(ortam) -> None:
-    """`/maliyet/analiz`, iş finansı ve gelir yazımı maliyet.gor ister → 403."""
+    """`/maliyet/analiz`, iş finansı ve gelir yazımı maliyet.gor ister → 403
+    (maliyet.gor sahibi TS Yöneticisi hariç, §7.7)."""
     so = ortam.so_id
     for rol in SERVIS_ROLLERI:
+        if rol in MALIYET_GOREN_SERVIS_ROLLERI:
+            continue
         ist = ortam.istemciler[rol]
         for yol in (
             "/api/teknik-servis/maliyet/analiz",
@@ -467,11 +485,15 @@ async def test_teknisyen_is_detayinda_teklif_tutari_yok(ortam) -> None:
 
 
 async def test_sozlesme_ucreti_alan_olarak_yok(ortam) -> None:
-    mudur = ortam.istemciler["SERVIS_YONETICI"]
-    r = await mudur.get(f"/api/teknik-servis/bakim/sozlesmeler/{ortam.kimlikler['sozlesme_id']}")
+    """Şef sözleşmeyi görür ama ücreti göremez; maliyet.gor sahibi TS
+    Yöneticisi aynı sözleşmede ücreti görür (§7.7, test boşa geçmesin)."""
+    yol = f"/api/teknik-servis/bakim/sozlesmeler/{ortam.kimlikler['sozlesme_id']}"
+    r = await ortam.istemciler["SERVIS_SEF"].get(yol)
     assert r.status_code == 200, r.text
     veri = r.json()
     assert "fee_per_visit" not in str(veri) and "contract_total" not in str(veri)
+    r = await ortam.istemciler["SERVIS_YONETICI"].get(yol)
+    assert r.status_code == 200 and "fee_per_visit" in r.json(), r.text
 
 
 async def test_tarama_kendini_kanitlar(ortam, monkeypatch) -> None:
@@ -499,3 +521,5 @@ def test_anahtar_tarayici_ic_ice_bulur() -> None:
 def test_servis_rolleri_maliyet_gormez() -> None:
     for rol in SERVIS_ROLLERI:
         rol_yasaklari(rol)
+    goren = {r for r in SERVIS_ROLLERI if "maliyet.gor" in ROLES[r][1]}
+    assert goren == MALIYET_GOREN_SERVIS_ROLLERI
