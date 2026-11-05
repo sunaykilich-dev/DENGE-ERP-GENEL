@@ -41,7 +41,8 @@ import {
 } from "../api/bakim";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 
-const AYLAR = Array.from({ length: 12 }, (_, i) => dayjs().month(i).format("MMM"));
+// Ay adları çağrı anında üretilir: dayjs yereli (tr) modül yüklendikten sonra ayarlanıyor.
+const ayAdlari = () => Array.from({ length: 12 }, (_, i) => dayjs().month(i).format("MMM"));
 const gun = (v: string | null | undefined) => (v ? dayjs(v).format("DD.MM.YYYY") : "—");
 
 function DonemRozeti({ d }: { d: TakvimDonemi }) {
@@ -165,7 +166,7 @@ export function BakimTakvimiSekmesi() {
               </>
             ),
           },
-          ...AYLAR.map((ad, i) => ({
+          ...ayAdlari().map((ad, i) => ({
             title: (
               <Tooltip title={aylar[i] ? `${aylar[i].donem} dönem · ${aylar[i].cihaz} cihaz` : undefined}>
                 {ad}
