@@ -79,6 +79,7 @@ import { BAKIM_DURUM_GRUPLARI, TAYIN } from "../fiori/etiketler";
 import { KpiKutucugu } from "../fiori/ListeRaporu";
 import { useYeniParametresi } from "../fiori/useYeniParametresi";
 import BakimFormu from "./BakimFormu";
+import BakimIsEmirleriSekmesi from "./BakimIsEmirleri";
 import BakimRaporlari from "./BakimRaporlari";
 import { BakimTakvimiSekmesi, KararTarihleriPenceresi } from "./BakimTakvimi";
 import { ServisIsListesi, type ServisKategorisi } from "./ServisIsleriPage";
@@ -202,6 +203,7 @@ export default function BakimPage() {
             },
             { key: "sozlesmeler", label: "Sözleşmeler", children: <SozlesmelerSekmesi /> },
             { key: "takvim", label: "Bakım Takvimi", children: <BakimTakvimiSekmesi /> },
+            { key: "is-emirleri", label: "Bakım İş Emirleri", children: <BakimIsEmirleriSekmesi /> },
             {
               key: "donemler",
               label: "Bakım Dönemleri",

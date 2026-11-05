@@ -217,14 +217,15 @@ async def _sozlesme_uret(
     user: User | None,
     clock: Clock,
     on_acilis: int,
-    donem_id: int | None,
+    donem_idleri: set[int] | None,
 ) -> None:
     simdi = clock.now()
     bugun = yerel_bugun(clock)
     donemler = await bakim.donemleri_hesapla(db, sozlesme, clock)
-    if donem_id is not None:
-        # Eksik PB tamamlama: şef dönemi açıkça seçti, vade penceresi aranmaz.
-        vadeli = [d for d in donemler if d.id == donem_id and d.closed_at is None]
+    if donem_idleri is not None:
+        # Eksik PB tamamlama / toplu açma: kullanıcı dönemi açıkça seçti, vade
+        # penceresi aranmaz (yönetici gelecek ayın işlerini de açabilir).
+        vadeli = [d for d in donemler if d.id in donem_idleri and d.closed_at is None]
     else:
         vadeli = [
             d
@@ -314,12 +315,17 @@ async def uret_ayrintili(
     *,
     sozlesme_id: int | None = None,
     donem_id: int | None = None,
+    donem_idleri: set[int] | None = None,
 ) -> UretimSonucu:
     """Vadesi gelen dönemlerin PB'lerini üretir; ayrıntılı sonuç döner.
 
     Vade: dönem kapanmamış ve `hedef - bakim_on_acilis_gun <= bugün` (yerel).
-    `sozlesme_id`/`donem_id` verilirse yalnız onlar (eksik PB tamamlama).
+    `sozlesme_id`/`donem_id` verilirse yalnız onlar (eksik PB tamamlama);
+    `donem_idleri` verilirse yalnız o dönemler, vade aranmadan (toplu açma).
     """
+    secili: set[int] | None = None
+    if donem_id is not None or donem_idleri is not None:
+        secili = set(donem_idleri or ()) | ({donem_id} if donem_id is not None else set())
     on_acilis = int(await ayar_svc.get(db, "bakim_on_acilis_gun") or 0)
     run = MaintenanceGenerationRun(
         tetik=tetik,
@@ -330,6 +336,7 @@ async def uret_ayrintili(
             "bugun": yerel_bugun(clock).isoformat(),
             "sozlesme_id": sozlesme_id,
             "donem_id": donem_id,
+            "donem_idleri": sorted(donem_idleri) if donem_idleri is not None else None,
         },
         created_by=user.id if user else None,
     )
@@ -342,6 +349,12 @@ async def uret_ayrintili(
     stmt = stmt.where(MaintenanceContract.is_deleted.is_(False))
     if sozlesme_id is not None:
         stmt = stmt.where(MaintenanceContract.id == sozlesme_id)
+    elif secili is not None:
+        stmt = stmt.where(
+            MaintenanceContract.id.in_(
+                select(MaintenancePeriod.contract_id).where(MaintenancePeriod.id.in_(secili))
+            )
+        )
     else:
         stmt = stmt.where(MaintenanceContract.status.in_(("AKTIF", "TEYIT_BEKLIYOR")))
     if user is not None:
@@ -366,7 +379,7 @@ async def uret_ayrintili(
                     user=user,
                     clock=clock,
                     on_acilis=on_acilis,
-                    donem_id=donem_id,
+                    donem_idleri=secili,
                 )
         except Exception as exc:  # tek sözleşme turu durdurmaz (E04-06)
             logger.exception("PB üretimi sözleşmede hata: %s", sozlesme.contract_no)

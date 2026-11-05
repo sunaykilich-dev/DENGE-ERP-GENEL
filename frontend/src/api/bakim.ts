@@ -461,9 +461,9 @@ function sorgu(p: Record<string, string | number | boolean | null | undefined>):
 export const TAKVIM_DURUMLARI: Record<string, { ad: string; renk: string }> = {
   SISTEM_ONCESI: { ad: "Sistem öncesi", renk: "default" },
   KAPANDI: { ad: "Kapandı", renk: "green" },
-  PB_ACIK: { ad: "PB açıldı", renk: "blue" },
+  PB_ACIK: { ad: "İş emri açıldı", renk: "blue" },
   GECIKMIS: { ad: "Gecikmiş", renk: "red" },
-  ILK_TURDA: { ad: "İlk turda açılacak", renk: "orange" },
+  ILK_TURDA: { ad: "Açılış zamanı geldi", renk: "orange" },
   ILERIDE: { ad: "İleride", renk: "cyan" },
   TASLAK_PLAN: { ad: "Taslak plan", renk: "default" },
 };
@@ -541,6 +541,53 @@ export interface YillikTakvim {
   }[];
 }
 
+// --- Planlı bakım iş emirleri (`bakim_is_emri`) --------------------------------
+
+/** Bekleyen iş emri satır durumu: takvim durumları + açılma durumu. */
+export const PLANLI_IS_DURUMLARI: Record<string, { ad: string; renk: string }> = {
+  GECIKMIS: { ad: "Gecikmiş", renk: "red" },
+  ILK_TURDA: { ad: "Açılış zamanı geldi", renk: "orange" },
+  ILERIDE: { ad: "İleride", renk: "cyan" },
+  KISMEN: { ad: "Kısmen açıldı", renk: "gold" },
+  ACILDI: { ad: "Açıldı", renk: "blue" },
+};
+
+export interface PlanliIs {
+  donem_id: number;
+  sozlesme_id: number;
+  contract_no: string;
+  birim: string;
+  musteri: string | null;
+  tesis: string | null;
+  il: string | null;
+  hedef: string;
+  sira: number;
+  yillik_adet: number | null;
+  durum: string;
+  planli: number;
+  acilan: number;
+  acilacak: number;
+  eslesmemis: number;
+  turler: { tur: string; ad: string; adet: number }[];
+}
+
+export interface PlanliIsler {
+  bit: string;
+  on_acilis_gun: number;
+  kesildi: boolean;
+  toplam_acilacak: number;
+  satirlar: PlanliIs[];
+}
+
+export interface TopluAcSonucu {
+  onizleme: boolean;
+  run_id: number | null;
+  acilan: number;
+  is_emirleri: string[];
+  satirlar: { donem_id: number; sonuc: "TAMAM" | "BULUNAMADI"; acilan: number }[];
+  atlanan: Atlanan[];
+}
+
 // --- Çağrılar -----------------------------------------------------------------
 
 export const bakimApi = {
@@ -597,6 +644,14 @@ export const bakimApi = {
     }),
   takvim: (yil: number, birim?: string | null) =>
     api.get<YillikTakvim>(`${ONEK}/takvim?${sorgu({ yil, birim })}`),
+
+  planliIsler: (p: { bit?: string | null; birim?: string | null; yalniz_acilmamis: boolean }) =>
+    // `sorgu` false'u atar; sunucu varsayılanı true olduğu için açıkça yazılır.
+    api.get<PlanliIsler>(
+      `${ONEK}/planli-isler?${sorgu({ ...p, yalniz_acilmamis: String(p.yalniz_acilmamis) })}`,
+    ),
+  planliIsleriAc: (donem_idleri: number[], onizleme: boolean) =>
+    istek<TopluAcSonucu>(`${ONEK}/planli-isler/ac`, "POST", { donem_idleri, onizleme }),
 
   onizle: () => istek<Onizleme>(`${ONEK}/uretim/onizleme`, "POST"),
   uret: () => istek<UretimSonucu>(`${ONEK}/uretim`, "POST"),

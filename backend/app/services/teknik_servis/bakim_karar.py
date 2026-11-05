@@ -21,10 +21,11 @@ Kararlar (gerekçeli, `analiz/soru_formu/KARARLAR_2026-10-28.md` §8):
   yanlışlıkla yığınla gecikmiş iş açılmasın.
 - **Aktifleştirme:** TASLAK / TEYIT_BEKLIYOR sözleşme varsayılan olarak AKTIF'e
   alınır; tesis çakışması kuralı aynen işler (onay gerekirse satır hatası).
-- **PB işleri hemen açılmaz:** her dönemin PB'leri hedeften
-  `bakim_on_acilis_gun` gün önce `pb-uretimi` görevince açılır (cihaz başına 1
-  PB). Yanıt her dönem için açılış gününü ve ilk turda açılacak PB sayısını
-  verir. Otomatik görev `bakim_otomatik_uretim` açıkken çalışır.
+- **PB işleri hemen açılmaz:** dönemler "bekleyen iş emri" olarak listelenir
+  ve yönetici seçip topluca açar (`bakim_is_emri`, §8.7). İsteğe bağlı olarak
+  `bakim_otomatik_uretim` açıksa `pb-uretimi` görevi hedeften
+  `bakim_on_acilis_gun` gün önce açar (cihaz başına 1 PB). Yanıt her dönem
+  için açılış gününü ve açılış zamanı gelmiş PB sayısını verir.
 - **Toplu giriş tek tek SAVEPOINT'te:** bir satırın hatası diğerlerini
   durdurmaz. Önizleme aynı kodu dış SAVEPOINT'te koşturup geri alır (ikinci
   bir "ne olacak" hesabı yazılmaz; `bakim_uretim.onizle` ile aynı desen).

@@ -61,6 +61,7 @@ from app.services.statemachine import IzinsizGecis
 from app.services.teknik_servis import (
     bakim,
     bakim_formu,
+    bakim_is_emri,
     bakim_karar,
     bakim_raporlari,
     bakim_sablonlari,
@@ -340,6 +341,15 @@ class TopluKararIn(BaseModel):
     satirlar: list[TopluKararSatiri] = Field(min_length=1, max_length=bakim_karar.AZAMI_TOPLU_SATIR)
     aktiflestir: bool = True
     onizleme: bool = True
+
+
+class TopluAcIn(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={"examples": [{"donem_idleri": [101, 102], "onizleme": True}]}
+    )
+
+    donem_idleri: list[int] = Field(min_length=1, max_length=bakim_is_emri.AZAMI_SECIM)
+    onizleme: bool = False
 
 
 class OtomatikUretimIn(BaseModel):
@@ -1024,6 +1034,56 @@ async def yillik_takvim(
     return await bakim_karar.yillik_takvim(
         db, user, clock, yil=yil or yerel_bugun(clock).year, birim=birim
     )
+
+
+# =============================================================================
+# Planlı bakım iş emirleri: bekleyen liste + toplu açma (2026-11-05)
+# =============================================================================
+
+
+@router.get("/planli-isler")
+async def planli_isler(
+    db: DbDep,
+    clock: ClockDep,
+    user: Okuyucu,
+    bit: date | None = None,
+    birim: str | None = Query(default=None, max_length=20),
+    yalniz_acilmamis: bool = True,
+) -> dict[str, Any]:
+    """Açık dönemlerin cihaz iş emirleri (açılmış / açılacak). `bit` yoksa
+    bugünden 12 ay; gecikmiş dönemler her zaman dahil."""
+    return await bakim_is_emri.planli_isler(
+        db, user, clock, bit=bit, birim=birim, yalniz_acilmamis=yalniz_acilmamis
+    )
+
+
+@router.post("/planli-isler/ac")
+async def planli_isleri_ac(
+    payload: TopluAcIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
+) -> dict[str, Any]:
+    """Seçilen dönemlerin cihaz iş emirlerini topluca açar (cihaz başına 1
+    PB, idempotent). `onizleme` hiçbir şey yazmaz."""
+    sonuc = await _cagir(
+        bakim_is_emri.toplu_ac(db, user, clock, payload.donem_idleri, onizleme=payload.onizleme)
+    )
+    if payload.onizleme:
+        await db.rollback()
+        return sonuc
+    await audit.log(
+        db,
+        "maintenance_generation_runs",
+        "bakim.uret",
+        entity_id=sonuc["run_id"],
+        new_value={
+            "tetik": "TOPLU_AC",
+            "donem_idleri": sorted(set(payload.donem_idleri)),
+            "uretilen": sonuc["acilan"],
+        },
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return sonuc
 
 
 # =============================================================================

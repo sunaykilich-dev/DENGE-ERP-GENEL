@@ -6,9 +6,9 @@
  *   hangi ayda bakım düşeceği, kaç dönemin gecikmiş açılacağı ve ilk turda kaç
  *   PB açılacağı görünür; "Uygula" aynı satırları yazar. Önizleme yazmaz.
  * - `BakimTakvimiSekmesi`: aktif sözleşmeler × 12 ay. Her dönem rozeti
- *   durumuyla renklenir (gecikmiş, PB açıldı, ileride…). PB işleri hedeften
- *   `on_acilis_gun` gün önce otomatik açılır; planlama ekranında lokasyon
- *   grubu olarak toplu planlanır.
+ *   durumuyla renklenir (gecikmiş, iş emri açıldı, ileride…). İş emirleri
+ *   "Bakım İş Emirleri" sekmesinde yöneticinin seçimiyle topluca açılır
+ *   (`BakimIsEmirleri`); planlama ekranında lokasyon grubu olarak planlanır.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -113,9 +113,9 @@ export function BakimTakvimiSekmesi() {
       </Space>
       {veri.data && (
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          Bakım işleri her dönemin hedef tarihinden {veri.data.on_acilis_gun} gün önce cihaz başına
-          bir PB olarak otomatik açılır; Servis Planlama ekranında aynı lokasyondakiler birlikte
-          planlanır.
+          Bakımlar “Bakım İş Emirleri” sekmesinde iş emri olarak bekler; seçip açtığınızda cihaz
+          başına bir iş emri açılır ve Servis Planlama ekranında aynı lokasyondakiler birlikte
+          planlanır. Turuncu: açılış zamanı geldi (hedeften {veri.data.on_acilis_gun} gün önce).
         </Typography.Paragraph>
       )}
       <Table<Satir>
@@ -384,7 +384,7 @@ function OnizlemeTablosu({ y }: { y: TopluKararYaniti }) {
         description={[
           y.ozet.sistem_oncesi_kapanan ? `${y.ozet.sistem_oncesi_kapanan} geçmiş dönem sistem öncesi kapanacak.` : null,
           y.ozet.gecikmis_donem ? `${y.ozet.gecikmis_donem} geçmiş dönem gecikmiş olarak kalacak.` : null,
-          `İlk otomatik üretim turunda ${y.ozet.ilk_turda_pb} PB işi açılacak.`,
+          `Açılış zamanı gelmiş ${y.ozet.ilk_turda_pb} cihaz iş emri “Bakım İş Emirleri” sekmesinde açılmayı bekleyecek.`,
         ]
           .filter(Boolean)
           .join(" ")}
@@ -427,7 +427,7 @@ function OnizlemeTablosu({ y }: { y: TopluKararYaniti }) {
             render: (_, r) => (r.sonuc === "TAMAM" ? `${r.eslesen_cihaz}/${r.cihaz_sayisi}` : null),
           },
           {
-            title: "İlk tur PB",
+            title: "Zamanı gelen iş",
             width: 90,
             render: (_, r) => (r.sonuc === "TAMAM" ? r.ilk_turda_pb : null),
           },
