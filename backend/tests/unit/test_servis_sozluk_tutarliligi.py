@@ -142,10 +142,12 @@ _DALGA4_EKLERI = {
 # Faz A: ofis ağı CIDR listesi (KARARLAR 2026-10-28 G3.8, boş = kısıt yok) ve
 # MESAI takvimli SLA'nın mesai penceresi (TS-200, M5.1/M5.4).
 _FAZ_A_EKLERI = {"ofis_ag_listesi", "servis_mesai_baslangic", "servis_mesai_bitis"}
+# KARARLAR 2026-11-05 §9: iki aşamalı kapanış (ekip lideri → müdür).
+_ONAY_ZINCIRI_EKLERI = {"servis_kapanis_onay_zinciri"}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
-    beklenen = _PLAN_1_9 | _DALGA1_EKLERI | _DALGA4_EKLERI | _FAZ_A_EKLERI
+    beklenen = _PLAN_1_9 | _DALGA1_EKLERI | _DALGA4_EKLERI | _FAZ_A_EKLERI | _ONAY_ZINCIRI_EKLERI
     assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.
     assert set(ayar.AYAR_SINIRLARI) == beklenen

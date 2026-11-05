@@ -93,6 +93,12 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Tamamlanan işe kalite onayı verir (kendi çalıştığı işe veremez)",
     ),
     "servis.uzaktan_coz": ("Teknik Servis", "Açılışta telefonla/uzaktan çözüldü kaydı açar"),
+    # KARARLAR 2026-11-05 §9: iki aşamalı kapanış (`servis_kapanis_onay_zinciri`)
+    # açıkken iş, ekip liderinin kalite onayından SONRA yalnız bu izinle kapanır.
+    "servis.son_onay": (
+        "Teknik Servis",
+        "Ekip lideri onayından sonra işe son onayı verip kapatır (iki aşamalı kapanış)",
+    ),
     # Rol testi B3 (KARARLAR 2026-11-04 §6.5): satış destek satılan cihazın
     # kurulum takibini yapar. `servis.yaz` (her tür iş, not, ek) yerine yalnız
     # KURULUM işi açma izni — en az yetki.
@@ -526,6 +532,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis.tamamla",
             "servis.kapat",
             "servis.kalite_onay",
+            "servis.son_onay",
             "servis.uzaktan_coz",
             "servis.tanim",
             "servis.arac_yaz",

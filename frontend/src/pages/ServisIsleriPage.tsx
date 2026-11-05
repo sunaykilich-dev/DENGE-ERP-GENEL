@@ -724,7 +724,7 @@ function IsDetayCekmecesi({
     kapat: "İşi kapat",
     iptal: "İşi iptal et",
     bagli_is: "Bu işe bağlı yeni iş aç",
-    kalite: "Kalite onayı",
+    kalite: "Ekip lideri onayı",
     kalite_red: "Kaliteyi reddet / geri gönder",
     yola_geri: "Yola çıkışı geri al",
   };
@@ -812,7 +812,7 @@ function IsDetayCekmecesi({
                   disabled={!d.kalite.verebilir}
                   onClick={() => pencereAc("kalite")}
                 >
-                  Kalite onayı
+                  Ekip lideri onayı
                 </Button>
               </Tooltip>
             )}
@@ -966,17 +966,22 @@ function IsDetayCekmecesi({
                         </Descriptions.Item>
                       )}
                       {(d.kalite.onay_at || d.kalite.bekliyor) && (
-                        <Descriptions.Item label="Kalite onayı" span={2}>
+                        <Descriptions.Item label="Ekip lideri onayı" span={2}>
                           {d.kalite.onay_at ? (
                             <Space orientation="vertical" size={0}>
                               <span>
                                 <Tag color="green">Onaylandı</Tag>
                                 {zaman(d.kalite.onay_at)} · {d.kalite.onaylayan?.ad ?? "—"}
                               </span>
+                              {d.status === "TAMAMLANDI" && (
+                                <Tag color="gold" style={{ width: "fit-content" }}>
+                                  Müdür son onayı (kapatma) bekliyor
+                                </Tag>
+                              )}
                               {d.kalite.notu && <Typography.Text type="secondary">{d.kalite.notu}</Typography.Text>}
                             </Space>
                           ) : (
-                            <Tag color="orange">Kalite onayı bekliyor</Tag>
+                            <Tag color="orange">Ekip lideri onayı bekliyor</Tag>
                           )}
                         </Descriptions.Item>
                       )}
@@ -2357,7 +2362,7 @@ export function ServisIsListesi({
             checked={suzgec.kalite === "BEKLEYEN"}
             onChange={(e) => suzgecDegistir({ ...urlSuzgeci, kalite: e.target.checked ? "BEKLEYEN" : undefined })}
           >
-            Kalite onayı bekleyenler
+            Ekip lideri onayı bekleyenler
           </Checkbox>
           <Checkbox
             checked={suzgec.sonuc === "TEKLIF_SUNULACAK"}

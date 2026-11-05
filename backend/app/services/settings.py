@@ -99,6 +99,9 @@ DEFAULTS: dict[str, Any] = {
     # --- Teknik servis --------------------------------------------------------
     # ALINAMADI+neden de onay kaydı sayılır; saha bloke olmaz (KD-19).
     "servis_onay_zorunlu_turler": ["PB"],
+    # KARARLAR 2026-11-05 §9: açıkken iş kapanışı iki aşamalı — önce ekip
+    # liderinin kalite onayı, sonra `servis.son_onay` (müdür) kapatır.
+    "servis_kapanis_onay_zinciri": False,
     "servis_toplu_atama_ust_sinir": 150,  # toplu atama/plan; 151 → 422
     "servis_ek_silme_saat": 24,
     "servis_kapsam_son_is_gun": 30,
@@ -199,6 +202,7 @@ DEFAULTS: dict[str, Any] = {
 AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     # İzinli değerler servis türü sözlüğünün KENDİSİ (kopya değil).
     "servis_onay_zorunlu_turler": ("liste", frozenset(SERVIS_TURLERI), None),
+    "servis_kapanis_onay_zinciri": ("bool", None, None),
     "servis_toplu_atama_ust_sinir": ("tam", 1, 1000),
     "servis_ek_silme_saat": ("tam", 0, 720),
     "servis_kapsam_son_is_gun": ("tam", 1, 365),

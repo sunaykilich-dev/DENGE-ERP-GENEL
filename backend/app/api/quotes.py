@@ -108,6 +108,8 @@ class TeklifIn(BaseModel):
     service_order_id: int | None = None
     contact_id: int | None = None
     address_id: int | None = None
+    # Kabulde açılacak servis işi türü (işe bağlı olmayan servis teklifi).
+    servis_turu: str | None = Field(default=None, max_length=20)
 
 
 class TeklifDuzenleIn(TeklifIn):
@@ -184,6 +186,7 @@ class TeklifOut(BaseModel):
     so_no: str | None = None
     contact_id: int | None = None
     address_id: int | None = None
+    servis_turu: str | None = None
     etkin_durum: str | None = None
     sonraki_durumlar: list[str] = []
     submitted_by: int | None = None
@@ -504,6 +507,7 @@ def _baslik(payload: TeklifIn) -> svc.BaslikGirdisi:
         currency=payload.currency,
         fx_rate=payload.fx_rate,
         valid_until=payload.valid_until,
+        servis_turu=payload.servis_turu,
     )
 
 
@@ -525,6 +529,7 @@ async def olustur(
         service_order_id=so.id if so is not None else None,
         contact_id=baslik.contact_id,
         address_id=baslik.address_id,
+        servis_turu=baslik.servis_turu,
     )
     db.add(teklif)
     await db.flush()

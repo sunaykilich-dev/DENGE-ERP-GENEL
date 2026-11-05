@@ -819,7 +819,11 @@ async def ucret_guncelle(
 
 
 async def donemleri_hesapla(
-    db: AsyncSession, sozlesme: MaintenanceContract, clock: Clock
+    db: AsyncSession,
+    sozlesme: MaintenanceContract,
+    clock: Clock,
+    *,
+    yetim_ay_korumasi: bool = True,
 ) -> list[MaintenancePeriod]:
     """Döngüden dönem satırları (idempotent).
 
@@ -827,6 +831,10 @@ async def donemleri_hesapla(
     dönemin hedefi güncellenir; plandan düşen dönem PB'si yoksa fiziksel
     silinir (hiçbir kayıt ona bağlı değil; yumuşak silme `uq_mp_donem`'i
     yeniden açılışta kilitlerdi). PB'si olan dönem asla silinmez.
+
+    Çift dönem koruması (KARARLAR 2026-11-05 §9.6): tarih değişince plandan
+    düşen ama PB'si olan açık ("yetim") dönemle AYNI AYA düşen yeni dönem
+    eklenmez — aynı cihaza aynı ay ikinci PB açılmasın.
     """
     if (
         sozlesme.valid_from is None
@@ -855,12 +863,20 @@ async def donemleri_hesapla(
         ).all()
     )
     anahtar = {(d.cycle_start.astimezone(UTC), d.sequence_no): d for d in mevcutlar}
+    plan_anahtari = {(yerel_gece(dongu), sira) for dongu, sira, _ in plan}
+    yetim_aylari = {
+        (d.target_date.year, d.target_date.month)
+        for k, d in anahtar.items()
+        if yetim_ay_korumasi and k not in plan_anahtari and d.id in pbli and d.closed_at is None
+    }
     planli: set[tuple[datetime, int]] = set()
     for dongu, sira, hedef in plan:
         an = yerel_gece(dongu)
         planli.add((an, sira))
         donem = anahtar.get((an, sira))
         if donem is None:
+            if (hedef.year, hedef.month) in yetim_aylari:
+                continue
             db.add(
                 MaintenancePeriod(
                     contract_id=sozlesme.id,

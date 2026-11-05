@@ -282,3 +282,53 @@ async def test_karar_tarihi_eski_surum_409_ve_adet_yoksa_400(
         json={"karar_tarihi": "2027-02-01", "version": s["version"]},
     )
     assert r.status_code == 409
+
+
+async def test_tarih_degisince_baslamamis_pb_tasinir_baslamis_cift_donem_acmaz(
+    client, db, kisiler, lokasyon_ac, ekipman_ac
+):
+    """KARARLAR 2026-11-05 §9.6: karar tarihi değişince plandan düşen PB'li
+    dönem çift dönem üretmez. Sahaya çıkılmamış PB'ler en yakın yeni döneme
+    taşınır; sahada başlamış PB'nin dönemi kalır, aynı aya yeni dönem açılmaz."""
+    client.clock.set(BUGUN)
+    o = await ortam_kur(db, lokasyon_ac, ekipman_ac, xray=1, kapi=1, ad="Taşıma AVM")
+    await giris(client, "sef_k")
+    s = await _tarihsiz_sozlesme(client, o)
+    await hepsini_eslestir(client, s["id"], o)
+    r = await client.put(
+        f"{ONEK}/sozlesmeler/{s['id']}/karar-tarihi", json={"karar_tarihi": "2026-12-01"}
+    )
+    assert r.status_code == 200, r.text
+    ilk = (await _donemler(db, s["id"]))[0]
+    r = await client.post(f"{ONEK}/planli-isler/ac", json={"donem_idleri": [ilk.id]})
+    assert r.json()["acilan"] == 2
+
+    # Başlamamış PB: tarih 15.12'ye kayınca PB'ler yeni Aralık dönemine taşınır.
+    r = await client.put(
+        f"{ONEK}/sozlesmeler/{s['id']}/karar-tarihi", json={"karar_tarihi": "2026-12-15"}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["tasinan_pb"] == 2
+    donemler = await _donemler(db, s["id"])
+    assert [d.target_date.isoformat() for d in donemler] == [
+        "2026-12-15",
+        "2027-04-15",
+        "2027-08-15",
+    ]
+    yeni_ilk = donemler[0].id
+    db.expire_all()
+    isler = await pb_isleri(db, s["id"])
+    assert len(isler) == 2 and {so.maintenance_period_id for so in isler} == {yeni_ilk}
+
+    # Başlamış PB: dönem yerinde kalır, aynı aya ikinci dönem açılmaz.
+    for so in isler:
+        so.status = "SAHADA"
+    await db.commit()
+    r = await client.put(
+        f"{ONEK}/sozlesmeler/{s['id']}/karar-tarihi", json={"karar_tarihi": "2026-12-20"}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["tasinan_pb"] == 0
+    hedefler = [d.target_date.isoformat() for d in await _donemler(db, s["id"])]
+    assert hedefler == ["2026-12-15", "2027-04-20", "2027-08-20"], hedefler
+    assert len(await pb_isleri(db, s["id"])) == 2

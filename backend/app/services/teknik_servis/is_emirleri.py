@@ -52,6 +52,7 @@ from app.models.teknik_servis import (
     TALEP_KANALLARI,
 )
 from app.permissions import SCOPE_OWN_JOBS
+from app.services import settings as ayar_svc
 from app.services.normalize import normalize_seri, tr_normkey
 from app.services.statemachine import SERVIS_IS_EMRI, IzinsizGecis
 from app.services.teknik_servis import gecmis, kancalar, kapsam, numara
@@ -565,6 +566,9 @@ async def durum_degistir(
     if gerekce is not None and len(gerekce) > 500:
         raise ServisGirdiHatasi("Gerekçe en çok 500 karakter olabilir")
 
+    if hedef == "KAPATILDI" and user is not None:
+        await kapanis_zinciri_dogrula(db, so, user)
+
     await kancalar.durum_dogrula(db, so, hedef, kaynak)
 
     simdi = clock.now()
@@ -605,6 +609,24 @@ async def durum_degistir(
         raise ServisGirdiHatasi("Gerekçeye irtibat adı veya telefonu yazılamaz") from exc
     await kancalar.durum_degisti(db, so, onceki, hedef, kaynak, clock)
     return so
+
+
+SON_ONAY_IZNI = "servis.son_onay"
+
+
+async def kapanis_zinciri_dogrula(db: AsyncSession, so: ServiceOrder, user: User) -> None:
+    """İki aşamalı kapanış (KARARLAR 2026-11-05 §9, `servis_kapanis_onay_zinciri`).
+
+    Açıkken: teknisyen tamamlar → ekip lideri kalite onayı verir → teknik servis
+    müdürü (`servis.son_onay`) son onayla kapatır. Sıra atlanamaz (409/403).
+    Kapalıyken eski tek adımlı kapanış (`servis.kapat`) aynen sürer.
+    """
+    if not await ayar_svc.get(db, "servis_kapanis_onay_zinciri"):
+        return
+    if so.kalite_onay_at is None:
+        raise IsEmriHatasi("Kapatmadan önce ekip liderinin onayı (kalite onayı) gerekli")
+    if not user.has(SON_ONAY_IZNI):
+        raise IsEmriYetkiHatasi(f"Son onay ve kapatma teknik servis müdüründedir ({SON_ONAY_IZNI})")
 
 
 def sonraki_durumlar(so: ServiceOrder) -> list[str]:
@@ -1093,14 +1115,18 @@ KALITE_SUZGECLERI = ("BEKLEYEN", "ONAYLI")
 async def kalite_engeli(db: AsyncSession, so: ServiceOrder, user: User) -> str | None:
     """Görevler ayrılığı (G4.6): kullanıcı bu işte çalıştıysa engel metni.
 
-    Çalışmış sayılan: işe hiç tayin edilmiş olmak (kaldırılmış tayin dahil),
-    işte iptal edilmemiş süre kaydı olmak ya da sonucu girmiş olmak.
+    Çalışmış sayılan: işe teknisyen/stajyer olarak tayin edilmiş olmak
+    (kaldırılmış tayin dahil), işte iptal edilmemiş süre kaydı olmak ya da
+    sonucu girmiş olmak. Ekip liderinin ŞEF rolündeki tayini (müdür işi ekip
+    liderine verir, lider planlar; KARARLAR 2026-11-05 §9) tek başına engel
+    değildir: lider sahaya gittiyse süre kaydı onu zaten engeller.
     """
     tayinli = await db.scalar(
         select(
             exists().where(
                 ServiceOrderAssignment.service_order_id == so.id,
                 ServiceOrderAssignment.user_id == user.id,
+                ServiceOrderAssignment.rol != "SEF",
             )
         )
     )

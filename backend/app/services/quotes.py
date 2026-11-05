@@ -64,7 +64,7 @@ from app.models import (
     ServiceOrder,
     User,
 )
-from app.models.quote import BIRIMLI_KALEM_ACIKLAMA_UZUNLUGU, KALEM_TIPLERI
+from app.models.quote import BIRIMLI_KALEM_ACIKLAMA_UZUNLUGU, KALEM_TIPLERI, TEKLIF_IS_TURLERI
 from app.models.rbac import BIRIM_KODLARI
 from app.permissions import (
     SCOPE_ALL,
@@ -942,10 +942,55 @@ async def kabul_sonrasi(
 
     if not birimli_mi(t):
         return []
-    uyarilar = await maliyet.duzeltici_isleri_ac(db, t, user=user, clock=clock)
+    uyarilar = await kabulde_is_ac(db, t, user=user, clock=clock)
+    uyarilar += await maliyet.duzeltici_isleri_ac(db, t, user=user, clock=clock)
     uyarilar += await maliyet.gelir_aktar(db, t, user=user, clock=clock)
     uyarilar += await bekleme_kapat(db, t, user=user, clock=clock, sonuc="KABUL")
     return uyarilar
+
+
+async def kabulde_is_ac(
+    db: AsyncSession, t: Quote, *, user: User | None, clock: Clock
+) -> list[str]:
+    """Kabul edilen servis teklifi teknik servise düşer (KARARLAR 2026-11-05 §9.4).
+
+    Yalnız işe bağlı olmayan ve `servis_turu` seçilmiş birimli teklifte:
+    PLANLAMADA durumunda tek servis işi açılır ve teklife bağlanır (gelir
+    aktarımı bu bağdan sonra çalışır). Sonrası diğer işlerle aynı: müdür
+    ekip liderine verir, lider planlar, teknisyen yapar, lider ve müdür onaylar.
+    Müşteri linkinden kabulde `user` None'dır (sistem açılışı).
+    """
+    from app.services.teknik_servis import is_emirleri
+
+    if t.service_order_id is not None or not t.servis_turu or not t.birim:
+        return []
+    so = await is_emirleri.olustur(
+        db,
+        is_emirleri.ServisIsiGirdisi(
+            birim=t.birim,
+            tur=t.servis_turu,
+            konu=(t.title or f"Teklif {t.quote_no}")[:200],
+            customer_id=t.customer_id,
+            address_id=t.address_id,
+            contact_id=t.contact_id,
+            talep_kanali="DIGER",
+            aciklama=f"Kabul edilen teklif: {t.quote_no}",
+        ),
+        user=user,
+        clock=clock,
+        baslangic_durumu="PLANLAMADA",
+    )
+    t.service_order_id = so.id
+    await db.flush()
+    await audit.log(
+        db,
+        "quotes",
+        "kabulde_is_acildi",
+        entity_id=t.id,
+        new_value={"so_id": so.id, "so_no": so.so_no, "tur": so.tur},
+        user_id=user.id if user is not None else None,
+    )
+    return [f"Teklif kabul edildi; servis işi açıldı: {so.so_no}"]
 
 
 async def ret_sonrasi(db: AsyncSession, t: Quote, *, user: User | None, clock: Clock) -> list[str]:
@@ -997,6 +1042,7 @@ class BaslikGirdisi:
     currency: str = "TRY"
     fx_rate: Decimal | None = None
     valid_until: date | None = None
+    servis_turu: str | None = None
 
 
 async def baslik_dogrula(
@@ -1048,6 +1094,15 @@ async def baslik_dogrula(
             "Birimsiz (satış) teklifi yalnız DENGE MOBİLİTE seçiliyken açılır; "
             "servis teklifi için birim seçin."
         )
+    if g.servis_turu is not None:
+        if g.birim is None:
+            raise TeklifGirdiHatasi("Açılacak iş türü yalnız servis teklifinde seçilir")
+        if g.service_order_id is not None:
+            raise TeklifGirdiHatasi(
+                "Servis işine bağlı teklifte ayrıca iş açılmaz; iş türü seçilemez"
+            )
+        if g.servis_turu not in TEKLIF_IS_TURLERI:
+            raise TeklifGirdiHatasi(f"Bilinmeyen iş türü: {g.servis_turu}")
     await _irtibat_adres_dogrula(db, g.customer_id, g.contact_id, g.address_id)
     return so
 
@@ -1138,6 +1193,7 @@ async def taslak_guncelle(
     t.customer_id = baslik.customer_id
     t.birim = baslik.birim
     t.service_order_id = so.id if so is not None else None
+    t.servis_turu = baslik.servis_turu if so is None else None
     t.contact_id = baslik.contact_id
     t.address_id = baslik.address_id
     t.title = title

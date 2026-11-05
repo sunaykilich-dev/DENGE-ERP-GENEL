@@ -58,6 +58,10 @@ TEKLIF_DURUMLARI = (
     "IPTAL",  # yalnız birimli teklif; gerekçe zorunlu (Dalga 2)
 )
 
+# Kabul edilen servis teklifinin açacağı servis işi türü (KARARLAR 2026-11-05
+# §9.4). PB/ATOLYE yalnız sistem açar; TOPLAMA kiralamanındır — burada yok.
+TEKLIF_IS_TURLERI = ("PLANSIZ_BAKIM", "ARIZA", "DESTEK", "KURULUM", "KESIF", "DEMONTAJ", "TASIMA")
+
 # ISCILIK: birimli servis teklifinde işçilik kalemi (DB CHECK'i yok).
 KALEM_TIPLERI = ("URUN", "PAKET", "HIZMET", "ABONELIK", "SIM_PAKETI", "SERBEST", "ISCILIK")
 # Gönderim kanalı (elle gönderimde not zorunlu; E07-05).
@@ -94,6 +98,12 @@ class Quote(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, Versione
         ),
         Index("ix_quote_servis_isi", "service_order_id"),
         Index("ix_quote_birim_durum_tarih", "birim", "status", "created_at"),
+        CheckConstraint(
+            "servis_turu IS NULL OR servis_turu IN ("
+            + ", ".join(f"'{t}'" for t in TEKLIF_IS_TURLERI)
+            + ")",
+            name="ck_quote_servis_turu",
+        ),
     )
 
     quote_no: Mapped[str] = mapped_column(String(24))
@@ -136,6 +146,9 @@ class Quote(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, Versione
     )
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_reason: Mapped[str | None] = mapped_column(String(300))
+    # Kabulde açılacak servis işi türü (yalnız işe bağlı OLMAYAN birimli
+    # teklif). NULL = kabulde iş açılmaz (eski davranış).
+    servis_turu: Mapped[str | None] = mapped_column(String(20))
 
     versions: Mapped[list["QuoteVersion"]] = relationship(
         back_populates="quote", cascade="all, delete-orphan", lazy="selectin"

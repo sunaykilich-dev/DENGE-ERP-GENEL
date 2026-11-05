@@ -126,6 +126,18 @@ const bosKalem = (kdv: number): Kalem => ({
   vat_rate: kdv,
 });
 
+
+/** Kabulde açılacak servis işi türleri (sunucu `TEKLIF_IS_TURLERI`). */
+const TEKLIF_IS_TURLERI = [
+  { value: "PLANSIZ_BAKIM", label: "Bakım" },
+  { value: "ARIZA", label: "Arıza / servis" },
+  { value: "KURULUM", label: "Kurulum" },
+  { value: "DESTEK", label: "Destek" },
+  { value: "KESIF", label: "Keşif" },
+  { value: "DEMONTAJ", label: "Demontaj" },
+  { value: "TASIMA", label: "Taşıma" },
+];
+
 export default function TeklifFormu({
   onKaydedildi,
   servisIsiId,
@@ -149,6 +161,8 @@ export default function TeklifFormu({
   const [gecerlilik, setGecerlilik] = useState<Dayjs | null>(dayjs().add(15, "day"));
   const [kalemler, setKalemler] = useState<Kalem[]>([]);
   const [not, setNot] = useState("");
+  // Kabul edilince teknik servise düşecek iş türü (KARARLAR 2026-11-05 §9.4).
+  const [isTuru, setIsTuru] = useState<string | undefined>("PLANSIZ_BAKIM");
 
   const baslik = useQuery({
     queryKey: ["teklif-baslik"],
@@ -254,6 +268,7 @@ export default function TeklifFormu({
       customer_id: musteriId,
       ...(birim ? { birim } : {}),
       ...(servisIsiId ? { service_order_id: servisIsiId } : {}),
+      ...(birim && !servisIsiId && isTuru ? { servis_turu: isTuru } : {}),
       title: baslikMetni || null,
       currency: paraBirimi,
       valid_until: gecerlilik ? gecerlilik.format("YYYY-MM-DD") : null,
@@ -322,6 +337,18 @@ export default function TeklifFormu({
                   placeholder="Boş = satış teklifi"
                   style={{ width: "100%" }}
                   options={birimlerim.map((b) => ({ value: b, label: b }))}
+                />
+              </Alan>
+            )}
+            {birim && servisIsiId == null && (
+              <Alan etiket="Kabul edilince açılacak iş">
+                <Select
+                  allowClear
+                  value={isTuru}
+                  onChange={setIsTuru}
+                  placeholder="Boş = iş açılmaz"
+                  style={{ width: "100%" }}
+                  options={TEKLIF_IS_TURLERI}
                 />
               </Alan>
             )}

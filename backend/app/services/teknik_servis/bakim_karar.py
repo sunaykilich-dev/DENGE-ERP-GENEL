@@ -171,13 +171,113 @@ async def karar_uygula(
     if girdi.aktiflestir and sozlesme.status in ("TASLAK", "TEYIT_BEKLIYOR"):
         await bakim.durum_degistir(db, sozlesme, "AKTIF", user=user, clock=clock, ip=ip)
 
-    kapanan = 0
+    kapanan = tasinan = 0
     if sozlesme.status == "AKTIF":
+        # Koruma kapalı: yetim PB'lerin taşınacağı aynı aydaki yeni dönem oluşsun.
+        await bakim.donemleri_hesapla(db, sozlesme, clock, yetim_ay_korumasi=False)
+        tasinan = await _yetimleri_uzlastir(db, sozlesme, user=user, clock=clock)
         donemler = await bakim.donemleri_hesapla(db, sozlesme, clock)
         kapanan = await _gecmisi_kapat(db, sozlesme, donemler, girdi.yapilan_adet, clock, user, ip)
     ozet = await takvim_ozeti(db, sozlesme, clock)
     ozet["sistem_oncesi_kapanan"] = kapanan
+    ozet["tasinan_pb"] = tasinan
     return ozet
+
+
+# Henüz sahaya çıkılmamış PB: yeni takvime taşınabilir.
+_TASINABILIR = frozenset({"PLANLAMADA", "PLANLANDI"})
+
+
+async def _yetimleri_uzlastir(
+    db: AsyncSession, sozlesme: MaintenanceContract, *, user: User, clock: Clock
+) -> int:
+    """Tarih değişince plandan düşen PB'li açık dönemleri yeni takvime bağlar
+    (KARARLAR 2026-11-05 §9.6). Dönüş: taşınan PB sayısı.
+
+    - Dönemin bütün PB'leri henüz sahaya çıkılmamışsa (PLANLAMADA/PLANLANDI)
+      PB'ler hedefi en yakın, PB'siz açık yeni döneme taşınır; boşalan eski
+      dönem silinir. Plan tarihi (varsa ziyaret) değişmez.
+    - Sahada başlamış iş varsa dönem yerinde kalır ve aynı aydaki PB'siz yeni
+      dönem silinir (çift PB önlenir; `donemleri_hesapla` onu yeniden eklemez).
+    """
+    from app.services.teknik_servis import gecmis
+
+    if sozlesme.valid_from is None or sozlesme.valid_to is None:
+        return 0
+    plan = bakim.donem_plani(
+        yerel_gun(sozlesme.valid_from),
+        yerel_gun(sozlesme.valid_to),
+        sozlesme.annual_frequency or 0,
+        sozlesme.fixed_months,
+    )
+    plan_anahtari = {(bakim.yerel_gece(dongu), sira) for dongu, sira, _ in plan}
+    donemler = list(
+        (
+            await db.scalars(
+                select(MaintenancePeriod).where(
+                    MaintenancePeriod.contract_id == sozlesme.id,
+                    MaintenancePeriod.is_deleted.is_(False),
+                )
+            )
+        ).all()
+    )
+    pbler: dict[int, list[ServiceOrder]] = {}
+    for so in (
+        await db.scalars(
+            select(ServiceOrder).where(
+                ServiceOrder.maintenance_period_id.in_([d.id for d in donemler] or [0]),
+                ServiceOrder.tur == "PB",
+                ServiceOrder.is_deleted.is_(False),
+            )
+        )
+    ).all():
+        pbler.setdefault(so.maintenance_period_id, []).append(so)
+
+    def planda(d: MaintenancePeriod) -> bool:
+        return (d.cycle_start, d.sequence_no) in plan_anahtari
+
+    yetimler = sorted(
+        (d for d in donemler if not planda(d) and d.closed_at is None and pbler.get(d.id)),
+        key=lambda d: d.target_date,
+    )
+    bos = [d for d in donemler if planda(d) and d.closed_at is None and not pbler.get(d.id)]
+    tasinan = 0
+    for y in yetimler:
+        isler = pbler[y.id]
+        if bos and all(so.status in _TASINABILIR for so in isler):
+            hedef = min(bos, key=lambda d: abs((d.target_date - y.target_date).days))
+            bos.remove(hedef)
+            for so in isler:
+                so.maintenance_period_id = hedef.id
+                if so.coverage_snapshot:
+                    so.coverage_snapshot = {
+                        **so.coverage_snapshot,
+                        "donem_id": hedef.id,
+                        "hedef": hedef.target_date.isoformat(),
+                    }
+                so.updated_by = user.id
+                await gecmis.olay_yaz(
+                    db,
+                    so,
+                    "NOT",
+                    f"Bakım dönemi karar tarihiyle taşındı: {y.target_date:%d.%m.%Y} → "
+                    f"{hedef.target_date:%d.%m.%Y}",
+                    user=user,
+                    clock=clock,
+                    veri={"eski_donem_id": y.id, "yeni_donem_id": hedef.id},
+                )
+                tasinan += 1
+            if hedef.generation_run_id is None:
+                hedef.generation_run_id = y.generation_run_id
+            await db.flush()
+            await db.delete(y)
+        else:
+            ay = (y.target_date.year, y.target_date.month)
+            for d in [d for d in bos if (d.target_date.year, d.target_date.month) == ay]:
+                bos.remove(d)
+                await db.delete(d)
+    await db.flush()
+    return tasinan
 
 
 async def _pbli_donemler(db: AsyncSession, donem_idleri: list[int]) -> dict[int, tuple[int, int]]:
