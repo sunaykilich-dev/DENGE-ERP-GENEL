@@ -80,6 +80,7 @@ import { KpiKutucugu } from "../fiori/ListeRaporu";
 import { useYeniParametresi } from "../fiori/useYeniParametresi";
 import BakimFormu from "./BakimFormu";
 import BakimRaporlari from "./BakimRaporlari";
+import { BakimTakvimiSekmesi, KararTarihleriPenceresi } from "./BakimTakvimi";
 import { ServisIsListesi, type ServisKategorisi } from "./ServisIsleriPage";
 
 /** Fotoğraf 9: PLANSIZ (kırmızı) / PLANLI (yeşil) kategori şeridi. */
@@ -200,6 +201,7 @@ export default function BakimPage() {
               ),
             },
             { key: "sozlesmeler", label: "Sözleşmeler", children: <SozlesmelerSekmesi /> },
+            { key: "takvim", label: "Bakım Takvimi", children: <BakimTakvimiSekmesi /> },
             {
               key: "donemler",
               label: "Bakım Dönemleri",
@@ -244,6 +246,7 @@ function SozlesmelerSekmesi() {
   const suresiDoluyor = params.get("suresi_doluyor") === "1";
   const secili = params.get("sozlesme") ? Number(params.get("sozlesme")) : null;
   const [pencere, setPencere] = useState<Sozlesme | "yeni" | null>(null);
+  const [kararPenceresi, setKararPenceresi] = useState(false);
   // "+ Hızlı oluştur › Yeni bakım sözleşmesi" (`?sekme=sozlesmeler&yeni=1`).
   useYeniParametresi(() => setPencere("yeni"), yetkili("bakim.yaz"));
 
@@ -298,6 +301,9 @@ function SozlesmelerSekmesi() {
             Yeni sözleşme
           </Button>
         )}
+        {yetkili("bakim.yaz") && (
+          <Button onClick={() => setKararPenceresi(true)}>Karar tarihleri</Button>
+        )}
       </Space>
       <Table<Sozlesme>
         rowKey="id"
@@ -332,7 +338,20 @@ function SozlesmelerSekmesi() {
                 .map(([t, n]) => `${n} ${CIHAZ_TURLERI[t] ?? t}`)
                 .join(" + ") || "—",
           },
-          { title: "Dönem", render: (_, r) => `${tarih(r.baslangic)} – ${tarih(r.bitis)}` },
+          {
+            title: "Dönem",
+            render: (_, r) => (
+              <>
+                {tarih(r.baslangic)} – {tarih(r.bitis)}
+                {r.karar_tarihi && (
+                  <>
+                    <br />
+                    <Typography.Text type="secondary">Karar {tarih(r.karar_tarihi)}</Typography.Text>
+                  </>
+                )}
+              </>
+            ),
+          },
           {
             title: "Yapılan",
             render: (_, r) => (r.sayac.frekans ? `${r.sayac.yapilan}/${r.sayac.frekans}` : "—"),
@@ -366,6 +385,7 @@ function SozlesmelerSekmesi() {
         onDuzenle={(s) => setPencere(s)}
       />
       <SozlesmePenceresi kayit={pencere} onKapat={() => setPencere(null)} />
+      <KararTarihleriPenceresi acik={kararPenceresi} onKapat={() => setKararPenceresi(false)} />
     </>
   );
 }

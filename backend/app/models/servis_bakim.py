@@ -157,6 +157,9 @@ class MaintenanceContract(
     )
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Sözleşme karar tarihi (yerel gün). Verildiğinde başlangıç bu gün olur;
+    # bakım ayları buradan yıllık adede göre hesaplanır (`bakim_karar`).
+    decision_date: Mapped[date | None] = mapped_column(Date)
     annual_frequency: Mapped[int | None] = mapped_column(SmallInteger)
     fixed_months: Mapped[list[int] | None] = mapped_column(ARRAY(SmallInteger))
     status: Mapped[str] = mapped_column(

@@ -1405,6 +1405,7 @@ def sozlesme_satiri(
         "bitis": yerel_gun(sozlesme.valid_to).isoformat() if sozlesme.valid_to else None,
         "annual_frequency": sozlesme.annual_frequency,
         "fixed_months": sozlesme.fixed_months,
+        "karar_tarihi": sozlesme.decision_date.isoformat() if sozlesme.decision_date else None,
         "suresi_doldu": bool(sozlesme.valid_to and sozlesme.valid_to <= clock.now()),
         "teyit_gerekcesi": sozlesme.teyit_gerekcesi,
         "notes": sozlesme.notes,

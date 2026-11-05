@@ -61,6 +61,7 @@ from app.services.statemachine import IzinsizGecis
 from app.services.teknik_servis import (
     bakim,
     bakim_formu,
+    bakim_karar,
     bakim_raporlari,
     bakim_sablonlari,
     bakim_uretim,
@@ -284,6 +285,61 @@ class HedefTarihIn(BaseModel):
 
     hedef_tarih: date
     gerekce: str = Field(min_length=1, max_length=500)
+
+
+class KararAlanlari(BaseModel):
+    karar_tarihi: date
+    sure_ay: int | None = Field(default=None, ge=1, le=bakim_karar.AZAMI_SURE_AY)
+    bitis: date | None = None
+    yillik_adet: int | None = Field(default=None, ge=1, le=12)
+    sabit_aylar: list[int] | None = Field(default=None, max_length=12)
+    # Güncel döngüde sistem öncesi yapılmış bakım adedi (Excel "YAPILAN BAKIM ADEDİ").
+    yapilan_adet: int | None = Field(default=None, ge=0, le=12)
+
+    def girdi(self, aktiflestir: bool) -> bakim_karar.KararGirdisi:
+        return bakim_karar.KararGirdisi(
+            karar_tarihi=self.karar_tarihi,
+            sure_ay=self.sure_ay,
+            bitis=self.bitis,
+            yillik_adet=self.yillik_adet,
+            sabit_aylar=self.sabit_aylar,
+            yapilan_adet=self.yapilan_adet,
+            aktiflestir=aktiflestir,
+        )
+
+
+class KararTarihiIn(KararAlanlari):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [{"karar_tarihi": "2026-12-15", "sure_ay": 12, "onizleme": True}]
+        }
+    )
+
+    version: int | None = None
+    aktiflestir: bool = True
+    onizleme: bool = False
+
+
+class TopluKararSatiri(KararAlanlari):
+    sozlesme_id: int | None = None
+    contract_no: str | None = Field(default=None, max_length=30)
+
+
+class TopluKararIn(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "satirlar": [{"contract_no": "BS-2026-0001", "karar_tarihi": "2026-12-15"}],
+                    "onizleme": True,
+                }
+            ]
+        }
+    )
+
+    satirlar: list[TopluKararSatiri] = Field(min_length=1, max_length=bakim_karar.AZAMI_TOPLU_SATIR)
+    aktiflestir: bool = True
+    onizleme: bool = True
 
 
 class OtomatikUretimIn(BaseModel):
@@ -895,6 +951,79 @@ async def donem_eksik_pb(
     )
     await db.commit()
     return _uretim_ciktisi(sonuc)
+
+
+# =============================================================================
+# Karar tarihi ve yıllık takvim (2026-11-05, `bakim_karar`)
+# =============================================================================
+
+
+@router.put("/sozlesmeler/{id}/karar-tarihi")
+async def sozlesme_karar_tarihi(
+    id: int, payload: KararTarihiIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
+) -> dict[str, Any]:
+    """Karar tarihi → başlangıç/bitiş, dönemler, geçmiş dönem kapanışı.
+    `onizleme` iken aynı kod SAVEPOINT'te koşar ve geri alınır."""
+    sozlesme = await _sozlesme(db, user, id, kilitle=True)
+    _surum(sozlesme, payload.version)
+    girdi = payload.girdi(payload.aktiflestir)
+    if payload.onizleme:
+        nokta = await db.begin_nested()
+        try:
+            ozet = await _cagir(
+                bakim_karar.karar_uygula(
+                    db, sozlesme, girdi, user=user, clock=clock, ip=client_ip(request)
+                )
+            )
+        finally:
+            await nokta.rollback()
+        await db.rollback()
+        return {"onizleme": True, **ozet}
+    ozet = await _cagir(
+        bakim_karar.karar_uygula(db, sozlesme, girdi, user=user, clock=clock, ip=client_ip(request))
+    )
+    await db.commit()
+    return {"onizleme": False, **ozet}
+
+
+@router.post("/karar-tarihleri")
+async def toplu_karar_tarihi(
+    payload: TopluKararIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
+) -> dict[str, Any]:
+    """Toplu karar tarihi girişi (sözleşme kimliği ya da numarasıyla). Satır
+    hatası diğerlerini durdurmaz; `onizleme` (varsayılan) hiçbir şey yazmaz."""
+    satirlar = [
+        (s.sozlesme_id, s.contract_no, s.girdi(payload.aktiflestir)) for s in payload.satirlar
+    ]
+    sonuc = await _cagir(
+        bakim_karar.toplu_uygula(
+            db,
+            satirlar,
+            user=user,
+            clock=clock,
+            onizleme=payload.onizleme,
+            ip=client_ip(request),
+        )
+    )
+    if payload.onizleme:
+        await db.rollback()
+    else:
+        await db.commit()
+    return sonuc
+
+
+@router.get("/takvim")
+async def yillik_takvim(
+    db: DbDep,
+    clock: ClockDep,
+    user: Okuyucu,
+    yil: int | None = Query(default=None, ge=2000, le=2100),
+    birim: str | None = Query(default=None, max_length=20),
+) -> dict[str, Any]:
+    """Aktif sözleşmelerin yıllık bakım takvimi (sözleşme × ay)."""
+    return await bakim_karar.yillik_takvim(
+        db, user, clock, yil=yil or yerel_bugun(clock).year, birim=birim
+    )
 
 
 # =============================================================================

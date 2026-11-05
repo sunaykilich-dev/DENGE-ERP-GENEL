@@ -101,6 +101,8 @@ export interface Sozlesme {
   bitis: string | null;
   annual_frequency: number | null;
   fixed_months: number[] | null;
+  /** Sözleşme karar tarihi (yerel gün); verildiğinde başlangıç bu gündür. */
+  karar_tarihi: string | null;
   suresi_doldu: boolean;
   teyit_gerekcesi: string | null;
   notes: string | null;
@@ -453,6 +455,92 @@ function sorgu(p: Record<string, string | number | boolean | null | undefined>):
   return s.toString();
 }
 
+// --- Karar tarihi ve yıllık takvim (`bakim_karar`) ----------------------------
+
+/** Dönemin takvim durumu (sunucu `bakim_karar` sabitleri). */
+export const TAKVIM_DURUMLARI: Record<string, { ad: string; renk: string }> = {
+  SISTEM_ONCESI: { ad: "Sistem öncesi", renk: "default" },
+  KAPANDI: { ad: "Kapandı", renk: "green" },
+  PB_ACIK: { ad: "PB açıldı", renk: "blue" },
+  GECIKMIS: { ad: "Gecikmiş", renk: "red" },
+  ILK_TURDA: { ad: "İlk turda açılacak", renk: "orange" },
+  ILERIDE: { ad: "İleride", renk: "cyan" },
+  TASLAK_PLAN: { ad: "Taslak plan", renk: "default" },
+};
+
+export interface TakvimDonemi {
+  donem_id: number | null;
+  hedef: string;
+  ay?: string;
+  durum: string;
+  pb_sayisi: number;
+  pb_acilis?: string | null;
+  acik_pb?: number;
+}
+
+export interface KararGirdisi {
+  karar_tarihi: string;
+  sure_ay?: number | null;
+  bitis?: string | null;
+  yillik_adet?: number | null;
+  sabit_aylar?: number[] | null;
+  yapilan_adet?: number | null;
+}
+
+export interface KararSonucu {
+  sira: number;
+  sonuc: "TAMAM" | "HATA";
+  hata: string | null;
+  sozlesme_id: number | null;
+  contract_no: string | null;
+  musteri?: string | null;
+  tesis?: string | null;
+  status?: string;
+  karar_tarihi?: string | null;
+  baslangic?: string | null;
+  bitis?: string | null;
+  annual_frequency?: number | null;
+  cihaz_sayisi?: number;
+  eslesen_cihaz?: number;
+  on_acilis_gun?: number;
+  donemler?: TakvimDonemi[];
+  gecikmis_donem?: number;
+  ilk_turda_pb?: number;
+  sistem_oncesi_kapanan?: number;
+}
+
+export interface TopluKararYaniti {
+  onizleme: boolean;
+  satirlar: KararSonucu[];
+  ozet: {
+    tamam: number;
+    hata: number;
+    donem: number;
+    ilk_turda_pb: number;
+    gecikmis_donem: number;
+    sistem_oncesi_kapanan: number;
+  };
+}
+
+export interface YillikTakvim {
+  yil: number;
+  on_acilis_gun: number;
+  aylar: { ay: number; donem: number; cihaz: number }[];
+  satirlar: {
+    sozlesme_id: number;
+    contract_no: string;
+    birim: string;
+    musteri: string | null;
+    tesis: string | null;
+    il: string | null;
+    karar_tarihi: string | null;
+    annual_frequency: number | null;
+    cihaz_sayisi: number;
+    eslesen_cihaz: number;
+    aylar: Record<string, TakvimDonemi[]>;
+  }[];
+}
+
 // --- Çağrılar -----------------------------------------------------------------
 
 export const bakimApi = {
@@ -497,6 +585,18 @@ export const bakimApi = {
     ),
   eksikPb: (sozlesmeId: number, donemId: number) =>
     istek<UretimSonucu>(`${ONEK}/sozlesmeler/${sozlesmeId}/donemler/${donemId}/eksik-pb`, "POST"),
+
+  topluKarar: (
+    satirlar: (KararGirdisi & { sozlesme_id?: number; contract_no?: string })[],
+    onizleme: boolean,
+  ) =>
+    istek<TopluKararYaniti>(`${ONEK}/karar-tarihleri`, "POST", {
+      satirlar,
+      onizleme,
+      aktiflestir: true,
+    }),
+  takvim: (yil: number, birim?: string | null) =>
+    api.get<YillikTakvim>(`${ONEK}/takvim?${sorgu({ yil, birim })}`),
 
   onizle: () => istek<Onizleme>(`${ONEK}/uretim/onizleme`, "POST"),
   uret: () => istek<UretimSonucu>(`${ONEK}/uretim`, "POST"),
