@@ -158,3 +158,36 @@ async def test_kabul_edilen_servis_teklifi_teknik_servise_duser(
         assert r.status_code == 200 and r.json()["service_order_id"] is None
     finally:
         await kapat(satis, mudur)
+
+
+async def test_gecis_kaydinda_talep_eden_yoksa_is_acilir(
+    client, db, birimli_kullanici_ac, lokasyon_ac, ekipman_ac
+) -> None:
+    """KARARLAR 2026-11-05 §9.8: kaynak listede talep eden kişi yoksa iş yalnız
+    geçiş kaydı (`servis.gecis_kaydi` + gerekçe) olarak açılır; lokasyon yine
+    zorunlu, sıradan açılış ve izinsiz geçiş eskisi gibi reddedilir."""
+    await birimli_kullanici_ac("mudur_g", "SERVIS_YONETICI", ["GUVENLIK"])
+    await birimli_kullanici_ac("sef_g", "SERVIS_SEF", ["GUVENLIK"])
+    h = await musteri(db, "Talep Listesi Müşterisi")
+    tesis = await lokasyon_ac(h, ad="Talep Listesi AVM")
+    e = await ekipman_ac(musteri=h, lokasyon=tesis, seri=None)
+    govde = {"ekipman_idler": [e.id], "tur": "KURULUM", "konu": "Kurulum", "talep_kanali": "DIGER"}
+    gerekce = "Güvenlik talep takip listesinden aktarım; yetkili listede yok"
+
+    await giris(client, "sef_g")
+    r = await client.post(f"{IS}/ekipmandan", json=govde)
+    assert r.status_code == 400 and "Talep eden" in r.json()["detail"]
+    r = await client.post(
+        f"{IS}/ekipmandan", json={**govde, "gecis_kaydi": True, "gecis_gerekcesi": gerekce}
+    )
+    assert r.status_code == 403  # şefte servis.gecis_kaydi yok
+
+    await giris(client, "mudur_g")
+    r = await client.post(f"{IS}/ekipmandan", json={**govde, "gecis_kaydi": True})
+    assert r.status_code == 400 and "gerekçe" in r.json()["detail"]
+    r = await client.post(
+        f"{IS}/ekipmandan", json={**govde, "gecis_kaydi": True, "gecis_gerekcesi": gerekce}
+    )
+    assert r.status_code == 201, r.text
+    so = await db.get(ServiceOrder, r.json()["isler"][0]["id"])
+    assert so.sla_kaynak == "GECIS" and so.equipment_id == e.id

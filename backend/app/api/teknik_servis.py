@@ -435,6 +435,10 @@ class EkipmandanIsIn(BaseModel):
     iletisim_ad: str | None = Field(default=None, max_length=120)
     iletisim_telefon: str | None = Field(default=None, max_length=20)
     mukerrer_gec: bool = False
+    # Geçiş/içe aktarma kaydı (KARARLAR 2026-11-05 §9.8): `servis.gecis_kaydi` +
+    # gerekçe; kaynakta talep eden yoksa ad/telefon aranmaz, SLA ölçülmez.
+    gecis_kaydi: bool = False
+    gecis_gerekcesi: str | None = Field(default=None, max_length=500)
 
     model_config = {
         "json_schema_extra": {
@@ -723,16 +727,21 @@ def _acilis_yetkisi(payload: IsAcIn, user: User) -> None:
             status.HTTP_403_FORBIDDEN,
             "Yalnız Kurulum işi açabilirsiniz (servis.kurulum_ac)",
         )
-    if payload.gecis_kaydi:
-        if not user.has("servis.gecis_kaydi"):
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Geçiş kaydı için yetkiniz yok (servis.gecis_kaydi)"
-            )
-        if len((payload.gecis_gerekcesi or "").strip()) < GECIS_GEREKCE_ALT:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"Geçiş kaydında gerekçe zorunlu (en az {GECIS_GEREKCE_ALT} karakter)",
-            )
+    _gecis_dogrula(payload.gecis_kaydi, payload.gecis_gerekcesi, user)
+
+
+def _gecis_dogrula(gecis: bool, gerekce: str | None, user: User) -> None:
+    if not gecis:
+        return
+    if not user.has("servis.gecis_kaydi"):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Geçiş kaydı için yetkiniz yok (servis.gecis_kaydi)"
+        )
+    if len((gerekce or "").strip()) < GECIS_GEREKCE_ALT:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Geçiş kaydında gerekçe zorunlu (en az {GECIS_GEREKCE_ALT} karakter)",
+        )
 
 
 async def _talep_bilgisi_dogrula(
@@ -741,11 +750,17 @@ async def _talep_bilgisi_dogrula(
     contact_id: int | None,
     iletisim_ad: str | None,
     iletisim_telefon: str | None,
+    *,
+    gecis: bool = False,
 ) -> None:
     """M1.2 (Faz A): ekrandan açılan işte lokasyon ve talep eden kişinin adı
     + telefonu zorunlu. Ad/telefon elle girilir ya da seçilen irtibat
     kişisinin kaydından gelir. PB ve sistem açılışları (bakım üretimi,
-    atölye kabulü, kiralama, bakım bulgusu) bu kapıdan geçmez."""
+    atölye kabulü, kiralama, bakım bulgusu) bu kapıdan geçmez.
+
+    Geçiş kaydında (`servis.gecis_kaydi` + gerekçe; KARARLAR 2026-11-05 §9.8)
+    kaynak listede talep eden kişi yoksa ad/telefon aranmaz; lokasyon yine
+    zorunludur. Kişi sahada/ilk aramada işin irtibatına girilir."""
     from app.models import Contact
 
     eksik = []
@@ -754,9 +769,9 @@ async def _talep_bilgisi_dogrula(
     kisi = await db.get(Contact, contact_id) if contact_id is not None else None
     ad = (iletisim_ad or "").strip() or (kisi.full_name if kisi is not None else "")
     telefon = (iletisim_telefon or "").strip() or ((kisi.phone or "") if kisi is not None else "")
-    if not (ad or "").strip():
+    if not gecis and not (ad or "").strip():
         eksik.append("talep eden kişinin adı")
-    if not telefon.strip():
+    if not gecis and not telefon.strip():
         eksik.append("talep eden kişinin telefonu")
     if eksik:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Zorunlu alan eksik: " + ", ".join(eksik))
@@ -799,7 +814,12 @@ async def _acilis_on_kontrol(db, payload: IsAcIn, user: User) -> list[dict[str, 
     if await hesap_kapsam_disinda_mi(db, user, payload.customer_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Müşteri bulunamadı")
     await _talep_bilgisi_dogrula(
-        db, payload.address_id, payload.contact_id, payload.iletisim_ad, payload.iletisim_telefon
+        db,
+        payload.address_id,
+        payload.contact_id,
+        payload.iletisim_ad,
+        payload.iletisim_telefon,
+        gecis=payload.gecis_kaydi,
     )
     if (
         payload.iliski_turu is not None
@@ -1316,6 +1336,7 @@ async def ekipmandan_ac(
             status.HTTP_403_FORBIDDEN,
             "Yalnız Kurulum işi açabilirsiniz (servis.kurulum_ac)",
         )
+    _gecis_dogrula(payload.gecis_kaydi, payload.gecis_gerekcesi, user)
     if payload.talep_kanali not in TALEP_KANALLARI or payload.talep_kanali == "BAKIM_OTOMATIK":
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, f"Geçersiz talep kanalı: {payload.talep_kanali}"
@@ -1358,6 +1379,7 @@ async def ekipmandan_ac(
                 e.contact_id,
                 payload.iletisim_ad if e.contact_id is None else None,
                 payload.iletisim_telefon if e.contact_id is None else None,
+                gecis=payload.gecis_kaydi,
             )
         except HTTPException:
             irtibatsiz.append(_etiket(e))
@@ -1411,10 +1433,22 @@ async def ekipmandan_ac(
                     aciklama=payload.aciklama,
                     seriler=[e.serial_no] if e.serial_no else [],
                     equipment_id=e.id,
+                    gecis_kaydi=payload.gecis_kaydi,
                 ),
                 user=user,
                 clock=clock,
             )
+            if payload.gecis_kaydi:
+                await gecmis.olay_yaz(
+                    db,
+                    so,
+                    "NOT",
+                    "Geçiş/içe aktarma kaydı: SLA ölçülmez; talep eden kaynakta yoksa "
+                    f"sonradan girilir. Gerekçe: {(payload.gecis_gerekcesi or '').strip()}",
+                    user=user,
+                    clock=clock,
+                    veri={"gecis_kaydi": True},
+                )
             acilan.append(so)
     except _HATALAR as exc:
         await db.rollback()
