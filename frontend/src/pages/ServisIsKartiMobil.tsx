@@ -29,6 +29,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import EkYukleyici from "../components/EkYukleyici";
+import RoleMontajFormu from "./RoleMontajFormu";
+import { teknikServisApi } from "../api/teknikServis";
 import MobilSonucCekmecesi from "../components/MobilSonucCekmecesi";
 import SayacDugmeleri, { ManuelKayitPenceresi } from "../components/SayacDugmeleri";
 import SlaEtiketi from "../components/SlaEtiketi";
@@ -43,6 +45,13 @@ export default function ServisIsKartiMobil() {
   const { yetkili } = useAuth();
   const [elle, setElle] = useState(false);
   const [sonucAcik, setSonucAcik] = useState(false);
+  const [roleAcik, setRoleAcik] = useState(false);
+  // Haberleşme kurulum/montaj işinde röle montaj bilgileri (KARARLAR §10).
+  const roleMontaj = useQuery({
+    queryKey: ["role-montaj", isId],
+    queryFn: () => teknikServisApi.roleMontaj(isId),
+    enabled: Number.isFinite(isId),
+  });
 
   const kart = useQuery({
     queryKey: ["mobil-kart", isId],
@@ -252,6 +261,18 @@ export default function ServisIsKartiMobil() {
               Sonuç Gir
             </Button>
           )}
+          {roleMontaj.data?.uygulanir && (
+            <Button
+              block
+              size="large"
+              style={{ minHeight: 44 }}
+              danger={roleMontaj.data.eksikler.length > 0}
+              onClick={() => setRoleAcik(true)}
+            >
+              Röle Montaj Bilgileri
+              {roleMontaj.data.eksikler.length > 0 && ` (${roleMontaj.data.eksikler.length} eksik)`}
+            </Button>
+          )}
           {k.bakim_formu && (
             <Link to={`/bakim?is=${k.id}`}>
               <Button block size="large" style={{ minHeight: 44 }}>
@@ -274,6 +295,11 @@ export default function ServisIsKartiMobil() {
           buyukDugme
         />
       </Space>
+      <RoleMontajFormu
+        soId={roleAcik ? k.id : null}
+        kapali={["KAPATILDI", "IPTAL"].includes(k.durum)}
+        onKapat={() => setRoleAcik(false)}
+      />
       {yetkili("servis.tamamla") && (
         <MobilSonucCekmecesi
           isId={k.id}

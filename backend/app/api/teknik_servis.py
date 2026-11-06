@@ -72,6 +72,7 @@ from app.services.teknik_servis import (
     gecmis,
     is_emirleri,
     kapsam,
+    role_montaj,
     sonuc,
 )
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
@@ -126,6 +127,8 @@ class IsAcIn(BaseModel):
     mukerrer_gec: bool = False
     # Geçiş/içe aktarma kaydı (rol testi B5; `servis.gecis_kaydi`): asıl
     # bildirim tarihi 7 günden eski olabilir, SLA ölçülmez (`sla_kaynak=GECIS`).
+    # Haberleşme saha işinde zorunlu, çoktan seçmeli (KARARLAR §10).
+    nitelikler: list[str] | None = Field(default=None, max_length=8)
     gecis_kaydi: bool = False
     gecis_gerekcesi: str | None = Field(default=None, max_length=500)
 
@@ -183,6 +186,7 @@ class IsPatch(BaseModel):
     kategori: str | None = Field(default=None, max_length=20)
     proje: str | None = Field(default=None, max_length=120)
     sistem: str | None = Field(default=None, max_length=120)
+    nitelikler: list[str] | None = Field(default=None, max_length=8)
     talep_kanali: str | None = Field(default=None, max_length=20)
     reported_at: datetime | None = None
     iletisim_ad: str | None = Field(default=None, max_length=120)
@@ -647,6 +651,9 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "irtibat": irtibat,
             "proje": so.proje,
             "sistem": so.sistem,
+            "nitelikler": so.nitelikler,
+            "nitelik_sorulur": role_montaj.nitelik_sorulur_mu(so.birim, so.tur),
+            "role_montaj_eksik": await role_montaj.eksikler(db, so),
             "aciklama": so.aciklama,
             "seriler": [
                 {"id": x.id, "seri_no": x.seri_no, "seri_norm": x.seri_norm}
@@ -709,6 +716,8 @@ def _girdi(payload: IsAcIn) -> is_emirleri.ServisIsiGirdisi:
         iliskili_is_id=payload.iliskili_is_id,
         iliski_turu=payload.iliski_turu,
         gecis_kaydi=payload.gecis_kaydi,
+        nitelikler=payload.nitelikler,
+        nitelik_zorunlu=True,
     )
 
 
@@ -1820,6 +1829,57 @@ async def kalite_onayi(
     )
     await db.commit()
     return await _detay(db, so, user, clock)
+
+
+class RoleMontajIn(BaseModel):
+    """Röle montaj bilgileri (tümü; gönderilmeyen alan silinir). İlk kayıtta
+    `version` boş, sonrakilerde son okunan `version` (iyimser kilit)."""
+
+    degerler: dict[str, Any]
+    version: int | None = None
+
+
+@router.get("/isler/{so_id}/role-montaj", response_model=None)
+async def role_montaj_getir(so_id: int, db: DbDep, user: Okuyucu) -> dict[str, Any]:
+    """Haberleşme kurulum/montaj işinin röle montaj bilgileri: alan tanımları,
+    değerler (kayıt yoksa işten öneriler), kapanışı engelleyen eksikler."""
+    so = await _kapsamli_is(db, so_id, user)
+    cikti = await role_montaj.durum(db, so)
+    if not _irtibat_tam(user):
+        tel = cikti["degerler"].get("sorumlu_telefon")
+        if tel:
+            cikti["degerler"]["sorumlu_telefon"] = kvkk.maskele(tel)
+    return cikti
+
+
+@router.put("/isler/{so_id}/role-montaj", response_model=None)
+async def role_montaj_kaydet(
+    so_id: int,
+    payload: RoleMontajIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yazici,
+) -> dict[str, Any]:
+    """Kısmi kayıt serbest; eksik zorunlu alan yalnız kapanışı engeller (409)."""
+    so = await _kapsamli_is(db, so_id, user)
+    try:
+        kayit = await role_montaj.kaydet(
+            db, so, payload.degerler, version=payload.version, user=user, clock=clock
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await audit.log(
+        db,
+        "service_role_montaj",
+        "kaydet",
+        entity_id=kayit.id,
+        new_value=role_montaj.denetim_degeri(kayit.alanlar),
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return await role_montaj.durum(db, so)
 
 
 @router.post("/isler/{so_id}/kalite-reddi", response_model=None)

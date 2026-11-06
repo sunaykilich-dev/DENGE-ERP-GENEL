@@ -129,6 +129,7 @@ from app.models.teknik_servis import (
     ServiceOrderEvent,
     ServiceOrderSerial,
     ServiceResult,
+    ServiceRoleMontaj,
     ServiceSlaPolicy,
     ServiceTimeEntry,
 )
@@ -224,6 +225,7 @@ __all__ = [
     "ServicePlan",
     "ServicePlanMember",
     "ServiceResult",
+    "ServiceRoleMontaj",
     "ServiceTimeEntry",
     "ServiceUnavailability",
     "ServiceVehicle",
