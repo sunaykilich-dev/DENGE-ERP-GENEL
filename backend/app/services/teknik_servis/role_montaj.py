@@ -127,7 +127,8 @@ ALANLAR: list[dict[str, Any]] = [
     _a("role_marka_model", "Röle marka model", "Montaj"),
     _a("role_seri_no", "Röle seri no", "Montaj"),
     _a("yazilim_versiyon", "Yazılım versiyon", "Montaj"),
-    _a("montaj_yapan", "Montajı yapan teknik personel", "Montaj"),
+    # Teknisyen listesinden çoklu seçim (2026-11-06): ad listesi saklanır.
+    _a("montaj_yapan", "Montajı yapan teknik personel", "Montaj", "personel"),
     # Frekans ve mod
     _a("role_tx", "Röle TX frekansı (MHz)", "Frekans ve mod", "frekans"),
     _a("role_rx", "Röle RX frekansı (MHz)", "Frekans ve mod", "frekans"),
@@ -222,7 +223,29 @@ def uygulanir_mi(so: ServiceOrder) -> bool:
 
 
 def _dolu(v: Any) -> bool:
+    if isinstance(v, list):
+        return any(_dolu(x) for x in v)
     return v is not None and str(v).strip() != ""
+
+
+_AZAMI_PERSONEL = 20
+
+
+def _personel_listesi(ad: str, deger: Any) -> list[str]:
+    """Ad listesi; eski kayıttaki virgüllü metin de listeye çevrilir."""
+    ham = deger if isinstance(deger, list) else str(deger).split(",")
+    liste: list[str] = []
+    for x in ham:
+        metin = str(x).strip()
+        if not metin:
+            continue
+        if len(metin) > 120:
+            raise ServisGirdiHatasi(f"{ad}: kişi adı en çok 120 karakter")
+        if metin not in liste:
+            liste.append(metin)
+    if len(liste) > _AZAMI_PERSONEL:
+        raise ServisGirdiHatasi(f"{ad}: en çok {_AZAMI_PERSONEL} kişi seçilebilir")
+    return liste
 
 
 def gorunur_mu(tanim: dict[str, Any], degerler: dict[str, Any]) -> bool:
@@ -264,6 +287,9 @@ def temizle(girdi: dict[str, Any]) -> dict[str, Any]:
         if not _dolu(deger):
             continue
         ad, tip = tanim["ad"], tanim["tip"]
+        if tip == "personel":
+            temiz[kod] = _personel_listesi(ad, deger)
+            continue
         if tip == "sayi":
             try:
                 sayi = int(str(deger).strip())
@@ -319,7 +345,7 @@ async def oneriler(db: AsyncSession, so: ServiceOrder) -> dict[str, Any]:
             await db.scalars(select(User.full_name).where(User.id.in_({a.user_id for a in ekip})))
         ).all()
         if adlar:
-            oneri["montaj_yapan"] = ", ".join(sorted(adlar))
+            oneri["montaj_yapan"] = sorted(adlar)
     from app.services.teknik_servis import is_emirleri
 
     seriler = await is_emirleri.aktif_seriler(db, so)
@@ -328,7 +354,38 @@ async def oneriler(db: AsyncSession, so: ServiceOrder) -> dict[str, Any]:
     return oneri
 
 
-async def durum(db: AsyncSession, so: ServiceOrder) -> dict[str, Any]:
+async def personel_secenekleri(
+    db: AsyncSession, so: ServiceOrder, user: User | None, degerler: dict[str, Any]
+) -> list[str]:
+    """"Montajı yapan" seçenekleri: işin ekibi + kullanıcının görebildiği
+    tayin edilebilir Haberleşme personeli (teknisyen yalnız kendini görür,
+    KVKK en az erişim) + kayıtta zaten yazılı adlar."""
+    from app.services.teknik_servis import personel
+
+    adlar: set[str] = set()
+    ekip = await atama.aktif_ekip(db, so)
+    if ekip:
+        adlar.update(
+            (
+                await db.scalars(
+                    select(User.full_name).where(User.id.in_({a.user_id for a in ekip}))
+                )
+            ).all()
+        )
+    if user is not None:
+        try:
+            adlar.update(k.ad for k in await personel.atanabilir_personel(db, user, BIRIM))
+        except (personel.PersonelKapsamDisi, personel.PersonelGirdiHatasi):
+            pass
+    mevcut = degerler.get("montaj_yapan")
+    if isinstance(mevcut, list):
+        adlar.update(str(x) for x in mevcut)
+    elif _dolu(mevcut):
+        adlar.update(_personel_listesi("Montajı yapan", mevcut))
+    return sorted(a for a in adlar if a)
+
+
+async def durum(db: AsyncSession, so: ServiceOrder, user: User | None = None) -> dict[str, Any]:
     """Ekran için: uygulanır mı, tanımlar, değerler, eksikler, version."""
     kayit = await _kayit(db, so)
     uygulanir = uygulanir_mi(so)
@@ -338,7 +395,11 @@ async def durum(db: AsyncSession, so: ServiceOrder) -> dict[str, Any]:
         degerler = await oneriler(db, so)
     else:
         degerler = {}
+    # Eski kayıtta virgüllü metin: ekran çoklu seçimle açılsın.
+    if isinstance(degerler.get("montaj_yapan"), str):
+        degerler["montaj_yapan"] = _personel_listesi("Montajı yapan", degerler["montaj_yapan"])
     return {
+        "personel_secenekleri": await personel_secenekleri(db, so, user, degerler),
         "uygulanir": uygulanir,
         "kayitli": kayit is not None,
         "version": kayit.version if kayit is not None else None,
@@ -409,6 +470,7 @@ async def kaydet(
         clock=clock,
         veri={"role_montaj_eksik": len(eksik)},
     )
+
     return kayit
 
 

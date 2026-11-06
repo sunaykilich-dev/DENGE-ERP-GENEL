@@ -296,7 +296,7 @@ export interface RoleMontajAlani {
   kod: string;
   ad: string;
   grup: string;
-  tip: "metin" | "sayi" | "tarih" | "secim" | "frekans";
+  tip: "metin" | "sayi" | "tarih" | "secim" | "frekans" | "personel";
   secenekler: string[] | null;
   kosul: { alan: string; degerler: string[]; mod?: string[] } | null;
   zorunlu: boolean;
@@ -308,7 +308,9 @@ export interface RoleMontajDurumu {
   kayitli: boolean;
   version: number | null;
   alanlar: RoleMontajAlani[];
-  degerler: Record<string, string | number>;
+  degerler: Record<string, string | number | string[]>;
+  /** "Montajı yapan" çoklu seçiminin seçenekleri (işin ekibi + tayin edilebilir personel). */
+  personel_secenekleri: string[];
   toplam_telsiz: number | null;
   eksikler: string[];
 }

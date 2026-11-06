@@ -12,7 +12,18 @@
  * sunucudan gelir. Tamir bedeli yalnız `maliyet.gor` sahibine gösterilir
  * (anahtar yoksa alan hiç çizilmez). Parça ve süre bölümü salt okunurdur.
  */
-import { EditOutlined, FilePdfOutlined, PlusOutlined, ToolOutlined, UserAddOutlined } from "@ant-design/icons";
+import {
+  ClockCircleOutlined,
+  EditOutlined,
+  ExclamationCircleOutlined,
+  FieldTimeOutlined,
+  FilePdfOutlined,
+  InboxOutlined,
+  PlusOutlined,
+  ToolOutlined,
+  UserAddOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnsType } from "antd/es/table";
 import {
@@ -90,7 +101,7 @@ import {
   kategorilerOlustur,
   saati,
 } from "../fiori/ListeOgeleri";
-import ListeRaporu, { KpiKutucugu, type FioriEylem } from "../fiori/ListeRaporu";
+import ListeRaporu, { type FioriEylem, type FioriKategori } from "../fiori/ListeRaporu";
 
 const SAYFA_BOYU = 50;
 /** Toplu tayinin başlangıç ekibi (sabit referans: pencere her çizimde sıfırlanmasın). */
@@ -155,6 +166,29 @@ function kpiYolu(taban: AtolyeSuzgeci, sorgu: Record<string, unknown>): string {
   const s: Record<string, unknown> = { ...taban };
   for (const k of KPI_SUZGEC_ANAHTARLARI) delete s[k];
   return atolyeListeYolu({ ...s, ...sorgu });
+}
+
+/** Durum sekmesinin kodu (tür sekmeleriyle çakışmasın). */
+const KPI_ONEKI = "kpi:";
+/** Tercih yokken görünen durum sekmeleri — sayfa sade açılsın; gerisi dişliden. */
+const VARSAYILAN_DURUM_SEKMELERI = [
+  "ACIK",
+  "TESHISTE",
+  "ONAY_BEKLIYOR",
+  "ONARIMDA",
+  "PARCA_BEKLIYOR",
+  "TESLIME_HAZIR",
+  "GECIKEN",
+];
+const KPI_UYARI = new Set(["GECIKEN", "TESLIM_ALINMADI", "SURE_EKSIK"]);
+
+function kpiIkonu(kod: string) {
+  if (kod === "ACIK") return <InboxOutlined />;
+  if (kod.startsWith("YAS_")) return <ClockCircleOutlined />;
+  if (kod === "GECIKEN") return <WarningOutlined />;
+  if (kod === "TESLIM_ALINMADI") return <ExclamationCircleOutlined />;
+  if (kod === "SURE_EKSIK") return <FieldTimeOutlined />;
+  return <ToolOutlined />;
 }
 
 function DurumEtiketi({ kod, sozluk }: { kod: string; sozluk?: FormVerileri }) {
@@ -1200,6 +1234,37 @@ export default function AtolyePage() {
     s?.servis_turleri ?? [],
     (k) => ATOLYE_TUR_RENGI[k] ?? "yesil",
   );
+  // Eski KPI kutucukları artık şeritte durum sekmesi (2026-11-06): sayısı
+  // rozette, tıklanınca listeyi süzer; ikinci tık süzgeci kaldırır.
+  const kpiler = ozet.data ?? [];
+  const sekmeler: FioriKategori[] = [
+    ...kategoriler.map((k) => ({ ...k, grup: "Servis türü" })),
+    ...kpiler.map((k) => ({
+      kod: KPI_ONEKI + k.kod,
+      ad: k.baslik,
+      ipucu: `${k.baslik}: ${k.tanim}`,
+      renk: (KPI_UYARI.has(k.kod) && k.deger > 0 ? "kirmizi" : "mavi") as FioriKategori["renk"],
+      ikon: kpiIkonu(k.kod),
+      sayi: k.deger,
+      sifirGoster: true,
+      grup: "Durum",
+    })),
+  ];
+  const seciliSekmeler = [
+    suzgec.servis_turu ?? TUMU_KATEGORISI.kod,
+    ...kpiler.filter((k) => kpiAktif(k.sorgu)).map((k) => KPI_ONEKI + k.kod),
+  ];
+  const sekmeSec = (kod: string) => {
+    if (!kod.startsWith(KPI_ONEKI)) {
+      suzgecDegistir({ ...suzgec, servis_turu: kod === TUMU_KATEGORISI.kod ? undefined : kod });
+      return;
+    }
+    const k = kpiler.find((x) => KPI_ONEKI + x.kod === kod);
+    if (!k) return;
+    setSayfa(1);
+    setSecili([]);
+    git(kpiAktif(k.sorgu) ? kpiYolu(suzgec, {}) : kpiYolu(suzgec, k.sorgu));
+  };
   const ekSuzgecSayisi = [
     suzgec.birim,
     suzgec.marka,
@@ -1512,27 +1577,19 @@ export default function AtolyePage() {
 
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      {(ozet.data ?? []).length > 0 && (
-        <div className="fl-kutucuklar">
-          {(ozet.data ?? []).map((k) => (
-            <KpiKutucugu
-              key={k.kod}
-              kod={k.kod}
-              baslik={k.baslik}
-              tanim={k.tanim}
-              deger={k.deger}
-              ikon={<ToolOutlined />}
-              yol={kpiYolu(suzgec, k.sorgu)}
-              vurgu={kpiAktif(k.sorgu) ? "uyari" : k.kod === "GECIKEN" && k.deger > 0 ? "kritik" : "normal"}
-            />
-          ))}
-        </div>
-      )}
 
       <ListeRaporu<AtolyeSatiri>
-        kategoriler={kategoriler}
-        seciliKategori={suzgec.servis_turu ?? TUMU_KATEGORISI.kod}
-        onKategori={(k) => suzgecDegistir({ ...suzgec, servis_turu: k === TUMU_KATEGORISI.kod ? undefined : k })}
+        kategoriler={sekmeler}
+        seciliKategori={seciliSekmeler}
+        kategoriAyari={{
+          kimlik: "atolye-sekmeleri",
+          sabit: [TUMU_KATEGORISI.kod],
+          varsayilan: [
+            ...kategoriler.map((k) => k.kod),
+            ...VARSAYILAN_DURUM_SEKMELERI.map((k) => KPI_ONEKI + k),
+          ],
+        }}
+        onKategori={sekmeSec}
         kayitSayisi={liste.data?.toplam}
         ustSag={
           <Input.Search

@@ -44,7 +44,7 @@ function formaCevir(alanlar: RoleMontajAlani[], degerler: RoleMontajDurumu["dege
   const sonuc: Record<string, unknown> = {};
   for (const a of alanlar) {
     const d = degerler[a.kod];
-    if (d == null || d === "") continue;
+    if (d == null || d === "" || (Array.isArray(d) && !d.length)) continue;
     sonuc[a.kod] = a.tip === "tarih" ? dayjs(String(d)) : d;
   }
   return sonuc;
@@ -99,7 +99,7 @@ export default function RoleMontajFormu({
     for (const a of veri.alanlar) {
       if (!gorunur(a, v)) continue; // gizli (moda uymayan) alan saklanmaz
       const d = v[a.kod];
-      if (d == null || d === "") continue;
+      if (d == null || d === "" || (Array.isArray(d) && !d.length)) continue;
       gonder[a.kod] = a.tip === "tarih" && dayjs.isDayjs(d) ? d.format("YYYY-MM-DD") : d;
     }
     setKaydediliyor(true);
@@ -131,6 +131,17 @@ export default function RoleMontajFormu({
             allowClear
             disabled={kapali_}
             options={(a.secenekler ?? []).map((s) => ({ value: s, label: s }))}
+          />
+        );
+      case "personel":
+        return (
+          <Select
+            mode="multiple"
+            allowClear
+            disabled={kapali_}
+            placeholder="Teknisyen seçin (birden çok)"
+            optionFilterProp="label"
+            options={(veri?.personel_secenekleri ?? []).map((s) => ({ value: s, label: s }))}
           />
         );
       case "frekans":

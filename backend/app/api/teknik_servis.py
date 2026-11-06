@@ -1844,7 +1844,7 @@ async def role_montaj_getir(so_id: int, db: DbDep, user: Okuyucu) -> dict[str, A
     """Haberleşme kurulum/montaj işinin röle montaj bilgileri: alan tanımları,
     değerler (kayıt yoksa işten öneriler), kapanışı engelleyen eksikler."""
     so = await _kapsamli_is(db, so_id, user)
-    cikti = await role_montaj.durum(db, so)
+    cikti = await role_montaj.durum(db, so, user)
     if not _irtibat_tam(user):
         tel = cikti["degerler"].get("sorumlu_telefon")
         if tel:
@@ -1879,7 +1879,7 @@ async def role_montaj_kaydet(
         ip=client_ip(request),
     )
     await db.commit()
-    return await role_montaj.durum(db, so)
+    return await role_montaj.durum(db, so, user)
 
 
 @router.post("/isler/{so_id}/kalite-reddi", response_model=None)
