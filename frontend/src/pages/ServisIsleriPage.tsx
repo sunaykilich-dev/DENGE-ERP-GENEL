@@ -81,6 +81,7 @@ import {
   imzaYukle,
   KPI_ADLARI,
   ONAY_TURLERI,
+  HABERLESME_NITELIKLERI,
   ONCELIK_ADLARI,
   ONCELIK_RENKLERI,
   teknikServisApi,
@@ -118,6 +119,7 @@ import ImzaAlani, { tuvalPng } from "../components/ImzaAlani";
 import ServisParcalari from "../components/ServisParcalari";
 import SlaEtiketi, { SlaKartiPenceresi } from "../components/SlaEtiketi";
 import BakimFormu from "./BakimFormu";
+import RoleMontajFormu from "./RoleMontajFormu";
 import ServisIsFormu from "./ServisIsFormu";
 
 const SAYFA_BOYU = 50;
@@ -516,6 +518,7 @@ function IsDetayCekmecesi({
   const [form] = Form.useForm();
   const [notMetni, setNotMetni] = useState("");
   const [bakimFormuAcik, setBakimFormuAcik] = useState(false);
+  const [roleFormuAcik, setRoleFormuAcik] = useState(false);
   const [slaKartiAcik, setSlaKartiAcik] = useState(false);
 
   const detay = useQuery({ queryKey: ["servis-is", id], queryFn: () => teknikServisApi.getir(id) });
@@ -856,6 +859,16 @@ function IsDetayCekmecesi({
                 Bakım Formu
               </Button>
             )}
+            {/* KARARLAR §10: Haberleşme kurulum/montaj işinde zorunlu, kapanışı engeller. */}
+            {d.role_montaj_eksik != null && (
+              <Button
+                type="dashed"
+                danger={d.role_montaj_eksik.length > 0}
+                onClick={() => setRoleFormuAcik(true)}
+              >
+                Röle Montaj Bilgileri
+              </Button>
+            )}
             {slaTabi && (
               <Button
                 danger={(slaKarti.data?.kapanis_icin_gerekenler.length ?? 0) > 0}
@@ -887,6 +900,14 @@ function IsDetayCekmecesi({
               void qc.invalidateQueries({ queryKey: ["is-sla", id] });
             }}
           />
+          <RoleMontajFormu
+            soId={roleFormuAcik ? d.id : null}
+            kapali={["KAPATILDI", "IPTAL"].includes(d.status)}
+            onKapat={() => {
+              setRoleFormuAcik(false);
+              yenile();
+            }}
+          />
           <BakimFormu
             soId={bakimFormuAcik ? d.id : null}
             onKapat={() => {
@@ -907,6 +928,24 @@ function IsDetayCekmecesi({
                       <Descriptions.Item label="Tür">
                         {sozluk?.turler.find((t) => t.kod === d.tur)?.ad ?? d.tur}
                       </Descriptions.Item>
+                      {d.nitelikler && (
+                        <Descriptions.Item label="İşin niteliği" span={2}>
+                          {d.nitelikler.map((n) => (
+                            <Tag key={n}>{HABERLESME_NITELIKLERI.find((x) => x.kod === n)?.ad ?? n}</Tag>
+                          ))}
+                        </Descriptions.Item>
+                      )}
+                      {d.role_montaj_eksik != null && (
+                        <Descriptions.Item label="Röle montaj bilgileri" span={2}>
+                          {d.role_montaj_eksik.length ? (
+                            <Tag color="orange">
+                              {d.role_montaj_eksik.length} zorunlu alan eksik — iş kapatılamaz
+                            </Tag>
+                          ) : (
+                            <Tag color="green">Tamam</Tag>
+                          )}
+                        </Descriptions.Item>
+                      )}
                       <Descriptions.Item label="Müşteri" span={2}>
                         {d.musteri?.title ?? d.customer_name_raw ?? "—"}
                       </Descriptions.Item>

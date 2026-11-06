@@ -68,13 +68,17 @@ async def test_birim_kapsami_acilista(client, db, kullanici_ac, birimli_kullanic
     hesap = await musteri(db)
 
     await giris(client, "sef_g")
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, birim="HABERLESME"))
+    r = await client.post(
+        "/api/teknik-servis/isler", json=acilis(hesap, birim="HABERLESME", nitelikler=["ARIZA"])
+    )
     assert r.status_code == 404
     r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, birim="XYZ"))
     assert r.status_code == 400
 
     await giris(client, "mudur")
-    r = await client.post("/api/teknik-servis/isler", json=acilis(hesap, birim="HABERLESME"))
+    r = await client.post(
+        "/api/teknik-servis/isler", json=acilis(hesap, birim="HABERLESME", nitelikler=["ARIZA"])
+    )
     assert r.status_code == 201, r.text
 
 

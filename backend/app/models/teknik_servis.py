@@ -44,7 +44,7 @@ from sqlalchemy import (
     literal_column,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID, ExcludeConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -121,6 +121,18 @@ SERVIS_TURLERI = (
     "DEMONTAJ",
     # KARARLAR 2026-11-04 §2: Set Bariyer taşıma işi (KURULUM/TOPLAMA gibi PROJE).
     "TASIMA",
+)
+# Haberleşme saha işinin niteliği (KARARLAR §10; çoktan seçmeli, açılışta
+# zorunlu). KURULUM/MONTAJ seçili işte röle montaj bilgileri kapanışta zorunlu.
+HABERLESME_NITELIKLERI = (
+    "KURULUM",
+    "MONTAJ",
+    "DEMONTAJ",
+    "ARIZA",
+    "BAKIM",
+    "PROGRAMLAMA",
+    "KESIF",
+    "DIGER",
 )
 SERVIS_KATEGORILERI = ("GUNLUK_SERVIS", "PLANLI_BAKIM", "ATOLYE", "PROJE")
 ONCELIKLER = ("KRITIK", "YUKSEK", "NORMAL")
@@ -356,6 +368,12 @@ class ServiceOrder(
             "customer_id IS NOT NULL OR source_system IS NOT NULL", name="ck_so_musteri"
         ),
         CheckConstraint(
+            "nitelikler IS NULL OR (cardinality(nitelikler) > 0 AND nitelikler <@ ARRAY["
+            + ", ".join(f"'{n}'" for n in HABERLESME_NITELIKLERI)
+            + "]::varchar[])",
+            name="ck_so_nitelikler",
+        ),
+        CheckConstraint(
             "status <> 'IPTAL' OR cancel_reason IS NOT NULL", name="ck_so_iptal_gerekce"
         ),
         # Bağ ve türü birlikte vardır ya da birlikte yoktur; tür de sözlükten.
@@ -475,6 +493,8 @@ class ServiceOrder(
     reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     proje: Mapped[str | None] = mapped_column(String(120))
     sistem: Mapped[str | None] = mapped_column(String(120))
+    # Haberleşme saha işinin niteliği (çoktan seçmeli); diğer birimlerde NULL.
+    nitelikler: Mapped[list[str] | None] = mapped_column(ARRAY(String(20)))
     konu: Mapped[str] = mapped_column(String(200))
     aciklama: Mapped[str | None] = mapped_column(Text)
 
@@ -1185,7 +1205,28 @@ def _seri_anahtari(_mapper, _connection, target: ServiceOrderSerial) -> None:
     target.seri_norm = _normalize.normalize_seri(target.seri_no)
 
 
+class ServiceRoleMontaj(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin):
+    """Haberleşme saha işinin röle (repeater) montaj bilgileri (KARARLAR §10).
+
+    Alanlar "Repeater Montaj Bilgileri" kütüğünün sütunlarıdır; tanım ve
+    zorunluluk kuralı tek yerde: `services/teknik_servis/role_montaj.ALANLAR`.
+    İş başına bir kayıt (1 cihaz = 1 iş). Eksik alan varken iş KAPATILAMAZ.
+    """
+
+    __tablename__ = "service_role_montaj"
+    __table_args__ = (UniqueConstraint("service_order_id", name="uq_srm_is"),)
+
+    service_order_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("service_orders.id", ondelete="RESTRICT")
+    )
+    alanlar: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
+
+
 __all__ = [
+    "HABERLESME_NITELIKLERI",
+    "ServiceRoleMontaj",
     "ATAMA_ROLLERI",
     "SORUMLU_ROLLERI",
     "BIRIM_KODLARI",

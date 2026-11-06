@@ -200,7 +200,7 @@ async def test_politika_tanim_kurallari(client, db, mudur, kullanici_ac) -> None
     ozel = r.json()
     try:
         await sla_yururlukte(db)
-        so = await is_ac(client, mudur, birim="HABERLESME")
+        so = await is_ac(client, mudur, birim="HABERLESME", nitelikler=["ARIZA"])
         k = await kayit(db, so["id"])
         assert k.sla_policy_id == ozel["id"]
         assert k.cozum_hedef_at - k.sla_baslangic_at == timedelta(hours=10)

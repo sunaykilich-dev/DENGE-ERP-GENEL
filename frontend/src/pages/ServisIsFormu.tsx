@@ -47,6 +47,8 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import {
+  HABERLESME_NITELIKLERI,
+  nitelikSorulur,
   ONCELIK_ADLARI,
   teknikServisApi,
   type AcilisUyarisi,
@@ -75,6 +77,8 @@ interface FormDegeri {
   seriler: string[];
   proje?: string;
   sistem?: string;
+  /** Haberleşme saha işinin niteliği (çoktan seçmeli, zorunlu). */
+  nitelikler?: string[];
   uzaktan: boolean;
   cozum_kanali?: "TELEFON" | "UZAKTAN";
   yapilan_islem?: string;
@@ -174,6 +178,7 @@ export default function ServisIsFormu({
   const kategoriDegeri = Form.useWatch("kategori", form);
   const turDegeri = Form.useWatch("tur", form);
   const gecis = !!Form.useWatch("gecis_kaydi", form) && gecisYetkili;
+  const nitelikVar = nitelikSorulur(birim, turDegeri);
   const tekCihaz =
     formVerileri?.turler.find((t) => t.kod === turDegeri)?.kategori === "GUNLUK_SERVIS" ||
     turDegeri === "PB";
@@ -206,6 +211,7 @@ export default function ServisIsFormu({
         seriler: mevcut.seriler.map((s) => s.seri_no),
         proje: mevcut.proje ?? undefined,
         sistem: mevcut.sistem ?? undefined,
+        nitelikler: mevcut.nitelikler ?? undefined,
         uzaktan: false,
         kategori: mevcut.kategori,
       };
@@ -307,6 +313,7 @@ export default function ServisIsFormu({
       sistem: v.sistem?.trim() || null,
       aciklama: v.aciklama?.trim() || null,
       seriler: (v.seriler ?? []).map((s) => s.trim()).filter(Boolean),
+      ...(nitelikSorulur(v.birim, v.tur) ? { nitelikler: v.nitelikler ?? [] } : {}),
       ...(gecisYetkili && v.gecis_kaydi
         ? { gecis_kaydi: true, gecis_gerekcesi: (v.gecis_gerekcesi ?? "").trim() }
         : {}),
@@ -419,6 +426,11 @@ export default function ServisIsFormu({
     }
     if (kategoriDuzeltebilir && v.kategori && v.kategori !== mevcut.kategori) {
       degisen.kategori = v.kategori;
+    }
+    if (nitelikSorulur(mevcut.birim, v.tur)) {
+      const yeni = [...(v.nitelikler ?? [])].sort().join(",");
+      const eskiN = [...(mevcut.nitelikler ?? [])].sort().join(",");
+      if (yeni !== eskiN) degisen.nitelikler = v.nitelikler ?? [];
     }
     if (kapali || v.gerekce || degisen.kategori) degisen.gerekce = v.gerekce?.trim() || undefined;
     const yeniSeriler = g.seriler ?? [];
@@ -638,6 +650,17 @@ export default function ServisIsFormu({
           </Form.Item>
         </Col>
       </Row>
+
+      {nitelikVar && (
+        <Form.Item
+          name="nitelikler"
+          label="İşin niteliği"
+          extra="Birden çok seçilebilir. Kurulum ya da montaj seçilirse röle montaj bilgileri doldurulmadan iş kapatılamaz."
+          rules={[{ required: true, type: "array", min: 1, message: "İşin niteliğini seçin" }]}
+        >
+          <Checkbox.Group options={HABERLESME_NITELIKLERI.map((n) => ({ value: n.kod, label: n.ad }))} />
+        </Form.Item>
+      )}
 
       {gecisYetkili && (
         <>

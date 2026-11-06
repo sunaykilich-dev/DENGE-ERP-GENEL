@@ -8,17 +8,12 @@ YALNIZ EKLEME: dört yeni tablo. `ik_belge_olaylari` için UPDATE/DELETE'i
 reddeden tetikleyici: imza kanıtı uygulama hatasıyla da değiştirilemesin.
 (TRUNCATE tetikleyiciye takılmaz; test temizliği ve geri alma çalışır.)
 
-ZİNCİR NOTU: istekte `down_revision = f7a000000001` (haberleşme röle montaj,
-başka oturum) istendi; o migration bu dal açılırken main'de yoktu ve zincir
-koşmazdı. Bu yüzden f6a000000001'e bağlandı. f7a main'e girince birleştirmede
-yalnız `down_revision` satırı "f7a000000001" yapılır (tablolar çakışmaz).
-
 BEDEL / GERİ ALMA: downgrade dört tabloyu düşürür; gönderilmiş bordrolar ve
 imza kanıtları KAYBOLUR (dosyalar depoda kalır). Canlıda geri almadan önce
 `ik_belge_olaylari` dışa aktarılmalıdır.
 
 Revision ID: f8a000000001
-Revises: f6a000000001
+Revises: f7a000000001
 Create Date: 2026-11-06
 
 """
@@ -30,7 +25,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "f8a000000001"
-down_revision: str | None = "f6a000000001"
+down_revision: str | None = "f7a000000001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

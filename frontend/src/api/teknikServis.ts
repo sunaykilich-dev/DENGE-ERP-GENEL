@@ -154,6 +154,11 @@ export interface IsDetayi extends Omit<IsSatiri, "seriler"> {
   irtibat: { id: number; full_name: string; unvan: string | null; telefon: string | null } | null;
   proje: string | null;
   sistem: string | null;
+  /** Haberleşme saha işinin niteliği (çoktan seçmeli); diğer işlerde null. */
+  nitelikler: string[] | null;
+  nitelik_sorulur: boolean;
+  /** Kurulum/montaj işi değilse null; değilse kapanışı engelleyen eksik alanlar. */
+  role_montaj_eksik: string[] | null;
   aciklama: string | null;
   seriler: { id: number; seri_no: string; seri_norm: string }[];
   ekip: EkipUyesi[];
@@ -269,6 +274,43 @@ export interface IsGirdisi {
    */
   gecis_kaydi?: boolean;
   gecis_gerekcesi?: string | null;
+  /** Haberleşme saha işinde zorunlu, çoktan seçmeli (KARARLAR §10). */
+  nitelikler?: string[] | null;
+}
+
+/** Haberleşme saha işinin niteliği (sunucu `role_montaj.NITELIK_ADLARI` ile aynı). */
+export const HABERLESME_NITELIKLERI: { kod: string; ad: string }[] = [
+  { kod: "KURULUM", ad: "Kurulum" },
+  { kod: "MONTAJ", ad: "Montaj" },
+  { kod: "DEMONTAJ", ad: "Demontaj" },
+  { kod: "ARIZA", ad: "Arıza" },
+  { kod: "BAKIM", ad: "Bakım" },
+  { kod: "PROGRAMLAMA", ad: "Programlama / frekans ayarı" },
+  { kod: "KESIF", ad: "Keşif" },
+  { kod: "DIGER", ad: "Diğer" },
+];
+export const nitelikSorulur = (birim?: string, tur?: string) =>
+  birim === "HABERLESME" && !!tur && tur !== "ATOLYE";
+
+export interface RoleMontajAlani {
+  kod: string;
+  ad: string;
+  grup: string;
+  tip: "metin" | "sayi" | "tarih" | "secim" | "frekans";
+  secenekler: string[] | null;
+  kosul: { alan: string; degerler: string[]; mod?: string[] } | null;
+  zorunlu: boolean;
+  ipucu: string | null;
+}
+
+export interface RoleMontajDurumu {
+  uygulanir: boolean;
+  kayitli: boolean;
+  version: number | null;
+  alanlar: RoleMontajAlani[];
+  degerler: Record<string, string | number>;
+  toplam_telsiz: number | null;
+  eksikler: string[];
 }
 
 /** Kapanmış işe bağlı yeni iş (M1.7); verilmeyen alan önceki işten gelir. */
@@ -512,6 +554,9 @@ export const teknikServisApi = {
     return api.get<MukerrerSonucu>(`${TS}/isler/mukerrer-kontrol?${q}`);
   },
   getir: (id: number) => api.get<IsDetayi>(isYolu(id)),
+  roleMontaj: (id: number) => api.get<RoleMontajDurumu>(`${isYolu(id)}/role-montaj`),
+  roleMontajKaydet: (id: number, degerler: Record<string, unknown>, version: number | null) =>
+    api.put<RoleMontajDurumu>(`${isYolu(id)}/role-montaj`, { degerler, version }),
   ac: (g: IsGirdisi) => api.post<IsDetayi>(`${TS}/isler`, g),
   uzaktanCozuldu: (g: UzaktanGirdisi) => api.post<IsDetayi>(`${TS}/isler/uzaktan-cozuldu`, g),
   /** Kütükten toplu "Servis işi aç": seçili her ekipman için bir iş (E03-11). */

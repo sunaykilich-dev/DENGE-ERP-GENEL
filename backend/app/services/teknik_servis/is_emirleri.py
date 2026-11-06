@@ -55,7 +55,7 @@ from app.permissions import SCOPE_OWN_JOBS
 from app.services import settings as ayar_svc
 from app.services.normalize import normalize_seri, tr_normkey
 from app.services.statemachine import SERVIS_IS_EMRI, IzinsizGecis
-from app.services.teknik_servis import gecmis, kancalar, kapsam, numara
+from app.services.teknik_servis import gecmis, kancalar, kapsam, numara, role_montaj
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 from app.services.teknik_servis.yerel_zaman import yerel_gun_araligi
 
@@ -257,6 +257,7 @@ DUZELTILEBILIR = (
     "kategori",
     "proje",
     "sistem",
+    "nitelikler",
     "talep_kanali",
     "reported_at",
     "iletisim_ad",
@@ -323,6 +324,10 @@ class ServisIsiGirdisi:
     # Geçiş/içe aktarma kaydı (rol testi B5): bildirim tarihi geriye sınırsız,
     # SLA damgalanmaz (`sla_kaynak=GECIS`, sonuç ÖLÇÜLEMEDİ). Yetki API'de.
     gecis_kaydi: bool = False
+    # Haberleşme saha işinin niteliği (çoktan seçmeli; KARARLAR §10). Ekran
+    # açılışında zorunlu (`nitelik_zorunlu`); sistem açılışında türden doldurulur.
+    nitelikler: list[str] | None = None
+    nitelik_zorunlu: bool = False
     # --- sistem açılışları (PB/atölye/kiralama) ---
     contract_item_id: int | None = None
     maintenance_period_id: int | None = None
@@ -444,6 +449,9 @@ async def olustur(
         reported_at=girdi.reported_at,
         proje=_bos(girdi.proje),
         sistem=_bos(girdi.sistem),
+        nitelikler=role_montaj.nitelik_dogrula(
+            girdi.birim, girdi.tur, girdi.nitelikler, zorunlu=girdi.nitelik_zorunlu
+        ),
         konu=konu,
         aciklama=_bos(girdi.aciklama),
         equipment_id=girdi.equipment_id,
@@ -566,6 +574,8 @@ async def durum_degistir(
     if gerekce is not None and len(gerekce) > 500:
         raise ServisGirdiHatasi("Gerekçe en çok 500 karakter olabilir")
 
+    if hedef == "KAPATILDI":
+        await role_montaj.kapanis_dogrula(db, so)
     if hedef == "KAPATILDI" and user is not None:
         await kapanis_zinciri_dogrula(db, so, user)
 
@@ -740,6 +750,14 @@ async def guncelle(
             raise ServisGirdiHatasi(f"Bilinmeyen kategori: {yeni['kategori']}")
         if so.tur == "PB" or yeni["kategori"] == "PLANLI_BAKIM":
             raise IsEmriHatasi("Planlı bakım kategorisi yalnız PB işine aittir; düzeltilemez")
+    if "nitelikler" in yeni or "tur" in yeni:
+        hedef_tur = yeni.get("tur", so.tur)
+        eski = so.nitelikler if role_montaj.nitelik_sorulur_mu(so.birim, hedef_tur) else None
+        yeni["nitelikler"] = role_montaj.nitelik_dogrula(
+            so.birim, hedef_tur, yeni.get("nitelikler", eski), zorunlu="nitelikler" in yeni
+        )
+        if yeni["nitelikler"] == so.nitelikler:
+            del yeni["nitelikler"]
     if "oncelik" in yeni and yeni["oncelik"] not in ONCELIKLER:
         raise ServisGirdiHatasi(f"Bilinmeyen öncelik: {yeni['oncelik']}")
     if "talep_kanali" in yeni and yeni["talep_kanali"] not in (None, *TALEP_KANALLARI):
