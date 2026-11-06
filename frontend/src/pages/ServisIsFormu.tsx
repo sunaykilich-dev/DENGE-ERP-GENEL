@@ -133,6 +133,16 @@ function MukerrerUyarisi({ m }: { m: MukerrerSonucu | null }) {
   );
 }
 
+const KUTUK_TIP_ADI: Record<string, string> = {
+  XRAY: "X-Ray",
+  KAPI_DEDEKTORU: "Kapı dedektörü",
+  EL_DEDEKTORU: "El dedektörü",
+  DIGER_GUVENLIK: "Güvenlik cihazı",
+  ROLE_TEKRARLAYICI: "Röle",
+  TELSIZ: "Telsiz",
+  TELSIZ_DIGER: "Telsiz (diğer)",
+};
+
 export default function ServisIsFormu({
   is: mevcut,
   formVerileri,
@@ -182,6 +192,18 @@ export default function ServisIsFormu({
   const tekCihaz =
     formVerileri?.turler.find((t) => t.kod === turDegeri)?.kategori === "GUNLUK_SERVIS" ||
     turDegeri === "PB";
+
+  // KARARLAR §12: arıza işinde müşterinin kütükteki cihazı seçilince seri (ve
+  // Haberleşmede kayıtlı frekans) kütükten gelir.
+  const kutukBirimi = birim === "GUVENLIK" || birim === "HABERLESME";
+  const kutukCihazlari = useQuery({
+    queryKey: ["kutuk-cihazlari", birim, musteri?.musteriId, musteri?.lokasyonId],
+    queryFn: () => teknikServisApi.kutukCihazlari(birim, musteri!.musteriId!, musteri?.lokasyonId),
+    enabled: kutukBirimi && !!musteri?.musteriId && mevcut?.tur !== "PB" && turDegeri !== "PB",
+  });
+  const seciliKutuk = (kutukCihazlari.data ?? []).find(
+    (c) => c.serial_no && (seriler ?? []).some((x) => x.trim().toUpperCase() === c.serial_no!.toUpperCase()),
+  );
 
   const arizaNedenleri = useQuery({
     queryKey: ["ariza-nedenleri", birim],
@@ -620,6 +642,44 @@ export default function ServisIsFormu({
       >
         <Select mode="tags" tokenSeparators={[",", ";"]} open={false} disabled={mevcut?.tur === "PB"} />
       </Form.Item>
+      {kutukBirimi && (kutukCihazlari.data?.length ?? 0) > 0 && (
+        <Form.Item
+          label="Kütükteki cihazdan seç"
+          extra={
+            seciliKutuk?.frekans?.role_tx
+              ? `Kayıtlı frekans: TX ${seciliKutuk.frekans.role_tx} / RX ${seciliKutuk.frekans.role_rx ?? "—"} (işe otomatik gelir)`
+              : birim === "HABERLESME"
+                ? "Kayıtlı frekansı olmayan cihazda iş kapatılmadan teknisyen frekansı girer."
+                : "Seri numarası kütükten gelir; kütükte yoksa iş kapatılmadan teknisyen girer."
+          }
+        >
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="Cihaz seçin (seri numarası alana yazılır)"
+            value={seciliKutuk?.id}
+            disabled={mevcut?.tur === "PB"}
+            onChange={(id?: number) => {
+              const c = kutukCihazlari.data?.find((x) => x.id === id);
+              form.setFieldValue("seriler", c?.serial_no ? [c.serial_no] : []);
+            }}
+            options={(kutukCihazlari.data ?? [])
+              .filter((c) => c.serial_no)
+              .map((c) => ({
+                value: c.id,
+                label: [
+                  KUTUK_TIP_ADI[c.equipment_type] ?? c.equipment_type,
+                  [c.brand, c.model].filter(Boolean).join(" "),
+                  c.serial_no,
+                  c.frekans?.role_tx ? `TX ${c.frekans.role_tx} / RX ${c.frekans.role_rx ?? "—"}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+              }))}
+          />
+        </Form.Item>
+      )}
       <MukerrerUyarisi m={mukerrer} />
 
       <Row gutter={12} style={{ marginTop: 12 }}>

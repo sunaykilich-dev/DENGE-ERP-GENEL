@@ -61,22 +61,22 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
         ),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
         ),
-        sa.Column(
-            "created_by", sa.BigInteger(), sa.ForeignKey("users.id", ondelete="SET NULL")
-        ),
-        sa.Column(
-            "updated_by", sa.BigInteger(), sa.ForeignKey("users.id", ondelete="SET NULL")
-        ),
+        sa.Column("created_by", sa.BigInteger(), sa.ForeignKey("users.id", ondelete="SET NULL")),
+        sa.Column("updated_by", sa.BigInteger(), sa.ForeignKey("users.id", ondelete="SET NULL")),
         sa.Column("version", sa.Integer(), nullable=False, server_default=sa.text("1")),
         sa.UniqueConstraint("service_order_id", name="uq_sfb_is"),
-        sa.CheckConstraint(
-            "kaynak IN ('KUTUK', 'ROLE_MONTAJ', 'TEKNISYEN')", name="ck_sfb_kaynak"
-        ),
+        sa.CheckConstraint("kaynak IN ('KUTUK', 'ROLE_MONTAJ', 'TEKNISYEN')", name="ck_sfb_kaynak"),
     )
 
 

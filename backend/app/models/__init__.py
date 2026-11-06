@@ -120,6 +120,7 @@ from app.models.teknik_servis import (
     ServiceAlertRead,
     ServiceApproval,
     ServiceFaultReason,
+    ServiceFrekansBilgisi,
     ServiceHold,
     ServiceHoldReason,
     ServiceMailOutbox,
@@ -130,7 +131,6 @@ from app.models.teknik_servis import (
     ServiceOrderSerial,
     ServiceResult,
     ServiceRoleMontaj,
-    ServiceFrekansBilgisi,
     ServiceSlaPolicy,
     ServiceTimeEntry,
 )

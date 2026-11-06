@@ -55,7 +55,14 @@ from app.permissions import SCOPE_OWN_JOBS
 from app.services import settings as ayar_svc
 from app.services.normalize import normalize_seri, tr_normkey
 from app.services.statemachine import SERVIS_IS_EMRI, IzinsizGecis
-from app.services.teknik_servis import gecmis, kancalar, kapsam, numara, role_montaj
+from app.services.teknik_servis import (
+    cihaz_bilgisi,
+    gecmis,
+    kancalar,
+    kapsam,
+    numara,
+    role_montaj,
+)
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 from app.services.teknik_servis.yerel_zaman import yerel_gun_araligi
 
@@ -504,6 +511,8 @@ async def olustur(
             clock=clock,
             kapsam_user=user,
         )
+    # Kütükten seri (Güvenlik) / kayıtlı frekans (Haberleşme) — KARARLAR §12.
+    await cihaz_bilgisi.kutukten_doldur(db, so, user=user, clock=clock)
     await kancalar.is_olusturuldu(db, so, clock)
     await db.refresh(so, attribute_names=["seriler", "atamalar"])
     return so
@@ -576,6 +585,7 @@ async def durum_degistir(
 
     if hedef == "KAPATILDI":
         await role_montaj.kapanis_dogrula(db, so)
+        await cihaz_bilgisi.kapanis_dogrula(db, so)
     if hedef == "KAPATILDI" and user is not None:
         await kapanis_zinciri_dogrula(db, so, user)
 
@@ -917,6 +927,8 @@ async def serileri_yaz(
         )
     except gecmis.KisiselVeriHatasi as exc:
         raise ServisGirdiHatasi("Gerekçeye irtibat adı veya telefonu yazılamaz") from exc
+    # Yeni seri kütükte varsa ekipman bağı ve kayıtlı frekans gelir (KARARLAR §12).
+    await cihaz_bilgisi.kutukten_doldur(db, so, user=user, clock=clock)
     return await aktif_seriler(db, so)
 
 

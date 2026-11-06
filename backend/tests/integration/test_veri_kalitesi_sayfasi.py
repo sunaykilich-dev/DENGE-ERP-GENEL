@@ -69,7 +69,7 @@ async def test_her_kontrol_sayisi_liste_toplamina_esit_ve_salt_okuma(
     await _hesap(db, "KALITE AŞ")
     await _hesap(db, "Vergi Bir", tax_no="1111111111")
     await _hesap(db, "Vergi İki", tax_no="1111111111")
-    await servis_isi_ac(musteri=m, durum="TAMAMLANDI")  # çözüm zamanı + süre eksik
+    await servis_isi_ac(musteri=m, durum="TAMAMLANDI", seri=None)  # çözüm zamanı + süre eksik
     await servis_isi_ac(musteri=m, tur="ATOLYE", durum="PLANLANDI")  # seri eksik
     await servis_isi_ac(musteri=m, birim="HABERLESME")  # kapsam dışı
     await ekipman_ac(musteri=m, seri=None)

@@ -405,8 +405,14 @@ async def servis_isi_ac(db):
     teknisyen olur (KENDI_ISLERI kapsamı aktif atamaya bakar)."""
     from datetime import date, datetime
 
-    from app.models import ServiceOrder, ServiceOrderAssignment
-    from app.services.teknik_servis import numara
+    from app.models import (
+        ServiceFrekansBilgisi,
+        ServiceOrder,
+        ServiceOrderAssignment,
+        ServiceOrderSerial,
+    )
+    from app.services.normalize import normalize_seri
+    from app.services.teknik_servis import cihaz_bilgisi, numara
     from app.services.teknik_servis.is_emirleri import tur_kategorisi
 
     async def _make(
@@ -418,8 +424,13 @@ async def servis_isi_ac(db):
         durum: str = "MUSTERI_TALEBI",
         konu: str = "Test arızası",
         atananlar=(),
+        seri: str | None = "TEST-SERI-1",
+        frekans: dict | None = None,
         **kw,
     ) -> ServiceOrder:
+        """`seri`/`frekans`: KARARLAR §12 kapanış kuralı olan arıza işine
+        (Güvenlik → seri, Haberleşme → frekans) varsayılan cihaz bilgisi;
+        kuralı sınayan test `seri=None` verir."""
         if musteri is None:
             musteri = await _musteri(db, f"Servis Müşterisi {birim}")
         onek = "PB" if tur == "PB" else "SRV"
@@ -436,6 +447,23 @@ async def servis_isi_ac(db):
         )
         db.add(so)
         await db.flush()
+        kural = cihaz_bilgisi.kural(so)
+        if kural is not None and seri is not None:
+            db.add(
+                ServiceOrderSerial(
+                    service_order_id=so.id, seri_no=seri, seri_norm=normalize_seri(seri)
+                )
+            )
+            if kural == cihaz_bilgisi.FREKANS:
+                db.add(
+                    ServiceFrekansBilgisi(
+                        service_order_id=so.id,
+                        seri_no=seri,
+                        kaynak="TEKNISYEN",
+                        frekans=frekans or {"role_tx": "427.1125", "role_rx": "417.1125"},
+                    )
+                )
+            await db.flush()
         an = datetime.fromisoformat(_TEST_ANI)
         for sira, kisi in enumerate(atananlar):
             db.add(

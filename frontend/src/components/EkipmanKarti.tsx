@@ -175,6 +175,25 @@ export default function EkipmanKarti({
     enabled: acik,
   });
 
+  // Kayıtlı frekans (Haberleşme; KARARLAR §12): arıza işine buradan kopyalanır.
+  const [frekansAcik, setFrekansAcik] = useState(false);
+  const [frekansForm] = Form.useForm<Record<string, string>>();
+  const frekansKaydet = useMutation({
+    mutationFn: (v: Record<string, string>) => {
+      const temiz = Object.fromEntries(Object.entries(v).filter(([, d]) => d != null && String(d).trim() !== ""));
+      return ekipmanApi.guncelle(ekipmanId!, {
+        frekans: Object.keys(temiz).length ? temiz : null,
+        version: kart.data!.version,
+      });
+    },
+    onSuccess: () => {
+      setFrekansAcik(false);
+      message.success("Kayıtlı frekans güncellendi");
+      tazele();
+    },
+    onError: (e) => message.error((e as Error).message),
+  });
+
   const tazele = () => {
     void qc.invalidateQueries({ queryKey: ["servis-ekipman-kart", ekipmanId] });
     void qc.invalidateQueries({ queryKey: ["servis-ekipman-gecmis", ekipmanId] });
@@ -349,6 +368,31 @@ export default function EkipmanKarti({
                       <Descriptions.Item label="Farklı cihaz gerekçesi">{k.duplicate_ack_reason}</Descriptions.Item>
                     )}
                     {k.notes && <Descriptions.Item label="Not">{k.notes}</Descriptions.Item>}
+                    {k.birim === "HABERLESME" && (
+                      <Descriptions.Item label="Kayıtlı frekans">
+                        <Space wrap>
+                          {k.frekans?.role_tx ? (
+                            <span>
+                              TX {k.frekans.role_tx} / RX {k.frekans.role_rx ?? "—"}
+                              {k.frekans.calisma_modu ? ` · ${k.frekans.calisma_modu}` : ""}
+                            </span>
+                          ) : (
+                            <Typography.Text type="secondary">Yok — ilk arızada teknisyen girer</Typography.Text>
+                          )}
+                          {yazabilir && (
+                            <Button
+                              size="small"
+                              onClick={() => {
+                                frekansForm.setFieldsValue(k.frekans ?? {});
+                                setFrekansAcik(true);
+                              }}
+                            >
+                              Düzenle
+                            </Button>
+                          )}
+                        </Space>
+                      </Descriptions.Item>
+                    )}
                   </Descriptions>
                 </Space>
               ),
@@ -461,6 +505,30 @@ export default function EkipmanKarti({
               <Input.TextArea rows={2} maxLength={1000} />
             </Form.Item>
           )}
+        </Form>
+      </Modal>
+      <Modal
+        open={frekansAcik}
+        title="Kayıtlı frekans"
+        okText="Kaydet"
+        confirmLoading={frekansKaydet.isPending}
+        onCancel={() => setFrekansAcik(false)}
+        onOk={() => frekansForm.submit()}
+        destroyOnHidden
+      >
+        <Form form={frekansForm} layout="vertical" onFinish={(v) => frekansKaydet.mutate(v)}>
+          <Form.Item name="role_tx" label="Röle TX frekansı (MHz)">
+            <Input placeholder="örn. 427.1125" maxLength={12} />
+          </Form.Item>
+          <Form.Item name="role_rx" label="Röle RX frekansı (MHz)">
+            <Input placeholder="örn. 417.1125" maxLength={12} />
+          </Form.Item>
+          <Form.Item name="calisma_modu" label="Çalışma modu">
+            <Select allowClear options={["ANALOG", "DIJITAL", "MIX"].map((m) => ({ value: m, label: m }))} />
+          </Form.Item>
+          <Typography.Text type="secondary">
+            Diğer frekans alanları (ton, CC, slot, simpleks) arıza işindeki cihaz bilgisinden de girilebilir.
+          </Typography.Text>
         </Form>
       </Modal>
     </Drawer>

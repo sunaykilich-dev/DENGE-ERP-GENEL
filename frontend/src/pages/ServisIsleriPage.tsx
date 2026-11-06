@@ -119,6 +119,7 @@ import ImzaAlani, { tuvalPng } from "../components/ImzaAlani";
 import ServisParcalari from "../components/ServisParcalari";
 import SlaEtiketi, { SlaKartiPenceresi } from "../components/SlaEtiketi";
 import BakimFormu from "./BakimFormu";
+import CihazBilgisiFormu from "./CihazBilgisiFormu";
 import RoleMontajFormu from "./RoleMontajFormu";
 import ServisIsFormu from "./ServisIsFormu";
 
@@ -519,6 +520,7 @@ function IsDetayCekmecesi({
   const [notMetni, setNotMetni] = useState("");
   const [bakimFormuAcik, setBakimFormuAcik] = useState(false);
   const [roleFormuAcik, setRoleFormuAcik] = useState(false);
+  const [cihazFormuAcik, setCihazFormuAcik] = useState(false);
   const [slaKartiAcik, setSlaKartiAcik] = useState(false);
 
   const detay = useQuery({ queryKey: ["servis-is", id], queryFn: () => teknikServisApi.getir(id) });
@@ -869,6 +871,16 @@ function IsDetayCekmecesi({
                 Röle Montaj Bilgileri
               </Button>
             )}
+            {/* KARARLAR §12: arıza işinde kütükten seri / kayıtlı frekans; eksikse kapanmaz. */}
+            {d.cihaz_bilgisi_eksik != null && (
+              <Button
+                type="dashed"
+                danger={d.cihaz_bilgisi_eksik.length > 0}
+                onClick={() => setCihazFormuAcik(true)}
+              >
+                {d.cihaz_bilgisi_kurali === "FREKANS" ? "Cihaz ve frekans" : "Cihaz seri no"}
+              </Button>
+            )}
             {slaTabi && (
               <Button
                 danger={(slaKarti.data?.kapanis_icin_gerekenler.length ?? 0) > 0}
@@ -898,6 +910,14 @@ function IsDetayCekmecesi({
             onKapat={() => {
               setSlaKartiAcik(false);
               void qc.invalidateQueries({ queryKey: ["is-sla", id] });
+            }}
+          />
+          <CihazBilgisiFormu
+            soId={cihazFormuAcik ? d.id : null}
+            kapali={["KAPATILDI", "IPTAL"].includes(d.status)}
+            onKapat={() => {
+              setCihazFormuAcik(false);
+              yenile();
             }}
           />
           <RoleMontajFormu
@@ -933,6 +953,20 @@ function IsDetayCekmecesi({
                           {d.nitelikler.map((n) => (
                             <Tag key={n}>{HABERLESME_NITELIKLERI.find((x) => x.kod === n)?.ad ?? n}</Tag>
                           ))}
+                        </Descriptions.Item>
+                      )}
+                      {d.cihaz_bilgisi_eksik != null && (
+                        <Descriptions.Item
+                          label={d.cihaz_bilgisi_kurali === "FREKANS" ? "Kayıtlı frekans" : "Cihaz seri no"}
+                          span={2}
+                        >
+                          {d.cihaz_bilgisi_eksik.length ? (
+                            <Tag color="orange">
+                              Kütükte yok — teknisyen girmeli, iş kapatılamaz
+                            </Tag>
+                          ) : (
+                            <Tag color="green">Tamam</Tag>
+                          )}
                         </Descriptions.Item>
                       )}
                       {d.role_montaj_eksik != null && (

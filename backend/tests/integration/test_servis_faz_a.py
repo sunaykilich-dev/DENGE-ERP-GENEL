@@ -105,7 +105,7 @@ async def test_eski_cok_cihazli_ariza_okunur(
     """Göçten/Faz A öncesinden gelen çok cihazlı arıza kaydı okunur; seri
     listesi azaltılabilir ama artırılamaz."""
     await birimli_kullanici_ac("sef_a2", "SERVIS_SEF", ["GUVENLIK"])
-    so = await servis_isi_ac()
+    so = await servis_isi_ac(seri=None)
     await _seri_ekle(db, so, "ESKI-1", "ESKI-2", "ESKI-3")
     await giris(client, "sef_a2")
     r = await client.get(f"{IS}/{so.id}")
@@ -205,6 +205,7 @@ async def test_yeniden_ac_ucu_409_ve_bagli_yeni_is(
         iletisim_ad="Saha Yetkilisi",
         iletisim_telefon="+905321112233",
         talep_kanali="TELEFON",
+        seri=None,
     )
     await _seri_ekle(db, so, "CIHAZ-7")
     await giris(client, "sef_a4")
@@ -247,7 +248,7 @@ async def test_bagli_yeni_is_kurallari(
 
     hesap = await db.get(Account, lok.account_id)
     acik = await servis_isi_ac(musteri=hesap, lokasyon=lok)
-    eski = await servis_isi_ac(musteri=hesap, lokasyon=lok, durum="TAMAMLANDI")
+    eski = await servis_isi_ac(musteri=hesap, lokasyon=lok, durum="TAMAMLANDI", seri=None)
     await _seri_ekle(db, eski, "E-1", "E-2")
     await giris(client, "op_a5")
     # Açık işten bağlı iş açılmaz.

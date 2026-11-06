@@ -76,7 +76,10 @@ async def test_excel_toplam_tipler_ve_maskeleme(
     await kullanici_ac("raporcu", "T_RAPORCU")
     tek = await teknisyen(birimli_kullanici_ac, "tek_x4")
     a = await servis_isi_ac(
-        konu="=cmd|' /C calc'!A0", iletisim_telefon="+905321112233", atananlar=[tek]
+        konu="=cmd|' /C calc'!A0",
+        iletisim_telefon="+905321112233",
+        atananlar=[tek],
+        seri=None,
     )
     await servis_isi_ac(birim="HABERLESME", durum="ISLEMDE")
     await _seri(db, a, "0012345")

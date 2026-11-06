@@ -1239,9 +1239,7 @@ class ServiceFrekansBilgisi(Base, PkMixin, TimestampMixin, ActorMixin, Versioned
     __tablename__ = "service_frekans_bilgisi"
     __table_args__ = (
         UniqueConstraint("service_order_id", name="uq_sfb_is"),
-        CheckConstraint(
-            "kaynak IN ('KUTUK', 'ROLE_MONTAJ', 'TEKNISYEN')", name="ck_sfb_kaynak"
-        ),
+        CheckConstraint("kaynak IN ('KUTUK', 'ROLE_MONTAJ', 'TEKNISYEN')", name="ck_sfb_kaynak"),
     )
 
     service_order_id: Mapped[int] = mapped_column(

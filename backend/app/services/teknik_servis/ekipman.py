@@ -120,6 +120,8 @@ GUNCELLENEBILIR = frozenset(
         "warranty_source",
         "duplicate_ack_reason",
         "notes",
+        # Kayıtlı frekans (Haberleşme; KARARLAR §12).
+        "frekans",
     }
 )
 
@@ -184,7 +186,7 @@ def _kirp(deger: Any) -> Any:
 
 
 def _json(deger: Any) -> Any:
-    if deger is None or isinstance(deger, str | int | float | bool):
+    if deger is None or isinstance(deger, str | int | float | bool | dict):
         return deger
     if isinstance(deger, date | datetime):
         return deger.isoformat()
@@ -500,6 +502,12 @@ async def guncelle(
             raise EkipmanBulunamadi("Birim kapsamınız dışında")
     if "equipment_type" in veri:
         _tip_dogrula(veri["equipment_type"])
+    if "frekans" in veri:
+        from app.services.teknik_servis import cihaz_bilgisi
+
+        if veri.get("birim", ekipman.birim) != "HABERLESME" and veri["frekans"]:
+            raise ServisGirdiHatasi("Kayıtlı frekans yalnız Haberleşme cihazında tutulur")
+        veri["frekans"] = cihaz_bilgisi.frekans_temizle(veri["frekans"] or {}) or None
 
     hesap_degisti = "account_id" in veri and veri["account_id"] != ekipman.account_id
     if hesap_degisti:

@@ -29,6 +29,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import EkYukleyici from "../components/EkYukleyici";
+import CihazBilgisiFormu from "./CihazBilgisiFormu";
 import RoleMontajFormu from "./RoleMontajFormu";
 import { teknikServisApi } from "../api/teknikServis";
 import MobilSonucCekmecesi from "../components/MobilSonucCekmecesi";
@@ -46,6 +47,13 @@ export default function ServisIsKartiMobil() {
   const [elle, setElle] = useState(false);
   const [sonucAcik, setSonucAcik] = useState(false);
   const [roleAcik, setRoleAcik] = useState(false);
+  const [cihazAcik, setCihazAcik] = useState(false);
+  // Arıza işinde kütükten seri / kayıtlı frekans (KARARLAR §12).
+  const cihaz = useQuery({
+    queryKey: ["cihaz-bilgisi", isId],
+    queryFn: () => teknikServisApi.cihazBilgisi(isId),
+    enabled: Number.isFinite(isId),
+  });
   // Haberleşme kurulum/montaj işinde röle montaj bilgileri (KARARLAR §10).
   const roleMontaj = useQuery({
     queryKey: ["role-montaj", isId],
@@ -261,6 +269,18 @@ export default function ServisIsKartiMobil() {
               Sonuç Gir
             </Button>
           )}
+          {cihaz.data?.kural && (
+            <Button
+              block
+              size="large"
+              style={{ minHeight: 44 }}
+              danger={cihaz.data.eksikler.length > 0}
+              onClick={() => setCihazAcik(true)}
+            >
+              {cihaz.data.kural === "FREKANS" ? "Cihaz ve frekans" : "Cihaz seri no"}
+              {cihaz.data.eksikler.length > 0 && " (kütükte yok — girin)"}
+            </Button>
+          )}
           {roleMontaj.data?.uygulanir && (
             <Button
               block
@@ -295,6 +315,11 @@ export default function ServisIsKartiMobil() {
           buyukDugme
         />
       </Space>
+      <CihazBilgisiFormu
+        soId={cihazAcik ? k.id : null}
+        kapali={["KAPATILDI", "IPTAL"].includes(k.durum)}
+        onKapat={() => setCihazAcik(false)}
+      />
       <RoleMontajFormu
         soId={roleAcik ? k.id : null}
         kapali={["KAPATILDI", "IPTAL"].includes(k.durum)}

@@ -470,7 +470,10 @@ async def kaydet(
         clock=clock,
         veri={"role_montaj_eksik": len(eksik)},
     )
+    # Tamamlanan montajın frekansı kütükteki cihaza (boşsa) yazılır (§12).
+    from app.services.teknik_servis import cihaz_bilgisi
 
+    await cihaz_bilgisi.role_montajdan_kutuge(db, so, temiz, user=user, clock=clock)
     return kayit
 
 

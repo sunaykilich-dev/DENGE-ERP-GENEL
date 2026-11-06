@@ -522,6 +522,7 @@ async def test_teknisyen_actigi_bagli_isi_gorur(
         iletisim_ad="Saha Yetkilisi",
         iletisim_telefon="+905321112233",
         talep_kanali="TELEFON",
+        seri=None,
     )
     db.add(ServiceOrderSerial(service_order_id=eski.id, seri_no="BG-1", seri_norm=""))
     await db.commit()
