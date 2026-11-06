@@ -1,0 +1,12 @@
+BU ORTAMDA GERCEKLESTIRILEN KONTROLLER:
+- V1.14 ZIP 40 dosyasi kaynak alindi, tumu korundu; 36'si ayni,
+  4 dosya gerekli yeni modul entegrasyonu icin degistirildi.
+- Node.js app.js ve ops120.js soz dizimi testi: gecti.
+- Yeni SQL sadece ilave tablo/index olusturur, mevcut kayitlar silinmez.
+- ZIP butunluk testi: gecti.
+
+BURADA DOGRULANAMAYANLAR:
+- .NET 10 derleme (.NET SDK mevcut degil).
+- SQL Server migration / sorgu entegrasyonu.
+- Sahadaki Windows, telefon ve kullanici yetki testleri.
+Bu surum uretimde test edilmis kabul EDILMEMELIDIR.

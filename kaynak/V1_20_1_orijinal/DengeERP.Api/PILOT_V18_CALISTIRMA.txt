@@ -1,0 +1,29 @@
+DengeERP V1.8 — PowerShell + SSMS ile geçiş
+
+ESKİ V1.7 KLASÖRÜNÜ SİLMEYİN, ÜZERİNE YAZMAYIN.
+
+1. SSMS: Mevcut DengeERP veritabanı yedeğinin güncel ve doğrulanmış olduğunu kontrol edin.
+2. Çalışan V1.7 PowerShell penceresinde Ctrl+C ile uygulamayı durdurun.
+3. V1.8 ZIP'i C:\DengeERP\App altına AYRI klasör olarak çıkarın.
+4. YENİ PowerShell'de:
+
+   cd "C:\DengeERP\App\DengeERP_Pilot_V1_8_DEVICE_WORKORDERS_CHECKLIST_2026-10-14\DengeERP.Api"
+   dotnet build
+
+   Derleme başarılıysa ve yedek mevcutsa:
+   dotnet run --urls "http://0.0.0.0:5050"
+
+5. Tarayıcı: http://10.10.50.60:5050 adresi, Ctrl+F5.
+6. Planlı Bakımlar > AKYAKA AVM > Cihaz İş Emirleri: 17 ayrı iş emri görünmeli.
+7. X-Ray ve kapı dedektörü formlarını açıp farklı kontrol listelerini doğrulayın.
+8. Tek cihazın seri numarası + bölge + not + kontrollerini doldurup yalnızca o cihazı kapatın.
+9. Tekrar başlattığınızda mükerrer PB emri açılmadığını SSMS/ekran üzerinden kontrol edin.
+
+Geri dönüş: Önce yeni uygulamayı Ctrl+C ile durdurun; eski V1.7 klasörü korunmaktadır.
+Gerekirse önce alınan SQL yedeğinden, şirketin DBA sorumlusu gözetiminde geri dönülmelidir.
+Sadece eski uygulamayı başlatmak V1.8'de veritabanına eklenen iş emirlerini geri almaz.
+
+EK TEST: Ana Panel sayi kutularina tiklayin. Birime/is turune gore gruplanmis is emirleri acilir.
+Kategori filtrelerini ve arama kutusunu deneyin; kayit numarasina tiklayip is emrini acin.
+Ayni testi Planlama Takvimi sayi kutulari ile yapin.
+Bakim formunda tek tek Uygun tiklarini, Uygunsuz secimini ve taslak kaydini deneyin.

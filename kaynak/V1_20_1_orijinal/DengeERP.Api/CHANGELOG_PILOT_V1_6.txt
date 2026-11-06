@@ -1,0 +1,11 @@
+DengeERP Pilot V1.6 – Planlama Takvimi
+
+- Planlama menüsü takvim görünümüne çevrildi.
+- Gün / Hafta / Ay görünümü eklendi.
+- Önceki / Bugün / Sonraki gezinmesi eklendi.
+- Birim ve personel filtreleri eklendi.
+- Planlanmayı bekleyen işler sağ panelde listelenir ve Planla ile mevcut SQL plan modalı açılır.
+- Planlı bakım (PB-) kayıtları takvimde Bakım etiketiyle görünür.
+- Personel ve araç zaman çakışmaları otomatik işaretlenir.
+- Takvim kartına tıklayınca iş emri detayı açılır.
+- Mevcut SQL plan kayıtları aynen kullanılır; veri taşınmaz veya yeniden girilmez.

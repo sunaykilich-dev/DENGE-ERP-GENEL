@@ -1,0 +1,22 @@
+# Mac'teki sanal ortam konteynerin Linux venv'inin uzerine kopyalanmamali —
+# bu olmadan imaj icindeki bagimliliklar bozuluyor.
+**/.venv/
+**/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+.git/
+.env
+var/
+frontend/dist/
+backend/tests/
+*.md
+
+# macOS AppleDouble yan dosyalari (._dosya). Bunlar 163 baytlik, ilk bayti NUL
+# olan ikili dosyalardir ve ADI *.py ile bittigi icin alembic onlari migration
+# sanip ice aktarmaya calisir -> "source code string cannot contain null bytes".
+# Mac'ten xattr desteklemeyen bir hedefe (SMB, exFAT, bazi SFTP istemcileri)
+# kopyalarken kendiliginden olusurlar. Sunucunun diskinde bulunsalar bile
+# imaja GIRMEMELERI gerekir.
+**/._*
+**/.DS_Store

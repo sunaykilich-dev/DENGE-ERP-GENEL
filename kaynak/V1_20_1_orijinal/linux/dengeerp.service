@@ -1,0 +1,26 @@
+[Unit]
+Description=DengeERP V1.20.1 ASP.NET Core service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dengeerp
+Group=dengeerp
+WorkingDirectory=/opt/dengeerp/current
+EnvironmentFile=/etc/dengeerp/dengeerp.env
+ExecStart=/usr/bin/dotnet /opt/dengeerp/current/DengeERP.Api.dll
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+SyslogIdentifier=dengeerp
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dengeerp
+UMask=0077
+LimitNOFILE=32768
+
+[Install]
+WantedBy=multi-user.target

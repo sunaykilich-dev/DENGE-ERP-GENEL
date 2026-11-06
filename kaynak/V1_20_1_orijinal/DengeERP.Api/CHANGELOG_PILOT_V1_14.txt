@@ -1,0 +1,53 @@
+DENGEERP PILOT V1.14 — SAHA ZAMAN TAKİBİ / PERSONEL KİŞİ-SAAT KPI
+Tarih: 15.10.2026
+Taban: V1.13 Eğitim, Yetkinlik ve Personel Gelişim (tam ZIP).
+
+YENİ: SAHA / ZAMAN TAKİBİ MENÜSÜ
+- Teknisyen yalnızca kendi oturumuyla, kendisine atanmış açık iş emrinde sayaç başlatabilir.
+- Faaliyet türleri: Yol/Ulaşım, Saha Çalışması, Bekleme, Uzaktan Destek, Atölye,
+  Test/Kontrol, Mola/Ara.
+- Başlat, faaliyeti değiştir, süreyi bitir. Başlangıç ve bitiş SQL Server saatine göre tutulur.
+- Bir personelde aynı anda en fazla 1 açık sayaç bulunur; veritabanında unique index ile korunur.
+- Faaliyet değişiminde önceki çalışma bölümü dbo.WorkOrderTimeLogs tablosuna kaydedilir,
+  dolayısıyla V1.10/V1.11 raporlarındaki GERÇEK PERSONEL SÜRESİ hesabına da dahil olur.
+- Mola/Ara ayrı canlı oturum kayıtlarında saklanır ama WorkOrderTimeLogs toplamına DAHİL EDİLMEZ.
+- 1 dakikadan kısa bölümler bilerek reddedilir, sahte 1 dakika yazılmaz.
+- Tek bölüm en fazla 18 saat: anormal/açık unutulmuş sayaç yetkili yönetici tarafından
+  gerekçe girilerek iptal edilir; kayıt silinmez, kişi-saat oluşturulmaz.
+- Hatalı manuel kayıtla saat çakışması hem manuel girişte hem canlı sayacı sonlandırırken engellenir.
+- İş emrinde/cihaz bakım formunda aktif bir sayaç varsa kapatma engellenir.
+- Sayacı bitirmek otomatik olarak iş emrini kapatmaz.
+
+YENİ: YÖNETİM KPI EKRANI
+- Personel, birim, tarih, müşteri, lokasyon ve iş emri araması.
+- Gerçek kişi-saat, sahada çalışma, yol, bekleme, farklı iş ve açık sayaç sayısı.
+- Aktif ekipler / müşteri / iş emri / başlangıç / geçen süre listesi.
+- Personel bazlı saha/yol/bekleme tablosu, detaylı süre hareketleri.
+- Yetkili kullanıcılar CSV (Excel'de açılabilir; BOM, Türkçe) indirebilir.
+- Yönetici raporundaki eski Excel 8 sayfası KORUNUR; zaman kayıtları aynı dbo.WorkOrderTimeLogs'tan beslenir.
+
+İŞ EMRİ DETAYI
+- Önceki manuel çalışma süresi formunun üzerine "Canlı Sayaç" paneli eklendi.
+- Aynı işte birden fazla teknisyen ayrı ayrı kendi hesaplarıyla süre tutabilir.
+- Mevcut seri numarası, bakım checklist, kiralama, eğitim ve diğer modüllere dokunulmadı.
+
+SQL
+- Database/ZZ_V114_LiveTimeTracking.sql tekrar çalıştırılabilir tek yeni tablo ve indeks ekler.
+- Mevcut kayıtları silmez/yeniden oluşturmaz, önceden kaydedilmiş süreleri değiştirmez.
+- Uygulama ilk çalışmada Database klasöründeki SQL güncellemelerini otomatik uygular.
+- MUTLAKA V1.13'ten GÜNCEL .bak YEDEĞİ ALIN ve RESTORE VERIFYONLY ile kontrol edin.
+
+YETKİ VE KURALLAR
+- Canlı sayaç: workorders.view ve workorders.edit veya workorders.close; KENDİ atanmış işi.
+- Ekip izleme: reports.view; CSV dışa aktarma: reports.export.
+- Hatalı açık sayacı iptal: workorders.assign veya users.manage; ilgili birime erişim.
+- Mevcut kullanıcı rolleri ve özel yetkileri değiştirilmez.
+
+BU SÜRÜMDE YOK
+- GPS otomatik konum doğrulama, offline senkronizasyon, otomatik süre bitirme,
+  çalışma süresi bazlı maaş/bordro veya mevzuata uygun fazla mesai hesaplaması.
+- Bu bir SERVİS FAALİYET süresi sistemidir, tek başına puantaj/ücret hesabı değildir.
+
+TEST DURUMU
+- Kaynak ZIP yapısı, V1.13 dosya korunması, JS sözdizimi, UI mock smoke testleri.
+- Windows .NET 10 derleme ve gerçek SQL Server entegrasyonu bu ortamda YAPILAMADI.

@@ -1,0 +1,14 @@
+# Kopyalayip uygulamayin. Bu sadece adresi aciklamak icin ornektir.
+# interface adi, gateway ve DNS IT tarafindan doldurulmalidir.
+network:
+  version: 2
+  ethernets:
+    SUNUCU_AG_ARAYUZU:
+      dhcp4: false
+      addresses:
+        - 10.10.50.16/24
+      # routes:
+      #   - to: default
+      #     via: IT_AG_GECIDI
+      # nameservers:
+      #   addresses: [IT_DNS_1, IT_DNS_2]

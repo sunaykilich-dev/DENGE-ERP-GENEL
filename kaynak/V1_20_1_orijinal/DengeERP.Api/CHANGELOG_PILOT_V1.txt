@@ -1,0 +1,50 @@
+DengeERP Pilot V1 - 13.10.2026
+================================
+
+Bu sürüm, 12 Ekim akşamı gönderilen çalışan DengeERP.Api projesi temel alınarak pilot kullanıma göre yeniden bütünleştirildi.
+
+EKLENEN / GERÇEK SQL'E ALINANLAR
+- SQL tabanlı kullanıcı / parola / rol / yetki yönetimi
+- PBKDF2 parola hashleme ve ilk girişte parola değiştirme
+- Kullanıcı bazlı birim + modül + işlem yetkileri
+- Güvenlik, Haberleşme, POC, Mobilite, Araç Takip ortak altyapısı
+- İş emri sistem adı, müşteri e-posta, seri numarası alanları
+- Çoklu seri numarası tablosu
+- İş türü kural tablosu (açılışta/kapanışta seri no zorunluluğu)
+- Durum değişiklik geçmişi SQL tablosu
+- Mevcut şef/teknisyen ataması ve plan tablosu ile bütünleşme
+- Web ekranından gerçek plan kaydı
+- Teklif ana kaydı + teklif kalemleri + iskonto/KDV/toplam
+- Teklif onay durumu
+- Temel PDF teklif çıktısı
+- SMTP yapılandırması sonrasında standart e-posta + PDF eki
+- Günlük / haftalık / aylık / özel tarih aralığı Excel export
+- Excel filtreleri: birim, durum, iş türü, teknisyen/personel, şef
+- Excel: Özet + İş Emirleri sayfaları
+- LAN pilot kullanımı için 0.0.0.0:5050 ve firewall yardımcı scripti
+
+BILEREK KPI/SLA'DA YAPILMAYAN
+- Yönetim KPI hedefleri ve SLA eşikleri sabitlenmedi.
+- Gerçek operasyon verileri ile son yönetici dashboard aşamasında tanımlanacak.
+
+SONRAKI ITERASYONLAR
+- Cihaz kütüğü / garanti / model bazlı checklist derinliği
+- Planlı bakım periyot motoru
+- Depo / muhasebe / satış / satınalma alt görev yönlendirmeleri
+- Offline teknisyen veri senkronizasyonu
+- Koordinat tabanlı rota optimizasyonu
+- Teklif PDF kurumsal şablon / logo / imza detayları
+
+Build fix 2026-10-13: kullanıcı izin tipi uyumsuzluğu giderildi; top-level helper çakışması kaldırıldı.
+
+
+PILOT V1.1 HOTFIX - 2026-10-13
+- Yeni ErpUsers kullanıcılarıyla eski AppUsers foreign key çakışması giderildi.
+- WorkOrders için CreatedByErpUserId alanı eklendi; eski CreatedByUserId korunuyor.
+- Yeni iş kaydı artık aktif ERP kullanıcısını CreatedByErpUserId alanında saklıyor.
+- API hata okuyucusunda Response body stream already read hatası giderildi.
+- Tarayıcı önbelleği için app.js/styles sürümü v21 yapıldı.
+
+V1.2 SERIAL HOTFIX (2026-10-13)
+- Operasyon Uzmanı (workorders.create), Şef/Teknisyen (workorders.edit/workorders.close) mevcut iş emrinde seri numarası ekleyebilir/güncelleyebilir.
+- Saha işlerinde seri no açılışta opsiyonel kalır; kapanışta kural tablosuna göre zorunluluk devam eder.

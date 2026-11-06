@@ -1,0 +1,17 @@
+DengeERP Pilot V1.3 - Kullanıcı Yetki Düzenleme
+Tarih: 2026-10-13
+
+Yeni:
+- Kullanıcı Yönetimi tablosuna "Düzenle" butonu eklendi.
+- Mevcut kullanıcının ad soyad, kullanıcı adı, rol, yetkili birimler ve modül/işlem yetkileri sonradan değiştirilebilir.
+- Kullanıcının sonraki girişte şifre değiştirmesini zorunlu kılma ayarı düzenlenebilir.
+- Kullanıcı güncelleme API'si eklendi: PUT /api/users/{id}
+- Güncellenen kullanıcının aktif oturum yetkileri anında yenilenir; yeniden kullanıcı oluşturmaya gerek yoktur.
+- Kullanıcı adı çakışması sunucu tarafında kontrol edilir.
+- Tarayıcı önbelleği için app.js/styles sürümü v22'ye yükseltildi.
+
+Korunanlar:
+- V1.2 seri numarası düzeltmesi
+- Pilot ağ erişimi
+- SQL kalıcı kullanıcı/rol/yetki sistemi
+- İş emri, planlama, teklif ve rapor altyapısı

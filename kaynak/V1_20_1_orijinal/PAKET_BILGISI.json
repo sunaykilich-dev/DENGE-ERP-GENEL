@@ -1,0 +1,29 @@
+{
+  "package": "DengeERP Linux Test Installer V1.20.1",
+  "target_ip": "10.10.50.16",
+  "prefix": 24,
+  "allowed_subnet": "10.10.50.0/24",
+  "source_zip": "DengeERP_V1_20_1_TARIH_FILTRESI_DUZELTME.zip",
+  "sql_auto_migration_default": false,
+  "admin_demo_seeding_disabled": true,
+  "build_on_target": true,
+  "handoff_package": "full_source_and_installer",
+  "linux_prebuilt_binary_included": false,
+  "included": [
+    "source_project",
+    "source_archive",
+    "concatenated_source_text",
+    "linux_install_scripts",
+    "sql_schema_scripts",
+    "config_templates",
+    "install_readme",
+    "checksums"
+  ],
+  "not_included": [
+    "production_database_backup",
+    "credentials",
+    "TLS_certificate",
+    "built_linux_binary"
+  ],
+  "demo_password_display_and_prefill_removed": true
+}

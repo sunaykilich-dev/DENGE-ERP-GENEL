@@ -1,0 +1,36 @@
+DengeERP Pilot V1.5 - Güvenlik Kütüğü + Bakım Otomasyonu + Haberleşme Atölye
+13.10.2026
+
+1) Güvenlik Cihaz Kütüğü
+- Kullanıcının sağladığı X-RAY KÜTÜK Excel verisi SQL'e idempotent olarak aktarılır.
+- 1.324 cihaz/kütük satırı kaynak satır ve seri numarası bazında korunur.
+- Cihaz tipi / marka / model / seri no / müşteri / lokasyon / ilgili kişi / kurulum durumu alanları.
+- Marka, model, cihaz tipi ve serbest arama filtreleri.
+- X-Ray ve Kapı Dedektörü ayrımı; kütükteki eski/karma kayıtlar Diğer Güvenlik Cihazı olarak korunur.
+
+2) Planlı Bakım
+- BAKIMLAR_2026-2027 Excel verisindeki 87 firma/sözleşme sisteme aktarılır.
+- Plan hesabında yıllık bakım sıklığı + yapılan bakım adedi esas alınır.
+- Sözleşme tarih metni bilgi amaçlı saklanır; otomatik periyot hesabını değiştirmez.
+- Vadesi gelen sıradaki bakım için PB-YYYYMM-#### iş emri otomatik oluşturulur.
+- PB işi Tamamlandı/Kapatıldı olduğunda bakım adedi artar ve sıradaki bakım vadesi geldiyse yeni PB kaydı hazırlanır.
+- Yönetici/Şef için manuel 'Vadesi Gelen İş Emirlerini Oluştur' komutu da bulunur.
+
+3) Haberleşme Teknik Servis Atölye
+- Logo CRM ekran alanlarına göre atölye servis kaydı tasarlandı.
+- Firma/adres/kişi/e-posta/telefon; giriş/tahmini bitiş; Logo Form No/Ana Servis Kaydı alanları.
+- Servis türleri: Arıza Onarımı, Garanti Onarımı, Dış Servis, Yazılım/Frekans Güncelleme, Setra-Kiralama Takip.
+- Marka seçenekleri: HYTERA, HYT, HQT, MOTOROLA, KIRISUN, ASELSAN.
+- Seri no zorunlu; atölye kaydı açıldığında bağlı SRV iş emri otomatik açılır.
+- Garanti tarih/durum alanları.
+- Aksesuar 1-5 seçmeli: ADAPTÖR, ANTEN, ASKI İPİ, BATARYA, KAPAK, KLİPS, KULAKLIK, TAŞIMA ÇANTASI, ŞARJ CİHAZI.
+- Notlar, müşteri şikayeti, cihaz durumu, onarım bilgisi.
+- Gelecekte Logo CRM entegrasyonu için alanlar SQL'de ayrı tutulur.
+
+4) Önceki V1.4 özellikleri aynen korunur
+- Kiralama Yönetimi
+- Personel / Organizasyon
+- Kullanıcı / Yetki düzenleme
+- Teklif yönetimi
+- Rapor / Excel export
+- Çoklu kullanıcı şirket içi pilot erişimi

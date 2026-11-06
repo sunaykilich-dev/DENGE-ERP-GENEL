@@ -1,0 +1,32 @@
+DengeERP Pilot V1.8 — TEK CİHAZ = TEK PB İŞ EMRİ + DİJİTAL BAKIM FORMU
+
+1) Ana PB emri yaklaşımı kaldırıldı. Her X-Ray ve her kapı dedektörü kendi WorkOrders kaydına ve PB-YYYYMM-#### numarasına sahip.
+2) Örnek AKYAKA AVM: Kaynak sözleşme verisinde 9 X-Ray ve 8 kapı dedektörü bulunuyor. O dönemde 17 ayrı iş emri görünür.
+3) V1.7'den kalan grup PB iş emri silinmez veya numarası değiştirilmez; ilk cihaza bağlanır. Diğer cihazların iş emirleri eklenir. Tekrar başlatmalarda mükerrer kayıt açılmaması için benzersiz ilişkiler oluşturuldu.
+4) Her cihaz formunda: seri numarası, bulunduğu bölüm, yapılan işlem, yedek parça, teknisyen notu, servis sonucu ve cihaz türüne özel teknik kontrol listesi bulunur.
+5) X-Ray: 11 kontrol başlığı; kapı dedektörü: 10 farklı kontrol başlığı. Her madde Bekliyor/Uygun/Uygunsuz/Kontrol Edilemedi olarak kaydedilir. Kontroller doğrulanmadan Tamamlandı ile iş kapatma engellenir.
+6) Uygunsuzluk/takip gereken sonuçlarda servis sonucu kaydedilir ancak cihaz PB iş emri açık kalır.
+7) Cihaz bazında kapanış WorkOrders ve MaintenanceDeviceItems'a işlenir. Tamamlayan ve tarih tutulur. Tüm cihazlar bitince bakım dönemi ve CompletedCount bir kez güncellenir.
+8) Fiyat görüntüleme yalnızca finance.prices.view yetkisiyle mümkündür (V1.7 özelliği korundu).
+9) V1.6 takvim, güvenlik kütüğü, Haberleşme Atölye, kiralama, teklif, yönetim ve diğer modüller paket içinde korunmuştur.
+
+ÖNEMLİ: Bu sürüm teslim öncesinde JS sözdizimi, ZIP bütünlük ve statik kaynak kontrollerinden geçirildi.
+Bu ortamda .NET 10 SDK ve gerçek SQL Server olmadığı için dotnet build / canlı entegrasyon testi yapılmadı.
+Yeni uygulamayı başlatmadan önce SQL yedeğinin bulunduğunu doğrulayın. İlk açılış V1.8 şemasını ekler
+ve zamanı gelen bakım dönemleri için her cihaza ayrı PB iş emrini oluşturabilir; sistemde veri değişir.
+Üretim sistemi üzerindeki 5050 adresinde gerçek kullanıcılar varken başlatmayın; bakım aralığında test edin.
+
+TEKNİK NOT:
+V1.7'de bakım dönemi ve ana iş emri arasındaki GeneratedWorkOrderId alanı veritabanı uyumluluğu için
+korunur, fakat V1.8'de artık 'ana iş emri' anlamına gelmez; ilk cihazın iş emrine işaret eder.
+Takip MDI.WorkOrderId alanından yapılır. Mevcut personel atamaları eski kaydın ilk cihazına bağlı kalır;
+diğer cihazlara şefin atama yapması gerekir.
+
+10) ANA PANEL SAYI KUTULARI: Acik Is, Musteri Talebi, Planlandi, Sahada, Atolyede, Beklemede,
+    Tamamlandi, Kritik kutulari tiklanabilir oldu. Kategori penceresi: birim, is turu, durum
+    filtreleri, is emri/firma/ariza/personel aramasi, tıklayarak dogrudan ilgili is emrine gecis.
+11) PLANLAMA SAYI KUTULARI: Bugun, Hafta, Toplam, Cakismalar, Plansiz isleri acan
+    ayni kategorize gosterim eklendi.
+12) PLANLI BAKIM: Acik/Tamamlanan cihaz is emri sayilari tiklanarak listelenebilir.
+13) BAKIM FORMU: Kontrol edilen her maddenin yaninda dogrudan UYGUN tik kutusu eklendi;
+    uygun degilse secimden Uygunsuz veya Kontrol Edilemedi girilebilir.

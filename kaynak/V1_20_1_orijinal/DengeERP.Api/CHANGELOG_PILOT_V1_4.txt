@@ -1,0 +1,31 @@
+DengeERP Pilot V1.4 - 13.10.2026
+
+YENİ MODÜLLER
+1) Kiralama Yönetimi
+- Güvenlik Sistemleri ve Haberleşme için ayrı kiralama kayıtları.
+- Otomatik KIR-YYYYMM-#### numarası.
+- Müşteri, proje/etkinlik, lokasyon, irtibat, tarih aralığı, adet, seri numaraları, sorumlu ve durum takibi.
+- Seri takipli ürünlerde teslim/kirada/iade/kapanış aşamalarında seri numarası zorunluluğu.
+- Kiralama kaydından bağımsız teknik teklif oluşturma kısayolu.
+- Ürün kataloğu Denge Elektronik web sitesindeki kiralama ürün aileleri ve model adları temel alınarak hazırlandı:
+  X-Ray: PG 5030, PG 6040, PG 6550, PG 100100
+  Kapı Dedektörü: PG 3000 King, PG 2000 King, PG&DH D118
+  Bariyer: BS-500-2R, BS-500-4R, BS-1000, BS-2000, ST-100, ST-200, ST-210, ST-10, ST-1000, ST-3000, ST-4000, ST-2000, ST-5000
+  Haberleşme: Hytera Dijital/DMR, TETRA, LTE/PoC telsiz kiralama kategorileri.
+
+2) Personel / Organizasyon
+- Organizasyon şemasındaki isim/departman/ünvan yapısı SQL personel dizinine başlangıç verisi olarak eklendi.
+- Personel ekleme, düzenleme, işe giriş tarihi, departman, ek departman, yönetici ve not alanları.
+- İşten çıkış/pasif işlemi; bağlı ERP hesabı varsa otomatik erişim kapatma.
+- İstenirse yeni personel oluştururken aynı anda ERP kullanıcı hesabı, rol, birim ve işlem yetkileri oluşturma.
+- Mevcut bağlı ERP hesabı için Yetkiler butonundan Kullanıcı / Yetki düzenleme.
+
+YETKİLER
+- rentals.view / rentals.create / rentals.edit
+- personnel.view / personnel.manage
+- Kiralama Operasyon ve İnsan Kaynakları rol şablonları eklendi.
+
+DİĞER
+- Atölye ve Kiralama menüleri ayrıldı.
+- Personel atama fallback listeleri 01.10.2026 organizasyon şemasına göre güncellendi.
+- Excel/PDF blob indirme yordamı düzeltildi (rapor export ve teklif PDF için).

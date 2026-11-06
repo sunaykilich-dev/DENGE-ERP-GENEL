@@ -1,0 +1,29 @@
+DengeERP V1.9 — KURULUM VE TEST
+
+1) V1.8 PowerShell penceresini açık bırakın (5050 portu).
+2) ZIP'i C:\DengeERP\App içine indirin.
+3) YENİ PowerShell penceresinde:
+
+$ad = 'DengeERP_Pilot_V1_9_TOPLU_PLANLAMA_ATAMA_2026-10-14'
+$kaynak = "C:\DengeERP\App\$ad.zip"
+$hedef = "C:\DengeERP\App\DengeERP_V1_9_TEMIZ_$(Get-Date -Format yyyyMMdd_HHmmss)"
+Expand-Archive -LiteralPath $kaynak -DestinationPath $hedef -ErrorAction Stop
+$proje = Get-ChildItem $hedef -Recurse -Filter 'DengeERP.Api.csproj' | Select-Object -First 1
+if (-not $proje) { throw 'Proje dosyasi bulunamadi!' }
+dotnet build $proje.FullName
+
+4) Derleme sıfır hataysa, güncel SQL veritabanı yedeğini SSMS'te doğrulayın.
+5) Kullanıcıların çalışması uygun zamanda V1.8'de Ctrl+C ile durdurulur.
+6) Aynı ikinci PowerShell'de:
+
+Set-Location $proje.DirectoryName
+dotnet run --urls "http://0.0.0.0:5050"
+
+7) http://10.10.50.60:5050 adresini Ctrl+F5 ile yenileyin.
+8) Planlama Takvimi > Plan Bekleyen > aynı firma/lokasyon için tüm cihazları
+   seç > Toplu Planla + Ata. Ekip/tarih/araç girip kaydedin.
+9) İş Emirleri > birim filtresi > kutucukları seç > Seçilenlere Toplu Atama.
+10) Her cihazın ayrı iş emri/seri no/bakım formu kaldığını doğrulayın.
+
+NOT: Yeni sürümü aynı canlı SQL veritabanına paralel bağlamayın: iki sürüm
+aynı planları/verileri güncelleyebilir. Çalışan veritabanının yedeği zorunludur.

@@ -1,0 +1,4001 @@
+{
+ "aciklama": "Rol testi 2. aşama (TS Yöneticisi + Şef) planlama sonucu. Ekip alanları test kullanıcı adlarıdır (kişi adı yok). 'plan_ekibi_sahaya_giden' = çakışmaya giren saha ekibi. Liste tarihlerinin bir kısmı geçmişte (26 Eki–3 Kas) ve bilerek o tarihlere planlandı: teknisyen ekranında 'Geciken' grubunda görünür. Araç: GUVENLIK havuzunda tek test aracı (plaka yazılmadı).",
+ "uretildi": "2026-11-04",
+ "isler": [
+  {
+   "id": 23,
+   "no": "SRV-202611-000023",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "KIBRIS GİRNE LİMANI",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "MUSTERI_ERISIMI",
+   "plan_tarihi": "2026-10-26",
+   "baslangic": null,
+   "sure_dk": 480,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26",
+    "plan_bitis": "2026-10-31",
+    "not": "Listede tarih aralığı"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 24,
+   "no": "SRV-202611-000024",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "ZONGULDAK EREN ENERJİ",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "DIS_SERVIS",
+   "plan_tarihi": "2026-10-26",
+   "baslangic": null,
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIS_SERVIS",
+    "aciklama": "Kargo/müşteri dönüşü bekleniyor"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 25,
+   "no": "SRV-202611-000025",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "ESAN BALYA ECZACIBAŞI",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "MUSTERI_ONAYI",
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "liste_plan": {
+    "plan_tarihi": null,
+    "not": "Listede: HENÜZ BELİRLENMEDİ."
+   },
+   "liste_eslenen": [],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 26,
+   "no": "SRV-202611-000026",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "DESTEK",
+   "musteri": "ESAN BALYA ECZACIBAŞI",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "DIGER",
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "liste_plan": {
+    "plan_tarihi": null,
+    "not": "Listede: HENÜZ BELİRLENMEDİ."
+   },
+   "liste_eslenen": [],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 27,
+   "no": "SRV-202611-000027",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 3,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 28,
+   "no": "SRV-202611-000028",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 3,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 29,
+   "no": "SRV-202611-000029",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 3,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 30,
+   "no": "SRV-202611-000030",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 3,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 31,
+   "no": "SRV-202611-000031",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 3,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 32,
+   "no": "SRV-202611-000032",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 3,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 33,
+   "no": "SRV-202611-000033",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": 4,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 34,
+   "no": "SRV-202611-000034",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": 4,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 35,
+   "no": "SRV-202611-000035",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": 4,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 36,
+   "no": "SRV-202611-000036",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-26",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": 2,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 37,
+   "no": "SRV-202611-000037",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "15:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 38,
+   "no": "SRV-202611-000038",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-28",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": 5,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 39,
+   "no": "SRV-202611-000039",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-26",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 1,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik",
+    "bulgu": "Sonuç notunda yeni arıza bulgusu var → bağlı iş (BAKIM_BULGUSU) önerilir"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 40,
+   "no": "SRV-202611-000040",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-26",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 1,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik",
+    "bulgu": "Sonuç notunda yeni arıza bulgusu var → bağlı iş (BAKIM_BULGUSU) önerilir"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 41,
+   "no": "SRV-202611-000041",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-28",
+   "baslangic": "10:00",
+   "sure_dk": 180,
+   "ziyaret_id": 6,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 42,
+   "no": "SRV-202611-000042",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-28",
+   "baslangic": "10:00",
+   "sure_dk": 180,
+   "ziyaret_id": 6,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 43,
+   "no": "SRV-202611-000043",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-28",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": 7,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 44,
+   "no": "SRV-202611-000044",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-02",
+   "baslangic": "14:00",
+   "sure_dk": 120,
+   "ziyaret_id": 8,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 45,
+   "no": "SRV-202611-000045",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "AVUSTURYA BAŞKONSOLOSLUĞU",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 90,
+   "ziyaret_id": 11,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 46,
+   "no": "SRV-202611-000046",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "ŞANLIURFA PİAZZA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-30",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": 15,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 47,
+   "no": "SRV-202611-000047",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "ŞANLIURFA PİAZZA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-30",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": 15,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 48,
+   "no": "SRV-202611-000048",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "VAKIF KATILIM",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "DIGER",
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 49,
+   "no": "SRV-202611-000049",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "KARTAL ANPA GROSS",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "DIGER",
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 50,
+   "no": "SRV-202611-000050",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "PİMSER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-02",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 20,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 51,
+   "no": "SRV-202611-000051",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "PİMSER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-02",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 20,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 52,
+   "no": "SRV-202611-000052",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "PİMSER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-02",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 20,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 53,
+   "no": "SRV-202611-000053",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "ÖZDİLEK AVM LEVENT",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "MALZEME",
+   "plan_tarihi": "2026-11-10",
+   "baslangic": null,
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "MALZEME"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 54,
+   "no": "SRV-202611-000054",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "KÜÇÜKPRENS İLKOKULU",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "MUSTERI_ERISIMI",
+   "plan_tarihi": "2026-10-29",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "MUSTERI_ERISIMI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 55,
+   "no": "SRV-202611-000055",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "RÖNESANS ANKARA",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 16,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 56,
+   "no": "SRV-202611-000056",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "RÖNESANS ANKARA",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 16,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 57,
+   "no": "SRV-202611-000057",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "RÖNESANS ANKARA",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 16,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 58,
+   "no": "SRV-202611-000058",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "RÖNESANS ANKARA",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 16,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 59,
+   "no": "SRV-202611-000059",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "RÖNESANS ANKARA",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 16,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 60,
+   "no": "SRV-202611-000060",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "İZMİR OPTİMUM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-28",
+   "baslangic": "16:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 61,
+   "no": "SRV-202611-000061",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "SECURİTAS",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-30",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": 19,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 62,
+   "no": "SRV-202611-000062",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "TOPLAMA",
+   "musteri": "SECURİTAS",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-30",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": 19,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 63,
+   "no": "SRV-202611-000063",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "RADDİSON BLU ŞİŞLİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-30",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "liste_eslenen": [
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 64,
+   "no": "SRV-202611-000064",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "MALTEPE PARK",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-29",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 13,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = TEKLIF_SUNULACAK; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 65,
+   "no": "SRV-202611-000065",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "MALTEPE PARK",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-29",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 13,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = TEKLIF_SUNULACAK; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 66,
+   "no": "SRV-202611-000066",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "MALTEPE PARK",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-29",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 13,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = TEKLIF_SUNULACAK; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 67,
+   "no": "SRV-202611-000067",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "ORTADAĞ ORTAOKULU",
+   "durum_simdi": "PLANLAMADA",
+   "aktif_bekleme": null,
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "PLANLAMADA",
+    "plan_degisim_nedeni": "ERTELEME"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Plan yok / dokunma"
+  },
+  {
+   "id": 68,
+   "no": "SRV-202611-000068",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "SANCAKTEPE BELEDİYESİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-26",
+   "baslangic": "14:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 69,
+   "no": "SRV-202611-000069",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "DOĞUŞ OTOMOTİV",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-26",
+   "baslangic": "16:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 70,
+   "no": "SRV-202611-000070",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "USO CENTER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-26",
+   "baslangic": "09:00",
+   "sure_dk": 60,
+   "ziyaret_id": 9,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 71,
+   "no": "SRV-202611-000071",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "TASIMA",
+   "musteri": "VENRAY",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-26",
+   "baslangic": "11:00",
+   "sure_dk": 60,
+   "ziyaret_id": 10,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 72,
+   "no": "SRV-202611-000072",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "HALKBANK GENEL",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "15:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 73,
+   "no": "SRV-202611-000073",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "İDTM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "11:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 74,
+   "no": "SRV-202611-000074",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "PALLADIUM TOWER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 18,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 75,
+   "no": "SRV-202611-000075",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "PALLADIUM TOWER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 18,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 76,
+   "no": "SRV-202611-000076",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "PALLADIUM TOWER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 18,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 77,
+   "no": "SRV-202611-000077",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "PALLADIUM TOWER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 18,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 78,
+   "no": "SRV-202611-000078",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "PALLADIUM TOWER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 300,
+   "ziyaret_id": 18,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 79,
+   "no": "SRV-202611-000079",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "13:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 80,
+   "no": "SRV-202611-000080",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "AVUSTURYA BAŞKONSOLOSLUĞU",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "09:00",
+   "sure_dk": 90,
+   "ziyaret_id": 11,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = TEKLIF_SUNULACAK; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 81,
+   "no": "SRV-202611-000081",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "15:00",
+   "sure_dk": 180,
+   "ziyaret_id": 12,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip işe başlar (İŞLEMDE), bitirmez"
+  },
+  {
+   "id": 82,
+   "no": "SRV-202611-000082",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "15:00",
+   "sure_dk": 180,
+   "ziyaret_id": 12,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip işe başlar (İŞLEMDE), bitirmez"
+  },
+  {
+   "id": 83,
+   "no": "SRV-202611-000083",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "15:00",
+   "sure_dk": 180,
+   "ziyaret_id": 12,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip işe başlar (İŞLEMDE), bitirmez"
+  },
+  {
+   "id": 84,
+   "no": "SRV-202611-000084",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "15:00",
+   "sure_dk": 180,
+   "ziyaret_id": 12,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip işe başlar (İŞLEMDE), bitirmez"
+  },
+  {
+   "id": 85,
+   "no": "SRV-202611-000085",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "15:00",
+   "sure_dk": 180,
+   "ziyaret_id": 12,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip işe başlar (İŞLEMDE), bitirmez"
+  },
+  {
+   "id": 86,
+   "no": "SRV-202611-000086",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "15:00",
+   "sure_dk": 180,
+   "ziyaret_id": 12,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip işe başlar (İŞLEMDE), bitirmez"
+  },
+  {
+   "id": 87,
+   "no": "SRV-202611-000087",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "DESTEK",
+   "musteri": "DENGE GRUP",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-29",
+   "baslangic": "14:00",
+   "sure_dk": 120,
+   "ziyaret_id": 14,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    },
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv",
+    "t_tek_guv2",
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "liste_eslenen": [
+    "t_tek_guv2",
+    "t_tek_guv1",
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 88,
+   "no": "SRV-202611-000088",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "DESTEK",
+   "musteri": "DENGE GRUP",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-29",
+   "baslangic": "14:00",
+   "sure_dk": 120,
+   "ziyaret_id": 14,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    },
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv",
+    "t_tek_guv2",
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "liste_eslenen": [
+    "t_tek_guv2",
+    "t_tek_guv1",
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 89,
+   "no": "SRV-202611-000089",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-28",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 90,
+   "no": "SRV-202611-000090",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "İSTANBUL HAVALİMANI GÖÇ İDARESİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-28",
+   "baslangic": "11:30",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = TEKLIF_SUNULACAK; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 91,
+   "no": "SRV-202611-000091",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "İSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-28",
+   "baslangic": "14:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 92,
+   "no": "SRV-202611-000092",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "ARASTA PARK AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "14:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 93,
+   "no": "SRV-202611-000093",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "MALTEPE PARK",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-02",
+   "baslangic": "14:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik",
+    "bulgu": "Sonuç notunda yeni arıza bulgusu var → bağlı iş (BAKIM_BULGUSU) önerilir"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "liste_eslenen": [
+    "t_tek_guv2"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 94,
+   "no": "SRV-202611-000094",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "DALGAKIRAN",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-04",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 17,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-04"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 95,
+   "no": "SRV-202611-000095",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "DESTEK",
+   "musteri": "DALGAKIRAN",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-04",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 17,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-04"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 96,
+   "no": "SRV-202611-000096",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "ESPARK AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-04",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-04"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 97,
+   "no": "SRV-202611-000097",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "HALKBANKASI İFM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-27",
+   "baslangic": "16:30",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 98,
+   "no": "SRV-202611-000098",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "KARTSİS TURNİKE",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 99,
+   "no": "SRV-202611-000099",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "MEYER",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "11:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 100,
+   "no": "SRV-202611-000100",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "SECURITAS",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-10-30",
+   "baslangic": "13:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 101,
+   "no": "SRV-202611-000101",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "KOÇTAŞ AVM BEYLİKDÜZÜ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "14:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 102,
+   "no": "SRV-202611-000102",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "DHL",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-06",
+   "baslangic": "09:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 103,
+   "no": "SRV-202611-000103",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "MKE",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "15:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 104,
+   "no": "SRV-202611-000104",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "METRO İSTANBUL",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-02",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_saha_guv",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_saha_guv"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 105,
+   "no": "SRV-202611-000105",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "TCDD 2. BÖLGE MÜDÜRLÜĞÜ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 106,
+   "no": "SRV-202611-000106",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "GÖLCÜK DONANMA KOMUTANLIĞI",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-06",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": null,
+   "arac_var": true,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-06"
+   },
+   "liste_eslenen": [],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 107,
+   "no": "SRV-202611-000107",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "BEAST TEKNOLOJİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-06",
+   "baslangic": "11:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 108,
+   "no": "SRV-202611-000108",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "SAHA GEÇİŞ KONTROL SİSTEMLERİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-06",
+   "baslangic": "14:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 109,
+   "no": "SRV-202611-000109",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "DHL",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-03",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_tek_guv1",
+     "rol": "TEKNISYEN",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2",
+    "t_tek_guv1"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_tek_guv2"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 110,
+   "no": "SRV-202611-000110",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "ÇAM SAKURA HASTANESİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-02",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_guv",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_guv"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "liste_eslenen": [
+    "t_sef_guv"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 111,
+   "no": "SRV-202611-000111",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "TASIMA",
+   "musteri": "ÇAĞAN ELEKTRONİK",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "16:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_guv2",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_guv2"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "liste_eslenen": [
+    "t_tek_guv2"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 112,
+   "no": "SRV-202611-000112",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "musteri": "İGDAŞ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 21,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 113,
+   "no": "SRV-202611-000113",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "musteri": "İGDAŞ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 180,
+   "ziyaret_id": 21,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 114,
+   "no": "SRV-202611-000114",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "musteri": "RÖNESANS TSK PROJESİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-04",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_sef_hab",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_hab",
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab",
+    "t_sef_hab"
+   ],
+   "3_asama": "Ekip işe başlar (İŞLEMDE), bitirmez"
+  },
+  {
+   "id": 115,
+   "no": "SRV-202611-000115",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "musteri": "HISTORIA AVM",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "14:00",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 116,
+   "no": "SRV-202611-000116",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "musteri": "TP-OTC FİLYOS PROJESİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-06",
+   "baslangic": "09:00",
+   "sure_dk": 480,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_sef_hab",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_hab",
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab",
+    "t_sef_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 117,
+   "no": "SRV-202611-000117",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "musteri": "ÜSTAY İNŞAAT",
+   "durum_simdi": "BEKLEMEDE",
+   "aktif_bekleme": "DIS_SERVIS",
+   "plan_tarihi": "2026-11-04",
+   "baslangic": "14:00",
+   "sure_dk": 60,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIS_SERVIS"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Beklemede; 2. aşamada bekleme açıldı"
+  },
+  {
+   "id": 118,
+   "no": "SRV-202611-000118",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KESIF",
+   "musteri": "MAKİNE VE KİMYA ENDÜSTRİSİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-07",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_hab",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_sef_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 119,
+   "no": "SRV-202611-000119",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KESIF",
+   "musteri": "REC",
+   "durum_simdi": "MUSTERI_TALEBI",
+   "aktif_bekleme": null,
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "MUSTERI_TALEBI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_sef_hab"
+   ],
+   "3_asama": "Plan yok / dokunma"
+  },
+  {
+   "id": 120,
+   "no": "SRV-202611-000120",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "HALKBANKASI",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-07",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 121,
+   "no": "SRV-202611-000121",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "HALKBANKASI",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-07",
+   "baslangic": "13:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 122,
+   "no": "SRV-202611-000122",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "ESENLER BELEDİYESİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-10",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 123,
+   "no": "SRV-202611-000123",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KURULUM",
+   "musteri": "BUSKİ",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-11",
+   "baslangic": "09:00",
+   "sure_dk": 480,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_sef_hab",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_hab",
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab",
+    "t_sef_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 124,
+   "no": "SRV-202611-000124",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KURULUM",
+   "musteri": "ZİRAAT BANKASI",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-10",
+   "baslangic": "14:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 125,
+   "no": "SRV-202611-000125",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "DEMONTAJ",
+   "musteri": "ENERYA",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-12",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    },
+    {
+     "kullanici": "t_sef_hab",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_hab",
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab",
+    "t_sef_hab"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 126,
+   "no": "SRV-202611-000126",
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KURULUM",
+   "musteri": "İBB İTFAİYE",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-04",
+   "baslangic": "15:30",
+   "sure_dk": 90,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_tek_hab",
+     "rol": "TEKNISYEN",
+     "sorumlu": true
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_tek_hab"
+   ],
+   "hedef": {
+    "durum": "TAMAMLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_hab"
+   ],
+   "3_asama": "Ekip yola çıkar/sahaya varır, iş yapılır, sonuç = COZULDU; süre kaydı girilmezse 'eksik' kalmalı"
+  },
+  {
+   "id": 127,
+   "no": "SRV-202611-000127",
+   "sirket": "ELEKTRONIK",
+   "birim": "BARIYER",
+   "tur": "KURULUM",
+   "musteri": "FİRSTGATE ORGANİZASYON",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-06",
+   "baslangic": "09:00",
+   "sure_dk": 240,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_bar",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_bar"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_sef_bar"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 128,
+   "no": "SRV-202611-000128",
+   "sirket": "ELEKTRONIK",
+   "birim": "BARIYER",
+   "tur": "TOPLAMA",
+   "musteri": "FİRSTGATE ORGANİZASYON",
+   "durum_simdi": "PLANLAMADA",
+   "aktif_bekleme": null,
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_bar",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "MUSTERI_TALEBI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_sef_bar"
+   ],
+   "3_asama": "Plan yok / dokunma"
+  },
+  {
+   "id": 129,
+   "no": "SRV-202611-000129",
+   "sirket": "ELEKTRONIK",
+   "birim": "BARIYER",
+   "tur": "TASIMA",
+   "musteri": "ZEUS MEDYA",
+   "durum_simdi": "PLANLANDI",
+   "aktif_bekleme": null,
+   "plan_tarihi": "2026-11-05",
+   "baslangic": "09:00",
+   "sure_dk": 120,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [
+    {
+     "kullanici": "t_sef_bar",
+     "rol": "SEF",
+     "sorumlu": false
+    }
+   ],
+   "plan_ekibi_sahaya_giden": [
+    "t_sef_bar"
+   ],
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_sef_bar"
+   ],
+   "3_asama": "Dokunma (planlı kalır) ya da yalnız görüntüle"
+  },
+  {
+   "id": 130,
+   "no": "SRV-202611-000130",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "musteri": "AVUSTURYA BAŞKONSOLOSLUĞU",
+   "durum_simdi": "MUSTERI_TALEBI",
+   "aktif_bekleme": null,
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "MUSTERI_TALEBI",
+    "not": "Arayüz testi kaydı; 2. aşama serbestçe kullanabilir"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Plan yok / dokunma"
+  },
+  {
+   "id": 131,
+   "no": "SRV-202611-000131",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "musteri": "KİPA AVM",
+   "durum_simdi": "MUSTERI_TALEBI",
+   "aktif_bekleme": null,
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "MUSTERI_TALEBI",
+    "not": "Arayüz testi kaydı; 2. aşama serbestçe kullanabilir"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Plan yok / dokunma"
+  },
+  {
+   "id": 132,
+   "no": "SRV-202611-000132",
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "musteri": "ORTADAĞ ORTAOKULU",
+   "durum_simdi": "MUSTERI_TALEBI",
+   "aktif_bekleme": null,
+   "plan_tarihi": null,
+   "baslangic": null,
+   "sure_dk": null,
+   "ziyaret_id": null,
+   "arac_var": false,
+   "ekip": [],
+   "plan_ekibi_sahaya_giden": [],
+   "hedef": {
+    "durum": "MUSTERI_TALEBI",
+    "not": "Arayüz testi kaydı; 2. aşama serbestçe kullanabilir"
+   },
+   "liste_plan": null,
+   "liste_eslenen": [
+    "t_tek_guv1"
+   ],
+   "3_asama": "Plan yok / dokunma"
+  }
+ ]
+}

@@ -1,0 +1,228 @@
+{#
+  Fiyat teklifi — tasarım `~/denge-teklif/teklif-formu.html` referansıyla
+  BİREBİR aynı (kullanıcı kararı, 25 Eyl 2026).
+
+  Eski şablon markalı ve "tasarlanmış" bir düzendi: renkli başlıklar, gri
+  zeminler, büyük harf aralıklı etiketler. Kullanıcının ifadesiyle "AI kokan"
+  taraf buydu. Referans ise şirketin fiilen kullandığı, sade ve ticari bir
+  form: Arial, siyah ince çerçeveler, sabit alan düzeni.
+
+  Bu yüzden burada BİLEREK yapılanlar:
+  * Marka renkleri KULLANILMAZ; düzen siyah-beyaz ve sade kalır.
+  * Tablolar siyah 1px çerçeveli; zebra, gölge, yuvarlatma yok.
+  * Alan adları ve sıralaması referanstan kopyalanmıştır (TARİH / Teklif No. /
+    Müşteri Kimliği; SATIŞ YETKİLİSİ satırı; ARA TOPLAM → TOPLAM).
+  * Ölçüler mm cinsinden ve A4'e göre; ekrandaki canlı önizleme aynı
+    ölçüleri kullanır (frontend/src/pages/TeklifFormu.tsx).
+
+  YAZI TİPİ İSTİSNA DEĞİL (kullanıcı kararı, 30 Eyl 2026): referans form
+  Arial'dı ve şablon da öyle yazılmıştı, ama bu tek belgeyi ERP'nin geri
+  kalanından ve hak ediş dökümünden ayrı düşürüyordu. Artık her yerde
+  Archivo + IBM Plex Mono. Düzen, ölçüler ve sadelik aynen korunur.
+#}
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<style>
+  /* Kurumsal yazı tipleri. İKİ alt küme de şart: `latin-ext` dosyası YALNIZ
+     ğ ş ı İ ₺ gibi ek karakterleri taşır, temel harfleri değil. Tek başına
+     yüklendiğinde gövde metninin TAMAMI yedek fonta (DejaVu) düşüyordu ve
+     belge marka fontuyla yazılmış görünüp aslında başka bir yazı tipiyle
+     basılıyordu. `unicode-range` her karakteri doğru dosyadan alır. */
+  /* `unicode-range` Fontsource'un yayımladığı aralıkların AYNISI olmalı.
+     Kısaltılmış bir aralık sessizce yanlış sonuç verir: eski değer U+20AB'de
+     bitiyordu ve Türk lirası işareti (U+20BA) HİÇBİR aralığa girmediği için
+     her tutarda yedek fonta düşüyordu — rakamlar Archivo, yanındaki ₺ DejaVu. */
+  @font-face {
+    font-family: "Archivo";
+    src: url("{{ font_dir }}/archivo-latin-wdth-normal.woff2") format("woff2");
+    font-weight: 100 900;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+      U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+      U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "Archivo";
+    src: url("{{ font_dir }}/archivo-latin-ext-wdth-normal.woff2") format("woff2");
+    font-weight: 100 900;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+      U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+      U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "PlexMono";
+    src: url("{{ font_dir }}/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+    font-weight: 400;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+      U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+      U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "PlexMono";
+    src: url("{{ font_dir }}/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2");
+    font-weight: 400;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+      U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+      U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "PlexMono";
+    src: url("{{ font_dir }}/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+    font-weight: 500;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+      U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+      U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "PlexMono";
+    src: url("{{ font_dir }}/ibm-plex-mono-latin-ext-500-normal.woff2") format("woff2");
+    font-weight: 500;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+      U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+      U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+
+  @page { size: A4; margin: 0; }
+  body {
+    margin: 0; padding: 11mm 12mm;
+    font-family: "Archivo", "DejaVu Sans", sans-serif;
+    color: #000; font-size: 8.5pt;
+  }
+  /* Numara ve kodlar: hizalı okunsun diye tek aralıklı. */
+  .mono { font-family: "PlexMono", "DejaVu Sans Mono", monospace; }
+
+  .s-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .s-logo { width: 44mm; margin-bottom: 3mm; }
+  .s-addr { font-size: 8.5pt; line-height: 1.45; }
+
+  .s-meta { font-size: 8.5pt; margin-top: 14mm; border-collapse: collapse;
+            width: 80mm; table-layout: fixed; }
+  .s-meta td { padding: .6mm 0 .6mm 3mm; vertical-align: top; }
+  .s-meta .lbl { font-weight: bold; text-align: right; white-space: nowrap; width: 30mm; }
+  .s-meta .val { word-wrap: break-word; }
+
+  .s-titleline { display: flex; justify-content: space-between;
+                 align-items: baseline; margin-top: 6mm; }
+  .s-title { font-size: 10.5pt; font-weight: bold; }
+  .s-validity { font-size: 8.5pt; width: 60mm; display: flex; justify-content: space-between; }
+
+  .s-parties { display: flex; justify-content: space-between; margin-top: 5mm; }
+  .s-customer { font-size: 8.5pt; line-height: 1.6; flex: 1; padding-right: 6mm;
+                word-wrap: break-word; }
+  .s-preparer { font-size: 8.5pt; line-height: 1.6; width: 60mm; }
+  /* Archivo'nun italiği YOK; italik yazmak bu tek satırı DejaVu'ya
+     düşürür ve belgede ikinci bir yazı tipi belirirdi. Ayrım ağırlıkla. */
+  .s-preparer .h,
+  .vurgu { font-weight: 600; }
+
+  .s-note { font-size: 8.5pt; margin-top: 6mm; }
+  .s-note b { margin-right: 2mm; }
+
+  table.grid { width: 100%; border-collapse: collapse; margin-top: 4mm; font-size: 8pt; }
+  table.grid th { border: 1px solid #000; padding: 2mm 1.5mm; font-weight: bold;
+                  text-align: center; font-size: 8pt; }
+  table.grid td { border: 1px solid #000; padding: 1.8mm 1.5mm; height: 6.5mm;
+                  vertical-align: middle; }
+  /* Çok sayfalı teklifte başlık her sayfada tekrar etsin. */
+  table.grid thead { display: table-header-group; }
+
+  .s-items td.qty  { text-align: center; width: 16%; }
+  .s-items td.desc { width: 36%; }
+  .s-items td.unit { text-align: right;  width: 16%; }
+  .s-items td.tax  { text-align: center; width: 16%; }
+  .s-items td.amt  { text-align: right;  width: 16%; }
+
+  .s-bottom { display: flex; margin-top: 2mm; }
+  .s-notes { flex: 1; font-size: 8pt; line-height: 1.5; padding-right: 6mm; padding-top: 8mm; }
+  .s-notes p { margin: 0 0 2.5mm; }
+  .s-totals { width: 64mm; border-collapse: collapse; font-size: 8.5pt; }
+  .s-totals td { padding: 1.6mm 1.5mm; height: 6mm; }
+  .s-totals .lbl { text-align: right; padding-right: 3mm; white-space: nowrap; }
+  .s-totals .box { border: 1px solid #000; text-align: right; width: 26mm; }
+  .s-totals .grand .lbl, .s-totals .grand .box { font-weight: bold; }
+</style>
+</head>
+<body>
+
+  <div class="s-top">
+    <div>
+      <img class="s-logo" src="{{ brand_dir }}/denge-mobilite.png" alt="{{ firma.unvan }}">
+      <div class="s-addr">
+        {{ firma.adres }}<br>
+        Telefon: {{ firma.telefon }}{% if firma.eposta %} &nbsp; {{ firma.eposta }}{% endif %}
+      </div>
+    </div>
+    <table class="s-meta">
+      <tr><td class="lbl">TARİH</td><td class="val">{{ bugun }}</td></tr>
+      <tr><td class="lbl">Teklif No.</td><td class="val">{{ teklif.quote_no }}{% if versiyon.version_no > 1 %} · rev {{ versiyon.version_no }}{% endif %}</td></tr>
+      <tr><td class="lbl">Müşteri Kimliği</td><td class="val">{{ musteri.tax_no or musteri.id }}</td></tr>
+    </table>
+  </div>
+
+  <div class="s-titleline">
+    <div class="s-title">Fiyat Teklifi</div>
+    <div class="s-validity"><span class="vurgu">Teklif geçerlilik tarihi:</span> <span>{{ gecerlilik }}</span></div>
+  </div>
+
+  <div class="s-parties">
+    <div class="s-customer">
+      Şirket Adı : {{ musteri.title }}<br>
+      Açık Adres : {{ adres or "—" }}<br>
+      Telefon : {{ musteri.phone or "—" }}
+      {%- if musteri.email %}<br>E-posta : {{ musteri.email }}{% endif %}
+    </div>
+    <div class="s-preparer">
+      <span class="h">Hazırlayan:</span><br>
+      {{ hazirlayan }}<br>
+      {{ firma.telefon }}<br>
+      {{ firma.eposta }}
+    </div>
+  </div>
+
+  <div class="s-note"><b>Açıklamalar veya Özel Yönergeler:</b>{{ teklif.title or "" }}</div>
+
+  <table class="grid s-items">
+    <thead>
+      <tr>
+        <th style="width:16%">MİKTAR</th>
+        <th style="width:36%">AÇIKLAMA</th>
+        <th style="width:16%">BİRİM FİYATI</th>
+        <th style="width:16%">Vergi Oranı</th>
+        <th style="width:16%">TUTAR</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for k in kalemler %}
+      <tr>
+        <td class="qty">{{ k.qty }}</td>
+        <td class="desc">{{ k.description }}{% if k.iskonto_var %} (%{{ k.discount_pct }} iskonto){% endif %}</td>
+        <td class="unit">{{ k.unit_price }}</td>
+        <td class="tax">%{{ k.vat_pct }}</td>
+        <td class="amt">{{ k.line_total }}</td>
+      </tr>
+      {% endfor %}
+      {# Form görünümünü korumak için en az 8 satır; referansta da boş satırlar var. #}
+      {% for _ in range(8 - kalemler|length if kalemler|length < 8 else 0) %}
+      <tr><td class="qty">&nbsp;</td><td class="desc"></td><td class="unit"></td><td class="tax"></td><td class="amt"></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="s-bottom">
+    <div class="s-notes">
+      {% for satir in sartlar.split("\n") %}{% if satir.strip() %}<p>{{ satir.strip() }}</p>{% endif %}{% endfor %}
+      {% if kur %}<p>Kur: {{ kur }}{% if kur_tarihi %} ({{ kur_tarihi }}){% endif %}</p>{% endif %}
+    </div>
+    <table class="s-totals">
+      <tr><td class="lbl">ARA TOPLAM</td><td class="box">{{ toplam.ara }}</td></tr>
+      {% if toplam.iskonto_var %}
+      <tr><td class="lbl">İSKONTO</td><td class="box">{{ toplam.iskonto }}</td></tr>
+      {% endif %}
+      <tr><td class="lbl">SATIŞ VERGİSİ</td><td class="box">{{ toplam.kdv }}</td></tr>
+      <tr class="grand"><td class="lbl">TOPLAM</td><td class="box">{{ toplam.genel }}</td></tr>
+    </table>
+  </div>
+
+</body>
+</html>

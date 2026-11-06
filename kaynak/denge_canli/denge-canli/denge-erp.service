@@ -1,0 +1,28 @@
+# Denge ERP — Docker Compose yigini systemd altinda.
+# Kurulum:
+#   sudo cp deploy/denge-erp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now denge-erp
+#
+# Konteynerlerin kendi `restart: unless-stopped` politikasi tek tek
+# konteyneri kaldirir; bu birim SUNUCU YENIDEN BASLADIGINDA tum yigini
+# dogru sirada ayaga kaldirir ve `systemctl status` ile tek yerden izlenir.
+
+[Unit]
+Description=Denge Mobilite ERP (Docker Compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/denge-erp
+# Acilista migration + izin senkronu compose'un api komutunda kosuyor.
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+ExecReload=/usr/bin/docker compose up -d --remove-orphans
+# Imaj cekme ve derleme uzun surebilir.
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

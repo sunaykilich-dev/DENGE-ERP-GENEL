@@ -1,0 +1,49 @@
+DENGEERP V1.13 — GÜVENLİ KURULUM ve KABUL TESTİ
+================================================
+
+1) V1.12'yi çalıştıran PowerShell'i kapatmayın. ZIP'i C:\DengeERP\App içine
+   indirip yeni bir PowerShell açın.
+
+$ad = 'DengeERP_Pilot_V1_13_EGITIM_YETKINLIK_SAHA_GELISIM_2026-10-14'
+$zip = "C:\DengeERP\App\$ad.zip"
+$hedef = "C:\DengeERP\App\DengeERP_V1_13_TEMIZ_$(Get-Date -Format yyyyMMdd_HHmmss)"
+Expand-Archive -LiteralPath $zip -DestinationPath $hedef -ErrorAction Stop
+$proje = Get-ChildItem $hedef -Recurse -Filter 'DengeERP.Api.csproj' | Select-Object -First 1
+if (-not $proje) { throw 'Proje dosyasi bulunamadi' }
+dotnet build $proje.FullName
+
+2) SSMS'de güncel DengeERP veritabanı FULL yedeğini alın ve RESTORE VERIFYONLY
+   ile doğrulayın. Daha önceki yedeğe güvenmek yerine son sürüm yedeği alın.
+3) V1.12'yi kullanan personelle uygun durdurma zamanı belirleyin. V1.12
+   PowerShell'inde Ctrl+C ile uygulamayı durdurun. SQL veritabanını silmeyin.
+4) V1.13'ün derlendiği klasöre geçip başlatın:
+
+Set-Location $proje.DirectoryName
+dotnet run --urls 'http://0.0.0.0:5050'
+
+5) http://10.10.50.60:5050 adresini açın, Ctrl+F5 ile yenileyin, admin
+   hesabıyla giriş yapın. Eğitim / Personel Gelişimi menüsü görünmeli.
+
+KABUL TESTİ
+[ ] Yönetim Özeti doğru yıl ve birime göre değişiyor.
+[ ] Katalog örnekleri (İSG, X-Ray, kapı dedektörü, telsiz) görülüyor.
+[ ] Bir personele yıllık eğitim atanın; aynı eğitimi yeniden atayın; tek kayıt.
+[ ] Gerçekleşen eğitim oturumu ve katılım kaydedin; plan tamamlanıyor.
+[ ] Ön/son sınav puanı kaydediliyor, tabloda görülüyor.
+[ ] İlgili iş emrini seçerek saha gözlemi kaydedin.
+[ ] Kritik madde başarısızsa kritik uyarı oluşuyor.
+[ ] 1–4 yetkinlik seviyesi ve hedefi kalıcı kaydediliyor.
+[ ] 30/60/90 takip listesi tamamlanan eğitimden türetiliyor.
+[ ] CSV dışa aktarımı Excel'de Türkçe karakterlerle açılıyor.
+[ ] V1.12 kiralama, depo, planlama, bakım, rapor ekranları çalışıyor.
+
+YETKİLER
+Kullanıcı / Yetki sayfasından 'training.view', 'training.manage',
+ 'training.observe', 'training.export' yetkilerini ihtiyaca göre verin.
+Bu paket mevcut kullanıcıların el ile tanımlanmış yetkilerini değiştirmez.
+
+GERİ DÖNÜŞ
+Uygulamayı Ctrl+C ile durdurun. V1.12 klasöründeki uygulama kodunu
+tekrar çalıştırabilirsiniz. Veritabanını daha önceki yedeğe GERİ ALMAK
+V1.13'ten sonra girilen verileri kaybettirebilir; restore işlemini doğrudan
+uygulamayın. Yeni V1.13 tabloları V1.12 uygulamasınca kullanılmaz.

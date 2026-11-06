@@ -1,0 +1,50 @@
+DENGEERP PILOT V1.10 — SERVİS/BAKIM RAPORLARI VE GERÇEK PERSONEL ZAMANI
+Tarih: 14.10.2026
+Taban: Çalışan V1.9 TOPLU_PLANLAMA_ATAMA tam proje ZIP'i.
+
+1) ANA PANEL VE İŞ EMİRLERİ
+   - Günlük servis/arıza ve planlı/yıllık bakım ayrı KPI bloklarında gösterilir.
+   - İş Emirleri ilk açılışta günlük servis ve açık iş kategorisine odaklanır.
+   - Planlı bakım ayrı sekmede; tüm işlere ihtiyaç halinde geçilebilir.
+
+2) PLANLAMA
+   - Planlanmayı Bekleyenler kutusuna müşteri/firma, lokasyon, seri no ve iş emri araması eklendi.
+   - Arama değişince gizli eski toplu seçimler güvenlik için temizlenir.
+   - Aynı müşteri/lokasyondaki cihazlara toplu planlama ve toplu ekip atama (V1.9) korunur.
+
+3) GERÇEK ÇALIŞMA SÜRESİ
+   - Yeni SQL tablosu: dbo.WorkOrderTimeLogs (idempotent Z* migration).
+   - Her iş emrinde teknisyen, faaliyet türü, başlangıç ve bitiş tarihi/saati,
+     bulunduğu bölge ve iş notu kaydı.
+   - Bir işte birden çok teknisyenin zamanı ayrı kaydedilir.
+   - Faaliyetler: saha çalışması, yol, bekleme, uzaktan destek, atölye, test ve diğer.
+   - Aynı kişinin zaman çakışması engellenir.
+   - Teknisyen yalnızca kendisi için, üst yetkili ise işe atanmış teknisyen için zaman girebilir.
+   - Şef/yetkili hatalı kaydı silmeden iptal edebilir; audit izi tutulur.
+
+4) RAPORLAR
+   - Tarih, tarih türü, birim, iş kategorisi, iş türü, durum, kişi, şef ve müşteri filtreleri.
+   - Otomatik iş emri çapraz özetleri, personele ve müşteri/lokasyona göre kişi-saat raporları.
+   - Gerçek saat bazlı toplam kişi-saat, yol/bekleme/saha süreleri ve süre kaydı eksik işleri.
+   - Personel - lokasyon - başlangıç - bitiş - işlem notu ayrıntı tablosu.
+   - 'Güncelle' ile en son SQL kayıtlarını tekrar okuma.
+   - Tek tıklamayla 8 sayfalık Excel çıktısı:
+     Yönetim Özeti | Günlük Servis | Planlı Bakım | Birim Durum | Aylık Özet |
+     Personel KPI | Süre Hareketleri | Müşteri Lokasyon.
+   - Excel detay sayfalarında filtre başlıkları, sabit başlık satırı bulunur.
+   - Otomatik çapraz özetler indirme anında oluşturulur; Excel native PivotTable objesi DEĞİLDİR.
+
+VERİ DOĞRULUĞU
+   * 'Tahmini süre', personelin fiilen çalıştığı süre olarak raporlanmaz.
+   * Örn. iki kişi iki saat çalışırsa 4 kişi-saat.
+   * Süre kaydı olmayan eski iş emirleri 0 saat yapılmış gibi gösterilmez; eksik etiketlenir.
+   * Süre raporunun tarih filtresi faaliyetin başlangıç tarihine uygulanır.
+   * Tarih/mesai saatleri yerel SQL Server saatine göre kaydedilir.
+
+GÜVENLİK / YAYIN
+   * Mevcut V1.9 dosyalarını kesinlikle silmeyin; SQL'in güncel .bak yedeğini alın.
+   * Yeni paket ayrı klasöre çıkarılıp önce `dotnet build` ile derlenmeli.
+   * Uygulama ilk çalıştırmada SQL scriptlerini otomatik uygular; bu nedenle
+     mevcut veritabanına bağlamadan önce yedek alındığından emin olun.
+   * Eski servisi durdurmadan 5050 portunda ikinci uygulamayı başlatmayın.
+   * .NET/SQL entegrasyonu Windows makinede test edilmelidir.

@@ -1,0 +1,125 @@
+ARŞİV: Eski Windows pilot kurulum talimatıdır; Linux kurulumu için linux/README_KURULUM_TR.md kullanın.
+
+DENGEERP PILOT V1 - KURULUM / CALISTIRMA
+========================================
+
+1) YEDEK
+------
+Mevcut C:\DengeERP\App\DengeERP.Api klasorunu once yedekleyin.
+Bu paket, mevcut SQL verilerini silmeden idempotent tablo/alan guncellemeleri yapacak sekilde hazirlandi.
+
+2) KLASOR
+---------
+Bu paketin DengeERP.Api klasorunu tercihen:
+C:\DengeERP\App\DengeERP.Api_Pilot
+olarak acin. Once yan yana test edin; eski klasoru hemen silmeyin.
+
+3) SQL
+-----
+Uygulama acilirken Database\DengeERP_Update.sql dosyasini otomatik uygular.
+Ayrica dosya IT/SSMS kontrolu icin pakette bulunur.
+Beklenen SQL instance:
+localhost\SQLEXPRESS
+Veritabani:
+DengeERP
+
+Farkli SQL sunucusu kullanilacaksa appsettings.json -> ConnectionStrings -> DengeERP degistirilir.
+
+4) ILK CALISTIRMA
+-----------------
+PowerShell / CMD:
+cd C:\DengeERP\App\DengeERP.Api_Pilot
+dotnet build
+dotnet run --urls "http://0.0.0.0:5050"
+
+veya Start-Pilot.bat dosyasini cift tiklayin.
+
+Kendi bilgisayariniz:
+http://localhost:5050
+
+5) ILK GIRIS
+-------------
+admin / [ESKI_DEMO_PAROLA_KULLANILMAMALI]
+
+Demo hesaplar:
+operasyon / [ESKI_DEMO_PAROLA_KULLANILMAMALI]
+sef / [ESKI_DEMO_PAROLA_KULLANILMAMALI]
+teknisyen / [ESKI_DEMO_PAROLA_KULLANILMAMALI]
+
+Admin disindaki demo hesaplar ilk giriste sifre degistirir.
+Gercek pilot kullanicilarini admin -> Kullanici / Yetki ekranindan acin.
+
+6) AGDAN DIGER KULLANICI
+------------------------
+Windows PowerShell'i YONETICI olarak acin ve bu klasorde:
+.\Setup-Pilot-Firewall.ps1
+
+Calistirma ilk kez engellenirse sadece o oturum icin:
+Set-ExecutionPolicy -Scope Process Bypass
+.\Setup-Pilot-Firewall.ps1
+
+Script PC'nin IPv4 adreslerini verir. Ornek:
+http://192.168.1.75:5050
+
+Bu linki AYNI sirket agindaki pilot kullanicilara gonderebilirsiniz.
+PC acik kalmali, uyku moduna gecmemeli ve DengeERP sunucu penceresi kapanmamalidir.
+
+7) PILOTTA HAZIR OLAN ANA ISLEVLER
+----------------------------------
+- SQL tabanli gercek kullanici girisi
+- PBKDF2 ile hash'li parola
+- Rol + kullanici bazli modul/islem yetkileri
+- Birim bazli erisim: Guvenlik, Haberlesme, POC, Mobilite, Arac Takip
+- Is emri olusturma
+- Sef + coklu teknisyen atama
+- Tarih/saat/sure/arac/rota/not planlama
+- Durum degisikligi ve SQL durum gecmisi
+- Is turune gore seri no kurali
+  * Atolye: acilista zorunlu
+  * Saha: kapatirken zorunlu
+- Birden fazla seri numarasi (virgulle ayrilabilir)
+- Ortak teklif yonetimi (tum birimler)
+- Teklif kalemleri, iskonto, KDV ve toplam
+- Teklif onayi
+- Temel PDF teklif
+- Kurumsal SMTP ayari yapildiginda standart e-posta + PDF eki
+- Gunluk / haftalik / aylik / ozel tarih araligi Excel raporu
+- Rapor filtreleri: birim, durum, is turu, teknisyen, sef
+- Excel'de Ozet + Is Emirleri sayfalari
+
+8) E-POSTA AYARI
+----------------
+Mail gonderimi icin appsettings.json -> Email bolumu sirket IT'sinden alinacak degerlerle doldurulur:
+SmtpHost
+SmtpPort
+Username
+Password
+From
+EnableSsl
+
+Bu bilgiler yoksa teklif olusturma/PDF calisir; "Mail Gonder" butonu SMTP yapilandirilmadi uyarisini verir.
+
+9) ONEMLI PILOT SINIRLARI
+-------------------------
+- Bu PC gecici pilot sunucudur; kalici uretim sunucusu degildir.
+- SQL portunu internete acmayin.
+- Sirket disi erisim gerekiyorsa VPN/HTTPS planlanmalidir.
+- KPI/SLA hedefleri henuz sabitlenmedi; gercek operasyon verileriyle yonetici dashboard'u son asamada netlestirilecek.
+- Offline teknisyen senkronu, depo/muhasebe alt gorev akisi, cihaz kutugu/bakim checklist derinligi ve rota optimizasyonu sonraki iterasyonlardir.
+
+10) ILK PILOT TEST SENARYOSU
+----------------------------
+A) Admin gercek bir Sef ve Teknisyen kullanicisi acar.
+B) Operasyon bir musteri talebi acar.
+C) Sef kaydi acar -> Planla -> tarih/saat/arac/teknisyen atar.
+D) Teknisyen kendi hesabi ile girer -> sadece kendisine atanan isi gorur.
+E) Saha isinde seri no girmeden Tamamlandi denenir -> sistem engeller.
+F) Seri no girilir -> Tamamlandi -> Kapatildi yapilir.
+G) Teklif olusturulur, PDF indirilir.
+H) Raporlar ekranindan Bugun / Bu Hafta / Bu Ay Excel indirilir.
+
+PILOT V1.5 NOTU
+- İlk çalıştırmada Database klasöründeki SQL dosyaları sırayla ve otomatik uygulanır.
+- X-Ray kütük ve bakım Excel verileri V1.5 seed SQL içinde gömülüdür; Excel dosyalarını ayrıca kopyalamak gerekmez.
+- İlk V1.5 açılışı bakım planlarını oluşturur ve vadesi gelen sıradaki PB kayıtlarını otomatik açabilir; bu nedenle Ana Panelde açık iş sayısı artabilir.
+- Mevcut kullanıcı, iş emri, kiralama ve teklif kayıtları silinmez.

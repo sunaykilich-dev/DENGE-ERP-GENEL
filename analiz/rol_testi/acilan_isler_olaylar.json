@@ -1,0 +1,2203 @@
+{
+ "yetki_olaylari": [
+  {
+   "eylem": "hızlı müşteri (KIBRIS GİRNE LİMANI)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KIBRIS GİRNE LİMANI)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ZONGULDAK EREN ENERJİ)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ZONGULDAK EREN ENERJİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ESAN BALYA ECZACIBAŞI)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ESAN BALYA ECZACIBAŞI)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KİPA AVM)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KİPA AVM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (AVUSTURYA BAŞKONSOLOSLUĞU)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (AVUSTURYA BAŞKONSOLOSLUĞU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ŞANLIURFA PİAZZA AVM)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ŞANLIURFA PİAZZA AVM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (VAKIF KATILIM)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (VAKIF KATILIM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KARTAL ANPA GROSS)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KARTAL ANPA GROSS)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (PİMSER)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (PİMSER)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ÖZDİLEK AVM LEVENT)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ÖZDİLEK AVM LEVENT)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KÜÇÜKPRENS İLKOKULU)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KÜÇÜKPRENS İLKOKULU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (RÖNESANS ANKARA)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (RÖNESANS ANKARA)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İZMİR OPTİMUM)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İZMİR OPTİMUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (SECURİTAS)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (SECURİTAS)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (RADDİSON BLU ŞİŞLİ)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (RADDİSON BLU ŞİŞLİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (MALTEPE PARK)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (MALTEPE PARK)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ORTADAĞ ORTAOKULU)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ORTADAĞ ORTAOKULU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (SANCAKTEPE BELEDİYESİ)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (SANCAKTEPE BELEDİYESİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (DOĞUŞ OTOMOTİV)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (DOĞUŞ OTOMOTİV)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (USO CENTER)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (USO CENTER)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (VENRAY)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (VENRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (HALKBANK GENEL)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (HALKBANK GENEL)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İDTM)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İDTM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (PALLADIUM TOWER)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (PALLADIUM TOWER)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İSKİ)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İSKİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (DENGE GRUP)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (DENGE GRUP)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İSTANBUL HAVALİMANI GÖÇ İDARESİ)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İSTANBUL HAVALİMANI GÖÇ İDARESİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ARASTA PARK AVM)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ARASTA PARK AVM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (DALGAKIRAN)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (DALGAKIRAN)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ESPARK AVM)",
+   "kullanici": "t_ops_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_sdestek_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ESPARK AVM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (HALKBANKASI İFM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (LİDERTEK ZAMAN)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KARTSİS TURNİKE)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (MODA DENİZ KULÜBÜ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KARPOWERSHIP)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (MEYER)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (SİPAHİ GRUP KAZIM ELED AĞ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İHLAS HOLDİNG)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (EL_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (EL_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (EL_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "tesis ekle (KARTSİS TURNİKE / İSTANBUL AVRUPA YAKASI)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (lokasyon.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (RAMS TÜRKİYE)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (EL_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "tesis ekle (SECURITAS / DALGAKIRAN DİLOVASI)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (lokasyon.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (KOÇTAŞ AVM BEYLİKDÜZÜ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (DHL)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (MİGROS GENEL MÜDÜRLÜĞÜ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (MKE)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ADANA RAYLI SİSTEMLER)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (METRO İSTANBUL)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (TCDD 2. BÖLGE MÜDÜRLÜĞÜ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (GÖLCÜK DONANMA KOMUTANLIĞI)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (BAKIRKÖY ADLİYESİ (VEKTÖR GÜVENLİK))",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (BEAST TEKNOLOJİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (SAHA GEÇİŞ KONTROL SİSTEMLERİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (MARMARA PARK AVM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "tesis ekle (DHL / KAYSERİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (lokasyon.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ÇAM SAKURA HASTANESİ)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (XRAY)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/KURULUM)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ÇAĞAN ELEKTRONİK)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "ekipman aç (KAPI_DEDEKTORU)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (ekipman.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "iş aç (GUVENLIK/TASIMA)",
+   "kullanici": "t_sdestek_guv",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (servis.yaz)",
+   "yedek": "t_ops_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (İGDAŞ)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (RÖNESANS TSK PROJESİ)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (HISTORIA AVM)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (TP-OTC FİLYOS PROJESİ)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (ÜSTAY İNŞAAT)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (MAKİNE VE KİMYA ENDÜSTRİSİ)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (REC)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (HALKBANKASI)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (ESENLER BELEDİYESİ)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (BUSKİ)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (ZİRAAT BANKASI)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (ENERYA)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (İBB İTFAİYE)",
+   "kullanici": "t_ops_hab",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_hab"
+  },
+  {
+   "eylem": "hızlı müşteri (FİRSTGATE ORGANİZASYON)",
+   "kullanici": "t_sef_bar",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_guv"
+  },
+  {
+   "eylem": "hızlı müşteri (ZEUS MEDYA)",
+   "kullanici": "t_sef_bar",
+   "durum": 403,
+   "mesaj": "Bu işlem için yetkiniz yok (hesap.kart_yaz veya hesap.yaz)",
+   "yedek": "t_yon_guv"
+  }
+ ],
+ "uyarilar": [
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000026",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000025', 'id': 25}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000028",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000027', 'id': 27}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000029",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000027', 'id': 27}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000029",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000028', 'id': 28}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000030",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000027', 'id': 27}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000030",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000028', 'id': 28}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000030",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000029', 'id': 29}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000031",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000027', 'id': 27}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000031",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000028', 'id': 28}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000031",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000029', 'id': 29}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000031",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000030', 'id': 30}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000032",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000027', 'id': 27}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000032",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000028', 'id': 28}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000032",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000029', 'id': 29}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000032",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000030', 'id': 30}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000032",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000031', 'id': 31}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000034",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000033', 'id': 33}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000035",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000033', 'id': 33}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000035",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000034', 'id': 34}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000040",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000039', 'id': 39}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000042",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000041', 'id': 41}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000047",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000046', 'id': 46}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000051",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000050', 'id': 50}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000052",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000050', 'id': 50}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000052",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000051', 'id': 51}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000056",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000055', 'id': 55}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000057",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000055', 'id': 55}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000057",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000056', 'id': 56}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000058",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000055', 'id': 55}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000058",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000056', 'id': 56}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000058",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000057', 'id': 57}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000059",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000055', 'id': 55}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000059",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000056', 'id': 56}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000059",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000057', 'id': 57}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000059",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000058', 'id': 58}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000062",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000061', 'id': 61}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000065",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000064', 'id': 64}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000066",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000064', 'id': 64}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000066",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000065', 'id': 65}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000075",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000074', 'id': 74}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000076",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000074', 'id': 74}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000076",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000075', 'id': 75}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000077",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000074', 'id': 74}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000077",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000075', 'id': 75}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000077",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000076', 'id': 76}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000078",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000074', 'id': 74}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000078",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000075', 'id': 75}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000078",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000076', 'id': 76}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000078",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000077', 'id': 77}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000080",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000045', 'id': 45}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000082",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000081', 'id': 81}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000083",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000081', 'id': 81}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000083",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000082', 'id': 82}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000084",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000081', 'id': 81}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000084",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000082', 'id': 82}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000084",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000083', 'id': 83}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000085",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000081', 'id': 81}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000085",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000082', 'id': 82}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000085",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000083', 'id': 83}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000085",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000084', 'id': 84}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000086",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000081', 'id': 81}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000086",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000082', 'id': 82}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000086",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000083', 'id': 83}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000086",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000084', 'id': 84}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000086",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000085', 'id': 85}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000088",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000087', 'id': 87}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000091",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000079', 'id': 79}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000093",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000064', 'id': 64}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000093",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000065', 'id': 65}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000093",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000066', 'id': 66}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000095",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000094', 'id': 94}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000113",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000112', 'id': 112}"
+  },
+  {
+   "tur": "BENZER_MUSTERI",
+   "unvan": "HALKBANKASI",
+   "mesaj": "{\"mesaj\": \"Benzer adlı kayıt var. Listeden seçin ya da yine de eklemek için onaylayın.\", \"adaylar\": [{\"id\": 34, \"unvan\": \"HALKBANKASI İFM\", \"il\": \"İstanbul\", \"dogrulandi\": false, \"eslesen\": \"unvan\"}], \"kapsam_disi\": 0}"
+  },
+  {
+   "tur": "AYNI_LOKASYON",
+   "so_no": "SRV-202611-000128",
+   "mesaj": "{'kod': 'AYNI_LOKASYON', 'so_no': 'SRV-202611-000127', 'id': 127}"
+  }
+ ]
+}

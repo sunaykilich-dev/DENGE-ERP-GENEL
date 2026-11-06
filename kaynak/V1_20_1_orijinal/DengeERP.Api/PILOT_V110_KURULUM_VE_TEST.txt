@@ -1,0 +1,51 @@
+DENGEERP V1.10 - GÜVENLİ GEÇİŞ / TEST
+
+MEVCUT DURUM
+- V1.9: http://10.10.50.60:5050 adresinde çalışmaya devam etmeli (geçiş öncesi).
+- V1.10: ZIP tam kaynak proje, tek seferde ayrı bir klasöre çıkarılacak.
+
+1. YEDEK
+   SSMS'te DengeERP veritabanının COPY_ONLY CHECKSUM yedeğini alıp
+   RESTORE VERIFYONLY ile doğrulayın. Mevcut ERP klasörünü de saklayın.
+   İlk açılışta tüm /Database/*.sql dosyaları yeniden çalıştırılır.
+   V1.10 yeni tablo ekler; eski tabloları silmez.
+
+2. DERLEME - YENİ POWERSHELL (eski ERP çalışırken bu adım güvenlidir)
+   PowerShell'de projeyi bul:
+   $p = Get-ChildItem 'C:\DengeERP\App' -Recurse -Filter 'DengeERP.Api.csproj' |
+     Where-Object { $_.FullName -like '*V1_10*' } | Select-Object -First 1
+   dotnet build $p.FullName
+
+3. GEÇİŞ
+   Yedeği doğruladıktan ve derleme başarılı olduktan sonra,
+   mevcut V1.9 PowerShell penceresinde Ctrl+C basın.
+   V1.10 proje klasörüne geçip:
+   dotnet run --urls 'http://0.0.0.0:5050'
+   Beklenen çıktı: Now listening on: http://0.0.0.0:5050
+
+4. TARAYICI TESTİ
+   http://10.10.50.60:5050 -> Ctrl+F5
+   - Planlama Takvimi > Planlanmayı Bekleyenler > müşteri adıyla arama
+   - İş Emirleri > Günlük Servis / Planlı Bakım ayrımını aç
+   - Bir iş emri > Gerçek Çalışma Süresi > önce görevli teknisyeni ata
+   - Her faaliyet için başlangıç/bitiş/bölge/not doldur, kaydet
+   - 2 teknisyenli işte kişi bazlı 2 kayıt oluştur
+   - Raporlar > Güncelle > Gerçek Süre, Müşteri/Bölge, Personel KPI kontrol et
+   - Excel'e Aktar; 8 sayfa, gerçek personel süresi ve günlük/bakım ayrımını kontrol et
+
+5. TESTTE DİKKAT
+   - Gerçek çalışmayı kaydedeceğiniz iş emri ve teknisyen ataması olmalı.
+   - Gelecek saatler veya 18 saatten uzun tek kayıt kabul edilmez.
+   - Aynı kişinin çakışan saat kayıtları engellenir.
+   - Yanlış süreyi yalnızca yetkili kullanıcı iptal edebilir; audit izini korur.
+   - Sadece tahmini süre olan eski işlerde rapor 'süre kaydı yok' yazar.
+
+6. GERİ DÖNÜŞ
+   V1.10'u Ctrl+C ile durdur; gerekiyorsa eski V1.9 klasörüne gidip
+   dotnet run --urls 'http://0.0.0.0:5050' ile önceki API'yi başlat.
+   Yeni 'WorkOrderTimeLogs' tablosu eski V1.9 sürümünü bozmaz.
+   Veritabanı restore yalnızca gerçekten gerekirse ve onaylı bakım aralığında yapılmalı.
+
+NOT: Bu paket kaynak kodları gözden geçirilerek hazırlandı, JavaScript kontrolleri yapıldı.
+.NET derleme ve gerçek SQL Server entegrasyon testi paket hazırlanırken çalıştırılamadı;
+Windows ortamında dotnet build ve arayüz testleri kesinlikle yapılmalı.

@@ -1,0 +1,32 @@
+DENGEERP V1.20 — TEK PAKET GELISTIRME (V1.15-V1.20 KONSOLIDE)
+Kaynak: DengeERP V1.14 sahada calistirilan proje ZIP'i. Onceki 40 dosya korunur.
+
+YENI MODULLER:
+- Operasyon Merkezi: acik/geciken, bugun/yarin plan, servis/bakim ayrimi, kisi is yuku.
+- SLA hedefi: oncelige gore ayarlanabilir COZUM HEDEFI (takvim saati).
+- Ayni seri numarasindan acilan tekrarlayan servislerin analizi.
+- Is emirlerine bekleme nedeni ekleme / kaldirma ve islem gecmisi.
+- Mobil teknisyen paneli; eski is emri detayi ve sure sayacina gecis.
+- Depolara gore yedek parca katalogu, giris, is emrine bagli cikis, negatif stok onleme.
+- Bildirimler: geciken is, yarin plan, bekleme, az stok, egitim tarihi.
+  Acik Operasyon sayfasinda 3 dakika aralikla yenilenir, goruldu isareti vardir.
+- İş bazli maliyet: kaydedilen gelir, gercek sure x ic saatlik tarife,
+  yedek parca kullanimi ve diger maliyetlerle tahmini fark.
+- Operasyon CSV dis aktarimi.
+
+YETKILER: operations.manage, warehouse.manage, finance.costs.manage.
+Maliyet rakamlari finance.prices.view yetkisine de baglidir.
+Mevcut kullanicilara yetkiler OTOMATIK DAGITILMAZ; Admin atar.
+
+SINIRLAR:
+- Tam offline veri yazma ve otomatik senkronizasyon YOK. Mobil çevrimiçi kullanılır.
+- E-posta/SMS/push otomatik bildirim YOK; ERP ici aktif ekranda hesaplanir.
+- SLA sozlesmeye/mola-mesai takvimine bagli degil, takvim saati hedefine gore.
+- Fatura/gercek kar hesabini garanti etmez; maliyetler kayitli girisler kadar dogrudur.
+- Uretim guvenlik denetimi yapilmadi; genis / dis erisime ACILMAMALI.
+- Bu ortamda dotnet build ve gercek SQL Server testini yapamiyoruz.
+
+YENI SQL: Database/ZZ_V120_Operations.sql; tablolari tekrar calismaya uygun
+olacak sekilde var mi kontroluyle olusturur. Eski kayitlari silmez.
+
+YUKLEME: V1.14 -> V1.20; ara versiyonlar kurulmaz.

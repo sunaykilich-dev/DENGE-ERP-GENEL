@@ -1,0 +1,13 @@
+DengeERP V1.12 — Kiralama operasyon ve envanter
+
+- Bir kiralama kaydında birden fazla ürün kalemi, adet ve alfanümerik seri numarası.
+- Satın alma, saha operasyonu ve diğer kişiler: ad, görev/ünvan, telefon, e-posta, not.
+- Depo 1, Depo 2, Depo 3; isimleri sonradan değiştirilebilir.
+- Seri bazlı depo varlıkları, adet, hazır/hazır değil/kirada/kontrol durumu ve eksik açıklaması.
+- Kiralama kalemine gerçek stok/seri atama ve aynı cihazın iki işe ayrılmasına engel.
+- Sevk, kurulum, devreye alma, toplama ve depoya alınma aşamalarının zaman, ekip ve depo ile loglanması.
+- Önceki sürümün modülleri korunur. V1.12 SQL şeması tekrar çalıştırılabilir, veri silmez.
+
+GÜVENLİ GEÇİŞ: Canlı sistemin SQL yedeğini alın, V1.11'i durdurun, V1.12'yi ayrı klasörde derleyin.
+İlk açılışta Database/ZZ_V112_RentalInventoryOperations.sql otomatik uygulanır. Rollback için eski exe'yi açmak tek başına SQL şemasını geri almaz; veritabanı yedeğini saklayın.
+Uygulama önce 5050 yerine ayrı port + ayrılmış DB'de test edilmeli.

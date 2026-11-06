@@ -1,0 +1,55 @@
+DENGEERP PILOT V1.11 — RAPORLAMA, KOMPAKT TAKVİM, SAHA LOKASYONU
+Tarih: 14.10.2026
+Taban: V1.9 TOPLU PLANLAMA + V1.10 RAPOR VE GERÇEK PERSONEL ZAMANI.
+
+1. RAPORLAMA (V1.10'dan korundu)
+- Yönetim özeti; günlük servis/planlı bakım ayrı açık iş, kapanan iş, kişi-saat, yol, saha, bekleme süreleri.
+- Gerçek teknisyen çalışma saatleri, faaliyet bazında; tarih, birim, müşteri, personel vb. filtreler.
+- İndirildiğinde güncel verilerden hesaplanan 8 sayfalı Excel raporu.
+- Çapraz özetler pivot benzeri hesaplanmış raporlardır; Excel'in yerel PivotTable objeleri değildir.
+
+2. TAKVİMDE LOKASYON BAZLI KOMPAT GÖSTERİM
+- Aynı gün, aynı müşteri, birim, lokasyon ve şehir: tek takvim kartı (ziyaret).
+- Kartta şehir, müşteri/tesis adı, ayrı iş emri sayısı, başlangıç saati ve ekip bilgisi.
+- Kart tıklanınca altındaki ayrı iş emirleri detayları ve Aç düğmesiyle gösterilir.
+- Hafta görünümünde gün başına en fazla dört ziyaret gösterilir; devamı güne tıklanarak açılır.
+- Ay görünümünde gün başına en fazla üç ziyaret + kalan sayısı.
+- Günlük görünüm dikey kaydırmalı ve yüksekliği sınırlandırılmıştır.
+- Planlanmayı Bekleyenler panelinde aynı müşteri/lokasyonun alt işler listesi varsayılan kapalıdır.
+- Tüm cihaz bakım formları, seri numaraları ve iş emirleri birbirinden bağımsızdır.
+
+3. SAHA / LOKASYON BİLGİLERİ (YENİ)
+- Tekli ve toplu planlama formunda: tesis/lokasyon, şehir, ilçe, açık adres, bina/kat/bölge,
+  saha yetkilisi, telefon, ulaşım/giriş/otopark notu.
+- Kayıtlı cihaz ile ilişkili bölge ve yetkili; bakım sözleşmesindeki adres otomatik önerilir.
+- Seri numarası ile eşleşen güvenlik cihazı da bilgi kaynağı olarak kullanılabilir.
+- Kütükte olmayan şehir/ilçe tahmin edilmez; kullanıcı elle girer. Tüm alanlar düzenlenebilir.
+- Kaydedilen plan alanları yeni SQL kolonlarında saklanır; yeniden planlama ekranında gelir.
+- İş emri detayında gösterilir. Günlük/Planlı bakım ve çalışma süreleri Excel detaylarına şehir/adres eklenmiştir.
+
+4. SQL DEĞİŞİKLİKLERİ
+- Database/ZZ_V111_PlanSites.sql: dbo.WorkOrderPlans tablosuna 8 nullable kolon ekler.
+- Her sütun COL_LENGTH ile kontrol edilir; uygulama tekrar başlasa da mevcut veri korunur.
+- DROP, DELETE, TRUNCATE veya mevcut kayıtları sıfırlayan SQL eklenmedi.
+- Ancak tüm Database/*.sql dosyaları uygulama başlangıcında yeniden çalıştığından
+  CANLI sisteme almadan önce SQL backup + RESTORE VERIFYONLY zorunludur.
+
+5. TEST KAPSAMI
+- node --check app.js başarılı.
+- Önceki V1.10 raporlama/KPI QA senaryosu başarılı.
+- V1.11 takvim grup/şehir/planlama alanı QA senaryosu başarılı.
+- ZIP CRC bütünlük kontrolü yapılacaktır.
+- Gerçek .NET derlemesi veya SQL Server bağlantılı çalışma bu ortamda yapılamadı.
+  Windows PowerShell ile dotnet build ve tarayıcı testleri şarttır.
+
+6. GÜVENLİ GEÇİŞ
+- Çalışan V1.9 veya ara sürüm klasörünü SİLMEYİN.
+- SQL Server'da DengeERP'nin yeni .bak yedeğini alın, VERIFYONLY ile doğrulayın.
+- Paketi C:\DengeERP\App içinde AYRI klasöre çıkarın.
+- V1.11 için ayrı PowerShell'de: dotnet build
+- Derleme ve yedek doğrulamasından sonra eski ERP'yi Ctrl+C ile durdurun.
+- V1.11 klasöründen: dotnet run --urls "http://0.0.0.0:5050"
+- Erişim: http://10.10.50.60:5050
+- Tarayıcıda Ctrl+F5; günlük servis/planlı bakım ayrımı, rapor, plan sahası ve kompakt takvimi test edin.
+- Hata olursa V1.11 Ctrl+C ile durdurulup eski klasörde önceki sürüm tekrar başlatılabilir.
+- Yeni nullable SQL kolonları önceki uygulama sürümünde kullanılmadığı için geri dönüşte silinmemelidir.

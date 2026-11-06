@@ -1,0 +1,7 @@
+﻿.yerel_gizli/
+.env
+__pycache__/
+*.pyc
+.venv/
+derleme_kontrol/
+

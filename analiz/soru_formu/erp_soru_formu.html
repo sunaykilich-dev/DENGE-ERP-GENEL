@@ -1,0 +1,702 @@
+<title>ERP Kurgu Soru Formu</title>
+<style>
+:root{
+  --bg:#f5f6f7;--panel:#ffffff;--ink:#1d2d3e;--muted:#5b6b7b;--line:#e1e5ea;--accent:#0a6ed1;--accent-ink:#ffffff;--accent-soft:#e8f2fc;
+  --ok:#107e3e;--ok-soft:#e6f4ea;--warn:#e9730c;--warn-soft:#fdf1e6;--chip:#eef1f4;--info:#f2f6fb;
+  --r:10px;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+  font-family:"72","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12171d;--panel:#1b222b;--ink:#e6ebf1;--muted:#9aa8b6;--line:#2c3540;--accent:#4aa3ff;--accent-ink:#0b1622;--accent-soft:#1a2d42;
+  --ok:#5dd28b;--ok-soft:#173326;--warn:#ffad5c;--warn-soft:#3a2a18;--chip:#242d38;--info:#18212c;
+  --shadow:0 1px 2px rgba(0,0,0,.4);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d;--panel:#1b222b;--ink:#e6ebf1;--muted:#9aa8b6;--line:#2c3540;--accent:#4aa3ff;--accent-ink:#0b1622;--accent-soft:#1a2d42;
+  --ok:#5dd28b;--ok-soft:#173326;--warn:#ffad5c;--warn-soft:#3a2a18;--chip:#242d38;--info:#18212c;
+  --shadow:0 1px 2px rgba(0,0,0,.4);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+.ust{max-width:1240px;margin:0 auto;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.ust h1{font-size:18px;margin:0;font-weight:700;flex:1 1 220px}
+.ilerleme{flex:1 1 260px;display:flex;align-items:center;gap:10px}
+.bar{flex:1;height:8px;background:var(--chip);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+.yuzde{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);white-space:nowrap}
+.durum{font-size:12px;color:var(--muted);white-space:nowrap}
+.durum.ok{color:var(--ok)}
+button{font:inherit;cursor:pointer}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:6px 12px;font-size:13px}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.ana{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.ana:hover{opacity:.9;color:var(--accent-ink)}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.duzen{max-width:1240px;margin:0 auto;padding:16px;display:grid;grid-template-columns:270px 1fr;gap:20px;align-items:start}
+nav{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px}
+nav .grup{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 8px 4px}
+nav a{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:6px;color:var(--ink);text-decoration:none;font-size:13.5px}
+nav a:hover{background:var(--chip)}
+nav a.aktif{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav a small{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+nav a.bitti small{color:var(--ok);font-weight:700}
+.secici{display:none}
+main{min-width:0}
+.giris{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin-bottom:18px;box-shadow:var(--shadow)}
+.giris h2{margin:0 0 6px;font-size:20px}
+.giris p{margin:6px 0;color:var(--muted)}
+.giris .alanlar{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+label.kucuk{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+input[type=text],textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+textarea{min-height:70px;resize:vertical}
+input[type=text]:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+section.bolum{margin-bottom:28px;scroll-margin-top:84px}
+.bolum-bas{display:flex;align-items:baseline;gap:10px;margin:0 0 4px}
+.bolum-bas h2{margin:0;font-size:19px}
+.etiket{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:99px;background:var(--chip);color:var(--muted)}
+.bolum>p.aciklama{margin:2px 0 12px;color:var(--muted);font-size:14px}
+.bilgi{background:var(--info);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:12px 14px;margin:0 0 14px;font-size:13.5px}
+.bilgi table{border-collapse:collapse;width:100%;margin-top:6px}
+.bilgi th,.bilgi td{text-align:left;vertical-align:top;padding:6px 8px;border-top:1px solid var(--line)}
+.bilgi th{white-space:nowrap;font-weight:600}
+.bilgi-kaydir{overflow-x:auto}
+.soru{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow)}
+.soru.cevapli{border-left:4px solid var(--ok)}
+.soru h3{margin:0 0 4px;font-size:15px;font-weight:600;display:flex;gap:8px}
+.soru h3 .no{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums;flex:none}
+.soru .ipucu{font-size:13px;color:var(--muted);margin:0 0 8px}
+.secenekler{display:flex;flex-direction:column;gap:4px;margin:6px 0}
+.secenekler label{display:flex;gap:10px;align-items:flex-start;padding:6px 8px;border-radius:6px;cursor:pointer}
+.secenekler label:hover{background:var(--chip)}
+.secenekler input{margin-top:3px;accent-color:var(--accent);flex:none}
+.olcek{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.olcek button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:6px 10px;font-size:13px;min-width:44px}
+.olcek button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.not{margin-top:6px}
+.not summary{font-size:12.5px;color:var(--accent);cursor:pointer;list-style:none}
+.not summary::-webkit-details-marker{display:none}
+.not textarea{margin-top:6px;min-height:52px}
+.gizli{display:none!important}
+.son{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;text-align:center}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);max-width:760px;width:calc(100% - 32px);padding:16px}
+dialog textarea{min-height:50vh;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+@media (max-width:900px){
+  .duzen{grid-template-columns:1fr;padding:12px 16px}
+  nav{display:none}
+  .secici{display:block;margin-bottom:12px}
+  .giris .alanlar{grid-template-columns:1fr}
+  .ust{padding:10px 16px}
+}
+</style>
+
+<header>
+  <div class="ust">
+    <h1>Denge ERP — Kurgu Soru Formu</h1>
+    <div class="ilerleme"><div class="bar"><i id="bar"></i></div><span class="yuzde" id="yuzde">0 / 0</span></div>
+    <span class="durum" id="durum">Yükleniyor…</span>
+    <button class="btn" id="filtre" aria-pressed="false">Yalnız cevapsızlar</button>
+    <button class="btn ana" id="disa">Markdown olarak kopyala</button>
+  </div>
+</header>
+
+<div class="duzen">
+  <nav id="nav" aria-label="Bölümler"></nav>
+  <main>
+    <select class="secici" id="secici" aria-label="Bölüme git"></select>
+    <div class="giris">
+      <h2>Bu form ne için?</h2>
+      <p>Organizasyon şemanızı (≈50 kişi, 12 birim) ve SAP S/4HANA, Microsoft Dynamics 365, Odoo, IFS, Logo j-Platform gibi ERP'lerin kullanıcı/rol/yetki yaklaşımlarını inceledim. Aşağıdaki sorular, kafanızdaki kurguyu netleştirip sistemi ona göre şekillendirmem için hazırlandı.</p>
+      <p>Önce <b>Genel</b> bölümler (tüm ERP), sonra <b>Departman</b> bölümleri, en sonda <b>Modül</b> bölümleri geliyor. Her soruda seçeneklerin altında “Not / Diğer” alanı var; seçenekler size uymuyorsa oraya yazın. Bilmediğiniz ya da sonra karar vereceğiniz soruyu boş geçebilirsiniz. Cevaplar siz yazdıkça kaydedilir; ara verip sonra devam edebilirsiniz.</p>
+      <div class="alanlar">
+        <div><label class="kucuk" for="dolduran">Dolduran kişi</label><input type="text" id="dolduran" placeholder="Ad Soyad"></div>
+        <div><label class="kucuk" for="gorev">Görevi / birimi</label><input type="text" id="gorev" placeholder="ör. Teknik Servis Yöneticisi"></div>
+      </div>
+    </div>
+    <div id="form"></div>
+    <div class="son">
+      <p><b>Bitti mi?</b> Cevaplarınız otomatik kaydediliyor. Bana “formu doldurdum” demeniz yeterli; cevapları doğrudan okuyacağım.</p>
+      <button class="btn ana" id="disa2">Markdown olarak kopyala</button>
+    </div>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <p style="margin:0 0 8px"><b>Cevaplar (Markdown)</b> — panoya kopyalanamadıysa buradan seçip kopyalayın.</p>
+  <textarea id="dlgMetin" readonly></textarea>
+  <div style="text-align:right;margin-top:10px"><button class="btn" id="dlgKapat">Kapat</button></div>
+</dialog>
+
+<script>
+// Soru tipleri: T = tek seçim, C = çoklu seçim, M = serbest metin, O = önem ölçeği (1-5)
+// Satır biçimi: [kimlik, tip, soru, "seçenek|seçenek|…", "ipucu"]
+const DEPARTMANLAR = "Üst Yönetim (GM, GMY, asistanlar)|Genel Koordinatörlük|Güvenlik Sistemleri Teknik Servis|Haberleşme Sistemleri Teknik Servis|Depo & Lojistik|Müşteri İlişkileri & Kurumsal İletişim|Güvenlik Satış|Haberleşme Sistemleri Satış|Denge Mobil|Kiralama & Operasyon|Muhasebe|İnsan Kaynakları|İdari İşler";
+const ROLLER = "Genel Müdür|GMY (Muhasebe & Finans)|GMY (Ahmet Erzurum)|Genel Müdür Asistanı|Genel Koordinatör|Teknik Servis Yöneticisi|Saha Takım Lideri|Laboratuvar Takım Lideri|Kıdemli Saha Teknisyeni|Saha Teknisyeni|Kıdemli Laboratuvar Teknisyeni|Laboratuvar Teknisyeni|Sistem Mühendisi|Teknik Servis Operasyon Uzmanı|POC Destek Uzmanı|Depo ve Lojistik Yöneticisi|Kiralama Operasyon Personeli|Güvenlik Satış Yöneticisi|Haberleşme Satış Yöneticisi|Kurumsal Satış Uzmanı|Satış Destek Uzmanı|OKTH Uzmanı|Denge Mobil Operasyon Müdürü|Denge Mobil Operasyon Destek Uzmanı|Müşteri İlişkileri Yöneticisi|Operasyon Destek Uzmanı (Mİ)|Muhasebe Yöneticisi|Muhasebe Uzmanı|İK Yöneticisi|İdari İşler Yöneticisi|Danışma ve Santral Görevlisi|Stajyer";
+const OLCEK = "1 Gereksiz|2 Düşük|3 Orta|4 Yüksek|5 Kritik";
+
+const BOLUMLER = [
+// ───────────────────────── GENEL ─────────────────────────
+{id:"g1",grup:"Genel",baslik:"Vizyon ve kapsam",aciklama:"ERP'den ne beklediğinizi ve sınırlarını netleştirelim.",sorular:[
+["g1.1","T","Önümüzdeki 12 ayda ERP'nin ana hedefi hangisi?","Önce teknik servisi tamamen dijitalleştirmek|Önce teknik servis, sonra kademeli olarak tüm departmanlar|Baştan tüm şirketi tek sistemde toplamak|Öncelik yönetim görünürlüğü ve raporlama"],
+["g1.2","C","Nihai hedefte ERP'yi hangi birimler günlük olarak kullanmalı?",DEPARTMANLAR],
+["g1.3","M","Bugün sizi en çok yoran, “ERP bunu çözmeli” dediğiniz 3 süreç hangisi?",null,"Somut örnekle yazarsanız çok yardımcı olur (ör. “teknisyen formu kâğıtta dolduruyor, ofiste biri yeniden giriyor”)."],
+["g1.4","C","Bugün işlerinizi hangi araçlarla yürütüyorsunuz?","Excel|Logo (Tiger/Go/j-Platform)|Flowick|Eski DengeERP (.NET)|Denge Mobilite ERP (mevcut web sistemi)|WhatsApp grupları|E-posta|Kâğıt form / defter|Üretici portalları"],
+["g1.5","T","Logo (muhasebe) ile ERP'nin ilişkisi nasıl olmalı?","Logo kalır; ERP muhasebe yapmaz, yalnız bilgi verir|ERP fatura/hak ediş taslağı üretir, Logo'ya aktarılır|Cari ve stok kartları iki yönlü eşitlenir|Uzun vadede ERP Logo'nun yerini alır"],
+["g1.6","T","Canlıya geçiş nasıl olmalı?","Pilot birim (ör. Güvenlik TS), sonra diğerleri|Tüm teknik servis aynı gün|Belirli bir süre eski ve yeni sistem paralel|Yeni yıl / yeni dönem başında tek seferde"],
+["g1.7","M","Başarıyı neyle ölçeceğiz?",null,"ör. kâğıt form sıfırlansın, SLA uyumu %95, raporlar elle hazırlanmasın, teknisyen başına günlük iş sayısı artsın."],
+["g1.8","T","Arayüz dili?","Yalnız Türkçe|Türkçe + İngilizce (kullanıcı seçsin)"],
+["g1.9","M","ERP'de kesinlikle OLMASINI İSTEMEDİĞİNİZ bir şey var mı?",null,"ör. personelin sürekli konum takibi, fazla onay adımı, karmaşık ekranlar."]
+]},
+{id:"g2",grup:"Genel",baslik:"Organizasyon modeli",aciklama:"Şemanızda birden fazla şapka taşıyan kişiler, iki eşit teknik servis yöneticisi ve farklı yönetim hatlarına bağlı iki teknik servis birimi var. ERP'nin bunları nasıl modelleyeceğini belirleyelim.",
+bilgi:"<b>Şemadan gördüklerim:</b> Emre Utku (Genel Koordinatör + Satış Yönetimi), Nazım Köse (Teknik Servis Yöneticisi + Güvenlik Satış Yöneticisi), Çağatay Koruç (Haberleşme Satış Yöneticisi + Haberleşme TS Yönetimi), Sevgi Çetin (İK Yöneticisi + İdari İşler Yöneticisi), Ayşegül Aydoğmuş (Muhasebe & Finans GMY + Kiralama & Satış Yönetimi). Teknik Servis'te Nazım Köse ve Sunay Kılıç aynı unvanda. Güvenlik TS, Teknik Servis Yöneticileri altında; Haberleşme TS ise Çağatay Koruç'un yönetiminde. Kiralama & Operasyon ve Muhasebe, Muhasebe & Finans GMY altında. Denge Mobil, Satış Yönetimi altında.",
+sorular:[
+["g2.1","T","Organizasyon şeması ERP'de nasıl tutulmalı?","Departman → birim → pozisyon ağacı; her kişi bir pozisyonda|Ağaç + kişi birden fazla pozisyonda olabilir (çoklu şapka)|Basit: kişi kartında yalnız departman alanı yeter"],
+["g2.2","T","Çoklu şapka taşıyan kişilerin yetkileri nasıl çalışsın?","Tüm şapkalarının yetkileri tek hesapta birleşsin|Tek hesap, ama kullanıcı ekranda aktif şapkasını seçsin|Her şapka için ayrı kullanıcı hesabı"],
+["g2.3","T","İki Teknik Servis Yöneticisi (Nazım Köse, Sunay Kılıç) arasında iş bölümü nasıl?","Birim bazlı (biri Güvenlik, biri Haberleşme/diğer)|Bölge ya da müşteri bazlı|Konu bazlı (biri saha/operasyon, biri idari/raporlama)|Tam ortak: ikisi de her şeyi görür ve yönetir"],
+["g2.4","T","Güvenlik TS ve Haberleşme TS ERP'de nasıl ayrışsın?","Tamamen ayrı: kendi iş listeleri, kendi raporları, birbirini görmez|Ortak havuz, birim filtresiyle; birbirini görebilir|Yöneticiler ikisini birlikte görür, ekipler yalnız kendi birimini"],
+["g2.5","T","Denge Mobil teknik servis süreçlerine dahil mi?","Evet, kendi servis işlerini açar ve izler|Yalnız mevcut Mobilite modülünü (hat/cihaz/abonelik) kullanır|Hayır, teknik servisle ilişkisi yok"],
+["g2.6","T","Kiralama & Operasyon ile teknik servis ilişkisi?","Kiralanan cihazın sevk/kurulum/toplama işlerini teknik servis yapar|Kiralama ekibi kendi sahasını kendisi yapar|Karma: kurulum TS, sevk/toplama kiralama"],
+["g2.7","T","Boş kadrolar (ör. GM Asistanı, Mİ Operasyon Destek Uzmanı) için?","Pozisyon rolüyle önceden tanımlansın; kişi gelince bağlanır, yetkiler otomatik gelir|Kişi işe başlayınca tanımlanır"],
+["g2.8","T","Lise stajyerleri sistemi kullanacak mı?","Hayır|Yalnız salt-okuma / eğitim amaçlı|Sınırlı: yalnız tayin edildiği işlere not ve fotoğraf ekler"],
+["g2.9","T","Onay zinciri organizasyon şemasından otomatik mi çıksın?","Evet, her kişinin yöneticisi otomatik onaycıdır|Hayır, her süreç için ayrı onaycı listesi tanımlanır|Karma: varsayılan şemadan, süreç bazında değiştirilebilir"],
+["g2.10","T","İzinde/raporda olan kişinin işleri ve onayları?","Kişi kendi vekilini süreli seçer|Yöneticisi vekil tayin eder|İK izin kaydından otomatik vekil devreye girer"],
+["g2.11","M","GMY Ahmet Erzurum'un ERP'deki sorumluluk alanı nedir?",null,"Şemada altında ekip görünmüyor; hangi süreçleri görmesi/onaylaması gerekir?"],
+["g2.12","M","Şemada güncel olmayan, eksik ya da ERP'de farklı yansıması gereken bir şey var mı?"]
+]},
+{id:"g3",grup:"Genel",baslik:"Kullanıcı ve kimlik",aciklama:"Kim, nasıl ve nereden giriş yapacak?",sorular:[
+["g3.1","T","Giriş yöntemi?","Kullanıcı adı + parola (mevcut)|Kurumsal e-posta hesabıyla tek oturum (Microsoft 365 / Google)|Active Directory / LDAP"],
+["g3.2","T","İki adımlı doğrulama (SMS/uygulama kodu) kimlere?","Herkese|Yalnız yönetici, muhasebe ve sistem yöneticisine|Yalnız şirket dışından girişlerde|Gerek yok"],
+["g3.3","T","Kullanıcı adı biçimi?","ad.soyad|Kurumsal e-posta adresi|Sicil numarası"],
+["g3.4","T","Yeni personelin hesabını kim açar?","İK, işe giriş sürecinin parçası olarak|Sistem yöneticisi, departman yöneticisinin talebiyle|Departman yöneticisi kendi ekibine açar"],
+["g3.5","T","İşten ayrılan personelin hesabı?","İK çıkış kaydı girince aynı gün otomatik kapanır|Sistem yöneticisi elle kapatır|Zimmet/iş devri tamamlanınca kapanır"],
+["g3.6","T","Ortak kullanılan cihazlar (depo tableti, atölye bilgisayarı, santral)?","Ortak hesap yasak; herkes kendi hesabıyla girer|Kiosk/ortak hesap, kısıtlı ekranlarla izinli"],
+["g3.7","T","Oturum ne kadar açık kalsın?","30 dk hareketsizlikte kapansın|Mesai boyunca (8-10 saat)|Masaüstünde kısa, mobilde uzun"],
+["g3.8","T","Erişim yeri kısıtı?","Her yerden (internet)|Yalnız ofis ağı + VPN|Rol bazlı: saha her yerden, muhasebe yalnız ofisten"],
+["g3.9","C","Şirket dışından kullanıcı olacak mı?","Müşteri portalı (müşteri kendi kaydını açar/izler)|Taşeron / dış servis firması|Bayi / iş ortağı|Üretici temsilcisi|Hayır"],
+["g3.10","C","Müşteri portalı olursa müşteri neler yapabilsin?","Arıza kaydı açma|İşin durumunu izleme|Servis formu / PDF indirme|Planlı bakım takvimini görme|Kendi cihaz listesini görme|Hak ediş / fatura özetini görme|Memnuniyet anketi doldurma"],
+["g3.11","C","Kullanılacak cihazlar?","Masaüstü / dizüstü|Tablet (sahada)|Akıllı telefon (sahada)|Depo el terminali / barkod okuyucu"]
+]},
+{id:"g4",grup:"Genel",baslik:"Rol ve yetki modeli",aciklama:"ERP'nin kalbi. Önce diğer ERP'lerin nasıl yaptığına bakın, sonra size uygun olanı seçin.",
+bilgi:"<b>Diğer ERP'lerde rol/yetki nasıl kurgulanıyor?</b><div class='bilgi-kaydir'><table><tr><th>SAP S/4HANA</th><td>Tekil roller (işlem + yetki nesnesi) birleşik rollerde toplanır; yetkiler <i>organizasyon düzeyine</i> (şirket kodu, tesis, depo, satış org.) bağlanır. Fiori'de rol = kullanıcının gördüğü kutucuk grupları. Görevler ayrılığı (SoD) GRC aracıyla denetlenir.</td></tr><tr><th>Microsoft Dynamics 365</th><td>Rol → görev (duty) → ayrıcalık (privilege) katmanı. Kayıt erişimi <i>iş birimi</i> hiyerarşisiyle: Kullanıcı / İş birimi / Alt birimler / Kuruluş. Takımlar ve alan düzeyi güvenlik profilleri var.</td></tr><tr><th>Odoo</th><td>Kullanıcı grupları (ör. Satış: Kullanıcı-Kendi kayıtları / Tüm kayıtlar / Yönetici) + <i>kayıt kuralları</i> (“yalnız kendi müşterilerim”) + çoklu şirket. Basit ve anlaşılır.</td></tr><tr><th>IFS</th><td>İzin kümeleri (permission set) iç içe; saha servis için hazır rol paketleri (dispatcher, teknisyen, servis yöneticisi). Mobil uygulama ayrı yetkilendirilir.</td></tr><tr><th>Logo j-Platform / Tiger</th><td>Kullanıcı ve rol bazlı; menü/işlem/alan kısıtları, firma-dönem-işyeri-ambar bazında yetki; onay akışları ayrı tanımlanır.</td></tr><tr><th>Bizim sistem (bugün)</th><td>Rol → izin kodları (tek kaynak dosya), kapsam: <i>Tümü / Kendi müşterileri / Kendi birimi</i>, maliyet varsayılan gizli, süreli vekâlet, tüm değişikliklerde denetim izi. Teknik serviste 8 rol tanımlı.</td></tr></table></div>",
+sorular:[
+["g4.1","T","Yetki tasarımında hangi yaklaşım size yakın?","Rol bazlı: kişiye bir veya birden fazla rol verilir (Odoo/Dynamics gibi)|Pozisyon bazlı: pozisyon = rol paketi; kişi pozisyona atanınca yetkiler gelir (SAP gibi)|Rol bazlı + kişiye özel istisna (ek izin/kısıt) verilebilsin"],
+["g4.2","T","Yetki ne kadar ince olsun?","Modül düzeyi: görür/görmez|Ekran + işlem düzeyi: oku / oluştur / düzenle / sil / onayla / dışa aktar|İşlem düzeyi + alan düzeyi (fiyat, maliyet, kişisel veri alanları gizlenebilir)"],
+["g4.3","C","Kayıt görünürlüğünde hangi kapsamlar gerekli?","Tüm kayıtlar|Kendi birimi (Güvenlik / Haberleşme…)|Kendi müşterileri (satış temsilcisi)|Yalnız kendisine tayin edilen işler|Kendi bölgesi / şehri|Yalnız kendi oluşturduğu kayıtlar|Kendi ekibinin (takım liderinin ekibi) kayıtları"],
+["g4.4","C","Hangi roller MALİYET (alış fiyatı, işçilik maliyeti, kârlılık) görebilsin?",ROLLER],
+["g4.5","C","Hangi roller SATIŞ FİYATI ve teklif tutarlarını görebilsin?",ROLLER],
+["g4.6","C","Hangi görevler ayrılığı (SoD) kuralları zorunlu olsun?","Teklifi hazırlayan, kendi teklifini onaylayamaz|Satın alma talep eden, kendi talebini onaylayamaz|Stok çıkışı yapan, sayım farkını onaylayamaz|Kullanıcı/yetki yöneten, kendine yetki veremez|İşi yapan teknisyen, kendi işinin kalite onayını veremez|Fiyat/iskonto değiştiren, faturayı kesemez"],
+["g4.7","T","Rol ve yetki değişikliğini kim yapar?","Yalnız sistem yöneticisi|Sistem yöneticisi, departman yöneticisinin yazılı talebiyle|Departman yöneticisi kendi ekibine, kendi yetkisinden fazlasını veremeden"],
+["g4.8","T","Yetkiler ne sıklıkla gözden geçirilsin?","3 ayda bir|6 ayda bir|Yılda bir|Gerek yok"],
+["g4.9","T","Üst yönetim (GM/GMY) neyi görsün?","Her şeyi, düzenleme dahil|Her şeyi salt-okuma; yalnız onay verir|Yalnız panolar, raporlar ve onaylar"],
+["g4.10","T","Sistem yöneticisi (süper kullanıcı) kim olmalı?","Teknik Servis Yöneticisi (ör. Sunay Kılıç)|Ayrı bir BT/sistem sorumlusu|Dış BT firması|En az 2 kişi (biri yedek)"],
+["g4.11","T","Kayıt silme politikası?","Hiçbir iş kaydı fiziksel silinmez; yalnız iptal/pasif|Yalnız yönetici, gerekçe yazarak silebilir|Taslak kayıtlar silinebilir, onaylanmışlar silinemez"],
+["g4.12","C","Denetim izini (kim neyi ne zaman değiştirdi) kim görebilsin?","Sistem yöneticisi|Genel Müdür|Departman yöneticileri kendi birimi için|Muhasebe (finansal kayıtlar için)|Kayıt sahibi kendi kaydı için"],
+["g4.13","C","Aşağıdaki rollerden ERP'de ayrı rol olarak tanımlanması GEREKENLER hangileri?",ROLLER,"Seçmedikleriniz benzer bir rolle birleştirilecek (ör. Kıdemli Saha Teknisyeni = Saha Teknisyeni)."],
+["g4.14","C","Kıdemli teknisyenin normal teknisyenden farkı ne olmalı?","Fark yok, yalnız unvan|İşi kendi başına kapatabilir (onaysız)|Ekibindeki teknisyen/stajyer işlerini kontrol edip onaylar|Parça / dış servis talebi açabilir|İş tayini yapabilir"],
+["g4.15","T","Excel'e / PDF'e dışa aktarma bir yetki olsun mu?","Evet, ayrı yetki; varsayılan kapalı|Listeyi görebilen dışa aktarabilsin|Yalnız yöneticiler dışa aktarabilsin"]
+]},
+{id:"g5",grup:"Genel",baslik:"Onay akışları",aciklama:"Hangi işlemler kimin onayından geçmeli?",sorular:[
+["g5.1","C","Hangi işlemler onay gerektirsin?","Teklifin müşteriye gönderilmesi|Belirli oranın üstündeki iskonto|Depodan parça çıkışı|Satın alma talebi|Fazla mesai|Servis işinin kapanışı (kalite kontrol)|Garanti dışı ücretli iş|Cihazın dış servise/üreticiye gönderilmesi|Kiralama sözleşmesi|Cihazın hurdaya ayrılması|Müşteri iadesi / RMA|İzin talebi|Masraf / avans|Müşteri kartı açma / değiştirme"],
+["g5.2","M","Teklif onay limitleri nasıl olmalı?",null,"ör. 0–50.000 TL Satış Yöneticisi, 50.000–250.000 TL Genel Koordinatör, üstü Genel Müdür."],
+["g5.3","C","Onaycıya hangi kanallarla ulaşılsın?","ERP içi bildirim / onay kutusu|E-postadaki bağlantıyla tek tık onay|Mobil anlık bildirim|WhatsApp mesajı"],
+["g5.4","T","Onaycı belirli sürede yanıt vermezse?","Belirli saat sonra bir üst yöneticiye çıkar|Vekile düşer|Bekler, yalnız hatırlatma gider"],
+["g5.5","T","Çok adımlı onaylar?","Sıralı (önce A, sonra B)|Paralel (hepsi aynı anda, hepsi onaylamalı)|Paralel, biri onaylarsa yeterli"],
+["g5.6","T","Ret gerekçesi zorunlu mu?","Evet, her retde|Hayır"],
+["g5.7","T","Acil durumda onay atlanabilsin mi?","Hayır, asla|Evet, yönetici “acil” işaretleyip sonradan onaylatır"]
+]},
+{id:"g6",grup:"Genel",baslik:"Bildirim ve iletişim",sorular:[
+["g6.1","C","Bildirim kanalları?","ERP içi zil|E-posta|SMS|Mobil anlık bildirim|WhatsApp Business"],
+["g6.2","C","Personele hangi olaylarda bildirim gitsin?","Bana iş tayin edildi / tayinim değişti|SLA süresi dolmak üzere|Kritik arıza kaydı açıldı|Onayımı bekleyen kayıt var|Planlı bakım yaklaşıyor|Stok kritik seviyeye indi|Kiralanan cihazın dönüşü gecikti|Bakım/servis sözleşmesi bitiyor|Cihaz garantisi bitiyor|Personel sertifikası/belgesi süresi doluyor|Müşteri olumsuz geri bildirim verdi"],
+["g6.3","C","Müşteriye otomatik bildirim gitsin mi?","Kaydınız açıldı (kayıt no ile)|Teknisyen tayin edildi / yola çıktı|İş tamamlandı + servis formu PDF|Planlı bakım randevusu hatırlatma|Memnuniyet anketi|Hiçbiri, müşteriyle iletişim insanla yürür"],
+["g6.4","T","Mesai dışında bildirim?","Yalnız nöbetçi personele ve kritik işler için|Herkese gitsin|Mesai dışında hiç gitmesin"],
+["g6.5","C","Özet raporlar e-postayla gelsin mi?","Yöneticilere günlük özet|Yöneticilere haftalık özet|Teknisyene sabah “bugünkü işlerin” listesi|Üst yönetime aylık rapor|Gerek yok"]
+]},
+{id:"g7",grup:"Genel",baslik:"Arayüz ve kullanım deneyimi (UI/UX)",aciklama:"Fiori görünümüne geçtik ve “tayin” dilini kullandık. Şimdi detaylar.",sorular:[
+["g7.1","T","Mevcut SAP Fiori görünümü?","Çok iyi, aynen devam|İyi ama daha sade olmalı|Değişmeli (notta yazın)"],
+["g7.2","T","Giriş sonrası ilk ekran?","Kutucuklu başlangıç sayfası (Fiori launchpad)|Kişiye özel pano (KPI + işlerim)|Doğrudan rolün ana iş listesi"],
+["g7.3","T","Kullanıcı kendi başlangıç sayfasını düzenleyebilsin mi?","Evet, kutucuk ekle/çıkar/sırala|Hayır, rol neyse o"],
+["g7.4","T","Liste ekranlarında yoğunluk?","Sıkışık (çok satır, SAP gibi)|Ferah (daha az satır, büyük yazı)|Kullanıcı seçsin"],
+["g7.5","T","Koyu tema?","Gerekli|Gereksiz|Kullanıcı seçsin"],
+["g7.6","T","Sahada mobil kullanım nasıl olmalı?","Tarayıcıdan (telefona kısayol olarak eklenen web uygulaması) yeterli|Android + iOS yerel uygulama|Yalnız Android uygulama"],
+["g7.7","T","Çekmeyen yerlerde (bodrum, tünel, havalimanı içi) çevrimdışı çalışma?","Kesinlikle gerekli|Olsa iyi olur|Gereksiz"],
+["g7.8","C","Sahada hangi özellikler gerekli?","Fotoğraf çekip işe ekleme|Müşteriye ekranda imza attırma|Barkod / QR okutarak cihaz bulma|İş başlat/bitirde konum kaydı|Sesli not|Yol tarifi (harita)|Kontrol listesini adım adım doldurma"],
+["g7.9","T","Müşteri onayı/imzası nasıl alınsın?","Tablet/telefona el imzası|Müşteriye SMS/e-posta doğrulama kodu|Kâğıt form imzalatılıp fotoğrafı yüklenir|Gerek yok"],
+["g7.10","T","“Tayin” dili tüm ERP'ye mi yayılsın?","Evet, tüm modüllerde (Mobilite dahil)|Yalnız teknik serviste"],
+["g7.11","C","Liste ekranlarında hangi kolaylıklar önemli?","Kayıtlı filtreler / görünümler|Toplu işlem (çoklu seç → tayin et / durum değiştir)|Sütunları gizle/sırala|Klavye kısayolları|Satırdan hızlı önizleme|Excel'e aktarma"],
+["g7.12","C","Yardım ve eğitim nasıl olsun?","Ekranda ipuçları|Kısa eğitim videoları|PDF kullanım kılavuzu|Yüz yüze eğitim + deneme ortamı"],
+["g7.13","M","Beğendiğiniz ya da nefret ettiğiniz bir yazılım ekranı var mı? Neden?"]
+]},
+{id:"g8",grup:"Genel",baslik:"Raporlama ve göstergeler (KPI)",sorular:[
+["g8.1","C","Yönetim panosunda hangi göstergeler olmalı?","Açık iş sayısı (birim/öncelik)|SLA uyum oranı|Ortalama müdahale ve çözüm süresi|İlk seferde çözüm oranı|Teknisyen başına iş / kişi-saat|Planlı bakım gerçekleşme %|Parça/malzeme maliyeti|İş bazlı kârlılık|Müşteri memnuniyeti|Tekrarlayan arıza (aynı cihaz)|Kiralık cihaz doluluk oranı|Stok değeri ve devir hızı|Bekleyen teklifler ve dönüşüm oranı|Tahsil edilmemiş hak ediş"],
+["g8.2","T","Raporlar hangi sıklıkta kullanılıyor?","Anlık (pano)|Günlük|Haftalık|Aylık"],
+["g8.3","C","Müşteriye hangi raporlar gidiyor / gitmeli?","Aylık servis özeti|Planlı bakım gerçekleşme raporu|SLA uyum raporu|Cihaz bazlı arıza geçmişi|Hak ediş eki (iş listesi)"],
+["g8.4","T","Teknisyen performans verisi (iş sayısı, süre) prim/değerlendirmede kullanılacak mı?","Evet|Hayır, yalnız planlama için|Henüz karar verilmedi"],
+["g8.5","T","Raporlar nasıl paylaşılsın?","Ekranda + Excel|Otomatik PDF e-posta|Power BI / dış rapor aracına veri"],
+["g8.6","M","Bugün elle hazırladığınız ve ERP'nin otomatik üretmesini istediğiniz raporlar hangileri?"]
+]},
+{id:"g9",grup:"Genel",baslik:"Entegrasyonlar",sorular:[
+["g9.1","C","Logo ile hangi veriler eşitlensin?","Cari (müşteri/tedarikçi) kartları|Stok / malzeme kartları|Satış faturası|Alış faturası|İrsaliye|Tahsilat bilgisi|Hiçbiri (elle aktarım)"],
+["g9.2","M","Flowick şu an ne için kullanılıyor ve ERP sonrası kalacak mı?"],
+["g9.3","C","e-Dönüşüm ihtiyacı?","e-Fatura|e-Arşiv|e-İrsaliye|Logo üzerinden yürüyor, ERP'ye gerek yok"],
+["g9.4","T","Araç takip (GPS) sistemi var mı, entegre olsun mu?","Var, entegre olsun (teknisyenin konumu planlamada görünsün)|Var, entegrasyon gerekmez|Yok"],
+["g9.5","T","Santral entegrasyonu (gelen arayan numaradan müşteri kartı açılsın)?","Evet|Hayır"],
+["g9.6","T","Kurumsal e-posta altyapısı?","Microsoft 365|Google Workspace|Kendi sunucumuz / hosting"],
+["g9.7","C","Diğer entegrasyonlar?","Personel devam kontrol sistemi (PDKS/kartlı giriş)|Üretici RMA/garanti portalları|Kargo firması (takip no)|Banka / sanal POS|BTK / OKTH sistemleri|Yok"]
+]},
+{id:"g10",grup:"Genel",baslik:"Veri, geçiş, KVKK ve güvenlik",sorular:[
+["g10.1","T","Eski sistemlerden ne kadar veri taşınsın?","Tüm geçmiş|Son 3 yıl|Son 1 yıl|Yalnız açık işler + cihaz kütüğü + müşteri kartları"],
+["g10.2","T","Müşteri kartını (ana veri) kim açar/değiştirir?","Herkes açabilir, mükerrer kontrolüyle|Yalnız belirli kişiler (Mİ / satış destek / muhasebe)|Açan herkes, ama muhasebe onaylar"],
+["g10.3","T","Personel konum kaydı (KVKK açısından hassas)?","Hiç tutulmasın|Yalnız iş başlat/bitir anında|Mesai içinde sürekli (açık rıza ile)"],
+["g10.4","T","Sunucu nerede olsun?","Mevcut canlı sunucu (şirket içi/kiralık)|Türkiye'de bulut|Şirket içi yeni sunucu"],
+["g10.5","T","Kabul edilebilir en fazla veri kaybı?","Hiç (anlık yedek)|En fazla 1 saat|En fazla 1 gün"],
+["g10.6","T","Sistem çökerse en geç ne zaman açılmalı?","1 saat içinde|Aynı gün|Ertesi gün"],
+["g10.7","T","Müşteri irtibat kişilerinin kişisel verileri ne kadar saklansın?","Sözleşme süresince + yasal süre|Kişi değişince silinsin|Karar verilmedi"],
+["g10.8","M","Özellikle gizli kalması gereken bilgi türleri var mı?",null,"ör. personel maaşı, müşteri sözleşme fiyatı, havalimanı/kamu kurumu güvenlik planları, cihaz konumları."]
+]},
+// ───────────────────────── DEPARTMANLAR ─────────────────────────
+{id:"d1",grup:"Departman",baslik:"Üst Yönetim",aciklama:"Nurettin Erzurum (Genel Müdür), Ahmet Erzurum (GMY), Ayşegül Aydoğmuş (Muhasebe & Finans GMY), Neriman Boyacı ve bir boş kadro (Genel Müdür Asistanı).",sorular:[
+["d1.1","C","Genel Müdür ERP'de neleri yapmalı?","Panoları ve raporları izlemek|Limit üstü teklif / satın alma onayı|Herhangi bir kaydın detayına inmek|Mobilden onay vermek|Hiçbiri, raporlar e-postayla gelsin"],
+["d1.2","C","Genel Müdür Asistanı ne yapabilsin?","GM adına rapor hazırlama|GM'nin onay kutusunu görme (onay veremez)|GM vekili olarak onay verme|Toplantı/ziyaret kaydı|Gerek yok"],
+["d1.3","M","Haftalık yönetim toplantısında masaya hangi 5 bilgi gelmeli?"],
+["d1.4","T","Muhasebe & Finans GMY'nin kiralama ve muhasebe dışındaki birimlerde yetkisi?","Tüm finansal verileri (maliyet, kârlılık) görür|Yalnız kendi hattını görür|Tüm şirketi görür ve onaylar"]
+]},
+{id:"d2",grup:"Departman",baslik:"Genel Koordinatörlük",aciklama:"Emre Utku — Teknik Servis, Depo, Müşteri İlişkileri, Satış ve Haberleşme TS hatlarının bağlı olduğu koordinatörlük.",sorular:[
+["d2.1","C","Genel Koordinatör hangi kararları ERP üzerinden verir?","Birimler arası öncelik çatışması (aynı teknisyen iki işe)|Limit üstü teklif onayı|Satın alma onayı|Personel planlama / fazla mesai onayı|Müşteri şikâyetinin üst seviye çözümü"],
+["d2.2","T","Satıştan teknik servise iş geçişi (kurulum, keşif) nasıl olsun?","Satış siparişi onaylanınca otomatik kurulum işi açılsın|Satış, teknik servise talep açsın; TS kabul etsin|Elle, telefon/e-postayla (mevcut)"],
+["d2.3","M","Koordinatörlüğün bugün en çok vakit harcadığı takip işi nedir?"]
+]},
+{id:"d3",grup:"Departman",baslik:"Teknik Servis Yönetimi",aciklama:"Nazım Köse ve Sunay Kılıç (Teknik Servis Yöneticileri).",sorular:[
+["d3.1","T","Servis işlerini kim tayin eder (sahaya kim gidecek)?","Teknik Servis Yöneticisi|Takım lideri (saha/laboratuvar)|Operasyon uzmanı (ofis)|Teknisyen havuzdan kendisi alır, lider onaylar"],
+["d3.2","T","7/24 nöbet sistemi var mı?","Evet, haftalık nöbet listesi|Yalnız belirli müşteriler (havalimanı vb.) için|Hayır"],
+["d3.3","C","Personel yetkinliği nasıl takip edilsin?","Cihaz/marka bazlı yetkinlik (ör. Smiths X-Ray seviye 2)|Sertifika ve geçerlilik tarihi|Radyasyon güvenliği / dozimetre kayıtları|Ehliyet / araç kullanma yetkisi|İSG eğitimleri|Müşteri tesisine giriş izni (havalimanı kartı vb.)"],
+["d3.4","T","İş kapandıktan sonra kalite kontrol?","Her işi takım lideri kontrol eder|Rastgele örneklem|Yalnız şikâyet gelirse|Yok"],
+["d3.5","T","İstanbul dışı / uzun yol işleri?","Sık (planlamada konaklama/yol masrafı gerekli)|Ara sıra|Nadiren"],
+["d3.6","M","Bir teknik servis yöneticisi olarak sabah ERP'yi açtığınızda ilk neyi görmek istersiniz?"]
+]},
+{id:"d4",grup:"Departman",baslik:"Güvenlik Sistemleri Teknik Servis",aciklama:"Hakan Erdal (Saha Takım Lideri), Ali Kaya (Kıdemli Lab. Teknisyeni), Ali Güler (Kıdemli Saha Tek.), Arda Çiftçi, Burak Mehmet Şahinbaş, Emirhan Pehlivan, Özgür Çavdar ve iki lise stajyeri.",sorular:[
+["d4.1","C","Hangi cihaz türleri teknik servis kapsamında?","X-Ray bagaj/kargo tarama|Kapı tipi metal dedektör|El tipi metal dedektör|Patlayıcı / iz dedektörü|Araç altı görüntüleme|Turnike / geçiş kontrol|CCTV|Plaka tanıma|Sıvı tarama|Diğer (notta)"],
+["d4.2","T","Saha Takım Liderinin yetkisi?","İş tayini + işi kapatma onayı|Yalnız ekibini yönlendirir, tayin yönetici yapar|Teknisyenle aynı + ekip raporu"],
+["d4.3","T","Laboratuvar (atölye) iş akışı?","Cihaz atölyeye gelir → kabul → arıza tespiti → teklif/onay → onarım → test → teslim|Daha basit: kabul → onarım → teslim|Dış servis/üreticiye gönderim ağırlıklı"],
+["d4.4","T","X-Ray cihazlarında radyasyon ölçüm/lisans belgeleri ERP'de takip edilsin mi?","Evet, cihaz başına belge ve süre takibi|Hayır, ayrı tutuluyor"],
+["d4.5","T","Mevcut planlı bakım kontrol formları (X-Ray 11, kapı dedektörü 10 madde) yeterli mi?","Yeterli|Güncellenmeli (notta)|Müşteriye/cihaz modeline göre farklı form gerekli"],
+["d4.6","T","Arızalı cihazın yerine yedek (muadil) cihaz bırakılıyor mu?","Sık; takip edilmeli|Ara sıra|Hayır"],
+["d4.7","M","Saha ekibinin sahada en çok zorlandığı an hangisi?"]
+]},
+{id:"d5",grup:"Departman",baslik:"Haberleşme Sistemleri Teknik Servis",aciklama:"Ertuğrul Çakır (Lab. Takım Lideri), Mehmet Can Şahin (Sistem Mühendisi), Emre Çevre (Lab. Tek.), Cem Ülger & Batuhan Yıldız (Saha), Hazal Çelik & Ebrar Yayla Almkarı (TS Operasyon Uzmanı), Ramazan Furkan Ermiş (POC Destek Uzmanı).",sorular:[
+["d5.1","C","Hangi ürün/sistem grupları kapsamda?","El/araç telsizi (DMR, TETRA, analog)|Röle / repeater / baz istasyonu|POC (hücresel ağ üzerinden bas-konuş) cihaz ve hatları|Telsiz programlama / frekans planı|Network / IP altyapı|Santral / ses kayıt|OKTH abonelikleri|Diğer (notta)"],
+["d5.2","C","TS Operasyon Uzmanları (Hazal, Ebrar) ERP'de ne yapar?","Kayıt açma ve müşteriyle iletişim|Planlama ve tayin|Atölye kabul/teslim|RMA / üretici yazışması|Teklif hazırlama|Fatura/hak ediş hazırlığı"],
+["d5.3","C","Sistem Mühendisinin özel ihtiyacı?","Proje (çok adımlı kurulum) takibi|Cihaz konfigürasyon dosyası saklama|Saha keşif raporu|Diğer"],
+["d5.4","T","POC Destek Uzmanının işi ERP'de nerede?","Teknik servis işi olarak|Mobilite modülünde (hat/abonelik)|İkisi birden"],
+["d5.5","T","Telsiz programlama/frekans kayıtları cihaz kütüğünde tutulsun mu?","Evet (frekans, kod, ID)|Hayır"],
+["d5.6","T","Haberleşme TS'nin satışla ilişkisi (Çağatay Koruç iki şapkalı)?","Satış ve TS aynı müşteri kartını ve geçmişi görsün|Ayrı tutulsun"]
+]},
+{id:"d6",grup:"Departman",baslik:"Depo ve Lojistik",aciklama:"Beytullah Numan Özdek (Depo ve Lojistik Yöneticisi) — tek kişilik birim.",sorular:[
+["d6.1","C","Hangi depo/stok noktaları var?","Merkez depo|Teknisyen araç stoğu|Atölye stoğu|Kiralık cihaz deposu|Müşteri sahasında konsinye stok|Hurda/arızalı deposu"],
+["d6.2","T","Seri numarası takibi?","Tüm cihazlarda seri no zorunlu|Yalnız ana cihazlarda; yedek parça adetle|Hiç"],
+["d6.3","T","Barkod/QR kullanımı?","Şimdi var|İstiyoruz|Gerek yok"],
+["d6.4","T","Sayım sıklığı?","Aylık|3 ayda bir|Yıl sonu|Sürekli (döngüsel)"],
+["d6.5","C","Lojistik süreçleri?","Kargo gönderimi (takip no)|Kendi aracımızla sevkiyat|İrsaliye kesimi|Teslim tutanağı imzalatma"],
+["d6.6","C","Zimmet takibi ERP'de olsun mu?","Teknisyene alet/ölçüm cihazı zimmeti|Araç zimmeti|Bilgisayar/telefon zimmeti|Hayır"],
+["d6.7","T","Depo yöneticisi yokken (tek kişi) stok çıkışını kim yapar?","Teknik Servis Yöneticisi|Operasyon uzmanı|Teknisyen kendisi, sonradan onaylanır"]
+]},
+{id:"d7",grup:"Departman",baslik:"Müşteri İlişkileri ve Kurumsal İletişim",aciklama:"Filiz Bigeç (Yönetici) ve boş kadro (Operasyon Destek Uzmanı).",sorular:[
+["d7.1","T","Müşteriden gelen arıza çağrısını kim kayda geçirir?","Müşteri İlişkileri|Teknik servis operasyon uzmanları|Santral/danışma|Kim aldıysa"],
+["d7.2","T","Şikâyet yönetimi ayrı bir süreç olsun mu?","Evet: şikâyet kaydı, sorumlu, çözüm süresi, kapanış|Servis işine not olarak yeter"],
+["d7.3","T","Memnuniyet anketi?","Her iş sonunda otomatik|Aylık/üç aylık toplu|Yok"],
+["d7.4","C","Müşteri kartında Mİ ekibinin görmesi gerekenler?","Tüm servis geçmişi|Açık teklifler|Sözleşme ve SLA|Ödeme/tahsilat durumu|İletişim geçmişi (arama, e-posta)"],
+["d7.5","M","Kurumsal iletişim (duyuru, bülten, müşteri bilgilendirme) ERP'de yer almalı mı?"]
+]},
+{id:"d8",grup:"Departman",baslik:"Satış (Güvenlik, Haberleşme, Denge Mobil)",aciklama:"Güvenlik Satış (Nazım Köse, Umut Can Yıldırım), Haberleşme Satış (Çağatay Koruç, Fatma Lale Şahingöz, Samet Alpat, Seray Eren, Muharrem Ali Şahinbaş – OKTH), Denge Mobil (Serkan Doğan, Fatih Bayındır, Güngör Sima Aktüre, Baran Tefiye).",sorular:[
+["d8.1","C","Satış ERP'de hangi aşamaları yürütsün?","Potansiyel müşteri / fırsat (CRM)|Ziyaret ve görüşme kaydı|Teklif|Sipariş|Sözleşme|Yalnız teknik servisten gelen teklifleri görür"],
+["d8.2","T","Satış temsilcisi müşteri görünürlüğü?","Yalnız kendi müşterileri|Kendi satış biriminin tüm müşterileri|Tüm müşteriler"],
+["d8.3","T","Fiyat listesi ve iskonto yetkisi?","Liste fiyatı sabit; iskonto oranı role göre sınırlı|Satışçı serbest, yönetici onaylar|Fiyatı yalnız yönetici belirler"],
+["d8.4","T","Satış Destek Uzmanının rolü?","Teklif/sipariş hazırlar, satışçı adına|Yalnız evrak ve takip|Satışçıyla aynı yetki"],
+["d8.5","M","OKTH Uzmanının süreci nedir? (BTK başvuruları, abonelik, frekans…)"],
+["d8.6","T","Denge Mobil'in mevcut Mobilite modülü (hesap, cihaz, hat, iş emri, hak ediş) yeterli mi?","Yeterli|Eksikleri var (notta)|Teknik servis modülüyle birleşmeli"],
+["d8.7","T","Satılan cihaz otomatik olarak cihaz kütüğüne (kurulu ekipman) düşsün mü?","Evet, kurulumla birlikte|Evet, satışla birlikte|Hayır"]
+]},
+{id:"d9",grup:"Departman",baslik:"Kiralama ve Operasyon",aciklama:"Nuri Demir, Tekin Uzunalp, Daniyar Setdarkulyyev, Uysal Aydoğmuş (Kiralama Operasyon Personeli) — Ayşegül Aydoğmuş'a bağlı.",sorular:[
+["d9.1","C","Kiralanan ürünler?","X-Ray / dedektör (etkinlik, fuar, maç)|Telsiz|POC cihaz/hat|Araç|Diğer (notta)"],
+["d9.2","T","Kiralama süresi tipik olarak?","Günlük/etkinlik bazlı|Aylık|Yıllık sözleşme|Karışık"],
+["d9.3","T","Kiralama faturalama periyodu?","Sözleşme başında tek seferde|Aylık otomatik|Teslim dönüşünde"],
+["d9.4","C","Kiralama personeli ERP'de ne yapar?","Rezervasyon / müsaitlik kontrolü|Sevk ve teslim tutanağı|Sahada kurulum|Dönüş kontrolü ve hasar tespiti|Faturalamaya bildirim"],
+["d9.5","T","Dönüşte hasar/eksik tespit edilirse?","Teknik servise kontrol işi açılır, hasar bedeli müşteriye yansıtılır|Kiralama ekibi kendi değerlendirir"],
+["d9.6","T","Daniyar Setdarkulyyev gibi yabancı uyruklu personel için arayüz dili?","Türkçe yeterli|İngilizce de gerekli"]
+]},
+{id:"d10",grup:"Departman",baslik:"Muhasebe",aciklama:"Tuğba Serbest (Muhasebe Yöneticisi), Tuğba Gayır ve Canan Güllü (Muhasebe Uzmanı).",sorular:[
+["d10.1","T","Biten servis işi muhasebeye nasıl ulaşsın?","İş kapanınca “faturalanacak” listesine düşer|Aylık hak ediş dökümü (Excel) ile|Teknik servis ayrıca bildirir"],
+["d10.2","T","Tahsilat takibi nerede?","Logo'da kalır|ERP'de (müşteri kartında görünür)|İkisinde, eşitlenerek"],
+["d10.3","C","Muhasebe ERP'de neyi görmeli?","İş bazlı maliyet (parça + işçilik + yol)|Satış fiyatı ve teklifler|Kiralama sözleşmeleri|Stok değeri|Personel masrafları|Hak ediş"],
+["d10.4","T","Teknisyen masrafları (yakıt, yemek, konaklama, otopark)?","ERP'de, işe bağlı masraf kaydı + fiş fotoğrafı|Ayrı form/Excel|Avans/kasa ile Logo'da"],
+["d10.5","T","Maliyet yöntemi (stok)?","Ağırlıklı ortalama|FIFO (ilk giren ilk çıkar)|Son alış fiyatı|Logo neyse o"],
+["d10.6","T","Döviz?","Teklif ve maliyet döviz olabilir (USD/EUR), TL'ye çevrilir|Her şey TL"]
+]},
+{id:"d11",grup:"Departman",baslik:"İnsan Kaynakları",aciklama:"Sevgi Çetin (İK Yöneticisi; aynı zamanda İdari İşler Yöneticisi).",sorular:[
+["d11.1","C","İK ERP'de hangi bilgileri yönetsin?","Personel kartı ve organizasyon şeması|İzin talepleri ve bakiyesi|Eğitim ve sertifikalar|Performans değerlendirme|İşe giriş / çıkış kontrol listesi (zimmet, hesap)|Fazla mesai kayıtları|Yetkinlik matrisi"],
+["d11.2","T","Teknisyen zaman kaydı (iş başında geçen süre) İK ile ilişkisi?","Yalnız iş/verim takibi; İK görmez|İK görür ama bordroya etki etmez|Fazla mesai hesabına esas olur"],
+["d11.3","T","Bordro?","Dışarıda (muhasebe/Logo/dış firma) kalır|ERP'ye taşınmalı"],
+["d11.4","T","Organizasyon şemasını ERP'de kim günceller?","İK|Sistem yöneticisi|Her yönetici kendi birimini"],
+["d11.5","T","Personelin kişisel verilerini (TC, adres, sağlık) kim görebilir?","Yalnız İK|İK + Genel Müdür|İK + kişinin yöneticisi (kısıtlı)"]
+]},
+{id:"d12",grup:"Departman",baslik:"İdari İşler",aciklama:"Sevgi Çetin (Yönetici), Hülya Kaplan (Temizlik ve Servis), Ramazan Dinç (Gece Güvenlik ve Destek), Ayşe Demirkaplan (Danışma ve Santral).",sorular:[
+["d12.1","C","İdari işlerde ERP'de takip edilmesi gerekenler?","Şirket araçları (muayene, sigorta, kasko, km, bakım)|Araç–personel zimmeti|Ofis demirbaşları|Ziyaretçi kaydı|Kargo giriş/çıkış|Tedarikçi / sözleşme takibi (kira, temizlik vb.)"],
+["d12.2","T","Danışma ve santral görevlisi ERP'de ne yapsın?","Gelen arıza çağrısını ön kayıt olarak açabilsin|Yalnız ilgili kişiye yönlendirsin (ERP kullanmaz)|Ziyaretçi/kargo kaydı"],
+["d12.3","T","Temizlik ve gece güvenlik personeli ERP kullanacak mı?","Hayır|Yalnız vardiya/devriye kaydı|Yalnız talep (arıza/malzeme) bildirimi"],
+["d12.4","T","Şirket içi talepler (ofis arızası, malzeme, araç talebi)?","ERP'de basit talep modülü|E-posta/WhatsApp yeterli"]
+]},
+// ───────────────────────── MODÜLLER ─────────────────────────
+{id:"m1",grup:"Modül",baslik:"Servis iş emri",aciklama:"Arıza, keşif, kurulum, plansız bakım gibi tüm servis işlerinin yaşam döngüsü.",sorular:[
+["m1.1","C","İş talepleri hangi kanallardan geliyor?","Telefon|E-posta|WhatsApp|Müşteri portalı (olursa)|Sahadaki teknisyen kendisi açar|Planlı bakımdan otomatik|Satıştan (kurulum/keşif)"],
+["m1.2","C","Kayıt açarken zorunlu alanlar?","Müşteri + lokasyon|Cihaz (seri no)|Arıza tanımı|Öncelik|Talep eden kişi ve telefonu|Talep kanalı|Fotoğraf"],
+["m1.3","T","Öncelik seviyeleri?","Kritik / Yüksek / Normal / Düşük (mevcut)|Sözleşmeye göre otomatik belirlensin|Daha basit: Acil / Normal"],
+["m1.4","T","Mevcut durumlar (YENİ KAYIT → TAYİN EDİLDİ → İŞLEM-BAŞLADI → ASKIDA → TAMAMLANDI / YAPILAMADI) yeterli mi?","Yeterli|Eksik/fazla var (notta)"],
+["m1.5","C","İş “ASKIDA”ya hangi nedenlerle alınır?","Parça bekleniyor|Müşteri onayı bekleniyor|Müşteri tesisine erişim yok|Üretici/dış servis bekleniyor|Teklif onayı bekleniyor"],
+["m1.6","T","Bir arıza kaydında birden fazla cihaz olabilir mi?","Evet, tek iş birden fazla cihaz|Hayır, her cihaz ayrı iş (planlı bakımdaki gibi)"],
+["m1.7","T","Kapanmış iş yeniden açılabilsin mi?","Evet, belirli gün içinde (garanti işçiliği)|Hayır, yeni iş açılır ve eskisine bağlanır"],
+["m1.8","T","İşi kim iptal edebilir?","Açan kişi|Yönetici|Operasyon uzmanı + yönetici"],
+["m1.9","T","Garanti/sözleşme kontrolü?","Kayıt açılırken otomatik uyarı (garantide / sözleşmede / ücretli)|Elle"],
+["m1.10","C","İş kapanışında zorunlu olanlar?","Yapılan işlem açıklaması|Kullanılan parçalar|Süre kaydı|Fotoğraf|Müşteri imzası|Kök neden kodu"]
+]},
+{id:"m2",grup:"Modül",baslik:"Planlama ve tayin",sorular:[
+["m2.1","T","Planlama ekranı nasıl olmalı?","Takvim (gün/hafta, teknisyen satırları)|Liste + tarih|Harita üzerinde"],
+["m2.2","C","Tayin önerisinde sistem neye baksın?","Teknisyen yetkinliği|Müsaitlik / çakışma|Konum yakınlığı|İş yükü dengesi|Müşterinin tercih ettiği teknisyen"],
+["m2.3","T","Bir işe kaç kişi tayin edilir?","Genelde tek teknisyen|Ekip (şef + teknisyen)|Değişken"],
+["m2.4","T","Çakışan tayin (aynı saatte iki iş)?","Engellensin|Uyarı versin, gerekçe ile geçilebilsin (mevcut)"],
+["m2.5","T","Müşteriden randevu onayı alınıyor mu?","Evet, her iş için|Yalnız planlı bakımda|Hayır"],
+["m2.6","T","Teknisyen kendisine tayin edilen işi reddedebilsin mi?","Evet, gerekçeyle|Hayır"]
+]},
+{id:"m3",grup:"Modül",baslik:"Ekipman (cihaz) kütüğü",sorular:[
+["m3.1","C","Cihaz kartında olması gerekenler?","Seri no, marka, model|Müşteri + lokasyon + bölge (Giriş 1 vb.)|Kurulum tarihi|Garanti başlangıç/bitiş|Yazılım/firmware sürümü|Sahiplik (müşteri malı / kiralık / demo / bizim)|Fotoğraf|Belge (lisans, ölçüm raporu)"],
+["m3.2","T","Cihazlara QR etiket yapıştırılsın mı?","Evet, okutunca cihaz kartı ve geçmişi açılsın|Hayır"],
+["m3.3","T","Cihaz bir lokasyondan diğerine taşınınca?","Hareket geçmişi tutulsun|Yalnız güncel lokasyon yeter"],
+["m3.4","T","Cihazın parçaları (alt bileşen: jeneratör, monitör, bant) ayrı izlensin mi?","Evet, seri no'lu ana parçalar|Hayır"]
+]},
+{id:"m4",grup:"Modül",baslik:"Planlı bakım",sorular:[
+["m4.1","T","Bakım işleri nasıl üretilsin?","Sözleşmeden otomatik (dönem başında)|Yönetici dönem başında toplu üretir|Elle"],
+["m4.2","T","Bakım sıklığı?","Sözleşmeye göre (yılda 1-12)|Cihaz türüne göre sabit|Karışık"],
+["m4.3","T","Kontrol formu cihaz modeline göre değişsin mi?","Evet|Hayır, cihaz türü bazında yeterli"],
+["m4.4","T","Kaçırılan/geciken bakım?","Otomatik uyarı + yöneticiye bildirim|Raporda görünsün yeter"],
+["m4.5","T","Bakım sonrası müşteriye ne gider?","Cihaz başına bakım formu PDF|Tüm lokasyon için tek özet rapor|İkisi"]
+]},
+{id:"m5",grup:"Modül",baslik:"SLA ve operasyon merkezi",aciklama:"Açık karar TS-200: SLA süresi takvim saatiyle mi mesai saatiyle mi işlesin?",sorular:[
+["m5.1","T","SLA süresi nasıl sayılsın?","Takvim saati (7/24, mevcut)|Mesai saati (hafta içi 08:30–18:00, tatiller hariç)|Müşteri sözleşmesine göre (bazısı 7/24, bazısı mesai)"],
+["m5.2","C","SLA'da hangi süreler ölçülsün?","Müdahale (teknisyenin sahaya varışı)|İlk yanıt (kaydın tayini)|Çözüm|Geçici çözüm (yedek cihaz) süresi"],
+["m5.3","T","SLA ihlalinde?","Yalnız rapor|Yöneticiye anlık uyarı|Sözleşmedeki cezai şartın hesaplanması"],
+["m5.4","T","Resmî ve dini tatiller?","Tatil takvimi tanımlansın, SLA durdursun|Tatil fark etmez"],
+["m5.5","T","Operasyon merkezi ekranı (anlık durum panosu) duvar ekranında açık kalacak mı?","Evet, TV modu gerekli|Hayır"]
+]},
+{id:"m6",grup:"Modül",baslik:"Atölye, laboratuvar ve RMA",sorular:[
+["m6.1","C","Atölye kabulünde neler kaydedilsin?","Cihazla gelen aksesuarlar|Görsel hasar + fotoğraf|Müşterinin arıza tarifi|Teslim alan/eden imzası|Tahmini teslim tarihi"],
+["m6.2","T","Onarım öncesi müşteri onayı (ücretli işlerde)?","Teklif onaylanmadan işlem yapılmaz|Belirli tutarın altı onaysız yapılır"],
+["m6.3","T","Dış servis / üreticiye gönderim (RMA)?","Sık, ayrıntılı takip gerekli (gönderim, takip no, dönüş)|Ara sıra, basit kayıt yeter"],
+["m6.4","T","Açık karar: Atölye rolü dış servis firmasını seçebilmek için cari/hesap kartlarını görebilsin mi?","Evet, görsün (hesap.gor izni verilsin)|Hayır, dış servis seçimini yönetici yapsın"],
+["m6.5","T","Açık karar: RMA kaydındaki maliyet alanı maliyet yetkisi olmayanlardan gizlensin mi? (Bugün canlıda herkese açık)","Evet, gizlensin|Hayır, açık kalsın"]
+]},
+{id:"m7",grup:"Modül",baslik:"Yedek parça ve stok",sorular:[
+["m7.1","T","Teknisyen parçayı nasıl alır?","Talep açar, depo onaylayıp çıkış yapar|Araç stoğundan kullanır, işe bağlar|İkisi"],
+["m7.2","T","Kullanılmayan/arızalı parça iadesi?","Zorunlu iade kaydı|Gerek yok"],
+["m7.3","T","Minimum stok uyarısı?","Parça bazında kritik seviye + otomatik satın alma talebi|Yalnız uyarı|Gerek yok"],
+["m7.4","T","Satın alma ERP'de mi?","Talep → onay → sipariş → mal kabul ERP'de|Yalnız talep ERP'de, sipariş Logo'da|Hiç"],
+["m7.5","T","Negatif stoka düşmeye izin?","Asla (mevcut)|Yöneticinin onayıyla"]
+]},
+{id:"m8",grup:"Modül",baslik:"Teklif ve maliyet",sorular:[
+["m8.1","C","Teklifte hangi kalemler olur?","Parça/malzeme|İşçilik (saat × ücret)|Yol/konaklama|Dış servis bedeli|Kiralama|Bakım sözleşmesi bedeli"],
+["m8.2","T","İşçilik ücreti nasıl belirlenir?","Tek saat ücreti|Teknisyen seviyesine göre|Müşteri/sözleşmeye göre"],
+["m8.3","T","Teklif şablonu?","Tek standart şablon (logolu PDF)|Birime göre ayrı şablon (Güvenlik / Haberleşme)|Müşteriye göre"],
+["m8.4","T","Teklif geçerlilik ve revizyon?","Her revizyon ayrı numara (R1, R2) + geçmiş|Üzerine yazılır"],
+["m8.5","T","İş bazlı kârlılık kim görür?","Yalnız yönetim + muhasebe|TS yöneticileri de|Kimse, yalnız toplam rapor"]
+]},
+{id:"m9",grup:"Modül",baslik:"Zaman takibi",aciklama:"Kural: zaman takibi bordro değildir, mola kişi-saate dahil değildir, süre kaydı yoksa “eksik” sayılır (0 değil).",sorular:[
+["m9.1","T","Teknisyen süreyi nasıl kaydeder?","Saat Aç / Saat Kapa (canlı sayaç)|İş sonunda başlangıç-bitiş saatini girer|İkisi"],
+["m9.2","T","Yol süresi?","Ayrı kalem olarak kaydedilsin|İş süresine dahil|Kaydedilmesin"],
+["m9.3","T","Yukarıdaki kurallar (mola dahil değil, eksik ≠ 0) doğru mu?","Doğru|Değişmeli (notta)"],
+["m9.4","T","Eksik süre kaydı olan iş kapatılabilsin mi?","Hayır|Evet, ama raporda “eksik” görünür"],
+["m9.5","T","Süre düzeltmeyi kim yapabilir?","Teknisyen kendisi (aynı gün)|Yalnız takım lideri/yönetici|Herkes, denetim iziyle"]
+]},
+{id:"m10",grup:"Modül",baslik:"Kiralama modülü",sorular:[
+["m10.1","T","Aynı cihazın aynı tarihlere iki kez kiralanması?","Engellensin (mevcut)|Uyarı versin"],
+["m10.2","C","Kiralama süreci adımları?","Rezervasyon|Sözleşme|Sevk|Kurulum|Kullanım dönemi|Toplama|Dönüş kontrolü|Faturalama"],
+["m10.3","T","Kiralık cihazların bakımı?","Her dönüşte kontrol işi açılsın|Periyodik planlı bakım|İkisi"],
+["m10.4","T","Kiralama uzlaştırması (TS-205) gerçek veriyle denenecek; pilot için hangi dönem/müşteri?","Son ay|Son çeyrek|Belirli bir müşteri (notta)"]
+]},
+{id:"m11",grup:"Modül",baslik:"Eğitim ve yetkinlik",sorular:[
+["m11.1","C","Takip edilecekler?","Verilen iç eğitimler|Üretici eğitimleri/sertifikaları|Saha gözlemi (takım liderinin değerlendirmesi)|Stajyer gelişimi|Müşteriye verilen kullanıcı eğitimleri"],
+["m11.2","T","Yetkinliği olmayan teknisyene iş tayini?","Engellensin|Uyarıyla tayin edilebilsin (mevcut)"],
+["m11.3","T","Müşteriye verilen eğitim (operatör eğitimi) ERP'de?","Evet, katılımcı listesi + sertifika PDF|Hayır"]
+]},
+{id:"m12",grup:"Modül",baslik:"Müşteri, lokasyon ve irtibat",sorular:[
+["m12.1","T","Müşteri yapısı?","Müşteri → lokasyonlar (tesisler) → bölgeler|Ana firma → alt firmalar → lokasyonlar (holding yapısı)|Basit: müşteri + adres"],
+["m12.2","C","Lokasyon kartında?","Adres + harita konumu|Erişim notu (güvenlik, otopark, giriş kartı)|Çalışma saatleri|Birden fazla irtibat kişisi|Lokasyona özel SLA"],
+["m12.3","T","Mükerrer müşteri kontrolü?","Vergi no ile kesin|Unvan benzerliğiyle uyarı (mevcut)|İkisi"],
+["m12.4","T","Kamu kurumları (havalimanı, adliye) için özel alanlar?","Gerekli (ihale no, sözleşme no, muayene kabul)|Gerek yok"]
+]},
+{id:"m13",grup:"Modül",baslik:"Belgeler, formlar ve PDF",sorular:[
+["m13.1","C","Sistemden çıkması gereken belgeler?","Servis formu|Planlı bakım formu|Teklif|Teslim tutanağı (kiralama/atölye)|Hak ediş eki|Kurulum/kabul tutanağı|Eğitim sertifikası"],
+["m13.2","T","Servis formu tasarımı?","Mevcut kâğıt formun aynısı (örnek gönderirim)|Yeni, sade tasarım|Müşteri bazlı farklı"],
+["m13.3","T","Pivot Excel şablonu (TS-201) için örnek dosyanız var mı?","Evet, göndereceğim|Hayır, düz tablo yeterli|Hayır, siz önerin"],
+["m13.4","T","Açık karar: Muhasebe destek rolü servis raporlarını (fatura devri Excel'i) dışa aktarabilsin mi?","Evet|Hayır"]
+]},
+{id:"m14",grup:"Modül",baslik:"Mobil “Benim İşlerim”",sorular:[
+["m14.1","C","Teknisyen telefonda ne görmeli?","Bugünkü işlerim (sıralı)|Yarınki işler|Müşteri adresi + yol tarifi + arama|Cihaz geçmişi|Kontrol formu|Parça talebi|Kendi süre kayıtlarım"],
+["m14.2","T","Teknisyen yeni iş açabilsin mi (sahada fark ettiği arıza)?","Evet|Hayır, operasyona bildirir"],
+["m14.3","T","İş bitince müşteriye form nasıl verilsin?","Anında e-posta ile PDF|Ekranda gösterip imzalatma|Ofis sonra gönderir"]
+]},
+// ───────────────────────── ÖNCELİK ─────────────────────────
+{id:"p1",grup:"Öncelik",baslik:"Önceliklendirme",aciklama:"Her başlık sizin için ne kadar önemli? (1 = gereksiz, 5 = kritik)",sorular:[
+["p1.1","O","Servis iş emri ve tayin",OLCEK],
+["p1.2","O","Mobil saha uygulaması (çevrimdışı dahil)",OLCEK],
+["p1.3","O","Planlı bakım",OLCEK],
+["p1.4","O","SLA ve operasyon panosu",OLCEK],
+["p1.5","O","Atölye / laboratuvar / RMA",OLCEK],
+["p1.6","O","Yedek parça, stok ve satın alma",OLCEK],
+["p1.7","O","Teklif ve maliyet",OLCEK],
+["p1.8","O","Kiralama",OLCEK],
+["p1.9","O","Satış / CRM",OLCEK],
+["p1.10","O","Muhasebe / Logo entegrasyonu",OLCEK],
+["p1.11","O","İK, izin, eğitim",OLCEK],
+["p1.12","O","İdari işler (araç, zimmet)",OLCEK],
+["p1.13","O","Müşteri portalı",OLCEK],
+["p1.14","O","Yönetim raporları ve panolar",OLCEK],
+["p1.15","O","Güvenlik (MFA, yetki gözden geçirme)",OLCEK],
+["p1.16","M","Eklemek istediğiniz başka bir şey var mı?"]
+]}
+];
+
+// ── durum ──
+const DEPO_ANAHTAR = "denge-erp-soru-formu-v1";
+let durum = {cevaplar:{}, dolduran:"", gorev:""};
+let db = null, belge = null, sunucu = false;
+const tumSorular = BOLUMLER.flatMap(b => b.sorular.map(s => ({b, s})));
+
+function yerelOku(){ try { const x = JSON.parse(localStorage.getItem(DEPO_ANAHTAR) || "null"); if (x && x.cevaplar) durum = x; } catch(e) {} }
+function yerelYaz(){ try { localStorage.setItem(DEPO_ANAHTAR, JSON.stringify(durum)); } catch(e) {} }
+
+function dolu(c){
+  if (!c) return false;
+  const v = c.v;
+  if (Array.isArray(v)) return v.length > 0 || !!(c.n && c.n.trim());
+  if (typeof v === "number") return true;
+  return !!((v && String(v).trim()) || (c.n && c.n.trim()));
+}
+
+// ── çizim ──
+function el(etiket, ozellik, ...cocuk){
+  const e = document.createElement(etiket);
+  for (const [k, v] of Object.entries(ozellik || {})){
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const c of cocuk) if (c != null) e.append(c);
+  return e;
+}
+
+function soruCiz(b, s){
+  const [kim, tip, metin, sec, ipucu] = s;
+  const c = durum.cevaplar[kim] || {};
+  const kart = el("div", {class:"soru", id:"s-" + kim, "data-kim": kim});
+  kart.append(el("h3", {}, el("span", {class:"no"}, kim.toUpperCase()), el("span", {}, metin)));
+  if (ipucu) kart.append(el("p", {class:"ipucu"}, ipucu));
+  const secenekler = sec ? sec.split("|") : [];
+  if (tip === "T" || tip === "C"){
+    const kutu = el("div", {class:"secenekler", role: tip === "T" ? "radiogroup" : "group"});
+    secenekler.forEach((o, i) => {
+      const girdi = el("input", {type: tip === "T" ? "radio" : "checkbox", name: "q-" + kim, value: o});
+      if (tip === "T" ? c.v === o : (Array.isArray(c.v) && c.v.includes(o))) girdi.checked = true;
+      girdi.addEventListener("change", () => {
+        if (tip === "T") ayarla(kim, {v: o});
+        else {
+          const secili = [...kutu.querySelectorAll("input:checked")].map(x => x.value);
+          ayarla(kim, {v: secili});
+        }
+      });
+      kutu.append(el("label", {}, girdi, el("span", {}, o)));
+    });
+    kart.append(kutu);
+  } else if (tip === "O"){
+    const kutu = el("div", {class:"olcek", role:"group", "aria-label": metin});
+    secenekler.forEach((o, i) => {
+      const deger = i + 1;
+      const d = el("button", {type:"button", "aria-pressed": String(c.v === deger), title:o}, o);
+      d.addEventListener("click", () => {
+        const yeni = (durum.cevaplar[kim] || {}).v === deger ? null : deger;
+        kutu.querySelectorAll("button").forEach((x, j) => x.setAttribute("aria-pressed", String(yeni === j + 1)));
+        ayarla(kim, {v: yeni});
+      });
+      kutu.append(d);
+    });
+    kart.append(kutu);
+  } else {
+    const t = el("textarea", {"aria-label": metin, placeholder:"Cevabınız…"});
+    t.value = c.v || "";
+    t.addEventListener("input", () => ayarla(kim, {v: t.value}));
+    kart.append(t);
+  }
+  if (tip !== "M"){
+    const not = el("details", {class:"not"});
+    if (c.n) not.open = true;
+    const t = el("textarea", {"aria-label": kim + " not", placeholder:"Not / Diğer / açıklama…"});
+    t.value = c.n || "";
+    t.addEventListener("input", () => ayarla(kim, {n: t.value}));
+    not.append(el("summary", {}, "＋ Not / Diğer"), t);
+    kart.append(not);
+  }
+  if (dolu(c)) kart.classList.add("cevapli");
+  return kart;
+}
+
+function formCiz(){
+  const form = document.getElementById("form"); form.textContent = "";
+  const nav = document.getElementById("nav"); nav.textContent = "";
+  const secici = document.getElementById("secici"); secici.textContent = "";
+  let sonGrup = "";
+  const GRUP_AD = {Genel:"Genel (tüm ERP)", Departman:"Departmanlar", Modül:"Modüller", Öncelik:"Öncelik"};
+  for (const b of BOLUMLER){
+    if (b.grup !== sonGrup){
+      sonGrup = b.grup;
+      nav.append(el("div", {class:"grup"}, GRUP_AD[b.grup]));
+      secici.append(el("option", {disabled:"", value:""}, "— " + GRUP_AD[b.grup] + " —"));
+    }
+    const a = el("a", {href:"#b-" + b.id, "data-b": b.id}, el("span", {}, b.baslik), el("small", {}, ""));
+    nav.append(a);
+    secici.append(el("option", {value: b.id}, b.baslik));
+    const bol = el("section", {class:"bolum", id:"b-" + b.id});
+    bol.append(el("div", {class:"bolum-bas"}, el("h2", {}, b.baslik), el("span", {class:"etiket"}, b.grup)));
+    if (b.aciklama) bol.append(el("p", {class:"aciklama"}, b.aciklama));
+    if (b.bilgi) bol.append(el("div", {class:"bilgi", html: b.bilgi}));
+    for (const s of b.sorular) bol.append(soruCiz(b, s));
+    form.append(bol);
+  }
+  secici.value = "";
+  document.querySelectorAll("section.bolum").forEach(s => gozlemci.observe(s));
+  secici.onchange = () => { if (secici.value) document.getElementById("b-" + secici.value).scrollIntoView({behavior:"smooth"}); };
+  sayaclar();
+}
+
+function sayaclar(){
+  let toplam = 0, cevap = 0;
+  for (const b of BOLUMLER){
+    let bc = 0;
+    for (const s of b.sorular){ if (dolu(durum.cevaplar[s[0]])) bc++; }
+    toplam += b.sorular.length; cevap += bc;
+    const a = document.querySelector('nav a[data-b="' + b.id + '"]');
+    if (a){ a.querySelector("small").textContent = bc + "/" + b.sorular.length; a.classList.toggle("bitti", bc === b.sorular.length); }
+  }
+  document.getElementById("bar").style.width = (toplam ? (100 * cevap / toplam) : 0) + "%";
+  document.getElementById("yuzde").textContent = cevap + " / " + toplam + " cevaplandı";
+  filtreUygula();
+}
+
+function ayarla(kim, parca){
+  const c = Object.assign({}, durum.cevaplar[kim] || {}, parca);
+  if (c.v === null || c.v === "" || (Array.isArray(c.v) && !c.v.length)) delete c.v;
+  if (c.n === "") delete c.n;
+  if (Object.keys(c).length) durum.cevaplar[kim] = c; else delete durum.cevaplar[kim];
+  const kart = document.getElementById("s-" + kim);
+  if (kart) kart.classList.toggle("cevapli", dolu(durum.cevaplar[kim]));
+  degisti();
+}
+
+// ── kayıt ──
+let zamanlayici = null, yaziliyor = false, bekliyor = false;
+function durumYaz(metin, ok){ const d = document.getElementById("durum"); d.textContent = metin; d.classList.toggle("ok", !!ok); }
+function degisti(){
+  durum.guncelleme = new Date().toISOString();
+  yerelYaz(); sayaclar();
+  durumYaz(sunucu ? "Kaydediliyor…" : "Bu tarayıcıya kaydedildi", !sunucu);
+  if (!sunucu) return;
+  clearTimeout(zamanlayici); zamanlayici = setTimeout(sunucuyaYaz, 1200);
+}
+async function sunucuyaYaz(){
+  if (!belge) return;
+  if (yaziliyor){ bekliyor = true; return; }
+  yaziliyor = true;
+  try {
+    await belge.set({cevaplar: durum.cevaplar, dolduran: durum.dolduran || "", gorev: durum.gorev || "", guncelleme: durum.guncelleme || new Date().toISOString(), form_surumu: 1});
+    durumYaz("Kaydedildi", true);
+  } catch(e){
+    if (e && e.code === "unavailable"){ setTimeout(sunucuyaYaz, 1500 + Math.random() * 1500); }
+    else if (e && (e.code === "invalid_argument" || e.code === "revoked" || e.code === "not_granted")){ sunucu = false; durumYaz("Sunucuya yazılamıyor; bu tarayıcıya kaydedildi"); }
+    else durumYaz("Kaydedilemedi; bu tarayıcıda duruyor");
+  } finally {
+    yaziliyor = false;
+    if (bekliyor){ bekliyor = false; sunucuyaYaz(); }
+  }
+}
+
+async function baglan(){
+  try {
+    const [d, u] = await Promise.all([claude.use("db"), claude.use("user")]);
+    const kimlik = u ? await u.id() : null;
+    if (!d || !kimlik){ durumYaz("Bu tarayıcıya kaydediliyor"); return; }
+    db = d; belge = db.doc("cevaplar/" + kimlik);
+    const snap = await belge.get();
+    const yerelVar = Object.keys(durum.cevaplar).length > 0;
+    if (snap.exists){
+      const x = snap.data() || {};
+      if (!yerelVar || (x.guncelleme && (!durum.guncelleme || x.guncelleme >= durum.guncelleme))){
+        durum = {cevaplar: JSON.parse(JSON.stringify(x.cevaplar || {})), dolduran: x.dolduran || "", gorev: x.gorev || "", guncelleme: x.guncelleme};
+        yerelYaz(); alanlariDoldur(); formCiz();
+      }
+    }
+    sunucu = true;
+    if (yerelVar && (!snap.exists || ((snap.data() || {}).guncelleme || "") < (durum.guncelleme || ""))) await sunucuyaYaz();
+    else durumYaz("Kaydedildi", true);
+  } catch(e){ durumYaz("Bu tarayıcıya kaydediliyor"); }
+}
+
+// ── dışa aktarma ──
+function markdown(){
+  const sat = ["# Denge ERP — Kurgu Soru Formu Cevapları", "", "Dolduran: " + (durum.dolduran || "-") + " — " + (durum.gorev || "-"), "Tarih: " + new Date().toLocaleString("tr-TR"), ""];
+  for (const b of BOLUMLER){
+    sat.push("## " + b.baslik + " (" + b.grup + ")", "");
+    for (const [kim, tip, metin, sec] of b.sorular){
+      const c = durum.cevaplar[kim];
+      let cevap = "—";
+      if (c && c.v != null){
+        if (Array.isArray(c.v)) cevap = c.v.join("; ");
+        else if (tip === "O") cevap = sec.split("|")[c.v - 1] || String(c.v);
+        else cevap = String(c.v);
+      }
+      sat.push("**" + kim.toUpperCase() + " " + metin + "**  ", cevap + (c && c.n ? "  \n_Not:_ " + c.n : ""), "");
+    }
+  }
+  return sat.join("\n");
+}
+async function disaAktar(){
+  const md = markdown();
+  try { await navigator.clipboard.writeText(md); durumYaz("Markdown panoya kopyalandı", true); }
+  catch(e){ const d = document.getElementById("dlg"); document.getElementById("dlgMetin").value = md; d.showModal(); }
+}
+
+// ── filtre ve gezinme ──
+let yalnizCevapsiz = false;
+function filtreUygula(){
+  document.querySelectorAll(".soru").forEach(k => k.classList.toggle("gizli", yalnizCevapsiz && dolu(durum.cevaplar[k.dataset.kim])));
+}
+function alanlariDoldur(){
+  document.getElementById("dolduran").value = durum.dolduran || "";
+  document.getElementById("gorev").value = durum.gorev || "";
+}
+
+document.getElementById("filtre").addEventListener("click", e => {
+  yalnizCevapsiz = !yalnizCevapsiz; e.currentTarget.setAttribute("aria-pressed", String(yalnizCevapsiz)); filtreUygula();
+});
+document.getElementById("disa").addEventListener("click", disaAktar);
+document.getElementById("disa2").addEventListener("click", disaAktar);
+document.getElementById("dlgKapat").addEventListener("click", () => document.getElementById("dlg").close());
+document.getElementById("dolduran").addEventListener("input", e => { durum.dolduran = e.target.value; degisti(); });
+document.getElementById("gorev").addEventListener("input", e => { durum.gorev = e.target.value; degisti(); });
+
+const gozlemci = new IntersectionObserver(girdiler => {
+  for (const g of girdiler) if (g.isIntersecting){
+    const id = g.target.id.slice(2);
+    document.querySelectorAll("nav a").forEach(a => a.classList.toggle("aktif", a.dataset.b === id));
+  }
+}, {rootMargin:"-30% 0px -65% 0px"});
+
+yerelOku(); alanlariDoldur(); formCiz();
+durumYaz("Bu tarayıcıya kaydediliyor");
+(function bekle(n){
+  if (window.claude && typeof window.claude.use === "function") baglan();
+  else if (n < 20) setTimeout(() => bekle(n + 1), 500);
+})(0);
+</script>

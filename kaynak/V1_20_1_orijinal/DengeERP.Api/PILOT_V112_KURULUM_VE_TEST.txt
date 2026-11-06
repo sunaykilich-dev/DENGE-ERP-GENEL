@@ -1,0 +1,61 @@
+DENGEERP PILOT V1.12 — KİRALAMA / DEPO / OPERASYON
+14 Ekim 2026
+
+TEMEL: DengeERP Pilot V1.11 (raporlama, kompakt takvim ve saha lokasyonları dahil)
+BU ZIP TAM PROJEDİR. Önceki kaynak dosyalar silinmemiştir.
+
+YENİLİKLER
+1) Kiralama formuna “+ Ürün Ekle”: farklı marka/model ve adet için ayrı satırlar,
+   her satırda alfanümerik seri numaraları ve not alanı. Önceki tek ürünlü
+   kayıtlar uygulama başlangıcında otomatik tek kalem olarak aktarılır.
+2) “+ Kişi Ekle”: Satın Alma / Saha Operasyon / Teknik Sorumlu / Diğer,
+   isim, organizasyondaki görev/ünvan, telefon, e-posta ve not.
+3) Kiralama ekranında Depo/Envanter sekmesi. Depo 1, Depo 2, Depo 3;
+   isimleri yetkili kullanıcı tarafından değiştirilebilir. Model, seri, adet,
+   hazır / hazır değil / kirada / kontrolde ve eksik açıklaması.
+4) Kiralama detayında her ürün kalemine depodan seri numaralı cihaz atama;
+   iki kiralamaya aynı cihaz atanması engellenir. Seri numarası kalemde saklanır.
+5) Operasyon geçmişi: Sevk Edildi, Kurulum Yapıldı, Devreye Alındı,
+   Toplandı, Depoya Alındı. Her aşama tarih/saat, ekip, depo, açıklama ve
+   o andaki seri numaraları ile kaydedilir. Depoya dönüşte envanter
+   otomatik “Kontrolde” durumuna geçer; kontrol sonrası yetkili “Hazır” yapar.
+6) Eski Depo / Lojistik servis iş emirleri görünümü KORUNDU.
+7) Önceki kullanıcı yetkileri, bakım, rapor, planlama, atölye ve diğer modüller KORUNDU.
+8) V1.11'de yerel PowerShell'de düzelttiğiniz iki tarih null kontrolü ve
+   Pkcs 9.0.21 bağımlılığı ZIP'e işlendi.
+
+GÜVENLİ ÇALIŞTIRMA
+A) Canlı 10.10.50.60:5050 üzerinde çalışan V1.11'i durdurmayın.
+B) Bu ZIP'i C:\DengeERP\App içine alın; ayrı bir dizine çıkarın.
+C) PowerShell: dotnet build <V1.12 klasörü>\DengeERP.Api\DengeERP.Api.csproj
+D) SSMS'de DengeERP veritabanının yeni, tarihli .bak yedeğini alın,
+   RESTORE VERIFYONLY ile doğrulayın. Yedek alınmadan yeni uygulamayı açmayın:
+   Program.cs başlangıçta bütün Database\*.sql dosyalarını uygular.
+E) Mümkünse önce kopya veritabanı + alternatif port ile test edin.
+F) Test başarılıysa çalışan V1.11'i Ctrl+C ile durdurun, V1.12 dizininden:
+   dotnet run --urls "http://0.0.0.0:5050"
+G) Tarayıcı: http://10.10.50.60:5050; Ctrl+F5.
+
+TEST SENARYOLARI
+[ ] Kiralamada 2 farklı ürün kalemi ve 2 farklı görevde irtibat ekle.
+[ ] Kaydet, yeniden aç: kalemler, adetler, kişiler ve görevler aynı mı?
+[ ] Depo 1, 2, 3 görünür mü? Depo adını yeniden adlandır.
+[ ] Ürün envanteri ekle: PG-5030.2026/AB seri no, Hazır ve Depo 1.
+[ ] Hazır Değil durumunda eksik notu zorunlu mu?
+[ ] Aynı cihaz ikinci kiralamaya atanabiliyor mu? (Engellenmeli.)
+[ ] Ayrı ekiplerle Kurulum ve Devreye Alma aşamalarını kaydet.
+[ ] Toplama / Depoya Alındı seç; cihaz Kontrolde ve seçili depoda mı?
+[ ] Kontrolü bitirip Hazır yap; boşta sayacı doğru mu?
+[ ] Eski kiralama kayıtları, planlama ve raporlama çalışıyor mu?
+
+VERİ GÜVENLİĞİ
+Yeni şema: Database/ZZ_V112_RentalInventoryOperations.sql
+Yeni kiralama tabloları oluşturur, mevcut RentalOrders kayıtlarını silmez.
+Eski kiralama kayıtlarını sadece yeni alt tablolara bir kere aktarır.
+Çalışan canlı veritabanında test edilmeden SQL şeması çalıştırılmamalıdır.
+Sadece eski exe'yi başlatmak veritabanını eski hâle döndürmez;
+gerektiğinde yedekle geri yükleme uzman tarafından planlanmalıdır.
+
+DOĞRULAMA SINIRI
+Bu ortamda node --check ve JS arayüz testleri yapılmıştır.
+Gerçek dotnet build ve SQL Server çalışma testi Windows makinesinde yapılmalıdır.

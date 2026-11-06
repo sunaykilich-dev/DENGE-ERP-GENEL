@@ -1,0 +1,12 @@
+DengeERP Pilot V1.7 - Cihaz Bazlı Planlı Bakım ve Ücret Görüntüleme Yetkisi
+
+- V1.6 dosyaları esas alındı, mevcut modüller korundu.
+- Bakım planına bağlı cihaz kayıtları: her cihaz ayrı Tamamlandı/Bekliyor.
+- Mevcut cihaz kütüğünden müşteri ve cihaz türüne göre eşleştirme denenir. Eşleşmeyen cihazlar seri numarasız ve açıkça işaretlenmiş olarak eklenir.
+- Ana iş emri, alt cihaz kayıtları tamamlanmadan kapatılamaz. Tüm cihazlar tamamlandığında yetkili kullanıcı ana iş emrini kapatır.
+- Bakım ekranı ücret sütunu ve API fiyat alanları finance.prices.view izniyle korunur.
+- Yetki kullanıcı yönetimi üzerinden kişi bazında atanabilir.
+
+ÖNEMLİ: V1.7 henüz gerçek SQL Server üzerinde entegrasyon testinden geçirilmemiştir.
+Veritabanı yedeği olmadan çalıştırmayın. V1.6 klasörünün üzerine yazmayın.
+Cihaz sayıları sözleşmenin ProductsText metninden okunur; farklı yazım varsa otomatik oluşturma hata verir, veri değiştirmez.

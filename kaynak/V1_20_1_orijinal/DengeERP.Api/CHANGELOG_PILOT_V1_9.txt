@@ -1,0 +1,40 @@
+DengeERP Pilot V1.9 — TOPLU PLANLAMA VE TOPLU EKİP ATAMASI
+Tarih: 14.10.2026
+Kaynak: Çalışan Pilot V1.8 ZIP paketi.
+
+1. Planlama Takvimi → Planlanmayı Bekleyenler
+   - İş emirleri müşteri, lokasyon ve birim bazında gruplanır.
+   - Bir lokasyondaki tüm cihaz iş emirleri grup kutusundan seçilebilir.
+   - Tek bir işlemde şef, birden fazla teknisyen, tarih/saat, süre,
+     araç ve saha notu girilerek toplu planlama + atama yapılır.
+   - Her cihazın PB iş emri, bakım formu ve seri numarası bağımsızdır.
+   - Aynı saha ziyareti için rota grup kodu üretilir (TPL-...).
+   - Aynı saha ziyareti kendi içindeki personele/araçlara çakışma göstermez.
+
+2. İş Emirleri → Toplu Atama
+   - Açık iş emirleri tik kutularıyla seçilir.
+   - Seçili aynı birimdeki işlere tek işlemle şef ve ekip atanır.
+   - Bu işlem mevcut tarih/araç/plan ve cihaz bakım formunu değiştirmez.
+   - Tamamlanmış, kapatılmış ve iptal edilmiş işler toplu atamaya alınmaz.
+
+3. SQL/API güvenliği
+   - PUT /api/workorders/bulk-assign
+   - PUT /api/workorders/bulk-plan
+   - İşlemden önce yetki, birim, durum, müşteri ve lokasyon denetimi.
+   - Tek SQL transaction: kısmi atama veya kısmi plan kaydı oluşmaz.
+   - Mevcut SQL tabloları ve verileri korunur; yeni veritabanı şeması yok.
+   - Kullanıcı işlemleri iş emri geçmişinde görünür.
+
+4. Seri numarası alanında type=text/inputmode=text açıkça tanımlandı.
+   - Harf, tire, nokta ve / gibi karakterler değiştirilmeden kaydedilir.
+
+TEST DURUMU
+- JavaScript sözdizimi (node --check): başarılı.
+- 17 cihaz senaryosu için HTML oluşturma ve toplu seçim alanları: başarılı.
+- ZIP bütünlüğü: doğrulanacak.
+- .NET derleme ve canlı SQL sunucusu testi: kullanıcı bilgisayarında yapılmalı.
+
+ÇALIŞAN V1.8'İ KORUYUN
+Bu paketi ayrı klasöre açın. V1.8 çalışırken yeni sürümde dotnet build yapmak güvenlidir.
+Canlı veritabanına bağlı dotnet run komutu veritabanını hazırlayabilir;
+önce sağlam SQL yedeğini kontrol edin. Eski çalışan sürümü silmeyin.

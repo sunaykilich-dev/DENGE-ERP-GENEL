@@ -1,0 +1,4829 @@
+{
+ "aciklama": "Rol testi 1. aşama (Operasyon + Satış Destek) açılan işler ve ekipmanlar. 'no' alanı olanlar servis işi, 'ekipman_id' olanlar B bölümü ekipman kaydıdır. 'hedef' = listedeki DURUM+NOT'tan türetilen hedef durum (2. aşama uygular); 'plan' = listedeki planlanan tarih (işlenmedi). Kişi adı yoktur; PERSONEL sütunu 'eslenen_teknisyen' test kullanıcılarına eşlendi. Olaylar (403 yedek kullanıcı, uyarılar): acilan_isler_olaylar.json. Üretici: araclar/talep_listesi_yukle.py",
+ "isler": [
+  {
+   "anahtar": "A:2:KURULUM:teslim:1",
+   "no": "SRV-202611-000023",
+   "id": 23,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "teslim",
+   "konu": "KIBRIS GİRNE LİMANI KIBRIS — KONVEYÖR BANT HAZIRLANDI. KILAVUZUN KONVEYÖRDEN TESLİM ALINMASI GEREKİYOR.",
+   "musteri": "KIBRIS GİRNE LİMANI",
+   "musteri_id": 4,
+   "lokasyon_id": 4,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 2 (A)",
+   "kaynak_durum": "BEKLEMEDE",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26",
+    "plan_bitis": "2026-10-31",
+    "not": "Listede tarih aralığı"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:3:ARIZA:ariza:1",
+   "no": "SRV-202611-000024",
+   "id": 24,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "ZONGULDAK EREN ENERJİ ZONGULDAK — X-RAY CİHAZININ BİLGİSAYAR KASASININ TAMİRİ.",
+   "musteri": "ZONGULDAK EREN ENERJİ",
+   "musteri_id": 5,
+   "lokasyon_id": 5,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 3 (A)",
+   "kaynak_durum": "BEKLEMEDE",
+   "kaynak_not": "BİLGİSAYAR KASASI CUMARTESİ GÜNÜ KARGOYA VERİLDİ. MÜŞTERİYE ULAŞTIĞINDA TARAFIMIZA BİLGİ VERECEK.",
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIS_SERVIS",
+    "aciklama": "Kargo/müşteri dönüşü bekleniyor"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:4:ARIZA:ariza:1",
+   "no": "SRV-202611-000025",
+   "id": 25,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "ESAN BALYA ECZACIBAŞI BALYA / BALIKESİR — X-RAY CİHAZI VE KAPI TİPİ METAL DEDEKTÖRÜ EĞİTİMİ VERİLECEK. KAPI DEDEKTÖRÜNDE ARIZA BULUNUYOR.",
+   "musteri": "ESAN BALYA ECZACIBAŞI",
+   "musteri_id": 6,
+   "lokasyon_id": 6,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 4 (A)",
+   "kaynak_durum": "BEKLEMEDE",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "plan": {
+    "plan_tarihi": null,
+    "not": "Listede: HENÜZ BELİRLENMEDİ."
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:4:DESTEK:egitim:1",
+   "no": "SRV-202611-000026",
+   "id": 26,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "DESTEK",
+   "alt_tur": "egitim",
+   "konu": "ESAN BALYA ECZACIBAŞI BALYA / BALIKESİR — X-RAY CİHAZI VE KAPI TİPİ METAL DEDEKTÖRÜ EĞİTİMİ VERİLECEK. KAPI DEDEKTÖRÜNDE ARIZA BULUNUYOR.",
+   "musteri": "ESAN BALYA ECZACIBAŞI",
+   "musteri_id": 6,
+   "lokasyon_id": 6,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 4 (A)",
+   "kaynak_durum": "BEKLEMEDE",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "plan": {
+    "plan_tarihi": null,
+    "not": "Listede: HENÜZ BELİRLENMEDİ."
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:5:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000027",
+   "id": 27,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM BALÇOVA — SC-5030A MODEL 6 ADET CİHAZIN BAKIMI. (cihaz 1/6)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 7,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 5 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/6"
+  },
+  {
+   "anahtar": "A:5:PLANSIZ_BAKIM:bakim:2",
+   "no": "SRV-202611-000028",
+   "id": 28,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM BALÇOVA — SC-5030A MODEL 6 ADET CİHAZIN BAKIMI. (cihaz 2/6)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 7,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 5 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/6"
+  },
+  {
+   "anahtar": "A:5:PLANSIZ_BAKIM:bakim:3",
+   "no": "SRV-202611-000029",
+   "id": 29,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM BALÇOVA — SC-5030A MODEL 6 ADET CİHAZIN BAKIMI. (cihaz 3/6)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 7,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 5 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "3/6"
+  },
+  {
+   "anahtar": "A:5:PLANSIZ_BAKIM:bakim:4",
+   "no": "SRV-202611-000030",
+   "id": 30,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM BALÇOVA — SC-5030A MODEL 6 ADET CİHAZIN BAKIMI. (cihaz 4/6)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 7,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 5 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "4/6"
+  },
+  {
+   "anahtar": "A:5:PLANSIZ_BAKIM:bakim:5",
+   "no": "SRV-202611-000031",
+   "id": 31,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM BALÇOVA — SC-5030A MODEL 6 ADET CİHAZIN BAKIMI. (cihaz 5/6)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 7,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 5 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "5/6"
+  },
+  {
+   "anahtar": "A:5:PLANSIZ_BAKIM:bakim:6",
+   "no": "SRV-202611-000032",
+   "id": 32,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM BALÇOVA — SC-5030A MODEL 6 ADET CİHAZIN BAKIMI. (cihaz 6/6)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 7,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 5 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "6/6"
+  },
+  {
+   "anahtar": "A:6:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000033",
+   "id": 33,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM GAZİEMİR — SC-5030A MODEL 3 ADET CİHAZIN BAKIMI. (cihaz 1/3)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 8,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 6 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/3"
+  },
+  {
+   "anahtar": "A:6:PLANSIZ_BAKIM:bakim:2",
+   "no": "SRV-202611-000034",
+   "id": 34,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM GAZİEMİR — SC-5030A MODEL 3 ADET CİHAZIN BAKIMI. (cihaz 2/3)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 8,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 6 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/3"
+  },
+  {
+   "anahtar": "A:6:PLANSIZ_BAKIM:bakim:3",
+   "no": "SRV-202611-000035",
+   "id": 35,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM GAZİEMİR — SC-5030A MODEL 3 ADET CİHAZIN BAKIMI. (cihaz 3/3)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 8,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 6 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "3/3"
+  },
+  {
+   "anahtar": "A:7:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000036",
+   "id": 36,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM ÇANAKKALE — SC-5030A MODEL 1 ADET CİHAZIN BAKIMI.",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 9,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 7 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:8:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000037",
+   "id": 37,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM DERİNCE — SC-5030A MODEL 1 ADET CİHAZIN BAKIMI.",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 10,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 8 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:9:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000038",
+   "id": 38,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM TORBALI — SC-5030A MODEL 1 ADET CİHAZIN BAKIMI.",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 11,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 9 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:10:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000039",
+   "id": 39,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM EDREMİT — SC-5030A MODEL 2 ADET CİHAZIN BAKIMI. (cihaz 1/2)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 12,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 10 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "PERİYODİK BAKIMI YAPILDI NOT:DEDEKTÖR LEKE ATIYOR ATLAMA YAPIYOR.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik",
+    "bulgu": "Sonuç notunda yeni arıza bulgusu var → bağlı iş (BAKIM_BULGUSU) önerilir"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/2"
+  },
+  {
+   "anahtar": "A:10:PLANSIZ_BAKIM:bakim:2",
+   "no": "SRV-202611-000040",
+   "id": 40,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM EDREMİT — SC-5030A MODEL 2 ADET CİHAZIN BAKIMI. (cihaz 2/2)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 12,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 10 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "PERİYODİK BAKIMI YAPILDI NOT:DEDEKTÖR LEKE ATIYOR ATLAMA YAPIYOR.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik",
+    "bulgu": "Sonuç notunda yeni arıza bulgusu var → bağlı iş (BAKIM_BULGUSU) önerilir"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/2"
+  },
+  {
+   "anahtar": "A:11:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000041",
+   "id": 41,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM KUŞADASI — SC-5030A MODEL 2 ADET CİHAZIN BAKIMI. (cihaz 1/2)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 13,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 11 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "X-RAY CİHAZININ PERİYODİK BAKIMLARI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/2"
+  },
+  {
+   "anahtar": "A:11:PLANSIZ_BAKIM:bakim:2",
+   "no": "SRV-202611-000042",
+   "id": 42,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM KUŞADASI — SC-5030A MODEL 2 ADET CİHAZIN BAKIMI. (cihaz 2/2)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 13,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 11 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "X-RAY CİHAZININ PERİYODİK BAKIMLARI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/2"
+  },
+  {
+   "anahtar": "A:12:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000043",
+   "id": 43,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM AYDIN — SC-5030A MODEL 1 ADET CİHAZIN BAKIMI.",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 14,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 12 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "X-RAY CİHAZININ PERİYODİK BAKIMLARI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:13:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000044",
+   "id": 44,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "KİPA AVM KEŞAN — SC-5030A MODEL 1 ADET CİHAZIN BAKIMI.",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 15,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 13 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:14:ARIZA:ariza:1",
+   "no": "SRV-202611-000045",
+   "id": 45,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "AVUSTURYA BAŞKONSOLOSLUĞU SARIYER — 1 ADET 3000 KİNG KAPI TİPİ METAL DEDEKTÖRÜNÜN (KMD) ARIZA TESPİTİNİN YAPILMASI.",
+   "musteri": "AVUSTURYA BAŞKONSOLOSLUĞU",
+   "musteri_id": 8,
+   "lokasyon_id": 16,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 14 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:15:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000046",
+   "id": 46,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "ŞANLIURFA PİAZZA AVM ŞANLIURFA PİAZZA AVM — PERİYODİK BAKIM YAPILMASI. 3000 KİNG KMD ANAKARTININ DEĞİŞTİRİLMESİ. RESET TUŞU VE SABİTLEME YÜZÜĞÜNÜN DEĞİŞTİRİLMESİ.",
+   "musteri": "ŞANLIURFA PİAZZA AVM",
+   "musteri_id": 9,
+   "lokasyon_id": 17,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 15 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "ulasim": "HAVA_YOLU (ulaşım türü; ERP'de araç değil)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:15:ARIZA:onarim:1",
+   "no": "SRV-202611-000047",
+   "id": 47,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "onarim",
+   "konu": "ŞANLIURFA PİAZZA AVM ŞANLIURFA PİAZZA AVM — PERİYODİK BAKIM YAPILMASI. 3000 KİNG KMD ANAKARTININ DEĞİŞTİRİLMESİ. RESET TUŞU VE SABİTLEME YÜZÜĞÜNÜN DEĞİŞTİRİLMESİ.",
+   "musteri": "ŞANLIURFA PİAZZA AVM",
+   "musteri_id": 9,
+   "lokasyon_id": 17,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 15 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "ulasim": "HAVA_YOLU (ulaşım türü; ERP'de araç değil)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:16:ARIZA:ariza:1",
+   "no": "SRV-202611-000048",
+   "id": 48,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "VAKIF KATILIM Merkez — MÜŞTERİYE AİT 1 ADET KLAVYE SERVİSİMİZDE BULUNUYOR. KLAVYE TAMİR EDİLEBİLİYORSA TAMİR BEDELİ, TAMİR EDİLEMİYORSA YENİ KL",
+   "musteri": "VAKIF KATILIM",
+   "musteri_id": 10,
+   "lokasyon_id": 18,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 16 (A)",
+   "kaynak_durum": "BEKLEMEDE",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "plan": null,
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:17:ARIZA:ariza:1",
+   "no": "SRV-202611-000049",
+   "id": 49,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "KARTAL ANPA GROSS Merkez — 3 ADET BUTON, 4 ADET PERDE VE 1 ADET ALARM LED'İNİN DEĞİŞTİRİLMESİ.",
+   "musteri": "KARTAL ANPA GROSS",
+   "musteri_id": 11,
+   "lokasyon_id": 19,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 17 (A)",
+   "kaynak_durum": "BEKLEMEDE",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIGER",
+    "aciklama": "Listede BEKLEMEDE; neden belirtilmemiş"
+   },
+   "plan": null,
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:18:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000050",
+   "id": 50,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "PİMSER BAYKAR OTEL ÇORLU — SATIŞI YAPILAN 1 ADET X-RAY CİHAZI İLE 2 ADET KAPI TİPİ METAL DEDEKTÖRÜNÜN (KMD) PERİYODİK BAKIMLARININ YAPILMASI. (cihaz 1/3)",
+   "musteri": "PİMSER",
+   "musteri_id": 12,
+   "lokasyon_id": 20,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 18 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/3"
+  },
+  {
+   "anahtar": "A:18:PLANSIZ_BAKIM:bakim:2",
+   "no": "SRV-202611-000051",
+   "id": 51,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "PİMSER BAYKAR OTEL ÇORLU — SATIŞI YAPILAN 1 ADET X-RAY CİHAZI İLE 2 ADET KAPI TİPİ METAL DEDEKTÖRÜNÜN (KMD) PERİYODİK BAKIMLARININ YAPILMASI. (cihaz 2/3)",
+   "musteri": "PİMSER",
+   "musteri_id": 12,
+   "lokasyon_id": 20,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 18 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/3"
+  },
+  {
+   "anahtar": "A:18:PLANSIZ_BAKIM:bakim:3",
+   "no": "SRV-202611-000052",
+   "id": 52,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "PİMSER BAYKAR OTEL ÇORLU — SATIŞI YAPILAN 1 ADET X-RAY CİHAZI İLE 2 ADET KAPI TİPİ METAL DEDEKTÖRÜNÜN (KMD) PERİYODİK BAKIMLARININ YAPILMASI. (cihaz 3/3)",
+   "musteri": "PİMSER",
+   "musteri_id": 12,
+   "lokasyon_id": 20,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 18 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1",
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "3/3"
+  },
+  {
+   "anahtar": "A:19:ARIZA:ariza:1",
+   "no": "SRV-202611-000053",
+   "id": 53,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "ÖZDİLEK AVM LEVENT Merkez — 1 ADET X-RAY CİHAZINA AİT BİLGİSAYAR KASASINDA ARIZA TESPİTİ YAPILMASI.",
+   "musteri": "ÖZDİLEK AVM LEVENT",
+   "musteri_id": 13,
+   "lokasyon_id": 21,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 19 (A)",
+   "kaynak_durum": "DEVAM EDİYOR",
+   "kaynak_not": "EKRAN KARTI ARIZALI TEMİN EDİLECEK.",
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "MALZEME"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:20:KURULUM:kurulum:1",
+   "no": "SRV-202611-000054",
+   "id": 54,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "kurulum",
+   "konu": "KÜÇÜKPRENS İLKOKULU SANCAKTEPE — 1 ADET POWER GUARD SC 5030 A AT ( SIFIR) ,PG 2000 KİNG (SIFIR),KROM AYAKLI SEHPA A DET ,1 ADET ÇIKIŞ ROLLER KURULUMU YAP",
+   "musteri": "KÜÇÜKPRENS İLKOKULU",
+   "musteri_id": 14,
+   "lokasyon_id": 22,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 20 (A)",
+   "kaynak_durum": "DEVAM EDİYOR",
+   "kaynak_not": "YERİNE BIRAKILDI ELEKTRİK OLMADIĞINDAN KURULUMU YAPILAMADI.",
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "MUSTERI_ERISIMI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:21:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000055",
+   "id": 55,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "RÖNESANS ANKARA Merkez — 5 KAPI DEDEKTÖRÜ BAKIMININ YAPILMASI (cihaz 1/5)",
+   "musteri": "RÖNESANS ANKARA",
+   "musteri_id": 15,
+   "lokasyon_id": 23,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 21 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/5"
+  },
+  {
+   "anahtar": "A:21:PLANSIZ_BAKIM:bakim:2",
+   "no": "SRV-202611-000056",
+   "id": 56,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "RÖNESANS ANKARA Merkez — 5 KAPI DEDEKTÖRÜ BAKIMININ YAPILMASI (cihaz 2/5)",
+   "musteri": "RÖNESANS ANKARA",
+   "musteri_id": 15,
+   "lokasyon_id": 23,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 21 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/5"
+  },
+  {
+   "anahtar": "A:21:PLANSIZ_BAKIM:bakim:3",
+   "no": "SRV-202611-000057",
+   "id": 57,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "RÖNESANS ANKARA Merkez — 5 KAPI DEDEKTÖRÜ BAKIMININ YAPILMASI (cihaz 3/5)",
+   "musteri": "RÖNESANS ANKARA",
+   "musteri_id": 15,
+   "lokasyon_id": 23,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 21 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "3/5"
+  },
+  {
+   "anahtar": "A:21:PLANSIZ_BAKIM:bakim:4",
+   "no": "SRV-202611-000058",
+   "id": 58,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "RÖNESANS ANKARA Merkez — 5 KAPI DEDEKTÖRÜ BAKIMININ YAPILMASI (cihaz 4/5)",
+   "musteri": "RÖNESANS ANKARA",
+   "musteri_id": 15,
+   "lokasyon_id": 23,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 21 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "4/5"
+  },
+  {
+   "anahtar": "A:21:PLANSIZ_BAKIM:bakim:5",
+   "no": "SRV-202611-000059",
+   "id": 59,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "RÖNESANS ANKARA Merkez — 5 KAPI DEDEKTÖRÜ BAKIMININ YAPILMASI (cihaz 5/5)",
+   "musteri": "RÖNESANS ANKARA",
+   "musteri_id": 15,
+   "lokasyon_id": 23,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 21 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "5/5"
+  },
+  {
+   "anahtar": "A:22:ARIZA:ariza:1",
+   "no": "SRV-202611-000060",
+   "id": 60,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "İZMİR OPTİMUM Merkez — 1 ADET KAPI DEDEKTÖRÜ KAFASI TEKNİK SERVİSİMİZE KARGOLANDI. PARÇA ELİMİZDE ŞUANDA. ARIZA TESPİT İŞLEMLERİNİN YAPILMASI G",
+   "musteri": "İZMİR OPTİMUM",
+   "musteri_id": 16,
+   "lokasyon_id": 24,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 22 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:23:KURULUM:teslim:1",
+   "no": "SRV-202611-000061",
+   "id": 61,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "teslim",
+   "konu": "SECURİTAS DİLOVASI-KOCAELİ — DALGAKIRAN FİRMASINA 1 ADET PG&DH 5030 AC TESLİMİ SAĞLANACAK VE İKAME OLARAK BIRAKILAN HEİMAN MARKA CİHAZ TESLİM ALINACA",
+   "musteri": "SECURİTAS",
+   "musteri_id": 17,
+   "lokasyon_id": 25,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 23 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:23:TOPLAMA:ikame_alma:1",
+   "no": "SRV-202611-000062",
+   "id": 62,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "TOPLAMA",
+   "alt_tur": "ikame_alma",
+   "konu": "SECURİTAS DİLOVASI-KOCAELİ — DALGAKIRAN FİRMASINA 1 ADET PG&DH 5030 AC TESLİMİ SAĞLANACAK VE İKAME OLARAK BIRAKILAN HEİMAN MARKA CİHAZ TESLİM ALINACA",
+   "musteri": "SECURİTAS",
+   "musteri_id": 17,
+   "lokasyon_id": 25,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 23 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:24:KURULUM:kurulum:1",
+   "no": "SRV-202611-000063",
+   "id": 63,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "kurulum",
+   "konu": "RADDİSON BLU ŞİŞLİ ŞİŞLİ-İSTANBUL — 1 ADET 100-100 1 ADET 60-40 CİHAZ KURULUMU YAPILACAK",
+   "musteri": "RADDİSON BLU ŞİŞLİ",
+   "musteri_id": 18,
+   "lokasyon_id": 26,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 24 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "30.10.2026 tarihinde Radisson Blu Otel Şişli lokasyonunda uzun süreli kiralama kapsamında X-Ray bagaj kontrol cihazları ve kapı tipi metal dedektörünün kurulumları gerçekleştirilmiştir. Cihazların kalibrasyon, genel kontrol ve fonksiyon testleri tamamlanmış, kullanıcı eğitimleri verilerek sistemler çalışır durumda teslim edilmiştir. Ayrıca mevcut CEIA HI-PE Multi Zone kapı tipi metal dedektörünün kalibrasyon ayarları ve genel kontrolleri yapılarak faal şekilde teslimi sağlanmıştır.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:25:ARIZA:ariza:1",
+   "no": "SRV-202611-000064",
+   "id": 64,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "MALTEPE PARK MALTEPE-İSTANBUL — 3 ARIZALI X-RAY CİHAZININ ARIZA TESPİT İŞLEMLERİNİN YAPILMASI (cihaz 1/3)",
+   "musteri": "MALTEPE PARK",
+   "musteri_id": 19,
+   "lokasyon_id": 27,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 25 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "ARIZA TESPİTİ YAPILDI FORMA İŞLENDİ",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/3"
+  },
+  {
+   "anahtar": "A:25:ARIZA:ariza:2",
+   "no": "SRV-202611-000065",
+   "id": 65,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "MALTEPE PARK MALTEPE-İSTANBUL — 3 ARIZALI X-RAY CİHAZININ ARIZA TESPİT İŞLEMLERİNİN YAPILMASI (cihaz 2/3)",
+   "musteri": "MALTEPE PARK",
+   "musteri_id": 19,
+   "lokasyon_id": 27,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 25 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "ARIZA TESPİTİ YAPILDI FORMA İŞLENDİ",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/3"
+  },
+  {
+   "anahtar": "A:25:ARIZA:ariza:3",
+   "no": "SRV-202611-000066",
+   "id": 66,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "MALTEPE PARK MALTEPE-İSTANBUL — 3 ARIZALI X-RAY CİHAZININ ARIZA TESPİT İŞLEMLERİNİN YAPILMASI (cihaz 3/3)",
+   "musteri": "MALTEPE PARK",
+   "musteri_id": 19,
+   "lokasyon_id": 27,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 25 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "ARIZA TESPİTİ YAPILDI FORMA İŞLENDİ",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "3/3"
+  },
+  {
+   "anahtar": "A:26:KURULUM:kurulum:1",
+   "no": "SRV-202611-000067",
+   "id": 67,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "kurulum",
+   "konu": "ORTADAĞ ORTAOKULU ORTADAĞ/KARTAL — 2 ADET DAHUA D109L KAPI TİPİ METAL DEDEKTÖRÜNÜN TESLİM EDİLMESİ VE KURULUMUNUN YAPILMASI",
+   "musteri": "ORTADAĞ ORTAOKULU",
+   "musteri_id": 20,
+   "lokasyon_id": 28,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 26 (A)",
+   "kaynak_durum": "ERTELENDİ",
+   "kaynak_not": "MÜŞTERİ AÇIK ALANA CİHAZ KURULUMU İSTEDİ",
+   "hedef": {
+    "durum": "PLANLAMADA",
+    "plan_degisim_nedeni": "ERTELEME"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:27:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000068",
+   "id": 68,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "SANCAKTEPE BELEDİYESİ SANCAKTEPE — 1 ADET DAHUA 6040 X-RAY CİHAZININ BAKIM İŞLEMLERİNİN YAPILMASI",
+   "musteri": "SANCAKTEPE BELEDİYESİ",
+   "musteri_id": 21,
+   "lokasyon_id": 29,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 27 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "PG-DH 6040X BAKIMI YAPILDI.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:28:KURULUM:kurulum:1",
+   "no": "SRV-202611-000069",
+   "id": 69,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "kurulum",
+   "konu": "DOĞUŞ OTOMOTİV ŞEKERPINAR — 2 ADET DAHUA D118 KAPI TİPİ METAL DEDEKTÖRÜNÜN TESLİM EDİLMESİ VE KURULUMUNUN YAPILMASI",
+   "musteri": "DOĞUŞ OTOMOTİV",
+   "musteri_id": 22,
+   "lokasyon_id": 30,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 28 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "KURULUM TAMAMLANIP KAPI TİPİ METAL DEDEKTÖRÜLERİ DEVREYE ALINDI.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:29:ARIZA:ariza:1",
+   "no": "SRV-202611-000070",
+   "id": 70,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "USO CENTER MASLAK — 1 ADET X-RAY CİHAZININ JENERATÖR MONTAJ İŞLEMLERİNİN YAPILMASI",
+   "musteri": "USO CENTER",
+   "musteri_id": 23,
+   "lokasyon_id": 31,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 29 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "HAİMANN HS 60 40 X RAY CİHAZININ 140 KV JENETATÖR MONTAJI YAPILIP FAAL HALE GETİRİLDİ.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:30:TASIMA:teslim_alma:1",
+   "no": "SRV-202611-000071",
+   "id": 71,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "TASIMA",
+   "alt_tur": "teslim_alma",
+   "konu": "VENRAY ŞİŞLİ — ONARIMI TAMAMLANAN X-RAY JENERATÖRÜNÜN TESLİM ALINMASI",
+   "musteri": "VENRAY",
+   "musteri_id": 24,
+   "lokasyon_id": 32,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 30 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "JENERATÖR ALINDI.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-26"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:31:KURULUM:kurulum:1",
+   "no": "SRV-202611-000072",
+   "id": 72,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "kurulum",
+   "konu": "HALKBANK GENEL İSTANBUL -ANADOLU YAKASI — 2 ADET X RAY KURULUMU VE 2 ADET KAPI DEDEKTÖRÜ KURULUMU",
+   "musteri": "HALKBANK GENEL",
+   "musteri_id": 25,
+   "lokasyon_id": 33,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 31 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "SATIŞI YAPILAN 2 ADET X-RAY KURULUMU YAPILDI VE KENDİLERİ TARAFINDAN TEMİN EDİLEN 2 ADET KAPI TİPİ METAL DEDEKTÖRÜ KURULUMU YAPILDI.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:32:KURULUM:kurulum:1",
+   "no": "SRV-202611-000073",
+   "id": 73,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "kurulum",
+   "konu": "İDTM BAKIRKÖY / YEŞİLKÖY — 2 ADET KİRALIK X-RAY CİHAZI + ROLLER VE 5 ADET KİRALIK METAL KAPI DEDEKTÖRÜNÜN DEVREYE ALINMASI",
+   "musteri": "İDTM",
+   "musteri_id": 26,
+   "lokasyon_id": 34,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 32 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:33:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000074",
+   "id": 74,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "PALLADIUM TOWER ATAŞEHİR / YENİSAHRA — 2 ADET X-RAY CİHAZI VE 3 ADET KAPI TİPİ METAL DEDEKTÖRÜNÜN BAKIMI (cihaz 1/5)",
+   "musteri": "PALLADIUM TOWER",
+   "musteri_id": 27,
+   "lokasyon_id": 35,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 33 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/5"
+  },
+  {
+   "anahtar": "A:33:PLANSIZ_BAKIM:bakim:2",
+   "no": "SRV-202611-000075",
+   "id": 75,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "PALLADIUM TOWER ATAŞEHİR / YENİSAHRA — 2 ADET X-RAY CİHAZI VE 3 ADET KAPI TİPİ METAL DEDEKTÖRÜNÜN BAKIMI (cihaz 2/5)",
+   "musteri": "PALLADIUM TOWER",
+   "musteri_id": 27,
+   "lokasyon_id": 35,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 33 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/5"
+  },
+  {
+   "anahtar": "A:33:PLANSIZ_BAKIM:bakim:3",
+   "no": "SRV-202611-000076",
+   "id": 76,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "PALLADIUM TOWER ATAŞEHİR / YENİSAHRA — 2 ADET X-RAY CİHAZI VE 3 ADET KAPI TİPİ METAL DEDEKTÖRÜNÜN BAKIMI (cihaz 3/5)",
+   "musteri": "PALLADIUM TOWER",
+   "musteri_id": 27,
+   "lokasyon_id": 35,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 33 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "3/5"
+  },
+  {
+   "anahtar": "A:33:PLANSIZ_BAKIM:bakim:4",
+   "no": "SRV-202611-000077",
+   "id": 77,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "PALLADIUM TOWER ATAŞEHİR / YENİSAHRA — 2 ADET X-RAY CİHAZI VE 3 ADET KAPI TİPİ METAL DEDEKTÖRÜNÜN BAKIMI (cihaz 4/5)",
+   "musteri": "PALLADIUM TOWER",
+   "musteri_id": 27,
+   "lokasyon_id": 35,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 33 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "4/5"
+  },
+  {
+   "anahtar": "A:33:PLANSIZ_BAKIM:bakim:5",
+   "no": "SRV-202611-000078",
+   "id": 78,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "PALLADIUM TOWER ATAŞEHİR / YENİSAHRA — 2 ADET X-RAY CİHAZI VE 3 ADET KAPI TİPİ METAL DEDEKTÖRÜNÜN BAKIMI (cihaz 5/5)",
+   "musteri": "PALLADIUM TOWER",
+   "musteri_id": 27,
+   "lokasyon_id": 35,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 33 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "5/5"
+  },
+  {
+   "anahtar": "A:34:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000079",
+   "id": 79,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ KARTAL — 1 ADET X-RAY CİHAZININ BAKIMI",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 36,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 34 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "PERİYODİK BAKIMI YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:35:ARIZA:ariza:1",
+   "no": "SRV-202611-000080",
+   "id": 80,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "AVUSTURYA BAŞKONSOLOSLUĞU SARIYER — 1 ADET PG3000 KAPI DEDEKTÖRÜNÜN ARIZA TESPİTİ",
+   "musteri": "AVUSTURYA BAŞKONSOLOSLUĞU",
+   "musteri_id": 8,
+   "lokasyon_id": 16,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 35 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "ARIZA TESPİTİ YAPILDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:36:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000081",
+   "id": 81,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ KAĞITHANE / NURTEPE — 6 ADET X-RAY CİHAZININ BAKIMI (cihaz 1/6)",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 37,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 36 (A)",
+   "kaynak_durum": "DEVAM EDİYOR",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/6"
+  },
+  {
+   "anahtar": "A:36:PLANSIZ_BAKIM:bakim:2",
+   "no": "SRV-202611-000082",
+   "id": 82,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ KAĞITHANE / NURTEPE — 6 ADET X-RAY CİHAZININ BAKIMI (cihaz 2/6)",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 37,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 36 (A)",
+   "kaynak_durum": "DEVAM EDİYOR",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "2/6"
+  },
+  {
+   "anahtar": "A:36:PLANSIZ_BAKIM:bakim:3",
+   "no": "SRV-202611-000083",
+   "id": 83,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ KAĞITHANE / NURTEPE — 6 ADET X-RAY CİHAZININ BAKIMI (cihaz 3/6)",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 37,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 36 (A)",
+   "kaynak_durum": "DEVAM EDİYOR",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "3/6"
+  },
+  {
+   "anahtar": "A:36:PLANSIZ_BAKIM:bakim:4",
+   "no": "SRV-202611-000084",
+   "id": 84,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ KAĞITHANE / NURTEPE — 6 ADET X-RAY CİHAZININ BAKIMI (cihaz 4/6)",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 37,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 36 (A)",
+   "kaynak_durum": "DEVAM EDİYOR",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "4/6"
+  },
+  {
+   "anahtar": "A:36:PLANSIZ_BAKIM:bakim:5",
+   "no": "SRV-202611-000085",
+   "id": 85,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ KAĞITHANE / NURTEPE — 6 ADET X-RAY CİHAZININ BAKIMI (cihaz 5/6)",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 37,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 36 (A)",
+   "kaynak_durum": "DEVAM EDİYOR",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "5/6"
+  },
+  {
+   "anahtar": "A:36:PLANSIZ_BAKIM:bakim:6",
+   "no": "SRV-202611-000086",
+   "id": 86,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ KAĞITHANE / NURTEPE — 6 ADET X-RAY CİHAZININ BAKIMI (cihaz 6/6)",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 37,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 36 (A)",
+   "kaynak_durum": "DEVAM EDİYOR",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "6/6"
+  },
+  {
+   "anahtar": "A:37:DESTEK:depo:1",
+   "no": "SRV-202611-000087",
+   "id": 87,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "DESTEK",
+   "alt_tur": "depo",
+   "konu": "DENGE GRUP ŞERİFALİ DEPO — 6 ADET X-RAY CİHAZININ SANDIKTAN ÇIKARTILMASI, TEST VE KONTROL İŞLEMLERİNİN YAPILMASI",
+   "musteri": "DENGE GRUP",
+   "musteri_id": 29,
+   "lokasyon_id": 38,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 37 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv2",
+    "t_tek_guv1",
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:38:DESTEK:depo:1",
+   "no": "SRV-202611-000088",
+   "id": 88,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "DESTEK",
+   "alt_tur": "depo",
+   "konu": "DENGE GRUP ŞERİFALİ DEPO — 6 ADET X-RAY CİHAZININ SEVKİYATA HAZIR HALE GETİRİLMESİ",
+   "musteri": "DENGE GRUP",
+   "musteri_id": 29,
+   "lokasyon_id": 38,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 38 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-29"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_tek_guv2",
+    "t_tek_guv1",
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:39:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000089",
+   "id": 89,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ ŞİŞLİ — X-RAY CİHAZI BAKIM İŞLEMLERİNİN YAPILMASI",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 39,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 39 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "X-RAYİN PERİYODİK BAKIMLARI YAPILMIŞTIR.FONKSİYON TESTLERİ YAPILIP FAAL TESLİM EDİLMİŞTİR.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:40:ARIZA:ariza:1",
+   "no": "SRV-202611-000090",
+   "id": 90,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "İSTANBUL HAVALİMANI GÖÇ İDARESİ ARNAVUTKÖY — 1 ADET KAPI DEDEKTÖRÜNÜN ARIZA TESPİT İŞLEMLERİNİN YAPILMASI",
+   "musteri": "İSTANBUL HAVALİMANI GÖÇ İDARESİ",
+   "musteri_id": 30,
+   "lokasyon_id": 40,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 40 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "ARIZA TESPİTİ YAPILDI 29.10.2026 DA TAMAMLANDI",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "TEKLIF_SUNULACAK",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:41:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000091",
+   "id": 91,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "İSKİ KARTAL — X-RAY CİHAZI BAKIM İŞLEMLERİNİN YAPILMASI",
+   "musteri": "İSKİ",
+   "musteri_id": 28,
+   "lokasyon_id": 36,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 41 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "X-RAYİN PERİYODİK BAKIMLARI YAPILMIŞTIR.FONKSİYON TESTLERİ YAPILIP FAAL TESLİM EDİLMİŞTİR.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-28"
+   },
+   "ulasim": "PLAKALI_ARAC (plaka rapora yazılmaz)",
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:69:ARIZA:ariza:1",
+   "no": "SRV-202611-000092",
+   "id": 92,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "ARASTA PARK AVM KOCAELİ — ARASTA PARK AVM'DE ARIZA TESPİT İŞLEMLERİNİN YAPILMASI",
+   "musteri": "ARASTA PARK AVM",
+   "musteri_id": 31,
+   "lokasyon_id": 41,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 69 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:70:ARIZA:ariza:1",
+   "no": "SRV-202611-000093",
+   "id": 93,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "alt_tur": "ariza",
+   "konu": "MALTEPE PARK MALTEPE-İSTANBUL — MALTEPE PARK AVM'DE BULUNAN X-RAY CİHAZININ JENERATÖRÜNÜN DEĞİŞİMİ",
+   "musteri": "MALTEPE PARK",
+   "musteri_id": 19,
+   "lokasyon_id": 27,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 70 (A)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "NOT:ANAKART DONMA YAPMAKTADIR.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik",
+    "bulgu": "Sonuç notunda yeni arıza bulgusu var → bağlı iş (BAKIM_BULGUSU) önerilir"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv2"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:71:KURULUM:kurulum:1",
+   "no": "SRV-202611-000094",
+   "id": 94,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "alt_tur": "kurulum",
+   "konu": "DALGAKIRAN DİLOVASI-KOCAELİ — X-RAY CİHAZI KURULUMU YAPILMASI VE EĞİTİM VERİLMESİ",
+   "musteri": "DALGAKIRAN",
+   "musteri_id": 32,
+   "lokasyon_id": 42,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 71 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-04"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:71:DESTEK:egitim:1",
+   "no": "SRV-202611-000095",
+   "id": 95,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "DESTEK",
+   "alt_tur": "egitim",
+   "konu": "DALGAKIRAN DİLOVASI-KOCAELİ — X-RAY CİHAZI KURULUMU YAPILMASI VE EĞİTİM VERİLMESİ",
+   "musteri": "DALGAKIRAN",
+   "musteri_id": 32,
+   "lokasyon_id": 42,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 71 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-04"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "A:72:PLANSIZ_BAKIM:bakim:1",
+   "no": "SRV-202611-000096",
+   "id": 96,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "alt_tur": "bakim",
+   "konu": "ESPARK AVM ESKİŞEHİR — ESPARK AVM DE KAPI DEDEKTÖRLERİ KALİBRASYON AYARLARININ YAPILMASI",
+   "musteri": "ESPARK AVM",
+   "musteri_id": 33,
+   "lokasyon_id": 43,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 72 (A)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-04"
+   },
+   "ulasim": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "yok (bilinmiyor)",
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "B:42:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:1",
+   "ekipman_id": 14,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "HALKBANKASI İFM",
+   "musteri_id": 34,
+   "lokasyon_id": 44,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 42 (B)"
+  },
+  {
+   "anahtar": "B:42:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:2",
+   "ekipman_id": 15,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "HALKBANKASI İFM",
+   "musteri_id": 34,
+   "lokasyon_id": 44,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 42 (B)"
+  },
+  {
+   "anahtar": "B:42:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:3",
+   "ekipman_id": 16,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "HALKBANKASI İFM",
+   "musteri_id": 34,
+   "lokasyon_id": 44,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 42 (B)"
+  },
+  {
+   "anahtar": "B:42:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:4",
+   "ekipman_id": 17,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "HALKBANKASI İFM",
+   "musteri_id": 34,
+   "lokasyon_id": 44,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 42 (B)"
+  },
+  {
+   "anahtar": "B:42:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:5",
+   "ekipman_id": 18,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "HALKBANKASI İFM",
+   "musteri_id": 34,
+   "lokasyon_id": 44,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 42 (B)"
+  },
+  {
+   "anahtar": "B:42:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:6",
+   "ekipman_id": 19,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "HALKBANKASI İFM",
+   "musteri_id": 34,
+   "lokasyon_id": 44,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 42 (B)"
+  },
+  {
+   "anahtar": "B:42:KURULUM",
+   "no": "SRV-202611-000097",
+   "id": 97,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "HALKBANKASI İFM — satılan cihaz kurulumu: 6 ADET PG&DH-6040 X-RAY CİHAZI; 6 ADET GİRİŞ ROLLER; 6 ADET ÇIKIŞ ROLLER",
+   "musteri": "HALKBANKASI İFM",
+   "musteri_id": 34,
+   "lokasyon_id": 44,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 42 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "2 ADET XRAYİ2 ADET KAPI TİPİ METAL DEDEKTÖRÜ KURULUMU YAPILDI.NOT: 4 ADET KENDİ DEPOLARINDA TESLİM EDİLDİ",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-27"
+   },
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "ekipman_idler": [
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:43:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:1",
+   "ekipman_id": 20,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "LİDERTEK ZAMAN",
+   "musteri_id": 35,
+   "lokasyon_id": 45,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 43 (B)"
+  },
+  {
+   "anahtar": "B:43:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:2",
+   "ekipman_id": 21,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "LİDERTEK ZAMAN",
+   "musteri_id": 35,
+   "lokasyon_id": 45,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 43 (B)"
+  },
+  {
+   "anahtar": "B:44:EKIPMAN:XRAY:PG&DH-5030 C X-RAY CİHAZI:1",
+   "ekipman_id": 22,
+   "tip": "XRAY",
+   "model": "PG&DH-5030 C X-RAY CİHAZI",
+   "musteri": "KARTSİS TURNİKE",
+   "musteri_id": 36,
+   "lokasyon_id": 46,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 44 (B)"
+  },
+  {
+   "anahtar": "B:44:EKIPMAN:KAPI_DEDEKTORU:D118 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 23,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D118 METAL DEDEKTÖRÜ",
+   "musteri": "KARTSİS TURNİKE",
+   "musteri_id": 36,
+   "lokasyon_id": 46,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 44 (B)"
+  },
+  {
+   "anahtar": "B:44:KURULUM",
+   "no": "SRV-202611-000098",
+   "id": 98,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "KARTSİS TURNİKE — satılan cihaz kurulumu: 1 ADET PG&DH-5030 C X-RAY CİHAZI; 1 ADET D118 METAL DEDEKTÖRÜ; 1 ADET ÇIKIŞ ROLLER; 1 ADET KROM AYAKLI SEHPA",
+   "musteri": "KARTSİS TURNİKE",
+   "musteri_id": 36,
+   "lokasyon_id": 46,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 44 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    22,
+    23
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:45:EKIPMAN:XRAY:PG&DH-5030 A X-RAY CİHAZI:1",
+   "ekipman_id": 24,
+   "tip": "XRAY",
+   "model": "PG&DH-5030 A X-RAY CİHAZI",
+   "musteri": "MODA DENİZ KULÜBÜ",
+   "musteri_id": 37,
+   "lokasyon_id": 47,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 45 (B)"
+  },
+  {
+   "anahtar": "B:45:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 25,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "MODA DENİZ KULÜBÜ",
+   "musteri_id": 37,
+   "lokasyon_id": 47,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 45 (B)"
+  },
+  {
+   "anahtar": "B:46:EKIPMAN:XRAY:PG&DH-5030 AC X-RAY CİHAZI:1",
+   "ekipman_id": 26,
+   "tip": "XRAY",
+   "model": "PG&DH-5030 AC X-RAY CİHAZI",
+   "musteri": "KARPOWERSHIP",
+   "musteri_id": 38,
+   "lokasyon_id": 48,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 46 (B)"
+  },
+  {
+   "anahtar": "B:46:EKIPMAN:KAPI_DEDEKTORU:GARRETT MULTIZONE METAL DEDEKT:1",
+   "ekipman_id": 27,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "GARRETT MULTIZONE METAL DEDEKTÖRÜ",
+   "musteri": "KARPOWERSHIP",
+   "musteri_id": 38,
+   "lokasyon_id": 48,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 46 (B)"
+  },
+  {
+   "anahtar": "B:47:EKIPMAN:XRAY:HİKVİSİON HP5030A X-RAY CİHAZI:1",
+   "ekipman_id": 28,
+   "tip": "XRAY",
+   "model": "HİKVİSİON HP5030A X-RAY CİHAZI",
+   "musteri": "MEYER",
+   "musteri_id": 39,
+   "lokasyon_id": 49,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 47 (B)"
+  },
+  {
+   "anahtar": "B:47:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 29,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "MEYER",
+   "musteri_id": 39,
+   "lokasyon_id": 49,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 47 (B)"
+  },
+  {
+   "anahtar": "B:47:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:2",
+   "ekipman_id": 30,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "MEYER",
+   "musteri_id": 39,
+   "lokasyon_id": 49,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 47 (B)"
+  },
+  {
+   "anahtar": "B:47:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:3",
+   "ekipman_id": 31,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "MEYER",
+   "musteri_id": 39,
+   "lokasyon_id": 49,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 47 (B)"
+  },
+  {
+   "anahtar": "B:47:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:4",
+   "ekipman_id": 32,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "MEYER",
+   "musteri_id": 39,
+   "lokasyon_id": 49,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 47 (B)"
+  },
+  {
+   "anahtar": "B:47:KURULUM",
+   "no": "SRV-202611-000099",
+   "id": 99,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "MEYER — satılan cihaz kurulumu: 1 ADET HİKVİSİON HP5030A X-RAY CİHAZI; 4 ADET PG 3000 KING METAL DEDEKTÖRÜ; 1 ADET ÇIKIŞ ROLLER; 4 ADET KROM A",
+   "musteri": "MEYER",
+   "musteri_id": 39,
+   "lokasyon_id": 49,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 47 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    28,
+    29,
+    30,
+    31,
+    32
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:48:EKIPMAN:XRAY:PG&DH-5030 AC X-RAY CİHAZI:1",
+   "ekipman_id": 33,
+   "tip": "XRAY",
+   "model": "PG&DH-5030 AC X-RAY CİHAZI",
+   "musteri": "SİPAHİ GRUP KAZIM ELED AĞ",
+   "musteri_id": 40,
+   "lokasyon_id": 50,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 48 (B)"
+  },
+  {
+   "anahtar": "B:48:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 34,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "SİPAHİ GRUP KAZIM ELED AĞ",
+   "musteri_id": 40,
+   "lokasyon_id": 50,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 48 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:XRAY:PG&DH-6550X X-RAY CİHAZI:1",
+   "ekipman_id": 35,
+   "tip": "XRAY",
+   "model": "PG&DH-6550X X-RAY CİHAZI",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:XRAY:PG&DH-6550X X-RAY CİHAZI:2",
+   "ekipman_id": 36,
+   "tip": "XRAY",
+   "model": "PG&DH-6550X X-RAY CİHAZI",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:XRAY:PG&DH-6550X X-RAY CİHAZI:3",
+   "ekipman_id": 37,
+   "tip": "XRAY",
+   "model": "PG&DH-6550X X-RAY CİHAZI",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:KAPI_DEDEKTORU:PG&DH-D118 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 38,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG&DH-D118 METAL DEDEKTÖRÜ",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:KAPI_DEDEKTORU:PG&DH-D118 METAL DEDEKTÖRÜ:2",
+   "ekipman_id": 39,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG&DH-D118 METAL DEDEKTÖRÜ",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:KAPI_DEDEKTORU:PG&DH-D118 METAL DEDEKTÖRÜ:3",
+   "ekipman_id": 40,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG&DH-D118 METAL DEDEKTÖRÜ",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:EL_DEDEKTORU:EL DEDEKTÖRÜ:1",
+   "ekipman_id": 41,
+   "tip": "EL_DEDEKTORU",
+   "model": "EL DEDEKTÖRÜ",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:EL_DEDEKTORU:EL DEDEKTÖRÜ:2",
+   "ekipman_id": 42,
+   "tip": "EL_DEDEKTORU",
+   "model": "EL DEDEKTÖRÜ",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:49:EKIPMAN:EL_DEDEKTORU:EL DEDEKTÖRÜ:3",
+   "ekipman_id": 43,
+   "tip": "EL_DEDEKTORU",
+   "model": "EL DEDEKTÖRÜ",
+   "musteri": "İHLAS HOLDİNG",
+   "musteri_id": 41,
+   "lokasyon_id": 51,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 49 (B)"
+  },
+  {
+   "anahtar": "B:50:EKIPMAN:XRAY:PG&DH-6550A X-RAY CİHAZI:1",
+   "ekipman_id": 44,
+   "tip": "XRAY",
+   "model": "PG&DH-6550A X-RAY CİHAZI",
+   "musteri": "KARTSİS TURNİKE",
+   "musteri_id": 36,
+   "lokasyon_id": 52,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 50 (B)"
+  },
+  {
+   "anahtar": "B:50:EKIPMAN:KAPI_DEDEKTORU:PG&DH-D118 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 45,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG&DH-D118 METAL DEDEKTÖRÜ",
+   "musteri": "KARTSİS TURNİKE",
+   "musteri_id": 36,
+   "lokasyon_id": 52,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 50 (B)"
+  },
+  {
+   "anahtar": "B:51:EKIPMAN:XRAY:SC 5030 AT X-RAY CİHAZI:1",
+   "ekipman_id": 46,
+   "tip": "XRAY",
+   "model": "SC 5030 AT X-RAY CİHAZI",
+   "musteri": "RAMS TÜRKİYE",
+   "musteri_id": 42,
+   "lokasyon_id": 53,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 51 (B)"
+  },
+  {
+   "anahtar": "B:51:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 47,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "RAMS TÜRKİYE",
+   "musteri_id": 42,
+   "lokasyon_id": 53,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 51 (B)"
+  },
+  {
+   "anahtar": "B:51:EKIPMAN:EL_DEDEKTORU:EL DEDEKTÖRÜ:1",
+   "ekipman_id": 48,
+   "tip": "EL_DEDEKTORU",
+   "model": "EL DEDEKTÖRÜ",
+   "musteri": "RAMS TÜRKİYE",
+   "musteri_id": 42,
+   "lokasyon_id": 53,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 51 (B)"
+  },
+  {
+   "anahtar": "B:52:EKIPMAN:XRAY:PG&DH 5030 AC X-RAY CİHAZI:1",
+   "ekipman_id": 49,
+   "tip": "XRAY",
+   "model": "PG&DH 5030 AC X-RAY CİHAZI",
+   "musteri": "SECURITAS",
+   "musteri_id": 17,
+   "lokasyon_id": 54,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 52 (B)"
+  },
+  {
+   "anahtar": "B:52:EKIPMAN:KAPI_DEDEKTORU:PG-1800 WP METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 50,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG-1800 WP METAL DEDEKTÖRÜ",
+   "musteri": "SECURITAS",
+   "musteri_id": 17,
+   "lokasyon_id": 54,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 52 (B)"
+  },
+  {
+   "anahtar": "B:52:KURULUM",
+   "no": "SRV-202611-000100",
+   "id": 100,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "SECURITAS — satılan cihaz kurulumu: 1 ADET PG&DH 5030 AC X-RAY CİHAZI; 1 ADET PG-1800 WP METAL DEDEKTÖRÜ; 1 ADET ÇIKIŞ ROLLER; 1 ADET KROM AYAKLI ",
+   "musteri": "SECURITAS",
+   "musteri_id": 17,
+   "lokasyon_id": 54,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 52 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-10-30"
+   },
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    49,
+    50
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:53:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING (2. EL) METAL DED:1",
+   "ekipman_id": 51,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING (2. EL) METAL DEDEKTÖRÜ",
+   "musteri": "KOÇTAŞ AVM BEYLİKDÜZÜ",
+   "musteri_id": 43,
+   "lokasyon_id": 55,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 53 (B)"
+  },
+  {
+   "anahtar": "B:53:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING (2. EL) METAL DED:2",
+   "ekipman_id": 52,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING (2. EL) METAL DEDEKTÖRÜ",
+   "musteri": "KOÇTAŞ AVM BEYLİKDÜZÜ",
+   "musteri_id": 43,
+   "lokasyon_id": 55,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 53 (B)"
+  },
+  {
+   "anahtar": "B:53:KURULUM",
+   "no": "SRV-202611-000101",
+   "id": 101,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "KOÇTAŞ AVM BEYLİKDÜZÜ — satılan cihaz kurulumu: 2 ADET PG 3000 KING (2. EL) METAL DEDEKTÖRÜ",
+   "musteri": "KOÇTAŞ AVM BEYLİKDÜZÜ",
+   "musteri_id": 43,
+   "lokasyon_id": 55,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 53 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    51,
+    52
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:54:EKIPMAN:KAPI_DEDEKTORU:D109 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 53,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D109 METAL DEDEKTÖRÜ",
+   "musteri": "DHL",
+   "musteri_id": 44,
+   "lokasyon_id": 56,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 54 (B)"
+  },
+  {
+   "anahtar": "B:54:KURULUM",
+   "no": "SRV-202611-000102",
+   "id": 102,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "DHL — satılan cihaz kurulumu: 1 ADET D109 METAL DEDEKTÖRÜ",
+   "musteri": "DHL",
+   "musteri_id": 44,
+   "lokasyon_id": 56,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 54 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    53
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:55:EKIPMAN:XRAY:SC 5030 AT X-RAY CİHAZI:1",
+   "ekipman_id": 54,
+   "tip": "XRAY",
+   "model": "SC 5030 AT X-RAY CİHAZI",
+   "musteri": "MİGROS GENEL MÜDÜRLÜĞÜ",
+   "musteri_id": 45,
+   "lokasyon_id": 57,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 55 (B)"
+  },
+  {
+   "anahtar": "B:55:EKIPMAN:XRAY:SC 5030 AT X-RAY CİHAZI:2",
+   "ekipman_id": 55,
+   "tip": "XRAY",
+   "model": "SC 5030 AT X-RAY CİHAZI",
+   "musteri": "MİGROS GENEL MÜDÜRLÜĞÜ",
+   "musteri_id": 45,
+   "lokasyon_id": 57,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 55 (B)"
+  },
+  {
+   "anahtar": "B:55:EKIPMAN:XRAY:SC 5030 AT X-RAY CİHAZI:3",
+   "ekipman_id": 56,
+   "tip": "XRAY",
+   "model": "SC 5030 AT X-RAY CİHAZI",
+   "musteri": "MİGROS GENEL MÜDÜRLÜĞÜ",
+   "musteri_id": 45,
+   "lokasyon_id": 57,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 55 (B)"
+  },
+  {
+   "anahtar": "B:55:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 57,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "MİGROS GENEL MÜDÜRLÜĞÜ",
+   "musteri_id": 45,
+   "lokasyon_id": 57,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 55 (B)"
+  },
+  {
+   "anahtar": "B:55:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:2",
+   "ekipman_id": 58,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "MİGROS GENEL MÜDÜRLÜĞÜ",
+   "musteri_id": 45,
+   "lokasyon_id": 57,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 55 (B)"
+  },
+  {
+   "anahtar": "B:55:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:3",
+   "ekipman_id": 59,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "MİGROS GENEL MÜDÜRLÜĞÜ",
+   "musteri_id": 45,
+   "lokasyon_id": 57,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 55 (B)"
+  },
+  {
+   "anahtar": "B:56:EKIPMAN:XRAY:SC6040 X-RAY CİHAZI:1",
+   "ekipman_id": 60,
+   "tip": "XRAY",
+   "model": "SC6040 X-RAY CİHAZI",
+   "musteri": "MKE",
+   "musteri_id": 46,
+   "lokasyon_id": 58,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 56 (B)"
+  },
+  {
+   "anahtar": "B:56:EKIPMAN:XRAY:SC6040 X-RAY CİHAZI:2",
+   "ekipman_id": 61,
+   "tip": "XRAY",
+   "model": "SC6040 X-RAY CİHAZI",
+   "musteri": "MKE",
+   "musteri_id": 46,
+   "lokasyon_id": 58,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 56 (B)"
+  },
+  {
+   "anahtar": "B:56:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 62,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "MKE",
+   "musteri_id": 46,
+   "lokasyon_id": 58,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 56 (B)"
+  },
+  {
+   "anahtar": "B:56:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:2",
+   "ekipman_id": 63,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "MKE",
+   "musteri_id": 46,
+   "lokasyon_id": 58,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 56 (B)"
+  },
+  {
+   "anahtar": "B:56:KURULUM",
+   "no": "SRV-202611-000103",
+   "id": 103,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "MKE — satılan cihaz kurulumu: 2 ADET SC6040 X-RAY CİHAZI; 2 ADET D733 METAL DEDEKTÖRÜ; 2 ADET GİRİŞ ROLLER; 2 ADET ÇIKIŞ ROLLER; 2 ADET DOLA",
+   "musteri": "MKE",
+   "musteri_id": 46,
+   "lokasyon_id": 58,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 56 (B)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    60,
+    61,
+    62,
+    63
+   ],
+   "ekipman_hedef_durum": "KURULUM_BEKLIYOR"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:1",
+   "ekipman_id": 64,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:2",
+   "ekipman_id": 65,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:3",
+   "ekipman_id": 66,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:4",
+   "ekipman_id": 67,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:5",
+   "ekipman_id": 68,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:6",
+   "ekipman_id": 69,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:7",
+   "ekipman_id": 70,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:8",
+   "ekipman_id": 71,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:9",
+   "ekipman_id": 72,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:10",
+   "ekipman_id": 73,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:11",
+   "ekipman_id": 74,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:12",
+   "ekipman_id": 75,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:13",
+   "ekipman_id": 76,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:14",
+   "ekipman_id": 77,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:15",
+   "ekipman_id": 78,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:16",
+   "ekipman_id": 79,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:17",
+   "ekipman_id": 80,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:XRAY:PG&DH-6040 X-RAY CİHAZI:18",
+   "ekipman_id": 81,
+   "tip": "XRAY",
+   "model": "PG&DH-6040 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 82,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:2",
+   "ekipman_id": 83,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:3",
+   "ekipman_id": 84,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:4",
+   "ekipman_id": 85,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:5",
+   "ekipman_id": 86,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:6",
+   "ekipman_id": 87,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:7",
+   "ekipman_id": 88,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:8",
+   "ekipman_id": 89,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:9",
+   "ekipman_id": 90,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:10",
+   "ekipman_id": 91,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:11",
+   "ekipman_id": 92,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:12",
+   "ekipman_id": 93,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:13",
+   "ekipman_id": 94,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:14",
+   "ekipman_id": 95,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:15",
+   "ekipman_id": 96,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:16",
+   "ekipman_id": 97,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:17",
+   "ekipman_id": 98,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:18",
+   "ekipman_id": 99,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:19",
+   "ekipman_id": 100,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:20",
+   "ekipman_id": 101,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:21",
+   "ekipman_id": 102,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:22",
+   "ekipman_id": 103,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:23",
+   "ekipman_id": 104,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:24",
+   "ekipman_id": 105,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:25",
+   "ekipman_id": 106,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:57:EKIPMAN:KAPI_DEDEKTORU:D733 METAL DEDEKTÖRÜ:26",
+   "ekipman_id": 107,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D733 METAL DEDEKTÖRÜ",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 57 (B)"
+  },
+  {
+   "anahtar": "B:58:EKIPMAN:XRAY:PG&DH 100100 X-RAY CİHAZI:1",
+   "ekipman_id": 108,
+   "tip": "XRAY",
+   "model": "PG&DH 100100 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 58 (B)"
+  },
+  {
+   "anahtar": "B:58:EKIPMAN:XRAY:PG&DH 100100 X-RAY CİHAZI:2",
+   "ekipman_id": 109,
+   "tip": "XRAY",
+   "model": "PG&DH 100100 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 58 (B)"
+  },
+  {
+   "anahtar": "B:58:EKIPMAN:XRAY:PG&DH 100100 X-RAY CİHAZI:3",
+   "ekipman_id": 110,
+   "tip": "XRAY",
+   "model": "PG&DH 100100 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 58 (B)"
+  },
+  {
+   "anahtar": "B:58:EKIPMAN:XRAY:PG&DH 100100 X-RAY CİHAZI:4",
+   "ekipman_id": 111,
+   "tip": "XRAY",
+   "model": "PG&DH 100100 X-RAY CİHAZI",
+   "musteri": "ADANA RAYLI SİSTEMLER",
+   "musteri_id": 47,
+   "lokasyon_id": 59,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 58 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 112,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:2",
+   "ekipman_id": 113,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:3",
+   "ekipman_id": 114,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:4",
+   "ekipman_id": 115,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:5",
+   "ekipman_id": 116,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:6",
+   "ekipman_id": 117,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:7",
+   "ekipman_id": 118,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:8",
+   "ekipman_id": 119,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:9",
+   "ekipman_id": 120,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:10",
+   "ekipman_id": 121,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:11",
+   "ekipman_id": 122,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:12",
+   "ekipman_id": 123,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:13",
+   "ekipman_id": 124,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:14",
+   "ekipman_id": 125,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:15",
+   "ekipman_id": 126,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:16",
+   "ekipman_id": 127,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:17",
+   "ekipman_id": 128,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:18",
+   "ekipman_id": 129,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:19",
+   "ekipman_id": 130,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:20",
+   "ekipman_id": 131,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:21",
+   "ekipman_id": 132,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:22",
+   "ekipman_id": 133,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:23",
+   "ekipman_id": 134,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:24",
+   "ekipman_id": 135,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:25",
+   "ekipman_id": 136,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:26",
+   "ekipman_id": 137,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:27",
+   "ekipman_id": 138,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:28",
+   "ekipman_id": 139,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:29",
+   "ekipman_id": 140,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:30",
+   "ekipman_id": 141,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:31",
+   "ekipman_id": 142,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:32",
+   "ekipman_id": 143,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:33",
+   "ekipman_id": 144,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)"
+  },
+  {
+   "anahtar": "B:59:KURULUM",
+   "no": "SRV-202611-000104",
+   "id": 104,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "METRO İSTANBUL — satılan cihaz kurulumu: 33 ADET PG 3000 KING METAL DEDEKTÖRÜ; 33 ADET KROM AYAKLI SEHPA",
+   "musteri": "METRO İSTANBUL",
+   "musteri_id": 48,
+   "lokasyon_id": 60,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 59 (B)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    137,
+    138,
+    139,
+    140,
+    141,
+    142,
+    143,
+    144
+   ],
+   "ekipman_hedef_durum": "KURULUM_BEKLIYOR"
+  },
+  {
+   "anahtar": "B:60:EKIPMAN:XRAY:PG&DH 100100 X-RAY CİHAZI:1",
+   "ekipman_id": 145,
+   "tip": "XRAY",
+   "model": "PG&DH 100100 X-RAY CİHAZI",
+   "musteri": "TCDD 2. BÖLGE MÜDÜRLÜĞÜ",
+   "musteri_id": 49,
+   "lokasyon_id": 61,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 60 (B)"
+  },
+  {
+   "anahtar": "B:60:EKIPMAN:XRAY:PG&DH 100100 X-RAY CİHAZI:2",
+   "ekipman_id": 146,
+   "tip": "XRAY",
+   "model": "PG&DH 100100 X-RAY CİHAZI",
+   "musteri": "TCDD 2. BÖLGE MÜDÜRLÜĞÜ",
+   "musteri_id": 49,
+   "lokasyon_id": 61,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 60 (B)"
+  },
+  {
+   "anahtar": "B:60:KURULUM",
+   "no": "SRV-202611-000105",
+   "id": 105,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "TCDD 2. BÖLGE MÜDÜRLÜĞÜ — satılan cihaz kurulumu: 2 ADET PG&DH 100100 X-RAY CİHAZI; 2 ADET GİRİŞ ROLLER; 2 ADET ÇIKIŞ ROLLER",
+   "musteri": "TCDD 2. BÖLGE MÜDÜRLÜĞÜ",
+   "musteri_id": 49,
+   "lokasyon_id": 61,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 60 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": "CİHAZ KURULUMLARI YAPILDI.",
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "ekipman_idler": [
+    145,
+    146
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:61:EKIPMAN:XRAY:SC-6040 X-RAY CİHAZI:1",
+   "ekipman_id": 147,
+   "tip": "XRAY",
+   "model": "SC-6040 X-RAY CİHAZI",
+   "musteri": "GÖLCÜK DONANMA KOMUTANLIĞI",
+   "musteri_id": 50,
+   "lokasyon_id": 62,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 61 (B)"
+  },
+  {
+   "anahtar": "B:61:KURULUM",
+   "no": "SRV-202611-000106",
+   "id": 106,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "GÖLCÜK DONANMA KOMUTANLIĞI — satılan cihaz kurulumu: 1 ADET SC-6040 X-RAY CİHAZI; 1 ADET GİRİŞ ROLLER; 1 ADET ÇIKIŞ ROLLER",
+   "musteri": "GÖLCÜK DONANMA KOMUTANLIĞI",
+   "musteri_id": 50,
+   "lokasyon_id": 62,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 61 (B)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-06"
+   },
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    147
+   ],
+   "ekipman_hedef_durum": "KURULUM_BEKLIYOR"
+  },
+  {
+   "anahtar": "B:62:EKIPMAN:XRAY:SC 5030 AT X-RAY CİHAZI:1",
+   "ekipman_id": 148,
+   "tip": "XRAY",
+   "model": "SC 5030 AT X-RAY CİHAZI",
+   "musteri": "BAKIRKÖY ADLİYESİ (VEKTÖR GÜVENLİK)",
+   "musteri_id": 51,
+   "lokasyon_id": 63,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 62 (B)"
+  },
+  {
+   "anahtar": "B:62:EKIPMAN:KAPI_DEDEKTORU:PG 3000 KING METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 149,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG 3000 KING METAL DEDEKTÖRÜ",
+   "musteri": "BAKIRKÖY ADLİYESİ (VEKTÖR GÜVENLİK)",
+   "musteri_id": 51,
+   "lokasyon_id": 63,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 62 (B)"
+  },
+  {
+   "anahtar": "B:63:EKIPMAN:KAPI_DEDEKTORU:PG&DH-D118 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 150,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG&DH-D118 METAL DEDEKTÖRÜ",
+   "musteri": "BEAST TEKNOLOJİ",
+   "musteri_id": 52,
+   "lokasyon_id": 64,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 63 (B)"
+  },
+  {
+   "anahtar": "B:63:EKIPMAN:KAPI_DEDEKTORU:PG&DH-D118 METAL DEDEKTÖRÜ:2",
+   "ekipman_id": 151,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "PG&DH-D118 METAL DEDEKTÖRÜ",
+   "musteri": "BEAST TEKNOLOJİ",
+   "musteri_id": 52,
+   "lokasyon_id": 64,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 63 (B)"
+  },
+  {
+   "anahtar": "B:63:KURULUM",
+   "no": "SRV-202611-000107",
+   "id": 107,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "BEAST TEKNOLOJİ — satılan cihaz kurulumu: 2 ADET PG&DH-D118 METAL DEDEKTÖRÜ",
+   "musteri": "BEAST TEKNOLOJİ",
+   "musteri_id": 52,
+   "lokasyon_id": 64,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 63 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    150,
+    151
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:64:EKIPMAN:KAPI_DEDEKTORU:D109 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 152,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D109 METAL DEDEKTÖRÜ",
+   "musteri": "SAHA GEÇİŞ KONTROL SİSTEMLERİ",
+   "musteri_id": 53,
+   "lokasyon_id": 65,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 64 (B)"
+  },
+  {
+   "anahtar": "B:64:EKIPMAN:KAPI_DEDEKTORU:D109 METAL DEDEKTÖRÜ:2",
+   "ekipman_id": 153,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D109 METAL DEDEKTÖRÜ",
+   "musteri": "SAHA GEÇİŞ KONTROL SİSTEMLERİ",
+   "musteri_id": 53,
+   "lokasyon_id": 65,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 64 (B)"
+  },
+  {
+   "anahtar": "B:64:KURULUM",
+   "no": "SRV-202611-000108",
+   "id": 108,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "SAHA GEÇİŞ KONTROL SİSTEMLERİ — satılan cihaz kurulumu: 2 ADET D109 METAL DEDEKTÖRÜ; 2 ADET KROM AYAKLI SEHPA",
+   "musteri": "SAHA GEÇİŞ KONTROL SİSTEMLERİ",
+   "musteri_id": 53,
+   "lokasyon_id": 65,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 64 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [],
+   "ekipman_idler": [
+    152,
+    153
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:65:EKIPMAN:XRAY:SC 5030 A X-RAY CİHAZI:1",
+   "ekipman_id": 154,
+   "tip": "XRAY",
+   "model": "SC 5030 A X-RAY CİHAZI",
+   "musteri": "MARMARA PARK AVM",
+   "musteri_id": 54,
+   "lokasyon_id": 66,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 65 (B)"
+  },
+  {
+   "anahtar": "B:66:EKIPMAN:KAPI_DEDEKTORU:D109 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 155,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D109 METAL DEDEKTÖRÜ",
+   "musteri": "DHL",
+   "musteri_id": 44,
+   "lokasyon_id": 67,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 66 (B)"
+  },
+  {
+   "anahtar": "B:66:KURULUM",
+   "no": "SRV-202611-000109",
+   "id": 109,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "DHL — satılan cihaz kurulumu: 1 ADET D109 METAL DEDEKTÖRÜ; 1 ADET KROM AYAKLI SEHPA; İLAVE EKİPMAN: KORUMA KILIFI (ADET BELİRTİLMEMİŞ)",
+   "musteri": "DHL",
+   "musteri_id": 44,
+   "lokasyon_id": 67,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 66 (B)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": "MARMARA AKTARMA MERKEZİ'NE TESLİM EDİLECEK. (MALTEPE FERHATPAŞA)",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "eslenen_teknisyen": [
+    "t_tek_guv2"
+   ],
+   "ekipman_idler": [
+    155
+   ],
+   "ekipman_hedef_durum": "KURULUM_BEKLIYOR"
+  },
+  {
+   "anahtar": "B:67:EKIPMAN:XRAY:PG&DH 5030 AC X-RAY CİHAZI:1",
+   "ekipman_id": 156,
+   "tip": "XRAY",
+   "model": "PG&DH 5030 AC X-RAY CİHAZI",
+   "musteri": "ÇAM SAKURA HASTANESİ",
+   "musteri_id": 55,
+   "lokasyon_id": 68,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 67 (B)"
+  },
+  {
+   "anahtar": "B:67:EKIPMAN:XRAY:PG&DH 5030 AC X-RAY CİHAZI:2",
+   "ekipman_id": 157,
+   "tip": "XRAY",
+   "model": "PG&DH 5030 AC X-RAY CİHAZI",
+   "musteri": "ÇAM SAKURA HASTANESİ",
+   "musteri_id": 55,
+   "lokasyon_id": 68,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 67 (B)"
+  },
+  {
+   "anahtar": "B:67:KURULUM",
+   "no": "SRV-202611-000110",
+   "id": 110,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "ÇAM SAKURA HASTANESİ — satılan cihaz kurulumu: 2 ADET PG&DH 5030 AC X-RAY CİHAZI",
+   "musteri": "ÇAM SAKURA HASTANESİ",
+   "musteri_id": 55,
+   "lokasyon_id": 68,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 67 (B)",
+   "kaynak_durum": "TAMAMLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "TAMAMLANDI",
+    "sonuc": "COZULDU",
+    "cozum_kanali": "YERINDE",
+    "sure_kaydi": "eksik"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-02"
+   },
+   "eslenen_teknisyen": [
+    "t_sef_guv"
+   ],
+   "ekipman_idler": [
+    156,
+    157
+   ],
+   "ekipman_hedef_durum": "KURULU"
+  },
+  {
+   "anahtar": "B:68:EKIPMAN:KAPI_DEDEKTORU:D109 METAL DEDEKTÖRÜ:1",
+   "ekipman_id": 158,
+   "tip": "KAPI_DEDEKTORU",
+   "model": "D109 METAL DEDEKTÖRÜ",
+   "musteri": "ÇAĞAN ELEKTRONİK",
+   "musteri_id": 56,
+   "lokasyon_id": 69,
+   "acan": "t_yon_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 68 (B)"
+  },
+  {
+   "anahtar": "B:68:TASIMA",
+   "no": "SRV-202611-000111",
+   "id": 111,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "TASIMA",
+   "konu": "ÇAĞAN ELEKTRONİK — satılan cihaz sevki: 1 ADET D109 METAL DEDEKTÖRÜ; 1 ADET KROM AYAKLI SEHPA KARGOLANMASI",
+   "musteri": "ÇAĞAN ELEKTRONİK",
+   "musteri_id": 56,
+   "lokasyon_id": 69,
+   "acan": "t_ops_guv",
+   "kaynak": "Guvenlik_Talep_Takip satır 68 (B)",
+   "kaynak_durum": "PLANLANDI",
+   "kaynak_not": null,
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": {
+    "plan_tarihi": "2026-11-03"
+   },
+   "eslenen_teknisyen": [
+    "t_tek_guv2"
+   ],
+   "ekipman_idler": [
+    158
+   ],
+   "ekipman_hedef_durum": "KURULUM_BEKLIYOR"
+  },
+  {
+   "anahtar": "HABERLESME:2026-07-13:İGDAŞ:ARIZA:1",
+   "no": "SRV-202611-000112",
+   "id": 112,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "konu": "İGDAŞ Fatih Şebeke — Araç telsizi arızası (Fatih şebeke) (cihaz 1/2)",
+   "musteri": "İGDAŞ",
+   "musteri_id": 57,
+   "lokasyon_id": 70,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-07-13",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "1/2"
+  },
+  {
+   "anahtar": "HABERLESME:2026-07-13:İGDAŞ:ARIZA:2",
+   "no": "SRV-202611-000113",
+   "id": 113,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "konu": "İGDAŞ Fatih Şebeke — Araç telsizi arızası (Fatih şebeke) (cihaz 2/2)",
+   "musteri": "İGDAŞ",
+   "musteri_id": 57,
+   "lokasyon_id": 70,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-07-13",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "2/2"
+  },
+  {
+   "anahtar": "HABERLESME:2026-06-16:RÖNESANS TSK PROJESİ:ARIZA:1",
+   "no": "SRV-202611-000114",
+   "id": 114,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "konu": "RÖNESANS TSK PROJESİ Ankara Şantiye — Telsiz sistemi arızasına müdahale ve onarım",
+   "musteri": "RÖNESANS TSK PROJESİ",
+   "musteri_id": 58,
+   "lokasyon_id": 71,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-06-16",
+   "hedef": {
+    "durum": "ISLEMDE"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab",
+    "t_sef_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-07-07:HISTORIA AVM:ARIZA:1",
+   "no": "SRV-202611-000115",
+   "id": 115,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "konu": "HISTORIA AVM Mecidiyeköy — Telsiz sistemi arıza keşfi",
+   "musteri": "HISTORIA AVM",
+   "musteri_id": 59,
+   "lokasyon_id": 72,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-07-07",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-10-13:TP-OTC FİLYOS PROJESİ:ARIZA:1",
+   "no": "SRV-202611-000116",
+   "id": 116,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "konu": "TP-OTC FİLYOS PROJESİ Filyos — Kurulu telsiz sisteminde arıza tespiti ve onarım",
+   "musteri": "TP-OTC FİLYOS PROJESİ",
+   "musteri_id": 60,
+   "lokasyon_id": 73,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-10-13",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab",
+    "t_sef_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-07-14:ÜSTAY İNŞAAT:ARIZA:1",
+   "no": "SRV-202611-000117",
+   "id": 117,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "ARIZA",
+   "konu": "ÜSTAY İNŞAAT Aliağa Şantiye — RD625 röle laboratuvar onarımı (arızalı röle iade alındı, yedek teslim edildi)",
+   "musteri": "ÜSTAY İNŞAAT",
+   "musteri_id": 61,
+   "lokasyon_id": 74,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-07-14",
+   "hedef": {
+    "durum": "BEKLEMEDE",
+    "neden": "DIS_SERVIS"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-08-21:MAKİNE VE KİMYA ENDÜSTRİSİ:KESIF:1",
+   "no": "SRV-202611-000118",
+   "id": 118,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KESIF",
+   "konu": "MAKİNE VE KİMYA ENDÜSTRİSİ Kırıkkale Tesisi — Telsiz sistemi kurulum keşfi",
+   "musteri": "MAKİNE VE KİMYA ENDÜSTRİSİ",
+   "musteri_id": 62,
+   "lokasyon_id": 75,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-08-21",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_sef_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-10-02:REC:KESIF:1",
+   "no": "SRV-202611-000119",
+   "id": 119,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KESIF",
+   "konu": "REC Cerrahpaşa Hastanesi — OKTH sistem keşfi",
+   "musteri": "REC",
+   "musteri_id": 63,
+   "lokasyon_id": 76,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-10-02",
+   "hedef": {
+    "durum": "MUSTERI_TALEBI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_sef_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-10-01:HALKBANKASI:PLANSIZ_BAKIM:1",
+   "no": "SRV-202611-000120",
+   "id": 120,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "PLANSIZ_BAKIM",
+   "konu": "HALKBANKASI Gaziantep — Telsiz sistemleri yıllık bakımı (Gaziantep)",
+   "musteri": "HALKBANKASI",
+   "musteri_id": 64,
+   "lokasyon_id": 77,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-10-01",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-09-16:HALKBANKASI:PLANSIZ_BAKIM:1",
+   "no": "SRV-202611-000121",
+   "id": 121,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "PLANSIZ_BAKIM",
+   "konu": "HALKBANKASI İstanbul Finans Merkezi — Telsiz sistemleri yıllık bakımı ve IP yapılandırması",
+   "musteri": "HALKBANKASI",
+   "musteri_id": 64,
+   "lokasyon_id": 78,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-09-16",
+   "hedef": {
+    "durum": "TAMAMLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-07-21:ESENLER BELEDİYESİ:PLANSIZ_BAKIM:1",
+   "no": "SRV-202611-000122",
+   "id": 122,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "PLANSIZ_BAKIM",
+   "konu": "ESENLER BELEDİYESİ Esenler — Telsiz sistemi aylık bakımı",
+   "musteri": "ESENLER BELEDİYESİ",
+   "musteri_id": 65,
+   "lokasyon_id": 79,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-07-21",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-10-15:BUSKİ:KURULUM:1",
+   "no": "SRV-202611-000123",
+   "id": 123,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KURULUM",
+   "konu": "BUSKİ Bursa — Satışı yapılan araç telsizi sisteminin teslimi ve kurulumu",
+   "musteri": "BUSKİ",
+   "musteri_id": 66,
+   "lokasyon_id": 80,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-10-15",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab",
+    "t_sef_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-10-17:ZİRAAT BANKASI:KURULUM:1",
+   "no": "SRV-202611-000124",
+   "id": 124,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KURULUM",
+   "konu": "ZİRAAT BANKASI İstanbul Finans Merkezi — İlave telsiz sistemi kurulumu ve devreye alma",
+   "musteri": "ZİRAAT BANKASI",
+   "musteri_id": 67,
+   "lokasyon_id": 81,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-10-17",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-07-10:ENERYA:DEMONTAJ:1",
+   "no": "SRV-202611-000125",
+   "id": 125,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "DEMONTAJ",
+   "konu": "ENERYA Erzincan — Röle ve anten demontajı",
+   "musteri": "ENERYA",
+   "musteri_id": 68,
+   "lokasyon_id": 82,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-07-10",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab",
+    "t_sef_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "HABERLESME:2026-06-29:İBB İTFAİYE:KURULUM:1",
+   "no": "SRV-202611-000126",
+   "id": 126,
+   "sirket": "TELEKOM",
+   "birim": "HABERLESME",
+   "tur": "KURULUM",
+   "konu": "İBB İTFAİYE Florya İtfaiye Merkezi — Telsiz sistemleri anten montajı",
+   "musteri": "İBB İTFAİYE",
+   "musteri_id": 69,
+   "lokasyon_id": 83,
+   "acan": "t_ops_hab",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-06-29",
+   "hedef": {
+    "durum": "TAMAMLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_hab"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "BARIYER:2026-09-12:FİRSTGATE ORGANİZASYON:KURULUM:1",
+   "no": "SRV-202611-000127",
+   "id": 127,
+   "sirket": "ELEKTRONIK",
+   "birim": "BARIYER",
+   "tur": "KURULUM",
+   "konu": "FİRSTGATE ORGANİZASYON Toyota Fabrikası — 650 m kiralık polis bariyeri + 60 tekno bariyer teslimi ve kurulumu",
+   "musteri": "FİRSTGATE ORGANİZASYON",
+   "musteri_id": 70,
+   "lokasyon_id": 84,
+   "acan": "t_sef_bar",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-09-12",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_sef_bar"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "BARIYER:2026-09-12:FİRSTGATE ORGANİZASYON:TOPLAMA:1",
+   "no": "SRV-202611-000128",
+   "id": 128,
+   "sirket": "ELEKTRONIK",
+   "birim": "BARIYER",
+   "tur": "TOPLAMA",
+   "konu": "FİRSTGATE ORGANİZASYON Toyota Fabrikası — 650 m polis bariyeri + 60 tekno bariyer toplama/iade alma",
+   "musteri": "FİRSTGATE ORGANİZASYON",
+   "musteri_id": 70,
+   "lokasyon_id": 84,
+   "acan": "t_sef_bar",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-09-12",
+   "hedef": {
+    "durum": "MUSTERI_TALEBI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_sef_bar"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "BARIYER:2026-06-19:ZEUS MEDYA:TASIMA:1",
+   "no": "SRV-202611-000129",
+   "id": 129,
+   "sirket": "ELEKTRONIK",
+   "birim": "BARIYER",
+   "tur": "TASIMA",
+   "konu": "ZEUS MEDYA İstanbul Park Kurtköy — 24 kiralık akordiyon bariyerin İstanbul Park'a taşınması",
+   "musteri": "ZEUS MEDYA",
+   "musteri_id": 71,
+   "lokasyon_id": 85,
+   "acan": "t_sef_bar",
+   "kaynak": "Denge_Is_Plani_Analizi 2026-06-19",
+   "hedef": {
+    "durum": "PLANLANDI"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_sef_bar"
+   ],
+   "cihaz_sira": "1/1"
+  },
+  {
+   "anahtar": "UI:130",
+   "no": "SRV-202611-000130",
+   "id": 130,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "ARIZA",
+   "konu": "KMD sürekli alarm veriyor (UI testi: + Hızlı oluştur)",
+   "musteri": "AVUSTURYA BAŞKONSOLOSLUĞU",
+   "musteri_id": 8,
+   "lokasyon_id": 16,
+   "acan": "t_ops_guv",
+   "kaynak": "UI: + Hızlı oluştur > Yeni servis işi",
+   "hedef": {
+    "durum": "MUSTERI_TALEBI",
+    "not": "Arayüz testi kaydı; 2. aşama serbestçe kullanabilir"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": null
+  },
+  {
+   "anahtar": "UI:131",
+   "no": "SRV-202611-000131",
+   "id": 131,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "PLANSIZ_BAKIM",
+   "konu": "SC-5030A periyodik bakım — seri biliniyor (UI testi)",
+   "musteri": "KİPA AVM",
+   "musteri_id": 7,
+   "lokasyon_id": 10,
+   "acan": "t_ops_guv",
+   "kaynak": "UI: + Hızlı oluştur > Yeni bakım işi (seri girildi)",
+   "hedef": {
+    "durum": "MUSTERI_TALEBI",
+    "not": "Arayüz testi kaydı; 2. aşama serbestçe kullanabilir"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": "UI-5030A-0001"
+  },
+  {
+   "anahtar": "UI:132",
+   "no": "SRV-202611-000132",
+   "id": 132,
+   "sirket": "ELEKTRONIK",
+   "birim": "GUVENLIK",
+   "tur": "KURULUM",
+   "konu": "Açık alana 2 KMD kurulumu için yeni yer tespiti ve kurulum (UI testi: menüden)",
+   "musteri": "ORTADAĞ ORTAOKULU",
+   "musteri_id": 20,
+   "lokasyon_id": 28,
+   "acan": "t_ops_guv",
+   "kaynak": "UI: menü Güvenlik > Teknik Servis > Kurulum > Yeni Kayıt",
+   "hedef": {
+    "durum": "MUSTERI_TALEBI",
+    "not": "Arayüz testi kaydı; 2. aşama serbestçe kullanabilir"
+   },
+   "plan": null,
+   "eslenen_teknisyen": [
+    "t_tek_guv1"
+   ],
+   "seri": null
+  }
+ ]
+}

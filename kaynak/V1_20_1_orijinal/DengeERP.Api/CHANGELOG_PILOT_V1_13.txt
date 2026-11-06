@@ -1,0 +1,43 @@
+DengeERP PILOT V1.13 — Eğitim, Yetkinlik ve Personel Gelişim Yönetimi
+Tarih: 2026-10-14
+Kaynak: V1.12 Kiralama / Envanter / Operasyon tam proje ZIP'i.
+
+YENİ MODÜL
+• Sol menü: Eğitim / Personel Gelişimi (yetkiye bağlı).
+• Yönetim Özeti: Yıllık hedef/tamamlama KPI, birim bazlı eğitim ilerlemesi,
+  saha uygulaması uygunluğu, yetkinlik hedefi ve 30/60/90 günlük takip listesi.
+• Yıllık Plan: Personeli tek tek ya da toplu seçerek yıllık eğitim planına ata.
+  Aynı kişiye aynı eğitimi aynı yılda ikinci kez atamak kayıt üretmez.
+• Katalog: Neden eğitim verildi, hedef davranış, başarı ölçütü, süre,
+  zorunluluk ve kişiselleştirilebilir saha gözlem kontrol maddeleri.
+• Eğitim Katılımı: Eğitim tarihi, eğitmen, gerçekleşen süre/yer, katılım,
+  eğitim öncesi ve sonrası değerlendirme puanı, notlar.
+• Saha Gözlemi: İlgili iş emri, gözlemci, ilk gözlem / 30 / 60 / 90 gün,
+  0/1/2 ve 'gözlenmedi' ölçütleri, aksiyon planı, takip tarihi.
+  Kritik maddedeki 'uygun değil' ayrıca uyarı üretir.
+• Yetkinlik Matrisi: 1–4 mevcut ve hedef düzey, kanıt, sonraki gözden geçirme.
+• Personel Gelişim Kartı: Kişinin eğitim/uygulama/yetkinlik geçmişi.
+• Rapor: Plan CSV'si Excel'de açılabilir; Türkçe metin ve BOM içerir.
+
+SQL
+Database/ZZ_V113_TrainingDevelopment.sql yeni tabloları kontrollü ve
+tekrar çalıştırılabilir biçimde oluşturur. Mevcut V1.12 tablolarını silmez.
+Örnek eğitim ve gözlem maddeleri ekler; yıllık personel eğitimlerini otomatik
+atamaz (yönetici onayıyla atanır).
+
+YENİ İZİNLER
+training.view, training.manage, training.observe, training.export
+Admin (*) yeni ekranı doğrudan görür. Önceden oluşturulmuş kullanıcıların
+özel yetki listeleri otomatik DEĞİŞTİRİLMEZ; Kullanıcı / Yetki'den verilir.
+
+ÖNEMLİ
+Bu ZIP'in JavaScript sözdizimi, statik veri ve paket bütünlük testleri yapıldı.
+.NET derlemesi ve gerçek SQL Server üzerinde uygulama testi bu ortamda YAPILMADI.
+Canlıya geçişten önce yedek alın, V1.13'ü ayrı klasörde derleyin, uygulama
+başlangıcındaki SQL güncellemesini değerlendirip sonra yayına alın.
+
+GELİŞTİRME SINIRLARI
+• Otomatik bildirim/e-posta gönderimi ve resmi İSG sertifika mevzuat takibi
+  henüz bu sürümde yoktur. Yasal eğitim periyotları ayrı yönetilmelidir.
+• Eğitim planı 'Tamamlandı' durumu katılımla işlenir; saha gelişimi ayrı
+  puanlanır. Eğitim süresinin uzun olması personel yetkinliği değildir.

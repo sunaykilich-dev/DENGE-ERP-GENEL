@@ -1,0 +1,1 @@
+V1.20.1: Raporlar > Excel disari aktar tarih bosken start/end sorgu parametreleri artik gonderilmez. Eski uygulama kodlari ve SQL schema korunmustur.

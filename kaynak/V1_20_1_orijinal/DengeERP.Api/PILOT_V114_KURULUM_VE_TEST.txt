@@ -1,0 +1,53 @@
+DENGEERP V1.14 — KURULUM / TEST (POWER SHELL + SSMS)
+====================================================
+1. Çalışan V1.13 PowerShell'i KAPATMAYIN.
+2. ZIP dosyasını C:\DengeERP\App klasörüne indirin.
+3. Yeni PowerShell'e bu komutları birlikte yapıştırın:
+
+$ad = 'DengeERP_Pilot_V1_14_SAHA_ZAMAN_TAKIBI_KPI_2026-10-15'
+$zip = "C:\DengeERP\App\$ad.zip"
+$hedef = "C:\DengeERP\App\DengeERP_V1_14_TEMIZ_$(Get-Date -Format yyyyMMdd_HHmmss)"
+Expand-Archive -LiteralPath $zip -DestinationPath $hedef -ErrorAction Stop
+$proje = Get-ChildItem $hedef -Recurse -Filter 'DengeERP.Api.csproj' | Select-Object -First 1
+if (-not $proje) { throw 'V1.14 proje dosyasi bulunamadi' }
+dotnet build $proje.FullName
+
+4. Sadece build başarıyla bittiğinde SSMS'te GÜNCEL .bak yedeği alın,
+   mutlaka RESTORE VERIFYONLY ile doğrulayın. ÖRNEK:
+
+USE master;
+GO
+DECLARE @K NVARCHAR(400)=CONVERT(NVARCHAR(400),SERVERPROPERTY('InstanceDefaultBackupPath'));
+DECLARE @P NVARCHAR(500)=@K+CASE WHEN RIGHT(@K,1)='\' THEN '' ELSE '\' END+
+'DengeERP_V113_SON_YEDEK_'+FORMAT(GETDATE(),'yyyyMMdd_HHmmss')+'.bak';
+BACKUP DATABASE DengeERP TO DISK=@P WITH COPY_ONLY,CHECKSUM,INIT,STATS=10;
+RESTORE VERIFYONLY FROM DISK=@P WITH CHECKSUM;
+SELECT @P AS YedekDosyasi;
+
+5. Personelle koordinasyon kurun. V1.13'ün PowerShell'inde Ctrl+C ile durdurun.
+6. V1.14 PowerShell'inde uygulamayı başlatın:
+
+Set-Location $proje.DirectoryName
+dotnet run --urls 'http://0.0.0.0:5050'
+
+7. Tarayıcı: http://10.10.50.60:5050 ; Ctrl+F5.
+
+V1.14 KABUL TESTİ (GERÇEK SQL SERVER)
+[ ] Admin ile giriş; menüde "Saha / Zaman Takibi" görünmeli.
+[ ] Bir açık işe teknisyen atayın; teknisyen kendi ERP hesabıyla giriş yapsın.
+[ ] Atanmamış başka iş için sayaç başlatılamasın.
+[ ] Atanmış işte "Yol / Ulaşım" başlat; en az 1 dakika sonra "Saha Çalışması"na geç.
+[ ] Bir dakika sonra "Mola / Ara"ya geç; 1 dk sonra devam et; 1 dk sonra bitir.
+[ ] İş emri detayındaki gerçek süre listesinde yol ve saha kayıtları oluşsun.
+[ ] Mola kişi-saat toplamında bulunmasın.
+[ ] Teknisyenin ikinci işte eş zamanlı sayaç açma girişimi engellensin.
+[ ] Manuel giriş aynı saate çakıştığında reddedilsin.
+[ ] Aktif sayaç varken iş emri veya cihaz bakım formu kapatılamasın.
+[ ] Şef/yonetici, kendi birimine ait aktif ekipleri görebilsin.
+[ ] Yetkili yönetici gerekçeli "İptal Et" yapınca audit kaydı saklansın.
+[ ] Personel/şehir/müşteri/dönem filtreleri, Excel/CSV çıktısı çalışsın.
+[ ] Raporlar -> Excel 8 sayfa, Eğitim, Kiralama, Depo, Planlama, Bakım sorunsuz açılsın.
+
+ÖNEMLİ: Build başarısı fonksiyonel doğrulama değildir. İlk veri yazan testleri test
+personeli ve kontrollü bir iş emriyle yapın. Test verisi canlı sonuçları etkileyebilir.
+Eski V1.13 klasörü ve SQL .bak yedeğini SİLMEYİN.
