@@ -32,6 +32,7 @@ from sqlalchemy import (
     event,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -172,6 +173,9 @@ class ServiceEquipment(
         BigInteger, ForeignKey("devices.id", ondelete="SET NULL")
     )
     notes: Mapped[str | None] = mapped_column(Text)
+    # Kayıtlı frekans (Haberleşme röle/telsiz; KARARLAR §12). Anahtarlar
+    # `cihaz_bilgisi.FREKANS_ALANLARI`; arıza işine buradan kopyalanır.
+    frekans: Mapped[dict | None] = mapped_column(JSONB)
 
 
 @event.listens_for(ServiceEquipment, "before_insert")
