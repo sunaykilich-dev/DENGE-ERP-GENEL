@@ -36,6 +36,7 @@ from app.models.gorev import (
     CardLabel,
     CardMember,
 )
+from app.models.ik_belge import IkBelge, IkBelgeOlayi, IkBelgeSablonu, IkGonderim
 from app.models.import_batch import ImportBatch
 from app.models.login_attempt import LoginAttempt
 from app.models.order import Order, OrderLine, OrderReservation
@@ -271,4 +272,9 @@ __all__ = [
     "ServiceCompetencyRequirement",
     "ServiceMailOutbox",
     "ServiceNotificationPref",
+    # --- İK Bordro ve Belgeler (KARARLAR §11) ---
+    "IkBelge",
+    "IkBelgeOlayi",
+    "IkBelgeSablonu",
+    "IkGonderim",
 ]

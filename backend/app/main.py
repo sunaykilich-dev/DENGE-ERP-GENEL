@@ -19,6 +19,7 @@ from app.api import catalog as catalog_api
 from app.api import devices as devices_api
 from app.api import egitim as egitim_api
 from app.api import gorevler as gorevler_api
+from app.api import ik_belgeler as ik_belgeler_api
 from app.api import imports as imports_api
 from app.api import kiralamalar as kiralamalar_api
 from app.api import kvkk as kvkk_api
@@ -236,6 +237,7 @@ def create_app() -> FastAPI:
     # kendi dosyalarına yazar, bu bloğa dokunmaz. Dalga 2 routerları
     # (operasyon, atölye, kiralama, parça, maliyet, eğitim) D2-S ekledi.
     app.include_router(personel_api.router)
+    app.include_router(ik_belgeler_api.router)
     app.include_router(lokasyonlar_api.router)
     app.include_router(teknik_servis_ana_veri_api.router)
     app.include_router(teknik_servis_planlama_api.router)

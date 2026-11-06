@@ -407,7 +407,25 @@ export const UYGULAMALAR: Uygulama[] = [
     izin: "egitim.kendim",
     grup: "ik",
   },
-  // --- Mobilite (canlı ekranlar; adlar değişmez) ---------------------------
+  {
+    id: "/ik-belgeler",
+    baslik: "Bordro ve Belgeler",
+    altBaslik: "Gönder, imzayı takip et",
+    ikon: SolutionOutlined,
+    yol: "/ik-belgeler",
+    izin: ["bordro.yonet", "ik_belge.yonet"],
+    grup: "ik",
+  },
+  {
+    // Herkese açık: kişi kendi bordrosunu/belgesini görür (izin değil kimlik, §11).
+    id: "/belgelerim",
+    baslik: "Belgelerim",
+    altBaslik: "Bordro ve imzalanacak belgeler",
+    ikon: FileDoneOutlined,
+    yol: "/belgelerim",
+    izin: [],
+    grup: "ik",
+  },  // --- Mobilite (canlı ekranlar; adlar değişmez) ---------------------------
   { id: "/panel", baslik: "Panel", altBaslik: "Mobilite özeti", ikon: PieChartOutlined, yol: "/panel", izin: "rapor.gor", grup: "mobilite", yalnizMobilite: true },
   { id: "/hesaplar", baslik: "Hesaplar", ikon: TeamOutlined, yol: "/hesaplar", izin: "hesap.gor", grup: "mobilite" },
   { id: "/urunler", baslik: "Ürün Kataloğu", ikon: ContainerOutlined, yol: "/urunler", izin: "urun.gor", grup: "mobilite" },

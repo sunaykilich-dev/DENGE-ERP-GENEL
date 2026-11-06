@@ -16,7 +16,9 @@ import AtolyePage from "./pages/AtolyePage";
 import BakimPage from "./pages/BakimPage";
 import BenimIslerimPage from "./pages/BenimIslerimPage";
 import EgitimPage from "./pages/EgitimPage";
+import BelgelerimPage from "./pages/BelgelerimPage";
 import GelisimKartimPage from "./pages/GelisimKartimPage";
+import IkBelgelerPage from "./pages/IkBelgelerPage";
 import KiralamalarPage from "./pages/KiralamalarPage";
 import KiralikEnvanterPage from "./pages/KiralikEnvanterPage";
 import OperasyonMerkeziPage from "./pages/OperasyonMerkeziPage";
@@ -190,6 +192,8 @@ function KorumaliUygulama() {
         <Route path="/egitim" element={<EgitimPage />} />
         <Route path="/egitim/:id" element={<EgitimPage />} />
         <Route path="/gelisim-kartim" element={<GelisimKartimPage />} />
+        <Route path="/ik-belgeler" element={<IkBelgelerPage />} />
+        <Route path="/belgelerim" element={<BelgelerimPage />} />
         {/* --- Teknik servis (Dalga 3, D3-S) --- */}
         <Route path="/servis-raporlari" element={<ServisRaporlariPage />} />
         <Route path="/zaman-takibi" element={<ZamanTakibiPage />} />

@@ -250,6 +250,18 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     # Dalga 4 (TS-213, E13-15): kendi kalıcı izinlerinin alt kümesini en fazla
     # 30 günlüğüne kapsamındaki personele devreder. Kendisi vekâlete kapalıdır.
     "vekalet.ver": ("Personel", "Süreli vekâlet verir ve iptal eder"),
+    # --- İK Bordro ve Belgeler (KARARLAR 2026-10-28 §11) ------------------------------
+    # Adları `.gor` ile BİTMEZ: `_READ_ONLY_ALL` (YONETIM) bütün `.gor`'ları alır
+    # ve bordro varsayılan gizlidir. Kişinin KENDİ belgesi izne bağlı değildir
+    # (kimliğe bağlıdır): rolü ne olursa olsun herkes kendi bordrosunu görür.
+    "bordro.yonet": (
+        "İK Belgeleri",
+        "Bordro gönderir; bordroları, onay ve itiraz durumunu görür (gizli)",
+    ),
+    "ik_belge.yonet": (
+        "İK Belgeleri",
+        "Form/talimat/taahhütname şablonu tanımlar, personele gönderir, imzayı takip eder",
+    ),
     # Sistem
     "sistem.kullanici": ("Sistem", "Kullanıcı ve rol yönetir"),
     "sistem.ayar": ("Sistem", "Parametreleri ve entegrasyon ayarlarını yönetir"),
@@ -339,6 +351,8 @@ VEKALETE_KAPALI = YUKSEK_YETKILI_IZINLER | {
     "hakedis.ode",
     "tahsilat.yaz",
     "vekalet.ver",
+    # Bordro gizlidir (G10.8 maaş); "birkaç günlüğüne" başkasına açılmaz.
+    "bordro.yonet",
 }
 
 _READ_ONLY_ALL = tuple(c for c in PERMISSIONS if c.endswith(".gor")) + ("rapor.disaaktar",)
@@ -734,6 +748,8 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "personel.gor",
             "personel.yaz",
             "personel.cikis",
+            "bordro.yonet",
+            "ik_belge.yonet",
             "egitim.gor",
             "egitim.detay",
             "egitim.yaz",

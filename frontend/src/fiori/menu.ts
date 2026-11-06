@@ -263,7 +263,7 @@ export const MENU_AGACI: MenuOgesi[] = [
     [sayfa("/servis-raporlari"), sayfa("/servis-maliyet"), sayfa("/fatura-devri"), sayfa("/servis-ana-veri")],
     { ikon: BarChartOutlined },
   ),
-  grup("ik", "İnsan Kaynakları", [sayfa("/personel"), sayfa("/egitim"), sayfa("/gelisim-kartim")], {
+  grup("ik", "İnsan Kaynakları", [sayfa("/personel"), sayfa("/egitim"), sayfa("/ik-belgeler"), sayfa("/gelisim-kartim"), sayfa("/belgelerim")], {
     ikon: TeamOutlined,
   }),
   grup(
