@@ -28,9 +28,12 @@ gerekir) ve yalnız `[ÖRNEK]` gönderimlerine dokunur.
 
 import argparse
 import asyncio
+import functools
+import io
 import random
 import sys
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,16 +53,71 @@ AYLAR = (
 
 
 # --------------------------------------------------------------------------
-# Bağımlılıksız küçük PDF üretici
+# Küçük PDF üretici (WeasyPrint'siz)
 # --------------------------------------------------------------------------
 # WeasyPrint Windows geliştirme makinesinde Pango/Cairo olmadan çalışmıyor
-# (`services/pdf.py`). Örnek belge için standart Helvetica yeter. Türkçe
-# harfler: WinAnsi kodlamasının cp1254'ten farklı altı kodu `Differences`
-# ile Türkçe glif adlarına çevrilir; metin cp1254 ile yazılır.
+# (`services/pdf.py`). Metin cp1254 ile yazılır; WinAnsi'den farklı altı kod
+# `Differences` ile Türkçe glif adlarına çevrilir.
+#
+# Standart Helvetica'da ğ/ş/İ glifleri görüntüleyiciye kalıyor ve bazıları
+# (ör. pdf.js) boş bırakıyor. Bu yüzden makinedeki TrueType yazı tipinin
+# (Windows: Arial, Docker imajı: DejaVu Sans) yalnız cp1254 harflerini içeren
+# alt kümesi gömülür (~30 KB, fontTools WeasyPrint bağımlılığı olarak kurulu).
+# Yazı tipi bulunamazsa standart Helvetica'ya düşülür.
 _TR_FARKLARI = (
     "/Differences [208 /Gbreve 221 /Idotaccent 222 /Scedilla "
     "240 /gbreve 253 /dotlessi 254 /scedilla]"
 )
+_ENCODING = f"<< /Type /Encoding /BaseEncoding /WinAnsiEncoding {_TR_FARKLARI} >>"
+_YAZI_TIPLERI = {
+    False: ("C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    True: (
+        "C:/Windows/Fonts/arialbd.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ),
+}
+
+
+@functools.lru_cache(maxsize=256)
+def _gomulu_yazi_tipi(kalin: bool, harfler: str) -> tuple[bytes, list[int], dict[str, int]] | None:
+    """Belgedeki `harfler` için (alt küme TTF, 32..255 genişlikleri,
+    tanımlayıcı ölçüleri) ya da yazı tipi yoksa None."""
+    yol = next((Path(y) for y in _YAZI_TIPLERI[kalin] if Path(y).is_file()), None)
+    if yol is None:
+        return None
+    try:
+        from fontTools import subset  # noqa: PLC0415
+        from fontTools.ttLib import TTFont  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - ortam bağımlı
+        return None
+    secenek = subset.Options()
+    secenek.glyph_names = True  # Differences glif adlarıyla eşleşir
+    secenek.notdef_outline = True
+    secenek.hinting = False  # ekran/baskı için gerekmez, boyutu yarıya indirir
+    secenek.drop_tables += ["meta", "DSIG"]
+    font = TTFont(str(yol))
+    alt = subset.Subsetter(secenek)
+    alt.populate(unicodes=[ord(h) for h in harfler])
+    alt.subset(font)
+    tampon = io.BytesIO()
+    font.save(tampon)
+    birim = 1000 / font["head"].unitsPerEm
+    cmap = font.getBestCmap()
+    genislik = []
+    for kod in range(32, 256):
+        h = bytes([kod]).decode("cp1254", errors="ignore")
+        glif = cmap.get(ord(h)) if h else None
+        genislik.append(round(font["hmtx"][glif][0] * birim) if glif else 0)
+    head, hhea = font["head"], font["hhea"]
+    olcu = {
+        "x0": round(head.xMin * birim),
+        "y0": round(head.yMin * birim),
+        "x1": round(head.xMax * birim),
+        "y1": round(head.yMax * birim),
+        "ascent": round(hhea.ascent * birim),
+        "descent": round(hhea.descent * birim),
+    }
+    return tampon.getvalue(), genislik, olcu
 
 
 def _pdf_metin(s: str) -> str:
@@ -68,30 +126,83 @@ def _pdf_metin(s: str) -> str:
     return kacisli.decode("latin-1")
 
 
+def _akis(sozluk: bytes, veri: bytes) -> bytes:
+    return sozluk + b"\nstream\n" + veri + b"\nendstream"
+
+
+def _harfler(metin: str) -> str:
+    return "".join(sorted(set(metin.encode("cp1254", errors="replace").decode("cp1254"))))
+
+
+def _metin_genisligi(metin: str, boyut: float, kalin: bool, harfler: str) -> float:
+    """Sağa yaslama için punto cinsinden genişlik (yazı tipi yoksa yaklaşık)."""
+    gomulu = _gomulu_yazi_tipi(kalin, harfler)
+    if gomulu is None:
+        return len(metin) * boyut * 0.55
+    genislik = gomulu[1]
+    kodlar = metin.encode("cp1254", errors="replace")
+    return sum(genislik[k - 32] for k in kodlar if k >= 32) * boyut / 1000
+
+
+def _yazi_tipi_nesneleri(no: int, kalin: bool, metin: str) -> list[bytes]:
+    """Font sözlüğü `no`'da; gömülüyse tanımlayıcı no+1, dosya no+2'de."""
+    gomulu = _gomulu_yazi_tipi(kalin, _harfler(metin))
+    if gomulu is None:
+        ad = "Helvetica-Bold" if kalin else "Helvetica"
+        return [f"<< /Type /Font /Subtype /Type1 /BaseFont /{ad} /Encoding {_ENCODING} >>".encode()]
+    ttf, genislik, o = gomulu
+    ad = "DNGSUB+Kalin" if kalin else "DNGSUB+Normal"
+    return [
+        (
+            f"<< /Type /Font /Subtype /TrueType /BaseFont /{ad} /FirstChar 32 /LastChar 255 "
+            f"/Widths [{' '.join(map(str, genislik))}] /FontDescriptor {no + 1} 0 R "
+            f"/Encoding {_ENCODING} >>"
+        ).encode(),
+        (
+            f"<< /Type /FontDescriptor /FontName /{ad} /Flags 32 "
+            f"/FontBBox [{o['x0']} {o['y0']} {o['x1']} {o['y1']}] /ItalicAngle 0 "
+            f"/Ascent {o['ascent']} /Descent {o['descent']} /CapHeight {o['ascent']} "
+            f"/StemV {120 if kalin else 80} /FontFile2 {no + 2} 0 R >>"
+        ).encode(),
+        _akis(b"<< /Length %d /Length1 %d >>" % (len(ttf), len(ttf)), ttf),
+    ]
+
+
 def ornek_pdf(baslik: str, satirlar: list[str]) -> bytes:
-    """Tek sayfa A4 PDF: kırmızı ÖRNEK uyarısı, başlık, satırlar."""
+    """Tek sayfa A4 PDF: kırmızı ÖRNEK uyarısı, başlık, satırlar.
+
+    Satırda sekme (`\\t`) varsa: soldaki parça x=50'de, sekmeden sonraki
+    parçalar sırayla 300 ve 420 noktalarına SAĞA yaslanır (tutar sütunları).
+    """
+    satirlar = satirlar[:48]
+    govde = "".join(satirlar).replace("\t", "")
+    harfler = _harfler(govde)
+    boyut, y = 10.5, 738.0
     akis = ["BT", "/F2 10 Tf", "0.8 0 0 rg", "50 800 Td", f"({_pdf_metin(UYARI)}) Tj", "ET"]
     akis += ["BT", "/F2 15 Tf", "0 0 0 rg", "50 768 Td", f"({_pdf_metin(baslik)}) Tj", "ET"]
-    akis += ["BT", "/F1 10.5 Tf", "0 0 0 rg", "14 TL", "50 738 Td"]
-    for i, satir in enumerate(satirlar[:48]):
-        akis.append(("" if i == 0 else "T* ") + f"({_pdf_metin(satir)}) Tj")
+    akis += ["BT", f"/F1 {boyut} Tf", "0 0 0 rg"]
+    for satir in satirlar:
+        sol, *sutunlar = satir.split("\t")
+        akis.append(f"1 0 0 1 50 {y:.1f} Tm ({_pdf_metin(sol)}) Tj")
+        for sag, deger in zip((300, 420), sutunlar, strict=False):
+            x = sag - _metin_genisligi(deger, boyut, kalin=False, harfler=harfler)
+            akis.append(f"1 0 0 1 {x:.1f} {y:.1f} Tm ({_pdf_metin(deger)}) Tj")
+        y -= 14
     akis.append("ET")
     icerik = "\n".join(akis).encode("latin-1")
 
-    def font(ad: str) -> bytes:
-        return (
-            f"<< /Type /Font /Subtype /Type1 /BaseFont /{ad} "
-            f"/Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding {_TR_FARKLARI} >> >>"
-        ).encode()
-
+    # 1 katalog, 2 sayfalar, 3 sayfa, 4 içerik, 5.. yazı tipleri
+    f1 = _yazi_tipi_nesneleri(5, kalin=False, metin=govde)
+    f2_no = 5 + len(f1)
+    f2 = _yazi_tipi_nesneleri(f2_no, kalin=True, metin=UYARI + baslik)
     nesneler = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
-        b"/Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
-        font("Helvetica"),
-        font("Helvetica-Bold"),
-        b"<< /Length %d >>\nstream\n" % len(icerik) + icerik + b"\nendstream",
+        b"/Resources << /Font << /F1 5 0 R /F2 %d 0 R >> >> /Contents 4 0 R >>" % f2_no,
+        _akis(b"<< /Length %d >>" % len(icerik), icerik),
+        *f1,
+        *f2,
     ]
     cikti = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     konumlar = []
@@ -129,21 +240,21 @@ def bordro_satirlari(kisi: User, donem: str) -> list[str]:
     yemek = round(r.choice([0, 3_300, 4_400]), 2)
     net = round(brut - sgk - issizlik - gv - dv + yemek, 2)
     return [
-        f"Dönem          : {AYLAR[ay - 1]} {yil}",
-        f"Çalışan        : {kisi.full_name}",
-        f"Sicil no       : {kisi.sicil_no or '-'}",
+        f"Dönem\t{AYLAR[ay - 1]} {yil}",
+        f"Çalışan\t{kisi.full_name}",
+        f"Sicil no\t{kisi.sicil_no or '-'}",
         "",
         "KAZANÇLAR",
-        f"  Brüt ücret (30 gün)              {_tl(brut)}",
-        f"  Yemek yardımı                    {_tl(yemek)}",
+        f"    Brüt ücret (30 gün)\t{_tl(brut)}",
+        f"    Yemek yardımı\t{_tl(yemek)}",
         "",
         "KESİNTİLER",
-        f"  SGK işçi payı (%14)              {_tl(sgk)}",
-        f"  İşsizlik sigortası (%1)          {_tl(issizlik)}",
-        f"  Gelir vergisi                    {_tl(gv)}",
-        f"  Damga vergisi                    {_tl(dv)}",
+        f"    SGK işçi payı (%14)\t{_tl(sgk)}",
+        f"    İşsizlik sigortası (%1)\t{_tl(issizlik)}",
+        f"    Gelir vergisi\t{_tl(gv)}",
+        f"    Damga vergisi\t{_tl(dv)}",
         "",
-        f"NET ÖDENEN                         {_tl(net)}",
+        f"NET ÖDENEN\t{_tl(net)}",
         "",
         "Bu bordro deneme amacıyla üretilmiştir; tutarlar kurgusaldır ve",
         "hiçbir gerçek ücret bilgisini yansıtmaz.",
@@ -200,10 +311,10 @@ SABLONLAR: list[tuple[str, str, str, list[str]]] = [
         "FORM",
         "Personele teslim edilen demirbaş ve ekipman.",
         [
-            "Teslim edilen          Adet   Seri no",
-            "Dizüstü bilgisayar      1     ORNEK-NB-0001",
-            "Cep telefonu            1     ORNEK-TEL-0001",
-            "Ölçü aleti (multimetre) 1     ORNEK-OLC-0001",
+            "Teslim edilen\tAdet\tSeri no",
+            "Dizüstü bilgisayar\t1\tORNEK-NB-0001",
+            "Cep telefonu\t1\tORNEK-TEL-0001",
+            "Ölçü aleti (multimetre)\t1\tORNEK-OLC-0001",
             "",
             "Yukarıdaki malzemeleri sağlam ve eksiksiz teslim aldım. İşten",
             "ayrılışımda eksiksiz iade etmeyi taahhüt ederim.",
