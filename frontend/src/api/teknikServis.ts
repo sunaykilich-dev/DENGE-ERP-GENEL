@@ -159,6 +159,10 @@ export interface IsDetayi extends Omit<IsSatiri, "seriler"> {
   nitelik_sorulur: boolean;
   /** Kurulum/montaj işi değilse null; değilse kapanışı engelleyen eksik alanlar. */
   role_montaj_eksik: string[] | null;
+  /** KARARLAR §12: arıza işinde kütük bilgisi kuralı (FREKANS / SERI), değilse null. */
+  cihaz_bilgisi_kurali: "FREKANS" | "SERI" | null;
+  /** Kural yoksa null; varsa kapanışı engelleyen eksikler. */
+  cihaz_bilgisi_eksik: string[] | null;
   aciklama: string | null;
   seriler: { id: number; seri_no: string; seri_norm: string }[];
   ekip: EkipUyesi[];
@@ -296,7 +300,7 @@ export interface RoleMontajAlani {
   kod: string;
   ad: string;
   grup: string;
-  tip: "metin" | "sayi" | "tarih" | "secim" | "frekans";
+  tip: "metin" | "sayi" | "tarih" | "secim" | "frekans" | "personel";
   secenekler: string[] | null;
   kosul: { alan: string; degerler: string[]; mod?: string[] } | null;
   zorunlu: boolean;
@@ -308,9 +312,34 @@ export interface RoleMontajDurumu {
   kayitli: boolean;
   version: number | null;
   alanlar: RoleMontajAlani[];
-  degerler: Record<string, string | number>;
+  degerler: Record<string, string | number | string[]>;
+  /** "Montajı yapan" çoklu seçiminin seçenekleri (işin ekibi + tayin edilebilir personel). */
+  personel_secenekleri: string[];
   toplam_telsiz: number | null;
   eksikler: string[];
+}
+
+/** Kütükteki cihaz özeti (KARARLAR §12). */
+export interface KutukCihazi {
+  id: number;
+  equipment_type: string;
+  brand: string | null;
+  model: string | null;
+  serial_no: string | null;
+  /** Kayıtlı frekans (Haberleşme): kütükten ya da son röle montaj kaydından. */
+  frekans: Record<string, string> | null;
+}
+
+export interface CihazBilgisiDurumu {
+  kural: "FREKANS" | "SERI" | null;
+  seri_no: string | null;
+  ekipman: KutukCihazi | null;
+  frekans: Record<string, string>;
+  /** KUTUK / ROLE_MONTAJ: kütükten otomatik geldi; TEKNISYEN: sahada girildi. */
+  kaynak: "KUTUK" | "ROLE_MONTAJ" | "TEKNISYEN" | null;
+  version: number | null;
+  eksikler: string[];
+  alanlar: RoleMontajAlani[];
 }
 
 /** Kapanmış işe bağlı yeni iş (M1.7); verilmeyen alan önceki işten gelir. */
@@ -555,6 +584,16 @@ export const teknikServisApi = {
   },
   getir: (id: number) => api.get<IsDetayi>(isYolu(id)),
   roleMontaj: (id: number) => api.get<RoleMontajDurumu>(`${isYolu(id)}/role-montaj`),
+  cihazBilgisi: (id: number) => api.get<CihazBilgisiDurumu>(`${isYolu(id)}/cihaz-bilgisi`),
+  cihazBilgisiKaydet: (
+    id: number,
+    govde: { seri_no?: string | null; frekans?: Record<string, unknown> | null; version: number | null },
+  ) => api.put<CihazBilgisiDurumu>(`${isYolu(id)}/cihaz-bilgisi`, govde),
+  kutukCihazlari: (birim: string, musteriId: number, adresId?: number | null) =>
+    api.get<KutukCihazi[]>(
+      `${TS}/isler/kutuk-cihazlari?birim=${encodeURIComponent(birim)}&musteri_id=${musteriId}` +
+        (adresId ? `&adres_id=${adresId}` : ""),
+    ),
   roleMontajKaydet: (id: number, degerler: Record<string, unknown>, version: number | null) =>
     api.put<RoleMontajDurumu>(`${isYolu(id)}/role-montaj`, { degerler, version }),
   ac: (g: IsGirdisi) => api.post<IsDetayi>(`${TS}/isler`, g),

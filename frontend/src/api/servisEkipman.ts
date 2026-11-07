@@ -106,6 +106,8 @@ export interface EkipmanKarti extends EkipmanSatiri {
   warranty_source: string | null;
   duplicate_ack_reason: string | null;
   notes: string | null;
+  /** Kayıtlı frekans (Haberleşme; KARARLAR §12): role_tx, role_rx, calisma_modu ... */
+  frekans: Record<string, string> | null;
   merged_into_id: number | null;
   sonraki_durumlar: string[];
   aktif_sozlesmeler: SozlesmeBagi[];

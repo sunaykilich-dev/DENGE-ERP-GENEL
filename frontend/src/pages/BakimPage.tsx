@@ -71,6 +71,7 @@ import { CalendarOutlined, FieldTimeOutlined, ToolOutlined, WarningOutlined } fr
 
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import EkYukleyici from "../components/EkYukleyici";
 import KayitGorevleri from "../components/KayitGorevleri";
 import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "../components/MusteriLokasyonSecici";
@@ -424,6 +425,11 @@ function SozlesmePenceresi({
     },
   });
 
+  // Şirket ayrımı (KARARLAR §12.6): yalnız etkin şirketin (ve kapsamın) birimleri.
+  const { menuBirimleri } = useSirket();
+  const birimSecenekleri = BIRIM_KODLARI.filter((b) => !menuBirimleri || menuBirimleri.has(b));
+  const varsayilanBirim = birimSecenekleri.includes("GUVENLIK") ? "GUVENLIK" : birimSecenekleri[0];
+
   const gonder = (v: Record<string, unknown>) => {
     const secim = v.musteri as MusteriLokasyonSecimi | undefined;
     const [bas, bit] = (v.donem as [dayjs.Dayjs, dayjs.Dayjs] | undefined) ?? [];
@@ -472,11 +478,11 @@ function SozlesmePenceresi({
                 fixed_months: mevcut.fixed_months ?? [],
                 notes: mevcut.notes,
               }
-            : { birim: "GUVENLIK", annual_frequency: 2, xray: 0, kapi: 0 }
+            : { birim: varsayilanBirim, annual_frequency: 2, xray: 0, kapi: 0 }
         }
       >
         <Form.Item name="birim" label="Birim" rules={[{ required: true }]}>
-          <Select options={BIRIM_KODLARI.map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] }))} />
+          <Select options={birimSecenekleri.map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] }))} />
         </Form.Item>
         <Form.Item
           name="musteri"

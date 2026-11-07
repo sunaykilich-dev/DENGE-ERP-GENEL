@@ -125,6 +125,8 @@ class EkipmanPatch(BaseModel):
     warranty_source: str | None = None
     duplicate_ack_reason: str | None = Field(default=None, max_length=1000)
     notes: str | None = Field(default=None, max_length=4000)
+    # Kayıtlı frekans (yalnız Haberleşme; alanlar `cihaz_bilgisi.FREKANS_ALANLARI`).
+    frekans: dict[str, Any] | None = None
     version: int
 
     model_config = {"json_schema_extra": {"examples": [{"version": 1, "zone": "B Kapısı Giriş"}]}}
@@ -219,6 +221,7 @@ class EkipmanKarti(EkipmanSatiri):
     warranty_source: str | None
     duplicate_ack_reason: str | None
     notes: str | None
+    frekans: dict[str, Any] | None = None
     merged_into_id: int | None
     sonraki_durumlar: list[str]
     aktif_sozlesmeler: list[SozlesmeBagi]
@@ -363,6 +366,7 @@ async def _kart(
         warranty_source=e.warranty_source,
         duplicate_ack_reason=e.duplicate_ack_reason,
         notes=e.notes,
+        frekans=e.frekans,
         merged_into_id=e.merged_into_id,
         sonraki_durumlar=sorted(SERVIS_EKIPMANI.sonraki(e.lifecycle_status)),
         aktif_sozlesmeler=[SozlesmeBagi(**s) for s in sozlesmeler],

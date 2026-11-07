@@ -337,7 +337,7 @@ async def test_sonuc_ilk_tamamlandida_donar_bagli_is_silmez(client, db, mudur) -
 async def test_asilmis_is_gecikme_nedenisiz_kapanmaz(client, db, mudur) -> None:
     """Kabul (4): hedef geçmiş işte TAMAMLANDI 200, gecikme nedenisiz KAPATILDI 409."""
     await sla_yururlukte(db)
-    so = await is_ac(client, mudur, oncelik="KRITIK")
+    so = await is_ac(client, mudur, oncelik="KRITIK", seriler=["SLA-1"])
     await ileri(client, hours=13)
     assert (await sla_karti(client, so["id"]))["sla"]["durum"] == "ASILDI"
     await tamamla(client, so["id"])

@@ -139,7 +139,7 @@ async def test_seri_degisikligi_eski_satiri_pasifler(
     from app.models import ServiceOrderSerial
 
     tek = await teknisyen(birimli_kullanici_ac, "tek_m4")
-    so = await servis_isi_ac(atananlar=[tek])
+    so = await servis_isi_ac(atananlar=[tek], seri=None)
     await giris(client, "tek_m4")  # teknisyen saha serisi girebilir
     r = await client.put(f"/api/teknik-servis/isler/{so.id}/seriler", json={"seriler": ["S-1"]})
     assert r.status_code == 200

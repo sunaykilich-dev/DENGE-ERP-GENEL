@@ -17,15 +17,18 @@ import { useNavigate } from "react-router-dom";
 
 import AltEylemCubugu, { type FioriEylem } from "./AltEylemCubugu";
 import DurumCubugu, { type DurumCubuguProps } from "./DurumCubugu";
-import KategoriSeridi, { type FioriKategori } from "./KategoriSeridi";
+import KategoriSeridi, { type FioriKategori, type KategoriAyari } from "./KategoriSeridi";
 import "./fiori.css";
 
 export type { FioriEylem } from "./AltEylemCubugu";
-export type { FioriKategori } from "./KategoriSeridi";
+export type { FioriKategori, KategoriAyari } from "./KategoriSeridi";
 
 export interface ListeRaporuProps<T extends object> {
   kategoriler?: FioriKategori[];
-  seciliKategori?: string;
+  /** Tek kod ya da (gruplu şeritte) birden çok seçili sekme. */
+  seciliKategori?: string | string[];
+  /** Kullanıcının görünecek sekmeleri seçmesi (dişli). */
+  kategoriAyari?: KategoriAyari;
   onKategori?: (kod: string) => void;
   /** Sunucunun `X-Toplam-Kayit` değeri. */
   kayitSayisi?: number;
@@ -60,6 +63,7 @@ export interface ListeRaporuProps<T extends object> {
 export default function ListeRaporu<T extends object>({
   kategoriler,
   seciliKategori,
+  kategoriAyari,
   onKategori,
   kayitSayisi,
   ustSag,
@@ -99,7 +103,12 @@ export default function ListeRaporu<T extends object>({
   return (
     <div className="fl-rapor">
       {kategoriler && kategoriler.length > 0 && onKategori && (
-        <KategoriSeridi kategoriler={kategoriler} secili={seciliKategori} onSec={onKategori} />
+        <KategoriSeridi
+          kategoriler={kategoriler}
+          secili={seciliKategori}
+          onSec={onKategori}
+          ayar={kategoriAyari}
+        />
       )}
       <div className="fl-ust">
         <span className="fl-kayit-sayisi">

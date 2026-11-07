@@ -69,6 +69,7 @@ from app.services.pdf import PdfUretilemedi
 from app.services.teknik_servis import (
     atama,
     bekletme,
+    cihaz_bilgisi,
     gecmis,
     is_emirleri,
     kapsam,
@@ -654,6 +655,8 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "nitelikler": so.nitelikler,
             "nitelik_sorulur": role_montaj.nitelik_sorulur_mu(so.birim, so.tur),
             "role_montaj_eksik": await role_montaj.eksikler(db, so),
+            "cihaz_bilgisi_kurali": cihaz_bilgisi.kural(so),
+            "cihaz_bilgisi_eksik": await cihaz_bilgisi.eksikler(db, so),
             "aciklama": so.aciklama,
             "seriler": [
                 {"id": x.id, "seri_no": x.seri_no, "seri_norm": x.seri_norm}
@@ -890,6 +893,21 @@ async def _acilis_denetimi(db, so: ServiceOrder, user: User, request: Request, e
 
 
 # --- Form verileri, mükerrer kontrolü ------------------------------------------------
+
+
+@router.get("/isler/kutuk-cihazlari", response_model=None)
+async def kutuk_cihazlari(
+    db: DbDep,
+    user: Okuyucu,
+    birim: str = Query(max_length=20),
+    musteri_id: int = Query(),
+    adres_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """İş açma formu: müşterinin (tesisin) kütükteki cihazları ve kayıtlı
+    frekansları (KARARLAR §12). Kapsam ekipman listesiyle aynı."""
+    return await cihaz_bilgisi.musteri_cihazlari(
+        db, user, birim=birim, musteri_id=musteri_id, adres_id=adres_id
+    )
 
 
 @router.get("/isler/form-verileri", response_model=None)
@@ -1844,7 +1862,7 @@ async def role_montaj_getir(so_id: int, db: DbDep, user: Okuyucu) -> dict[str, A
     """Haberleşme kurulum/montaj işinin röle montaj bilgileri: alan tanımları,
     değerler (kayıt yoksa işten öneriler), kapanışı engelleyen eksikler."""
     so = await _kapsamli_is(db, so_id, user)
-    cikti = await role_montaj.durum(db, so)
+    cikti = await role_montaj.durum(db, so, user)
     if not _irtibat_tam(user):
         tel = cikti["degerler"].get("sorumlu_telefon")
         if tel:
@@ -1879,7 +1897,60 @@ async def role_montaj_kaydet(
         ip=client_ip(request),
     )
     await db.commit()
-    return await role_montaj.durum(db, so)
+    return await role_montaj.durum(db, so, user)
+
+
+class CihazBilgisiIn(BaseModel):
+    """Teknisyen girişi: Güvenlik arızasında seri no; Haberleşme arızasında
+    frekans alanları (+ işte seri yoksa seri no). İlk kayıtta `version` boş."""
+
+    seri_no: str | None = Field(default=None, max_length=200)
+    frekans: dict[str, Any] | None = None
+    version: int | None = None
+
+
+@router.get("/isler/{so_id}/cihaz-bilgisi", response_model=None)
+async def cihaz_bilgisi_getir(so_id: int, db: DbDep, user: Okuyucu) -> dict[str, Any]:
+    """Arıza işinin kütükten gelen / girilen cihaz bilgisi ve kapanış eksikleri."""
+    so = await _kapsamli_is(db, so_id, user)
+    return await cihaz_bilgisi.durum(db, so)
+
+
+@router.put("/isler/{so_id}/cihaz-bilgisi", response_model=None)
+async def cihaz_bilgisi_kaydet(
+    so_id: int,
+    payload: CihazBilgisiIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yazici,
+) -> dict[str, Any]:
+    """Kütükte olmayan seri/frekansı teknisyen girer; eksik yalnız kapanışı engeller."""
+    so = await _kapsamli_is(db, so_id, user)
+    try:
+        await cihaz_bilgisi.kaydet(
+            db,
+            so,
+            seri_no=payload.seri_no,
+            frekans=payload.frekans,
+            version=payload.version,
+            user=user,
+            clock=clock,
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    cikti = await cihaz_bilgisi.durum(db, so)
+    await audit.log(
+        db,
+        "service_frekans_bilgisi",
+        "kaydet",
+        entity_id=so.id,
+        new_value={"kural": cikti["kural"], "seri_no": cikti["seri_no"], **cikti["frekans"]},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return cikti
 
 
 @router.post("/isler/{so_id}/kalite-reddi", response_model=None)

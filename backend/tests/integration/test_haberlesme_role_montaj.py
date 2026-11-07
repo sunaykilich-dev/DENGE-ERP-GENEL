@@ -88,6 +88,17 @@ def test_girdi_bicim_dogrulamasi() -> None:
     assert role_montaj.temizle({"role_tx": "427,1125", "anten_tipi": " "}) == {
         "role_tx": "427.1125"
     }
+    # Montajı yapan: çoklu seçim (ad listesi); eski virgüllü metin listeye döner.
+    assert role_montaj.temizle({"montaj_yapan": ["Ali Veli", "Can Er", "Ali Veli"]}) == {
+        "montaj_yapan": ["Ali Veli", "Can Er"]
+    }
+    assert role_montaj.temizle({"montaj_yapan": "Ali Veli, Can Er"}) == {
+        "montaj_yapan": ["Ali Veli", "Can Er"]
+    }
+    assert role_montaj.temizle({"montaj_yapan": []}) == {}
+    assert "Montajı yapan teknik personel" in role_montaj.eksik_alanlar({"montaj_yapan": []})
+    with pytest.raises(ServisGirdiHatasi):
+        role_montaj.temizle({"montaj_yapan": [f"Kişi {i}" for i in range(21)]})
 
 
 async def test_haberlesme_saha_isinde_nitelik_zorunlu_ve_coktan_secmeli(
@@ -132,6 +143,7 @@ async def test_kurulum_isi_montaj_bilgisi_eksikken_kapanmaz(
     d = r.json()
     assert d["uygulanir"] is True and d["kayitli"] is False
     assert d["degerler"]["firma_adi"]  # işin müşterisinden önerildi
+    assert isinstance(d["personel_secenekleri"], list)
 
     r = await client.post(f"{IS}/{so.id}/kapat", json={})
     assert r.status_code == 409 and "röle montaj" in r.json()["detail"]
@@ -151,6 +163,8 @@ async def test_kurulum_isi_montaj_bilgisi_eksikken_kapanmaz(
     r = await client.put(f"{IS}/{so.id}/role-montaj", json={"degerler": TAM, "version": surum})
     assert r.status_code == 200 and r.json()["eksikler"] == []
     assert r.json()["toplam_telsiz"] == 11
+    assert r.json()["degerler"]["montaj_yapan"] == ["Teknisyen"]
+    assert "Teknisyen" in r.json()["personel_secenekleri"]
     r = await client.post(f"{IS}/{so.id}/kapat", json={})
     assert r.status_code == 200, r.text
     assert (await tazele(db, so)).status == "KAPATILDI"

@@ -1224,9 +1224,42 @@ class ServiceRoleMontaj(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixi
     )
 
 
+FREKANS_KAYNAKLARI = ("KUTUK", "ROLE_MONTAJ", "TEKNISYEN")
+
+
+class ServiceFrekansBilgisi(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin):
+    """Haberleşme arıza işinin kayıtlı frekansı (KARARLAR §12).
+
+    İş açılırken cihazın kütük kaydından (`service_equipment.frekans`) ya da
+    o seri için girilmiş son röle montaj bilgisinden KOPYALANIR (`kaynak`);
+    ikisi de yoksa teknisyen girer. Kopya tutulur: kütük sonradan değişse de
+    işte o gün bilinen frekans kalır. TX/RX yokken iş KAPATILAMAZ.
+    """
+
+    __tablename__ = "service_frekans_bilgisi"
+    __table_args__ = (
+        UniqueConstraint("service_order_id", name="uq_sfb_is"),
+        CheckConstraint("kaynak IN ('KUTUK', 'ROLE_MONTAJ', 'TEKNISYEN')", name="ck_sfb_kaynak"),
+    )
+
+    service_order_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("service_orders.id", ondelete="RESTRICT")
+    )
+    seri_no: Mapped[str | None] = mapped_column(String(200))
+    equipment_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("service_equipment.id", ondelete="SET NULL")
+    )
+    kaynak: Mapped[str] = mapped_column(String(20))
+    frekans: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
+
+
 __all__ = [
     "HABERLESME_NITELIKLERI",
     "ServiceRoleMontaj",
+    "ServiceFrekansBilgisi",
+    "FREKANS_KAYNAKLARI",
     "ATAMA_ROLLERI",
     "SORUMLU_ROLLERI",
     "BIRIM_KODLARI",
