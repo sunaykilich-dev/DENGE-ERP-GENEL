@@ -12,8 +12,8 @@ BEDEL / GERİ ALMA: downgrade dört tabloyu düşürür; gönderilmiş bordrolar
 imza kanıtları KAYBOLUR (dosyalar depoda kalır). Canlıda geri almadan önce
 `ik_belge_olaylari` dışa aktarılmalıdır.
 
-Revision ID: f8a000000001
-Revises: f7a000000001
+Revision ID: faa000000001
+Revises: f9a000000001
 Create Date: 2026-11-06
 
 """
@@ -24,8 +24,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "f8a000000001"
-down_revision: str | None = "f7a000000001"
+revision: str = "faa000000001"
+down_revision: str | None = "f9a000000001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

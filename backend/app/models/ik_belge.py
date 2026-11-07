@@ -13,7 +13,7 @@ Tablolar:
 - `ik_belgeler`: kişi başına belge ve güncel durumu.
 - `ik_belge_olaylari`: SADECE EKLEME olay zinciri (görüldü, onay, itiraz...).
   Her satır önceki satırın özetini taşır (`onceki_ozet` → `kayit_ozeti`);
-  veritabanı tetikleyicisi UPDATE/DELETE'i reddeder (migration f8a000000001).
+  veritabanı tetikleyicisi UPDATE/DELETE'i reddeder (migration faa000000001).
   Böylece imza kaydı sonradan değiştirilirse zincir kırılır ve görünür.
 
 Dosyalar `services/storage.py` deposunda (içerik adresli, sha256). Belgenin
