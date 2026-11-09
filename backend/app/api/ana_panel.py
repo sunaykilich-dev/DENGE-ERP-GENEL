@@ -1,6 +1,6 @@
 """Ana Panel ucu (KARARLAR 2026-11-04 §4): `GET /api/teknik-servis/ana-panel`.
 
-İzin `servis.gor`. İş kuralı ve "sayı = liste" sözleşmesi
+İzin `servis.gor` + `takip.gor` (teknisyende yok). İş kuralı ve "sayı = liste" sözleşmesi
 `services/teknik_servis/ana_panel.py`'dedir; bu dosya yalnız sorgu
 parametrelerini doğrular ve yanıt şemasını (Türkçe alan adları) tanımlar.
 Yanıtta para/maliyet alanı YOKTUR (şema bunu da sabitler: yeni alan ancak
@@ -25,7 +25,8 @@ from app.services.teknik_servis.kancalar import ServisGirdiHatasi
 
 router = APIRouter(prefix="/api/teknik-servis", tags=["ana-panel"])
 
-Okuyucu = Annotated[User, Depends(require_permission("servis.gor"))]
+# Ekip yönetimi ekranı (2026-11-09): saha teknisyeninde `takip.gor` yok.
+Okuyucu = Annotated[User, Depends(require_permission("servis.gor", "takip.gor"))]
 
 
 # --- Yanıt şeması ----------------------------------------------------------------------------

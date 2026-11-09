@@ -53,7 +53,9 @@ export interface KpiDegeri {
 
 /** Görünür kutucukların KPI'ları; yalnız gereken uç, yalnız yetkiliyse çağrılır. */
 function useKpiler(uygulamalar: Uygulama[]): (u: Uygulama) => KpiDegeri | null {
-  const panelGerekli = uygulamalar.some((u) => u.kpi?.tur === "panel");
+  const { yetkili } = useAuth();
+  // Panel ucu ekip ekranıdır (`takip.gor`); saha teknisyeninde kutucuk sayısız çizilir.
+  const panelGerekli = yetkili("takip.gor") && uygulamalar.some((u) => u.kpi?.tur === "panel");
   const benimGerekli = uygulamalar.some((u) => u.kpi?.tur === "benim");
   const uyariGerekli = uygulamalar.some((u) => u.kpi?.tur === "uyari");
 

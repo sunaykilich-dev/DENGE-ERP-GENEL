@@ -80,7 +80,10 @@ class Bilesen:
     veri: str = "servis"
 
 
-_SERVIS = ("servis.gor",)
+# Servis veri ucu (`api/ana_panel.py`) `servis.gor` + `takip.gor` ister
+# (2026-11-09: saha teknisyeninde `takip.gor` yok). Bileşen izni uçla aynı
+# olmalı; yoksa servis.gor'lu satışçı panelde 403 alırdı.
+_SERVIS = ("servis.gor", "takip.gor")
 _TS = "Teknik Servis"
 
 BILESENLER: tuple[Bilesen, ...] = (
@@ -95,7 +98,7 @@ BILESENLER: tuple[Bilesen, ...] = (
     Bilesen("kpi_bekleyen_onay", "Bekleyen Onaylar", "Şef kapanışı ya da kalite onayı bekleyen işler.", _TS, "gosterge", _SERVIS),  # noqa: E501
     # --- Teknik servis kartları ---
     Bilesen("birim_ozeti", "Canlı Operasyon Özeti", "Birim bazında açık, sahada, atölyede ve tamamlanan işler.", _TS, "kart", _SERVIS, GENIS),  # noqa: E501
-    Bilesen("ekip_durumu", "Canlı Ekip Durumu", "Kim sahada, kim müsait; Operasyon Merkezi yetkisi gerekir.", _TS, "kart", ("servis.gor", "operasyon.gor")),  # noqa: E501
+    Bilesen("ekip_durumu", "Canlı Ekip Durumu", "Kim sahada, kim müsait; Operasyon Merkezi yetkisi gerekir.", _TS, "kart", ("servis.gor", "takip.gor", "operasyon.gor")),  # noqa: E501
     Bilesen("aktif_isler", "Aktif İşler / Kim Ne Yapıyor", "Son güncellenen açık işler, tayinli ekip ve SLA.", _TS, "kart", _SERVIS, GENIS),  # noqa: E501
     Bilesen("bekleyen_aksiyonlar", "Birimler Arası Bekleyen Aksiyonlar", "Başka birimin aksiyonunu bekleyen işler.", _TS, "kart", _SERVIS),  # noqa: E501
     Bilesen("grafik_durum", "Duruma Göre İşler", "Açık işlerin durum dağılımı.", _TS, "kart", _SERVIS),  # noqa: E501

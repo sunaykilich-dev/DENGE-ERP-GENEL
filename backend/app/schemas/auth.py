@@ -17,6 +17,8 @@ class RoleOut(BaseModel):
     scope: str
     # G3.8: rol yalnız ofis ağından girer (ayar `ofis_ag_listesi`).
     yalniz_ofis: bool = False
+    version: int = 1
+    ozellestirildi: bool = False
 
     model_config = {"from_attributes": True}
 

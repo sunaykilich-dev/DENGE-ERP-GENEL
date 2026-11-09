@@ -70,23 +70,30 @@ def test_suz_izinsiz_bilinmeyen_ve_tekrari_dusurur() -> None:
         {"kod": "grafik_durum", "boyut": "DEV", "gorunur": False},  # bozuk boyut
         "bozuk",
     ]
-    assert d.suz(kayit, _izin("servis.gor")) == [
+    assert d.suz(kayit, _izin("servis.gor", "takip.gor")) == [
         {"kod": "aktif_isler", "boyut": "DAR", "gorunur": True},
         {"kod": "grafik_durum", "boyut": "DAR", "gorunur": False},
     ]
 
 
 def test_sistem_varsayilani_izinle_suzulur_bos_kalirsa_izinliler_gelir() -> None:
+    servis_sefi = d.sistem_varsayilani(_izin("servis.gor", "takip.gor"))
+    assert "ekip_durumu" not in {o["kod"] for o in servis_sefi}
+    assert len(servis_sefi) == len(d.SISTEM_VARSAYILANI) - 1
+    # Saha teknisyeni (servis.gor, takip.gor yok): servis bileşeni yok (uç 403).
     teknisyen = d.sistem_varsayilani(_izin("servis.gor"))
-    assert "ekip_durumu" not in {o["kod"] for o in teknisyen}
-    assert len(teknisyen) == len(d.SISTEM_VARSAYILANI) - 1
+    assert teknisyen == []
+    # servis.gor + teklif.gor (satış temsilcisi) yalnız teklif bileşenini görür.
+    assert d.sistem_varsayilani(_izin("servis.gor", "teklif.gor")) == [
+        {"kod": "tekliflerim", "boyut": "DAR", "gorunur": True}
+    ]
     satis = d.sistem_varsayilani(_izin("teklif.gor"))
     assert satis == [{"kod": "tekliflerim", "boyut": "DAR", "gorunur": True}]
     assert d.sistem_varsayilani(_izin("hat.gor")) == []
 
 
 def test_dogrula_hatalari() -> None:
-    izin = _izin("servis.gor")
+    izin = _izin("servis.gor", "takip.gor")
     with pytest.raises(d.DuzenHatasi):
         d.dogrula([{"kod": "yok", "boyut": "DAR"}], izin, kime="yetkiniz")
     with pytest.raises(d.DuzenHatasi):

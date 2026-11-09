@@ -15,6 +15,7 @@ import { Alert, App, Button, Form, Input, InputNumber, Modal, Select, Space } fr
 import { useEffect, useMemo, useState } from "react";
 
 import { type Depo, olcuBirimiAdi, parcaApi, parcaHatasi, type SatirGirdisi } from "../api/yedekParca";
+import { useAuth } from "../auth/AuthContext";
 
 export type ParcaHareketTuru = "GIRIS" | "ZAYI" | "TRANSFER" | "CIKIS" | "IADE";
 
@@ -117,9 +118,17 @@ export default function ParcaHareketPenceresi({
     enabled: tur !== null,
   });
   const isTuru = tur === "CIKIS" || tur === "IADE";
+  // Teknisyen (kendi işleri kapsamı) işe yalnız KENDİ ARAÇ deposundan çıkar;
+  // birim deposundan parça amir onaylı talep ile gelir (sunucu 403).
+  const { kullanici } = useAuth();
+  const teknisyen = kullanici?.role.scope === "KENDI_ISLERI";
   const uygunDepolar = useMemo(
-    () => (depolar.data ?? []).filter((d: Depo) => !isTuru || !birim || d.birim === birim),
-    [depolar.data, isTuru, birim],
+    () =>
+      (depolar.data ?? []).filter(
+        (d: Depo) =>
+          (!isTuru || !birim || d.birim === birim) && !(tur === "CIKIS" && teknisyen && !d.kendi_araci),
+      ),
+    [depolar.data, isTuru, birim, tur, teknisyen],
   );
   const depoSecenekleri = useMemo(
     () =>

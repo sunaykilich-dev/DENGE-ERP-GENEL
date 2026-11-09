@@ -407,8 +407,15 @@ STOK_SAYIM = StateMachine(
 # sonraki çıkışlarla.
 PARCA_TALEBI = StateMachine(
     ad="Parça Talebi",
-    baslangiclar=frozenset({"ACIK"}),
-    gecisler=_m(ACIK=("KARSILANDI", "IPTAL"), KARSILANDI=(), IPTAL=()),
+    # Amir onayı (2026-11-09): onay yetkilisinin kendi talebi doğrudan ACIK.
+    baslangiclar=frozenset({"ONAY_BEKLIYOR", "ACIK"}),
+    gecisler=_m(
+        ONAY_BEKLIYOR=("ACIK", "REDDEDILDI", "IPTAL"),
+        ACIK=("KARSILANDI", "IPTAL"),
+        KARSILANDI=(),
+        REDDEDILDI=(),
+        IPTAL=(),
+    ),
 )
 
 # --- Kiralık depo sayımı (E06-22 b, Dalga 3) --------------------------------------------

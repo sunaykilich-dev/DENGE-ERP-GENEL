@@ -41,6 +41,11 @@ from app.services.teknik_servis.yerel_zaman import yerel_bugun
 router = APIRouter(prefix="/api/teknik-servis/planlama", tags=["teknik-servis-planlama"])
 
 Okuyucu = Annotated[User, Depends(require_permission("servis.gor"))]
+# Ekip yönetimi ekranları (2026-11-09): saha teknisyeninde `takip.gor` yok.
+TakipOkuyucu = Annotated[User, Depends(require_permission("servis.gor", "takip.gor"))]
+TakipAktarici = Annotated[
+    User, Depends(require_permission("servis.gor", "takip.gor", "servis_rapor.disaaktar"))
+]
 Planlayici = Annotated[User, Depends(require_permission("servis.planla"))]
 AracYazici = Annotated[User, Depends(require_permission("servis.arac_yaz"))]
 Aktarici = Annotated[User, Depends(require_permission("servis.gor", "servis_rapor.disaaktar"))]
@@ -330,7 +335,7 @@ async def _arac_cikti(db, arac: ServiceVehicle) -> dict[str, Any]:
 async def takvim_getir(
     db: DbDep,
     clock: ClockDep,
-    user: Okuyucu,
+    user: TakipOkuyucu,
     baslangic: date,
     bitis: date,
     birim: str | None = None,
@@ -348,7 +353,7 @@ async def havuz(
     response: Response,
     db: DbDep,
     clock: ClockDep,
-    user: Okuyucu,
+    user: TakipOkuyucu,
     gruplama: str = "lokasyon",
     birim: str | None = None,
     tur: str | None = None,
@@ -379,7 +384,7 @@ async def havuz(
 async def kpi(
     db: DbDep,
     clock: ClockDep,
-    user: Okuyucu,
+    user: TakipOkuyucu,
     gun: date | None = None,
     birim: str | None = None,
     tur: str | None = None,
@@ -398,7 +403,7 @@ async def kpi_liste(
     response: Response,
     db: DbDep,
     clock: ClockDep,
-    user: Okuyucu,
+    user: TakipOkuyucu,
     kod: str = Query(max_length=40),
     gun: date | None = None,
     birim: str | None = None,
@@ -429,7 +434,7 @@ async def takvim_excel(
     request: Request,
     db: DbDep,
     clock: ClockDep,
-    user: Aktarici,
+    user: TakipAktarici,
     baslangic: str | None = None,
     bitis: str | None = None,
     birim: str | None = None,
@@ -621,7 +626,7 @@ async def yeniden_plan(payload: TopluPlanIn, db: DbDep, clock: ClockDep, user: P
 @router.get("/araclar", response_model=None)
 async def araclar(
     db: DbDep,
-    user: Okuyucu,
+    user: TakipOkuyucu,
     birim: str | None = None,
     aktif: bool | None = None,
 ) -> Any:

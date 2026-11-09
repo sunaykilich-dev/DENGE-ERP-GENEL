@@ -27,6 +27,8 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Radio,
+  Select,
   Space,
   Table,
   Tag,
@@ -41,13 +43,21 @@ import {
   parcaApi,
   olcuBirimiAdi,
   parcaHatasi,
+  SOKULEN_KARARLARI,
+  type Sokulen,
   TALEP_DURUM_ADLARI,
   type Talep,
 } from "../api/yedekParca";
 import { useAuth } from "../auth/AuthContext";
 import ParcaHareketPenceresi, { type ParcaHareketTuru, ParcaSecici } from "./ParcaHareketPenceresi";
 
-const TALEP_RENGI: Record<string, string> = { ACIK: "gold", KARSILANDI: "green", IPTAL: "default" };
+const TALEP_RENGI: Record<string, string> = {
+  ONAY_BEKLIYOR: "orange",
+  ACIK: "gold",
+  KARSILANDI: "green",
+  REDDEDILDI: "red",
+  IPTAL: "default",
+};
 const para = (v: number | null | undefined) =>
   v == null ? "—" : v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const zaman = (v: string | null) => (v ? dayjs(v).format("DD.MM.YYYY HH:mm") : "—");
@@ -70,6 +80,20 @@ export default function ServisParcalari({
   const qc = useQueryClient();
   const [pencere, setPencere] = useState<ParcaHareketTuru | null>(null);
   const [talepAcik, setTalepAcik] = useState(false);
+  const [sokulenAcik, setSokulenAcik] = useState(false);
+  const sokulenler = useQuery({
+    queryKey: ["parca", "sokulen", soId],
+    queryFn: () => parcaApi.sokulenler(soId),
+    enabled: yetkili("parca.gor"),
+  });
+  const sokulenTeslim = useMutation({
+    mutationFn: (id: number) => parcaApi.sokulenTeslim(id),
+    onSuccess: async () => {
+      message.success("Sökülen parça teslim alındı");
+      await qc.invalidateQueries({ queryKey: ["parca"] });
+    },
+    onError: (e) => message.error(parcaHatasi(e).mesaj),
+  });
 
   const sorgu = useQuery({
     queryKey: ["parca", "is", soId],
@@ -182,6 +206,16 @@ export default function ServisParcalari({
         ]
       : []),
     { title: "Kullanıcı", dataIndex: "kullanici", key: "k" },
+    {
+      title: "Fiş",
+      key: "fis",
+      render: (_: unknown, h: IsParcaHareketi) =>
+        h.tur === "TERS_KAYIT" ? null : (
+          <a href={parcaApi.fisYolu(h.id)} target="_blank" rel="noreferrer">
+            PDF
+          </a>
+        ),
+    },
     ...(yonetebilir
       ? [
           {
@@ -227,6 +261,9 @@ export default function ServisParcalari({
                 Parça talebi
               </Button>
             )}
+            <Button size="small" onClick={() => setSokulenAcik(true)}>
+              Sökülen parça
+            </Button>
           </Space>
         ) : null
       }
@@ -268,7 +305,9 @@ export default function ServisParcalari({
                   render: (_, t) => (
                     <Space size={4}>
                       <Tag color={TALEP_RENGI[t.durum]}>{TALEP_DURUM_ADLARI[t.durum] ?? t.durum}</Tag>
-                      {t.beklemeye_bagli && t.durum === "ACIK" && <Tag color="blue">İş bekliyor</Tag>}
+                      {t.beklemeye_bagli && (t.durum === "ACIK" || t.durum === "ONAY_BEKLIYOR") && (
+                        <Tag color="blue">İş bekliyor</Tag>
+                      )}
                     </Space>
                   ),
                 },
@@ -279,7 +318,7 @@ export default function ServisParcalari({
                         title: "",
                         key: "i",
                         render: (_: unknown, t: Talep) =>
-                          t.durum === "ACIK" ? (
+                          t.durum === "ACIK" || t.durum === "ONAY_BEKLIYOR" ? (
                             <Popconfirm
                               title="Talep iptal edilsin mi?"
                               okText="İptal et"
@@ -291,11 +330,48 @@ export default function ServisParcalari({
                               </Button>
                             </Popconfirm>
                           ) : (
-                            t.iptal_nedeni ?? null
+                            (t.red_nedeni ?? t.iptal_nedeni ?? null)
                           ),
                       },
                     ]
                   : []),
+              ]}
+            />
+          )}
+          {(sokulenler.data ?? []).length > 0 && (
+            <Table<Sokulen>
+              size="small"
+              rowKey="id"
+              pagination={false}
+              dataSource={sokulenler.data}
+              scroll={{ x: true }}
+              title={() => "Sökülen parçalar"}
+              columns={[
+                { title: "Parça", key: "p", render: (_, r) => (r.kod ? `${r.kod} — ${r.ad}` : r.tanim) },
+                { title: "Seri No", key: "s", render: (_, r) => <span className="mono">{r.seri_no ?? "—"}</span> },
+                { title: "Adet", dataIndex: "adet", key: "a", align: "right" },
+                {
+                  title: "Karar",
+                  key: "k",
+                  render: (_, r) => (
+                    <Space size={4}>
+                      <Tag color={r.karar === "MUSTERIDE" ? "default" : r.karar === "IADE_HURDA" ? "red" : "blue"}>
+                        {r.karar_adi}
+                      </Tag>
+                      {r.depo_adi && <span>{r.depo_adi}</span>}
+                      {r.karar !== "MUSTERIDE" &&
+                        (r.teslim_alindi ? (
+                          <Tag color="green">Depo teslim aldı</Tag>
+                        ) : yonetebilir ? (
+                          <Button size="small" type="link" onClick={() => sokulenTeslim.mutate(r.id)}>
+                            Teslim al
+                          </Button>
+                        ) : (
+                          <Tag>Depoda bekleniyor</Tag>
+                        ))}
+                    </Space>
+                  ),
+                },
               ]}
             />
           )}
@@ -330,22 +406,172 @@ export default function ServisParcalari({
         birim={veri?.is_birimi}
         parcaSecenekleri={iadeSecenekleri}
       />
-      <TalepPenceresi acik={talepAcik} soId={soId} onKapat={() => setTalepAcik(false)} />
+      <TalepPenceresi acik={talepAcik} soId={soId} birim={veri?.is_birimi} onKapat={() => setTalepAcik(false)} />
+      <SokulenPenceresi
+        acik={sokulenAcik}
+        soId={soId}
+        birim={veri?.is_birimi}
+        onKapat={() => setSokulenAcik(false)}
+      />
     </Card>
   );
 }
 
-/** Parça talebi penceresi (iş ayrıntısı ve mobil sonuç akışı). */
-export function TalepPenceresi({ acik, soId, onKapat }: { acik: boolean; soId: number; onKapat: () => void }) {
+/**
+ * S5.2 sökülen parça penceresi: parça (katalogdan) ya da serbest tanım, seri no,
+ * adet ve ZORUNLU karar (depoya iade tamir/hurda ya da müşteride kaldı).
+ * İadede işin biriminin deposu seçilir (tek depo varsa kendiliğinden).
+ */
+export function SokulenPenceresi({
+  acik,
+  soId,
+  birim,
+  onKapat,
+}: {
+  acik: boolean;
+  soId: number;
+  birim?: string | null;
+  onKapat: () => void;
+}) {
   const { message } = App.useApp();
   const qc = useQueryClient();
-  const [form] = Form.useForm<{ product_id: number; adet: number; notes?: string; isi_beklet?: boolean }>();
+  const [form] = Form.useForm<{
+    product_id?: number;
+    tanim?: string;
+    seri_no?: string;
+    adet: number;
+    karar?: string;
+    depo_id?: number;
+    notes?: string;
+  }>();
   const [hata, setHata] = useState<string | null>(null);
+  const karar = Form.useWatch("karar", form);
+  const depolar = useQuery({
+    queryKey: ["parca", "depolar", false],
+    queryFn: () => parcaApi.depolar(false),
+    enabled: acik,
+  });
+  const iadeDepolari = (depolar.data ?? []).filter(
+    (d) => d.location_type !== "TEKNISYEN" && (!birim || d.birim === birim),
+  );
   const kaydet = useMutation({
-    mutationFn: (d: { product_id: number; adet: number; notes?: string; isi_beklet?: boolean }) =>
-      parcaApi.talepAc({ service_order_id: soId, ...d, notes: d.notes?.trim() || null }),
+    mutationFn: (d: {
+      product_id?: number;
+      tanim?: string;
+      seri_no?: string;
+      adet: number;
+      karar?: string;
+      depo_id?: number;
+      notes?: string;
+    }) =>
+      parcaApi.sokulenEkle({
+        service_order_id: soId,
+        karar: d.karar!,
+        adet: d.adet,
+        product_id: d.product_id ?? null,
+        tanim: d.tanim?.trim() || null,
+        seri_no: d.seri_no?.trim() || null,
+        depo_id:
+          d.karar === "MUSTERIDE" ? null : (d.depo_id ?? (iadeDepolari.length === 1 ? iadeDepolari[0].id : null)),
+        notes: d.notes?.trim() || null,
+      }),
     onSuccess: async () => {
-      message.success("Parça talebi açıldı");
+      message.success("Sökülen parça işe yazıldı");
+      await qc.invalidateQueries({ queryKey: ["parca"] });
+      form.resetFields();
+      setHata(null);
+      onKapat();
+    },
+    onError: (e) => setHata(parcaHatasi(e).mesaj),
+  });
+  return (
+    <Modal
+      open={acik}
+      title="Sökülen parça"
+      onCancel={() => {
+        setHata(null);
+        onKapat();
+      }}
+      onOk={() => form.submit()}
+      okText="Kaydet"
+      cancelText="Vazgeç"
+      confirmLoading={kaydet.isPending}
+      destroyOnHidden
+    >
+      {hata && <Alert type="error" showIcon message={hata} style={{ marginBottom: 12 }} />}
+      <Form form={form} layout="vertical" initialValues={{ adet: 1 }} onFinish={(d) => kaydet.mutate(d)}>
+        <Form.Item name="product_id" label="Parça (katalogda varsa)">
+          <ParcaSecici />
+        </Form.Item>
+        <Form.Item name="tanim" label="Tanım (katalogda yoksa)" rules={[{ max: 160 }]}>
+          <Input maxLength={160} placeholder="Ör. arızalı güç kartı" />
+        </Form.Item>
+        <Form.Item name="seri_no" label="Seri No" rules={[{ max: 80 }]}>
+          <Input maxLength={80} className="mono" />
+        </Form.Item>
+        <Form.Item name="adet" label="Adet" rules={[{ required: true }]}>
+          <InputNumber min={1} max={1_000_000} precision={0} />
+        </Form.Item>
+        <Form.Item name="karar" label="Parça ne oldu?" rules={[{ required: true, message: "Seçim zorunlu" }]}>
+          <Radio.Group options={SOKULEN_KARARLARI} />
+        </Form.Item>
+        {karar && karar !== "MUSTERIDE" && iadeDepolari.length > 1 && (
+          <Form.Item name="depo_id" label="İade deposu" rules={[{ required: true, message: "Depo seçin" }]}>
+            <Select options={iadeDepolari.map((d) => ({ value: d.id, label: d.name }))} />
+          </Form.Item>
+        )}
+        <Form.Item name="notes" label="Not" rules={[{ max: 500 }]}>
+          <Input.TextArea rows={2} maxLength={500} />
+        </Form.Item>
+      </Form>
+    </Modal>
+  );
+}
+
+/**
+ * Parça talebi penceresi (iş ayrıntısı ve mobil sonuç akışı).
+ *
+ * 2026-11-09 amir onayı: talep işin biriminin deposuna gider ve şefin onayına
+ * düşer. Birimde tek depo varsa depo alanı çizilmez (sunucu o depoyu seçer);
+ * birden çoksa tek seçim istenir. Araç depoları listelenmez.
+ */
+export function TalepPenceresi({
+  acik,
+  soId,
+  birim,
+  onKapat,
+}: {
+  acik: boolean;
+  soId: number;
+  /** İşin birimi; yalnız bu birimin depoları sunulur. */
+  birim?: string | null;
+  onKapat: () => void;
+}) {
+  const { message } = App.useApp();
+  const qc = useQueryClient();
+  const [form] = Form.useForm<{
+    product_id: number;
+    adet: number;
+    notes?: string;
+    isi_beklet?: boolean;
+    depo_id?: number;
+  }>();
+  const [hata, setHata] = useState<string | null>(null);
+  const depolar = useQuery({
+    queryKey: ["parca", "depolar", false],
+    queryFn: () => parcaApi.depolar(false),
+    enabled: acik,
+  });
+  const talepDepolari = (depolar.data ?? []).filter(
+    (d) => d.location_type !== "TEKNISYEN" && (!birim || d.birim === birim),
+  );
+  const kaydet = useMutation({
+    mutationFn: (d: { product_id: number; adet: number; notes?: string; isi_beklet?: boolean; depo_id?: number }) =>
+      parcaApi.talepAc({ service_order_id: soId, ...d, notes: d.notes?.trim() || null }),
+    onSuccess: async (t) => {
+      message.success(
+        t.durum === "ONAY_BEKLIYOR" ? "Parça talebi amirinizin onayına gönderildi" : "Parça talebi depoya iletildi",
+      );
       await qc.invalidateQueries({ queryKey: ["parca"] });
       // MALZEME beklemesi açılmış olabilir: iş detayı da tazelensin.
       for (const k of ["servis-is", "servis-is-gecmis", "servis-is-bekleme"]) {
@@ -371,10 +597,18 @@ export function TalepPenceresi({ acik, soId, onKapat }: { acik: boolean; soId: n
       destroyOnHidden
     >
       {hata && <Alert type="error" showIcon message={hata} style={{ marginBottom: 12 }} />}
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        Talep amirinizin onayına gider; onaylanınca depo hazırlar ve işe teslim eder.
+      </Typography.Paragraph>
       <Form form={form} layout="vertical" initialValues={{ adet: 1 }} onFinish={(d) => kaydet.mutate(d)}>
         <Form.Item name="product_id" label="Parça" rules={[{ required: true, message: "Parça seçin" }]}>
           <ParcaSecici />
         </Form.Item>
+        {talepDepolari.length > 1 && (
+          <Form.Item name="depo_id" label="Depo" rules={[{ required: true, message: "Depo seçin" }]}>
+            <Select options={talepDepolari.map((d) => ({ value: d.id, label: d.name }))} />
+          </Form.Item>
+        )}
         <Form.Item name="adet" label="Adet" rules={[{ required: true }]}>
           <InputNumber min={1} max={1_000_000} precision={0} />
         </Form.Item>

@@ -32,7 +32,9 @@ from app.models import (
 from app.permissions import (
     BIRIM_KAPSAMLARI,
     BIRIMLER,
+    HASSAS_IZINLER,
     PERMISSIONS,
+    ROLES,
     SCOPE_ALL,
     SCOPE_OWN_CUSTOMERS,
     SCOPE_OWN_JOBS,
@@ -95,6 +97,10 @@ class IzinSatiri(BaseModel):
     kod: str
     modul: str
     aciklama: str
+    # 2026-11-09: rol düzenleme ekranı. Hassas izin ayrıca işaretlenir; izin
+    # hangi sayfaları açıyor (sayfalar izinden türetilir, ayrı tutulmaz).
+    hassas: bool = False
+    sayfalar: list[str] = []
 
 
 class RolYetkisi(BaseModel):
@@ -109,6 +115,11 @@ class RolYetkisi(BaseModel):
     # Kullanıcı görünümünde doldurulur: bu izinlerin hangileri rolden değil,
     # kişiye özel istisnadan geliyor. Rol görünümünde daima boş.
     istisna_kodlari: list[str] = []
+    # Rol düzenleme (2026-11-09): iyimser kilit, elle değiştirildi mi,
+    # koddaki varsayılana dönülebilir mi (yalnız katalogdaki sistem rolleri).
+    version: int = 1
+    ozellestirildi: bool = False
+    varsayilana_donebilir: bool = False
 
 
 # Menüdeki ekran → onu açan izin. Arayüzdeki `MENU` tablosunun sunucu
@@ -142,10 +153,11 @@ _SAYFA_IZINLERI: list[tuple[str, str | tuple[str, ...]]] = [
     ("Parametreler", "sistem.ayar"),
     ("Denetim İzi", "sistem.denetim"),
     # --- Teknik Servis (plan §1.10; menü grubu "Teknik Servis") -------------
-    ("Servis Paneli", "servis.gor"),
+    ("Ana Panel", "takip.gor"),
+    ("Servis Paneli", "takip.gor"),
     ("Operasyon Merkezi", "operasyon.gor"),
     ("Servis İşleri", "servis.gor"),
-    ("Planlama", "servis.gor"),
+    ("Planlama", "takip.gor"),
     ("Benim İşlerim", "zaman.yaz"),
     ("Ekipman Kütüğü", "ekipman.gor"),
     ("Planlı Bakım", "bakim.gor"),
@@ -163,7 +175,28 @@ _SAYFA_IZINLERI: list[tuple[str, str | tuple[str, ...]]] = [
     ("Personel", "personel.gor"),
     ("Eğitim ve Gelişim", "egitim.gor"),
     ("Gelişim Kartım", "egitim.kendim"),
+    ("İK Belgeleri ve Bordro", ("bordro.yonet", "ik_belge.yonet")),
 ]
+
+
+def _izin_sayfalari(kod: str) -> list[str]:
+    """Bu iznin AÇTIĞI sayfalar (ekranda izin satırının yanında gösterilir)."""
+    return [
+        ad
+        for ad, izin in _SAYFA_IZINLERI
+        if (kod in izin if isinstance(izin, tuple) else kod == izin)
+    ]
+
+
+def _izin_satiri(kod: str) -> IzinSatiri:
+    modul, aciklama = PERMISSIONS[kod]
+    return IzinSatiri(
+        kod=kod,
+        modul=modul,
+        aciklama=aciklama,
+        hassas=kod in HASSAS_IZINLER,
+        sayfalar=_izin_sayfalari(kod),
+    )
 
 
 def _sayfa_acik(izin: str | tuple[str, ...], kodlar: set[str]) -> bool:
@@ -267,12 +300,13 @@ def _yetki_gorunumu(rol: Role, kodlar: set[str], istisna: list[str] | None = Non
         scope_aciklama=_KAPSAM_ACIKLAMA.get(rol.scope, rol.scope),
         yalniz_ofis=bool(rol.yalniz_ofis),
         sayfalar=[ad for ad, izin in _SAYFA_IZINLERI if _sayfa_acik(izin, kodlar)],
-        izinler=[
-            IzinSatiri(kod=k, modul=PERMISSIONS[k][0], aciklama=PERMISSIONS[k][1])
-            for k in sorted(kodlar)
-            if k in PERMISSIONS
-        ],
+        izinler=[_izin_satiri(k) for k in sorted(kodlar) if k in PERMISSIONS],
         istisna_kodlari=sorted(istisna or []),
+        version=rol.version,
+        ozellestirildi=bool(rol.ozellestirildi),
+        varsayilana_donebilir=bool(rol.is_system)
+        and rol.code in ROLES
+        and rol.code != yetki.ROL_ADMIN,
     )
 
 
@@ -299,8 +333,9 @@ async def kullanici_yetkileri(user_id: int, db: DbDep, clock: ClockDep, _: Admin
 
 @router.get("/izinler", response_model=list[IzinSatiri])
 async def izin_katalogu(_: AdminDep) -> list[IzinSatiri]:
-    """Tüm izinler — rol düzenleme ekranı seçenekleri buradan alır."""
-    return [IzinSatiri(kod=k, modul=m, aciklama=a) for k, (m, a) in sorted(PERMISSIONS.items())]
+    """Tüm izinler — rol düzenleme ekranı seçenekleri buradan alır (hassas
+    işareti ve iznin açtığı sayfalarla)."""
+    return [_izin_satiri(k) for k in sorted(PERMISSIONS)]
 
 
 class RolIn(BaseModel):
@@ -317,9 +352,23 @@ class RolPatch(BaseModel):
     scope: str | None = None
     izinler: list[str] | None = None
     yalniz_ofis: bool | None = None
+    # İyimser kilit (2026-11-09): ekran açıldığındaki sürüm; farklıysa 409.
+    version: int | None = None
 
 
-async def _rol_izinlerini_yaz(db, rol: Role, kodlar: list[str]) -> None:
+class RolVarsayilanIn(BaseModel):
+    version: int | None = None
+
+
+def _surum_dogrula(rol: Role, version: int | None) -> None:
+    if version is not None and version != rol.version:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Rol bu arada başka biri tarafından değiştirildi; ekranı yenileyip tekrar deneyin.",
+        )
+
+
+async def _rol_izinlerini_yaz(db, rol: Role, kodlar: list[str]) -> tuple[list[str], list[str]]:
     gecersiz = [k for k in kodlar if k not in PERMISSIONS]
     if gecersiz:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen izin: {', '.join(gecersiz)}")
@@ -343,6 +392,11 @@ async def _rol_izinlerini_yaz(db, rol: Role, kodlar: list[str]) -> None:
         )
     # Bundan sonra açılıştaki katalog senkronu bu role dokunmaz.
     rol.ozellestirildi = True
+    # İzin satırları ayrı tabloda: rol satırı değişmese de sürüm artmalı.
+    rol.updated_at = func.now()
+    # İlişki önbelleği eski kümeyi tutmasın (yanıt ve sonraki okuma).
+    db.expire(rol, ["permissions"])
+    return sorted(istenen - var_olan), sorted(fazla)
 
 
 def _bilinmeyenleri_reddet(kodlar: list[str]) -> None:
@@ -442,6 +496,7 @@ async def rol_guncelle(
             mesaj="Sistem yöneticisi rolü katalogdan yönetilir; düzenlenemez.",
             ayrinti={"kod": rol.code},
         )
+    _surum_dogrula(rol, payload.version)
     if payload.scope is not None and payload.scope not in SCOPES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçersiz kapsam")
     if payload.izinler is not None:
@@ -451,6 +506,8 @@ async def rol_guncelle(
         )
 
     eski = {"ad": rol.name, "kapsam": rol.scope, "yalniz_ofis": rol.yalniz_ofis}
+    eklenen: list[str] = []
+    cikarilan: list[str] = []
     if payload.name is not None:
         rol.name = payload.name
     if payload.scope is not None:
@@ -458,7 +515,7 @@ async def rol_guncelle(
     if payload.yalniz_ofis is not None:
         rol.yalniz_ofis = payload.yalniz_ofis
     if payload.izinler is not None:
-        await _rol_izinlerini_yaz(db, rol, payload.izinler)
+        eklenen, cikarilan = await _rol_izinlerini_yaz(db, rol, payload.izinler)
     else:
         rol.ozellestirildi = True
 
@@ -477,12 +534,59 @@ async def rol_guncelle(
             "kapsam": rol.scope,
             "yalniz_ofis": rol.yalniz_ofis,
             "izin": len(payload.izinler) if payload.izinler is not None else None,
+            "eklenen": eklenen,
+            "cikarilan": cikarilan,
             "etkilenen_kullanici": len(etkilenen),
         },
         user_id=user.id,
         ip=client_ip(request),
     )
     await db.commit()
+    await db.refresh(rol)
+    return RoleOut.model_validate(rol)
+
+
+@router.post("/roller/{kod}/varsayilan", response_model=RoleOut)
+async def rol_varsayilana_don(
+    kod: str, payload: RolVarsayilanIn, request: Request, db: DbDep, user: AdminDep
+) -> RoleOut:
+    """Sistem rolünün izinlerini koddaki varsayılana (`permissions.ROLES`)
+    döndürür; "özelleştirildi" işareti iner, açılış senkronu yeniden yönetir.
+
+    Özel rolün varsayılanı yoktur (409); ADMIN zaten katalogdan yönetilir
+    (409). Oturumlar düşer, denetime eklenen/çıkarılan yazılır.
+    """
+    rol = await db.scalar(select(Role).where(Role.code == kod))
+    if rol is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Rol bulunamadı: {kod}")
+    if rol.code == yetki.ROL_ADMIN or not rol.is_system or rol.code not in ROLES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Bu rolün koddaki bir varsayılanı yok; elle düzenleyin."
+        )
+    _surum_dogrula(rol, payload.version)
+    _ad, varsayilan, kapsam = ROLES[rol.code]
+    eklenen, cikarilan = await _rol_izinlerini_yaz(db, rol, list(varsayilan))
+    rol.ozellestirildi = False
+    rol.scope = kapsam
+    etkilenen = (await db.scalars(select(User).where(User.role_id == rol.id))).all()
+    for k in etkilenen:
+        await auth_service.revoke_all_sessions(db, k.id)
+    await audit.log(
+        db,
+        "roles",
+        "varsayilana_don",
+        entity_id=rol.id,
+        new_value={
+            "kod": rol.code,
+            "eklenen": eklenen,
+            "cikarilan": cikarilan,
+            "etkilenen_kullanici": len(etkilenen),
+        },
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(rol)
     return RoleOut.model_validate(rol)
 
 

@@ -1,29 +1,18 @@
 /**
- * Sol menü ağacı — Logo CRM kurgusu (KARARLAR 2026-11-04 §2).
+ * Sol menü ağacı — göreve göre gruplar (KARARLAR 2026-11-09 S7; önceki kurgu
+ * KARARLAR 2026-11-04 §2 birim köklüydü ve kullanıcı karışık buldu).
  *
- * Ana bölüm başlıkları → alt bölümler (gruplar) → yapraklar. Her yaprak MEVCUT
- * bir ekranı açar; çoğu servis işleri listesini süzgeçle açar
- * (`/servis-isleri?birim=GUVENLIK&tur=KURULUM`). İzin tek kaynaktan gelir:
- * yaprak `uygulamalar.ts` kataloğundaki uygulamaya bağlanır ve onun `izin`
- * alanını kullanır (izin kodu burada yeniden yazılmaz).
- *
- * Şirket süzgeci: birime bağlı bölüm (`birimler`) yalnız etkin şirketin
- * birimlerinden biri varsa görünür (Güvenlik/Set Bariyer → ELEKTRONİK,
- * Haberleşme/POC → TELEKOM, Mobilite → MOBİLİTE). `birimler` yoksa ortak
- * bölümdür, her şirkette görünür. Bu yalnız görsel kısıtlamadır; sunucu
- * kapsamı etkin şirketin birimleriyle ayrıca süzer.
- *
- * Ekranı henüz olmayan dallar (Satış akışları, Frekans/Setra) bilerek YOK —
- * boş ekran göstermemek için (KARARLAR §2). "Satış ve Müşteri" bölümü
- * (rol testi B-02) yalnız MEVCUT ekranları açar: grup ortak müşteri kartları,
- * servis teklifleri, sonuçlanan arıza işleri, kurulum işleri ve kurulum
- * bekleyen ekipman. Mobilite modülünün kendi yaprakları yalnız MOBİLİTE'de. `scripts/menu-kontrol.mjs`
- * her yaprağın `main.tsx`'te gerçek bir rotaya gittiğini ve katalogdaki her
- * sayfanın menüde bulunduğunu derlemeden önce denetler.
+ * Ana Panel, Benim İşlerim, Servis İşleri, Planlama, Satış, Depo, Kiralama,
+ * Raporlar, İnsan Kaynakları, (Mobilite), Yönetim. En fazla iki seviye; boş
+ * grup gizlenir. Her yaprak MEVCUT bir ekranı açar ve adresler değişmedi
+ * (favoriler/yer imleri bozulmaz). İzin tek kaynaktan gelir: yaprak
+ * `uygulamalar.ts` kataloğundaki uygulamaya bağlanır ve onun `izin` alanını
+ * kullanır; `izin` (ek) ve `birimler` (şirket) yalnız görünürlüğü daraltır,
+ * sunucu kapsamı ayrıca süzer. `scripts/menu-kontrol.mjs` her yaprağın
+ * `main.tsx`'te gerçek bir rotaya gittiğini ve katalogdaki her sayfanın
+ * menüde bulunduğunu derlemeden önce denetler.
  */
 import {
-  AlertOutlined,
-  ApartmentOutlined,
   AppstoreOutlined,
   BarChartOutlined,
   CalendarOutlined,
@@ -31,13 +20,10 @@ import {
   CarOutlined,
   DatabaseOutlined,
   FieldTimeOutlined,
-  FileProtectOutlined,
   InboxOutlined,
   SafetyOutlined,
-  ScheduleOutlined,
   SettingOutlined,
   TeamOutlined,
-  WifiOutlined,
 } from "@ant-design/icons";
 
 import {
@@ -59,6 +45,11 @@ export interface MenuYapragi {
   /** İzni veren katalog uygulaması (`uygulamalar.ts` kimliği); null = herkese açık. */
   uygulama: string | null;
   ikon?: IkonBileseni;
+  /** Uygulamanın iznine EK olarak bu izinlerden biri de gerekir (aynı sayfanın
+   *  ekip görünümü; ör. kalite onayı bekleyenler yalnız onaylayana). */
+  izin?: string[];
+  /** Doluysa yaprak yalnız etkin şirketin bu birimlerinden biri varsa görünür. */
+  birimler?: string[];
 }
 
 export interface MenuGrubu {
@@ -68,6 +59,8 @@ export interface MenuGrubu {
   ikon?: IkonBileseni;
   /** Doluysa bölüm yalnız etkin şirketin bu birimlerinden biri varsa görünür. */
   birimler?: string[];
+  /** Doluysa bölüm yalnız bu izinlerden biri varsa görünür (departman bölümü). */
+  izin?: string[];
   altlar: MenuOgesi[];
 }
 
@@ -102,109 +95,90 @@ function grup(
   anahtar: string,
   baslik: string,
   altlar: MenuOgesi[],
-  ek: { ikon?: IkonBileseni; birimler?: string[] } = {},
+  ek: { ikon?: IkonBileseni; birimler?: string[]; izin?: string[] } = {},
 ): MenuGrubu {
   return { tur: "grup", anahtar, baslik, altlar, ...ek };
 }
 
-/** Birimin servis işleri, isteğe bağlı tür süzgeciyle. */
-function servis(birim: string, tur: string | null, baslik: string): MenuYapragi {
-  const yol = `/servis-isleri?birim=${birim}${tur ? `&tur=${tur}` : ""}`;
-  return suzgecli(`servis:${birim}:${tur ?? "TUMU"}`, baslik, yol, "/servis-isleri");
+/** Servis işleri tür süzgeci (birimden bağımsız; birim ekranda süzülür).
+ *  `birimler`: tür yalnız bu birimlerde kullanılıyorsa (ör. Keşif → Haberleşme). */
+function tur(kod: string, baslik: string, birimler?: string[]): MenuYapragi {
+  return {
+    ...suzgecli(`servis:${kod}`, baslik, `/servis-isleri?tur=${kod}`, "/servis-isleri"),
+    ...(birimler ? { birimler } : {}),
+  };
 }
 
 const mobiliteSayfalari = SAYFALAR.filter((u) => u.grup === "mobilite").map((u) => sayfa(u.id));
 
-/** Menü ağacı (sıra = ekrandaki sıra). */
+/**
+ * Menü ağacı (sıra = ekrandaki sıra). KARARLAR 2026-11-09 S7: göreve göre
+ * gruplar, en fazla İKİ seviye (grup → yaprak), boş grup gizlenir. Birim
+ * (Haberleşme, Güvenlik, POC, Set Bariyer) menü kökü DEĞİL: servis işleri
+ * ekranında süzgeçtir (tek birimli kullanıcıda kendiliğinden seçili). Tür
+ * yaprakları (Keşif, Toplama ...) yalnız o türü kullanan birim etkin
+ * şirketteyse görünür (`birimler`). Yollar (URL) değişmedi.
+ */
 export const MENU_AGACI: MenuOgesi[] = [
   // Anahtar eski favori/son açılan kayıtları bozulmasın diye "ana-panel".
   sayfa(ANA_PANEL_YOLU, undefined, "ana-panel"),
   { ...sayfa("/benim-islerim"), ikon: FieldTimeOutlined },
 
-  // --- Birim bölümleri (şirkete göre) ---------------------------------------
   grup(
-    "guvenlik",
-    "Güvenlik",
+    "servis",
+    "Servis İşleri",
     [
-      grup("guvenlik:ts", "Teknik Servis", [
-        servis("GUVENLIK", null, "Tüm işler"),
-        servis("GUVENLIK", "KURULUM", "Kurulum"),
-        servis("GUVENLIK", "ARIZA", "Arıza"),
-        servis("GUVENLIK", "PLANSIZ_BAKIM", "Bakım"),
-      ]),
-      grup("guvenlik:atolye", "Atölye", [
-        suzgecli("atolye:GUVENLIK", "Bakım", "/atolye?birim=GUVENLIK", "/atolye"),
-      ]),
+      sayfa("/servis-isleri", "Tüm Servis İşleri"),
+      tur("ARIZA", "Arıza"),
+      tur("KURULUM", "Kurulum"),
+      tur("PLANSIZ_BAKIM", "Bakım"),
+      tur("KESIF", "Keşif", ["HABERLESME"]),
+      tur("TOPLAMA", "Toplama", ["BARIYER"]),
+      tur("TASIMA", "Taşıma", ["BARIYER"]),
+      sayfa("/atolye", "Atölye / Laboratuvar"),
+      sayfa("/servis-paneli"),
+      sayfa("kpi:atanmamis"),
+      sayfa("kpi:kapanis_bekleyen"),
+      sayfa("kpi:beklemede"),
+      {
+        ...suzgecli("kalite:bekleyen", "Kalite Onayı Bekleyen", "/servis-isleri?kalite=BEKLEYEN", "/servis-isleri"),
+        izin: ["servis.kalite_onay"],
+      },
     ],
-    { ikon: SafetyOutlined, birimler: ["GUVENLIK"] },
+    { ikon: SafetyOutlined },
   ),
   grup(
-    "haberlesme",
-    "Haberleşme",
+    "planlama",
+    "Planlama",
     [
-      grup("haberlesme:ts", "Teknik Servis", [servis("HABERLESME", null, "Tüm işler")]),
-      grup("haberlesme:lab", "Laboratuvar", [
-        suzgecli("atolye:HABERLESME", "Arıza Onarım", "/atolye?birim=HABERLESME", "/atolye"),
-        suzgecli("lab:yedek-parca", "Yedek Parça Stok", "/yedek-parca?sekme=stok", "/yedek-parca"),
-      ]),
-      grup("haberlesme:saha", "Saha", [
-        servis("HABERLESME", "KESIF", "Keşif"),
-        servis("HABERLESME", "ARIZA", "Arıza"),
-        servis("HABERLESME", "PLANSIZ_BAKIM", "Bakım"),
-      ]),
+      sayfa("/servis-planlama"),
+      sayfa("/operasyon"),
+      sayfa("/zaman-takibi"),
+      sayfa("/bakim", "Planlı Bakım Bildirimleri"),
+      suzgecli("bakim:sozlesmeler", "Bakım Sözleşmeleri", "/bakim?sekme=sozlesmeler", "/bakim"),
+      suzgecli("bakim:donemler", "Bakım Dönemleri", "/bakim?sekme=donemler", "/bakim"),
+      sayfa("kpi:bakim_acik"),
+      sayfa("kpi:bakim_geciken"),
+      sayfa("/gorevler"),
     ],
-    { ikon: WifiOutlined, birimler: ["HABERLESME"] },
-  ),
-  grup(
-    "poc",
-    "POC",
-    [
-      // B-10: POC tek bölümde; Haberleşme altındaki yinelenen yaprak kaldırıldı.
-      servis("POC", null, "Tüm işler"),
-      servis("POC", "ARIZA", "Arıza"),
-      servis("POC", "KURULUM", "Kurulum"),
-    ],
-    { ikon: ApartmentOutlined, birimler: ["POC"] },
-  ),
-  grup(
-    "mobilite",
-    "Mobilite",
-    [
-      grup("mobilite:ts", "Teknik Servis", [
-        servis("MOBILITE", null, "Mobilite işleri"),
-        servis("ARAC_TAKIP", null, "Araç Takip işleri"),
-      ]),
-      grup("mobilite:modul", "Mobilite Modülü", mobiliteSayfalari),
-    ],
-    { ikon: CarOutlined, birimler: ["MOBILITE", "ARAC_TAKIP"] },
-  ),
-  grup(
-    "bariyer",
-    "Set Bariyer",
-    [
-      servis("BARIYER", null, "Tüm işler"),
-      servis("BARIYER", "KURULUM", "Kurulum"),
-      servis("BARIYER", "TOPLAMA", "Toplama"),
-      servis("BARIYER", "TASIMA", "Taşıma"),
-    ],
-    { ikon: AlertOutlined, birimler: ["BARIYER"] },
+    { ikon: CalendarOutlined },
   ),
 
-  // Satış / Satış Destek (B-02): ELEKTRONİK ve TELEKOM'da (birimli şirketler).
-  // Müşteri kartları ve servis teklifleri grup ortaktır; servis görünümlerini
-  // sunucu kullanıcının birim kapsamıyla süzer.
+  // Satış (S7.3): satış ekranları ayrı oturumda eklenecek; bu grup onların
+  // yeridir. "Sonuçlanan Arıza İşleri" kaldırıldı (bütün çözülmüş arızaları
+  // gösteriyordu); yerine yalnız teklif sunulacak işler.
   grup(
     "satis",
-    "Satış ve Müşteri",
+    "Satış",
     [
       sayfa("/hesaplar", "Müşteri Kartları", "satis:hesaplar"),
       sayfa("/teklifler", "Teklifler", "satis:teklifler"),
       sayfa("/tekliflerim", "Tekliflerim", "satis:tekliflerim"),
       sayfa("/satislarim", "Satışlarımın Durumu", "satis:satislarim"),
       suzgecli(
-        "satis:ariza-sonuclanan",
-        "Sonuçlanan Arıza İşleri",
-        "/servis-isleri?tur=ARIZA&durum_grubu=COZULDU",
+        "satis:teklif-hazirlanacak",
+        "Teklif Hazırlanacak İşler",
+        "/servis-isleri?sonuc=TEKLIF_SUNULACAK",
         "/servis-isleri",
       ),
       suzgecli("satis:kurulum", "Kurulum İşleri", "/servis-isleri?tur=KURULUM", "/servis-isleri"),
@@ -216,61 +190,29 @@ export const MENU_AGACI: MenuOgesi[] = [
       ),
       sayfa("/urunler", "Ürün Kataloğu", "satis:urunler"),
     ],
-    { ikon: ShopOutlined, birimler: ["GUVENLIK", "BARIYER", "HABERLESME", "POC"] },
+    // Satışın bölümü: teknisyen burada yalnız kendi işlerinin süzülmüş
+    // görünümlerini görüyordu (2026-11-09); bölüm satış izni ister.
+    { ikon: ShopOutlined, birimler: ["GUVENLIK", "BARIYER", "HABERLESME", "POC"], izin: ["hesap.gor", "teklif.gor"] },
   ),
-
-  // --- Ortak bölümler (her şirkette) ----------------------------------------
+  grup("depo", "Depo", [sayfa("/yedek-parca"), sayfa("/servis-ekipman")], { ikon: DatabaseOutlined }),
   grup("kiralama", "Kiralama", [sayfa("/kiralamalar"), sayfa("/kiralik-envanter")], { ikon: InboxOutlined }),
-  grup(
-    "planlama",
-    "Planlama",
-    [sayfa("/servis-planlama"), sayfa("/operasyon"), sayfa("/zaman-takibi")],
-    { ikon: CalendarOutlined },
-  ),
-  grup(
-    "planli-bakim",
-    "Planlı Bakım",
-    [
-      sayfa("/bakim", "Bakım Bildirimleri"),
-      suzgecli("bakim:sozlesmeler", "Sözleşmeler", "/bakim?sekme=sozlesmeler", "/bakim"),
-      suzgecli("bakim:donemler", "Bakım Dönemleri", "/bakim?sekme=donemler", "/bakim"),
-      sayfa("kpi:bakim_acik"),
-      sayfa("kpi:bakim_geciken"),
-    ],
-    { ikon: ScheduleOutlined },
-  ),
-  grup(
-    "takip",
-    "Takip ve Onaylar",
-    [
-      sayfa("/servis-isleri", "Tüm Servis İşleri"),
-      sayfa("/servis-paneli"),
-      sayfa("kpi:atanmamis"),
-      sayfa("kpi:kapanis_bekleyen"),
-      suzgecli("kalite:bekleyen", "Kalite Onayı Bekleyen", "/servis-isleri?kalite=BEKLEYEN", "/servis-isleri"),
-      sayfa("kpi:beklemede"),
-      sayfa("/gorevler"),
-    ],
-    { ikon: FileProtectOutlined },
-  ),
-  grup(
-    "depo",
-    "Depo ve Yedek Parça",
-    [sayfa("/yedek-parca"), sayfa("/servis-ekipman")],
-    { ikon: DatabaseOutlined },
-  ),
   grup(
     "raporlar",
     "Raporlar",
     [sayfa("/servis-raporlari"), sayfa("/servis-maliyet"), sayfa("/fatura-devri"), sayfa("/servis-ana-veri")],
     { ikon: BarChartOutlined },
   ),
-  grup("ik", "İnsan Kaynakları", [sayfa("/personel"), sayfa("/egitim"), sayfa("/ik-belgeler"), sayfa("/gelisim-kartim"), sayfa("/belgelerim")], {
-    ikon: TeamOutlined,
-  }),
+  grup(
+    "ik",
+    "İnsan Kaynakları",
+    [sayfa("/personel"), sayfa("/egitim"), sayfa("/ik-belgeler"), sayfa("/gelisim-kartim"), sayfa("/belgelerim")],
+    { ikon: TeamOutlined },
+  ),
+  // Mobilite modülü (DENGE MOBİLİTE etkinken). Modülün kendisine dokunulmadı.
+  grup("mobilite", "Mobilite", mobiliteSayfalari, { ikon: CarOutlined, birimler: ["MOBILITE", "ARAC_TAKIP"] }),
   grup(
     "sistem",
-    "Sistem Yönetimi",
+    "Yönetim",
     [
       sayfa("/servis-tanimlar"),
       sayfa("/kullanicilar"),
@@ -301,6 +243,7 @@ export interface MenuSuzgeci {
 }
 
 export function yaprakYetkili(y: MenuYapragi, yetkili: Yetkili): boolean {
+  if (y.izin && !y.izin.some((i) => yetkili(i))) return false;
   if (y.uygulama === null) return true;
   const u = KATALOG.get(y.uygulama);
   return !!u && uygulamaYetkili(u, yetkili);
@@ -311,10 +254,12 @@ export function gorunurMenu(agac: MenuOgesi[], s: MenuSuzgeci): MenuOgesi[] {
   const sonuc: MenuOgesi[] = [];
   for (const o of agac) {
     if (o.tur === "yaprak") {
+      if (o.birimler && s.aktifBirimler && !o.birimler.some((b) => s.aktifBirimler!.has(b))) continue;
       if (yaprakYetkili(o, s.yetkili)) sonuc.push(o);
       continue;
     }
     if (o.birimler && s.aktifBirimler && !o.birimler.some((b) => s.aktifBirimler!.has(b))) continue;
+    if (o.izin && !o.izin.some((i) => s.yetkili(i))) continue;
     const altlar = gorunurMenu(o.altlar, s);
     if (altlar.length) sonuc.push({ ...o, altlar });
   }

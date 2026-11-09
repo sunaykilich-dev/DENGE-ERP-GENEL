@@ -143,7 +143,8 @@ export const UYGULAMALAR: Uygulama[] = [
     altBaslik: "Operasyon özeti",
     ikon: DashboardOutlined,
     yol: "/ana-panel",
-    izin: ["servis.gor", "teklif.gor"],
+    // Teknisyende Ana Panel yok (takip.gor yok); satış rolleri teklif.gor ile açar.
+    izin: ["takip.gor", "teklif.gor"],
     grup: "servis",
   },
   {
@@ -174,7 +175,7 @@ export const UYGULAMALAR: Uygulama[] = [
     altBaslik: "Kritik açık işler",
     ikon: DashboardOutlined,
     yol: "/servis-paneli",
-    izin: "servis.gor",
+    izin: "takip.gor",
     grup: "servis",
     kpi: { tur: "panel", kod: "kritik_acik" },
     kpiBirimi: "kritik",
@@ -185,7 +186,7 @@ export const UYGULAMALAR: Uygulama[] = [
     altBaslik: "Plan bekleyen işler",
     ikon: CalendarOutlined,
     yol: "/servis-planlama",
-    izin: "servis.gor",
+    izin: "takip.gor",
     grup: "servis",
     kpi: { tur: "panel", kod: "plan_bekleyen" },
     kpiBirimi: "iş",
@@ -213,7 +214,7 @@ export const UYGULAMALAR: Uygulama[] = [
     altBaslik: "Teknisyen tayini bekleyen",
     ikon: UserSwitchOutlined,
     yol: "/servis-isleri?kpi=atanmamis",
-    izin: "servis.gor",
+    izin: "takip.gor",
     grup: "takip",
     kpi: { tur: "panel", kod: "atanmamis" },
     kpiBirimi: "iş",
@@ -225,7 +226,7 @@ export const UYGULAMALAR: Uygulama[] = [
     altBaslik: "Şef kapanışı bekleyen",
     ikon: FileProtectOutlined,
     yol: "/servis-isleri?kpi=kapanis_bekleyen",
-    izin: "servis.gor",
+    izin: "takip.gor",
     grup: "takip",
     kpi: { tur: "panel", kod: "kapanis_bekleyen" },
     kpiBirimi: "iş",
@@ -237,7 +238,7 @@ export const UYGULAMALAR: Uygulama[] = [
     altBaslik: "Beklemeye alınmış",
     ikon: ClockCircleOutlined,
     yol: "/servis-isleri?kpi=beklemede",
-    izin: "servis.gor",
+    izin: "takip.gor",
     grup: "takip",
     kpi: { tur: "panel", kod: "beklemede" },
     kpiBirimi: "iş",
@@ -281,7 +282,7 @@ export const UYGULAMALAR: Uygulama[] = [
     altBaslik: "Planlı bakım (PB)",
     ikon: ScheduleOutlined,
     yol: "/servis-isleri?kpi=bakim_acik",
-    izin: "servis.gor",
+    izin: "takip.gor",
     grup: "bakim",
     kpi: { tur: "panel", kod: "bakim_acik" },
     kpiBirimi: "iş",
@@ -293,7 +294,7 @@ export const UYGULAMALAR: Uygulama[] = [
     altBaslik: "Hedef tarihi geçmiş",
     ikon: AlertOutlined,
     yol: "/servis-isleri?kpi=bakim_geciken",
-    izin: "servis.gor",
+    izin: "takip.gor",
     grup: "bakim",
     kpi: { tur: "panel", kod: "bakim_geciken" },
     kpiBirimi: "iş",
@@ -502,7 +503,7 @@ export function yoldanUygulama(yol: string): Uygulama | undefined {
  * belirler (bkz. `acilisGrubu`).
  *
  * Sıra: `rapor.gor` → `/panel` · `zaman.yaz` ∧ ¬`servis.planla` →
- * `/benim-islerim` · `servis.gor` → `/servis-paneli` · `egitim.kendim` →
+ * `/benim-islerim` · `takip.gor` → `/servis-paneli` · `egitim.kendim` →
  * `/gelisim-kartim` · değilse ilk yetkili sayfa. Hiçbiri yoksa null.
  */
 export function acilisYolu(yetkili: Yetkili): string | null {
@@ -511,7 +512,7 @@ export function acilisYolu(yetkili: Yetkili): string | null {
     SAYFALAR.some((u) => u.yol === yol && uygulamaYetkili(u, yetkili));
   const kurallar: [boolean, string][] = [
     [yetkili("zaman.yaz") && !yetkili("servis.planla"), "/benim-islerim"],
-    [yetkili("servis.gor"), "/servis-paneli"],
+    [yetkili("takip.gor"), "/servis-paneli"],
     [yetkili("egitim.kendim"), "/gelisim-kartim"],
   ];
   for (const [uygun, yol] of kurallar) {

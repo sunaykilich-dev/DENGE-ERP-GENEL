@@ -81,6 +81,8 @@ from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 router = APIRouter(prefix="/api/teknik-servis", tags=["teknik-servis"])
 
 Okuyucu = Annotated[User, Depends(require_permission("servis.gor"))]
+# Ekip yönetimi ekranları (2026-11-09): saha teknisyeninde `takip.gor` yok.
+TakipOkuyucu = Annotated[User, Depends(require_permission("servis.gor", "takip.gor"))]
 Yazici = Annotated[User, Depends(require_permission("servis.yaz"))]
 # İş açılışı: `servis.yaz` (her tür) ya da yalnız KURULUM açan satış destek
 # (`servis.kurulum_ac`, rol testi B3); tür kuralı `_acilis_on_kontrol`'de.
@@ -2494,7 +2496,7 @@ async def onarim_fisi(
 async def panel(
     db: DbDep,
     clock: ClockDep,
-    user: Okuyucu,
+    user: TakipOkuyucu,
     donem: str | None = Query(default=None, max_length=20),
     birim: str | None = Query(default=None, max_length=20),
 ) -> dict[str, Any]:
