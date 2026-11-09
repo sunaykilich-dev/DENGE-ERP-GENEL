@@ -855,7 +855,11 @@ async def talep_onayla(
     talep.onay_at = clock.now()
     talep.updated_by = user.id
     await db.flush()
-    so = await db.get(ServiceOrder, talep.service_order_id)
+    so = (
+        await db.get(ServiceOrder, talep.service_order_id)
+        if talep.service_order_id is not None
+        else None
+    )
     if so is not None:
         urun = await db.get(Product, talep.product_id)
         await gecmis.olay_yaz(
@@ -917,6 +921,26 @@ async def talep_teslim(
     409 ve hiçbir şey yazılmaz."""
     if talep.durum != "ACIK":
         raise ParcaHatasi("Yalnız onaylı (depoda bekleyen) talep teslim edilir.")
+    if talep.service_order_id is None:
+        # S5.3 ikmal: birim deposundan teknisyenin araç deposuna transfer.
+        hedef = await db.get(Warehouse, talep.hedef_depo_id)
+        if hedef is None:
+            raise ParcaBulunamadi("Araç deposu bulunamadı")
+        _grup, hareketler = await transfer_yap(
+            db,
+            kaynak=depo,
+            hedef=hedef,
+            satirlar=[Satir(talep.product_id, talep.adet)],
+            user=user,
+            clock=clock,
+            notes=f"İkmal talebi #{talep.id}",
+        )
+        PARCA_TALEBI.dogrula(talep.durum, "KARSILANDI")
+        talep.durum = "KARSILANDI"
+        talep.karsilanma_at = clock.now()
+        talep.updated_by = user.id
+        await db.flush()
+        return hareketler
     so = await db.get(ServiceOrder, talep.service_order_id)
     if so is None:
         raise ParcaBulunamadi("Servis işi bulunamadı")
@@ -1415,11 +1439,24 @@ async def say(db: AsyncSession, stmt: Select) -> int:
 
 
 def talep_sorgusu(user: User) -> Select:
-    """Kapsam içi işlerin parça talepleri (liste ve KPI aynı sorgu)."""
-    return kapsam.kapsam_isler(
-        select(ServicePartRequest).where(ServicePartRequest.is_deleted.is_(False)),
-        user,
-        ServicePartRequest.service_order_id,
+    """Kapsam içi parça talepleri (liste ve KPI aynı sorgu).
+
+    İşe bağlı talep: işin kapsamı. İkmal talebi (S5.3, işe bağlı değil):
+    hedef araç deposu kullanıcının erişebildiği depolardansa görünür
+    (teknisyen kendi aracı, şef/depo kendi biriminin araçları).
+    """
+    return select(ServicePartRequest).where(
+        ServicePartRequest.is_deleted.is_(False),
+        or_(
+            and_(
+                ServicePartRequest.service_order_id.is_not(None),
+                ServicePartRequest.service_order_id.in_(is_kapsam_sorgusu(user)),
+            ),
+            and_(
+                ServicePartRequest.service_order_id.is_(None),
+                ServicePartRequest.hedef_depo_id.in_(erisilebilir_depo_sorgusu(user)),
+            ),
+        ),
     )
 
 

@@ -45,10 +45,10 @@ async def o(kullanici_ac, birimli_kullanici_ac, giris):
     await kullanici_ac("yonetici", "ADMIN")
     await birimli_kullanici_ac("tekn", "SERVIS_TEKNISYEN", ["GUVENLIK"])
 
-    class O:
+    class Ortam:
         pass
 
-    x = O()
+    x = Ortam()
     x.admin = await giris("yonetici")
     return x
 
@@ -155,5 +155,7 @@ async def test_izin_katalogu_hassas_ve_sayfalar(o) -> None:
 
 async def test_yonetici_olmayan_rol_duzenleyemez(o, giris) -> None:
     tekn = await giris("tekn")
-    assert (await tekn.patch("/api/roller/SERVIS_TEKNISYEN", json={"izinler": []})).status_code == 403
+    assert (
+        await tekn.patch("/api/roller/SERVIS_TEKNISYEN", json={"izinler": []})
+    ).status_code == 403
     assert (await tekn.post("/api/roller/SERVIS_TEKNISYEN/varsayilan", json={})).status_code == 403

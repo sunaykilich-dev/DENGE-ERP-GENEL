@@ -20,6 +20,7 @@
 import {
   DownloadOutlined,
   EditOutlined,
+  FilePdfOutlined,
   InboxOutlined,
   PlusOutlined,
   RollbackOutlined,
@@ -60,6 +61,8 @@ import {
   HAREKET_TURU_ADLARI,
   type Hareket,
   type HareketSuzgeci,
+  KULLANIM_DURUM_ADLARI,
+  type Kullanim,
   OLCU_BIRIMLERI,
   olcuBirimiAdi,
   parcaApi,
@@ -132,6 +135,7 @@ export default function YedekParcaPage() {
             { key: "stok", label: "Stok", children: <StokSekmesi /> },
             { key: "hareketler", label: "Hareketler", children: <HareketSekmesi /> },
             { key: "talepler", label: "Parça Talepleri", children: <TalepSekmesi /> },
+            { key: "kullanim", label: "Sahada Kullanım", children: <KullanimSekmesi /> },
             { key: "sayimlar", label: "Sayım", children: <SayimSekmesi /> },
             ...(yetkili("servis.gor")
               ? [{ key: "isler", label: "İş Emri Parçaları", children: <IsSekmesi /> }]
@@ -554,6 +558,14 @@ function HareketSekmesi() {
           onClick: () => tek && tersSor(tek),
         },
         {
+          anahtar: "fis",
+          ad: "Parça Fişi (PDF)",
+          ikon: <FilePdfOutlined />,
+          kisalt: true,
+          devreDisi: !tek || tek.tur === "TERS_KAYIT",
+          onClick: () => tek && window.open(parcaApi.fisYolu(tek.id), "_blank"),
+        },
+        {
           anahtar: "excel",
           ad: "Excel",
           ikon: <DownloadOutlined />,
@@ -653,11 +665,14 @@ function TalepSekmesi() {
       key: "so",
       width: 170,
       align: "center",
-      render: (_, t) => (
-        <Link to={`/yedek-parca?sekme=isler&so=${t.service_order_id}`} className="fl-no-rozet">
-          {t.so_no}
-        </Link>
-      ),
+      render: (_, t) =>
+        t.ikmal ? (
+          <Tag color="purple">İkmal → {t.hedef_depo_adi}</Tag>
+        ) : (
+          <Link to={`/yedek-parca?sekme=isler&so=${t.service_order_id}`} className="fl-no-rozet">
+            {t.so_no}
+          </Link>
+        ),
     },
     { title: "Talep\nTarihi", key: "t", width: 100, align: "center", render: (_, t) => gunu(t.created_at) },
     {
@@ -710,6 +725,7 @@ function TalepSekmesi() {
   ];
   return (
     <>
+      {kullanir && <IkmalOnerisiKutusu />}
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
         Teknisyen parçayı işin biriminin deposundan talep eder; talep şefin onayına düşer (tek adım).
         Onaylanan talebi depo teslim eder ve stoktan işe çıkış yapılır. Reddedilen talep gerekçesiyle
@@ -797,6 +813,261 @@ function TalepSekmesi() {
           placeholder="Red gerekçesi (teknisyen görür)"
           value={redNedeni}
           onChange={(e) => setRedNedeni(e.target.value)}
+        />
+      </Modal>
+    </>
+  );
+}
+
+// --- S5.3 Araç ikmal önerisi -----------------------------------------------------
+
+/**
+ * Araç deposunda son 30 günde işe çıkılan ve bakiyesi bu tüketimin altına
+ * düşen parçalar. Tek tıkla ikmal talebi: amir onaylı talep akışından geçer,
+ * depo teslimi birim deposundan araca transferdir.
+ */
+function IkmalOnerisiKutusu() {
+  const { message } = App.useApp();
+  const qc = useQueryClient();
+  const oneriler = useQuery({ queryKey: ["parca", "ikmal-onerisi"], queryFn: parcaApi.ikmalOnerisi });
+  const talep = useMutation({
+    mutationFn: (g: { hedef_depo_id: number; product_id: number; adet: number }) => parcaApi.ikmalTalebi(g),
+    onSuccess: async (t) => {
+      message.success(t.durum === "ONAY_BEKLIYOR" ? "İkmal talebi amir onayına gönderildi" : "İkmal talebi depoya iletildi");
+      await qc.invalidateQueries({ queryKey: ["parca"] });
+    },
+    onError: (e) => message.error(parcaHatasi(e).mesaj),
+  });
+  const veri = oneriler.data ?? [];
+  if (!veri.length) return null;
+  return (
+    <Alert
+      type="info"
+      showIcon
+      style={{ marginBottom: 12 }}
+      message={`Araç deposu ikmal önerisi (${veri.length})`}
+      description={
+        <Table
+          size="small"
+          rowKey={(r) => `${r.hedef_depo_id}-${r.product_id}`}
+          pagination={false}
+          dataSource={veri}
+          scroll={{ x: true }}
+          columns={[
+            { title: "Araç", dataIndex: "hedef_depo_adi", key: "d" },
+            { title: "Parça", key: "p", render: (_, r) => `${r.kod} — ${r.ad}` },
+            { title: "Araçta", dataIndex: "bakiye", key: "b", align: "right" },
+            { title: "30 gün tüketim", dataIndex: "tuketim", key: "t", align: "right" },
+            {
+              title: "",
+              key: "i",
+              render: (_, r) => (
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={talep.isPending}
+                  onClick={() =>
+                    talep.mutate({ hedef_depo_id: r.hedef_depo_id, product_id: r.product_id, adet: r.onerilen_adet })
+                  }
+                >
+                  {r.onerilen_adet} {olcuBirimiAdi(r.birim)} talep et
+                </Button>
+              ),
+            },
+          ]}
+        />
+      }
+    />
+  );
+}
+
+// --- S5.1 Sahada kullanım (araç deposundan işe çıkış) -----------------------------------
+
+function KullanimSekmesi() {
+  const { yetkili, kullanici } = useAuth();
+  const { message } = App.useApp();
+  const qc = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const [sayfa, setSayfa] = useState(1);
+  const [secili, setSecili] = useState<number[]>([]);
+  const durum = params.get("durum") ?? undefined;
+  const [redAcik, setRedAcik] = useState(false);
+  const [zimmetAcik, setZimmetAcik] = useState(false);
+  const [metin, setMetin] = useState("");
+  const guncelle = (v: string | undefined) => {
+    const yeni = new URLSearchParams(params);
+    yeni.set("sekme", "kullanim");
+    if (v) yeni.set("durum", v);
+    else yeni.delete("durum");
+    setParams(yeni);
+    setSayfa(1);
+  };
+  const liste = useQuery({
+    queryKey: ["parca", "kullanimlar", durum, sayfa],
+    queryFn: () => parcaApi.kullanimlar(durum, SAYFA, (sayfa - 1) * SAYFA),
+  });
+  const bitti = async (m: string) => {
+    message.success(m);
+    setRedAcik(false);
+    setZimmetAcik(false);
+    setMetin("");
+    await qc.invalidateQueries({ queryKey: ["parca"] });
+  };
+  const onayla = useMutation({
+    mutationFn: (id: number) => parcaApi.kullanimOnayla(id),
+    onSuccess: () => bitti("Kullanım onaylandı"),
+    onError: (e) => message.error(parcaHatasi(e).mesaj),
+  });
+  const reddet = useMutation({
+    mutationFn: ({ id, n }: { id: number; n: string }) => parcaApi.kullanimReddet(id, n),
+    onSuccess: () => bitti("Kullanım reddedildi; teknisyene zimmet sorusu açıldı"),
+    onError: (e) => message.error(parcaHatasi(e).mesaj),
+  });
+  const zimmet = useMutation({
+    mutationFn: ({ id, n }: { id: number; n: string }) => parcaApi.zimmetCevapla(id, n),
+    onSuccess: () => bitti("Açıklama gönderildi"),
+    onError: (e) => message.error(parcaHatasi(e).mesaj),
+  });
+  const kayitlar = liste.data?.kayitlar ?? [];
+  const tek = kayitlar.find((k) => k.id === secili[0]) ?? null;
+  const onaylayici = yetkili("parca.talep_onay");
+  const sutunlar: ColumnsType<Kullanim> = [
+    {
+      title: "Durum",
+      key: "d",
+      width: 150,
+      align: "center",
+      render: (_, k) => (
+        <DurumBaglantisi
+          metin={KULLANIM_DURUM_ADLARI[k.durum] ?? k.durum}
+          ton={k.durum === "REDDEDILDI" ? "olumsuz" : k.durum === "BEKLIYOR" ? undefined : "kapali"}
+          alt={k.zimmet_durumu === "ACIK" ? <AltNot tur="uyari">ZİMMET SORUSU</AltNot> : undefined}
+        />
+      ),
+    },
+    {
+      title: "İş No",
+      key: "so",
+      width: 160,
+      align: "center",
+      render: (_, k) => (
+        <Link to={`/yedek-parca?sekme=isler&so=${k.service_order_id}`} className="fl-no-rozet">
+          {k.so_no}
+        </Link>
+      ),
+    },
+    { title: "Tarih", key: "t", width: 140, align: "center", render: (_, k) => zaman(k.created_at) },
+    { title: "Parça", key: "p", width: 240, render: (_, k) => <Aciklama metin={`${k.kod} — ${k.ad}`} /> },
+    { title: "Adet", dataIndex: "adet", key: "a", width: 70, align: "right" },
+    { title: "Araç", dataIndex: "depo_adi", key: "dp", width: 150, align: "center", responsive: ["sm"] },
+    {
+      title: "Kullanan /\nOnaylayan",
+      key: "kim",
+      width: 160,
+      align: "center",
+      responsive: ["md"],
+      render: (_, k) => (
+        <KucukGri>
+          {k.kullanan ?? "—"}
+          {k.onaylayan ? ` / ${k.onaylayan}` : ""}
+        </KucukGri>
+      ),
+    },
+    {
+      title: "Red Gerekçesi / Açıklama",
+      key: "n",
+      width: 240,
+      align: "center",
+      responsive: ["sm"],
+      render: (_, k) => (
+        <KucukGri>
+          {k.red_nedeni}
+          {k.zimmet_aciklama ? ` — ${k.zimmet_aciklama}` : ""}
+        </KucukGri>
+      ),
+    },
+  ];
+  return (
+    <>
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+        Teknisyen sahada parçayı kendi araç deposundan anında işe çıkar; iş beklemez. Şef bu kullanımı sonradan
+        onaylar. Reddedilen kullanım fark kaydıdır: teknisyene zimmet sorusu açılır ve açıklama ister.
+      </Typography.Text>
+      <ListeRaporu<Kullanim>
+        kayitSayisi={liste.data?.toplam}
+        durumCubugu={{
+          gruplar: tekliGruplar(KULLANIM_DURUM_ADLARI),
+          secili: durum,
+          onSec: (k) => guncelle(k),
+          onYenile: () => void liste.refetch(),
+          yenileniyor: liste.isFetching,
+        }}
+        sutunlar={sutunlar}
+        veri={kayitlar}
+        satirAnahtari="id"
+        yukleniyor={liste.isFetching}
+        bosMetin={liste.isError ? parcaHatasi(liste.error).mesaj : "Veri yok"}
+        scrollX={1100}
+        secili={secili}
+        onSecim={(k) => setSecili(k as number[])}
+        sayfalama={{ sayfa, boyut: SAYFA, toplam: liste.data?.toplam ?? 0, onChange: setSayfa }}
+        eylemler={[
+          {
+            anahtar: "onayla",
+            ad: "Onayla",
+            gizli: !onaylayici,
+            devreDisi: !tek || tek.durum !== "BEKLIYOR",
+            yukleniyor: onayla.isPending,
+            onClick: () => tek && onayla.mutate(tek.id),
+          },
+          {
+            anahtar: "reddet",
+            ad: "Reddet",
+            tehlikeli: true,
+            gizli: !onaylayici,
+            devreDisi: !tek || tek.durum !== "BEKLIYOR",
+            onClick: () => setRedAcik(true),
+          },
+          {
+            anahtar: "zimmet",
+            ad: "Açıklama Yaz",
+            devreDisi: !tek || tek.zimmet_durumu !== "ACIK" || tek.kullanan_id !== kullanici?.id,
+            onClick: () => setZimmetAcik(true),
+          },
+          {
+            anahtar: "fis",
+            ad: "Parça Fişi (PDF)",
+            ikon: <FilePdfOutlined />,
+            kisalt: true,
+            devreDisi: !tek,
+            onClick: () => tek && window.open(parcaApi.fisYolu(tek.hareket_id), "_blank"),
+          },
+        ]}
+      />
+      <Modal
+        open={redAcik || zimmetAcik}
+        title={redAcik ? "Kullanımı reddet (fark kaydı)" : "Zimmet sorusuna açıklama"}
+        okText={redAcik ? "Reddet" : "Gönder"}
+        okButtonProps={{ danger: redAcik, disabled: metin.trim().length < 3 }}
+        cancelText="Vazgeç"
+        confirmLoading={reddet.isPending || zimmet.isPending}
+        onCancel={() => {
+          setRedAcik(false);
+          setZimmetAcik(false);
+        }}
+        onOk={() => {
+          if (!tek) return;
+          if (redAcik) reddet.mutate({ id: tek.id, n: metin.trim() });
+          else zimmet.mutate({ id: tek.id, n: metin.trim() });
+        }}
+        destroyOnHidden
+      >
+        <Input.TextArea
+          rows={3}
+          maxLength={redAcik ? 200 : 500}
+          placeholder={redAcik ? "Red gerekçesi (teknisyen görür)" : "Parça nerede / neden kullanıldı?"}
+          value={metin}
+          onChange={(e) => setMetin(e.target.value)}
         />
       </Modal>
     </>

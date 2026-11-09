@@ -87,7 +87,13 @@ from app.models.servis_kiralama import (
     RentalItem,
 )
 from app.models.servis_maliyet import ServiceLaborRate, ServiceOrderFinancial
-from app.models.servis_parca import ServicePartRequest, StockCount, StockCountLine
+from app.models.servis_parca import (
+    ServicePartRequest,
+    ServicePartUsageReview,
+    ServiceRemovedPart,
+    StockCount,
+    StockCountLine,
+)
 from app.models.servis_planlama import (
     ServicePlan,
     ServicePlanMember,
@@ -256,6 +262,8 @@ __all__ = [
     "ServiceLaborRate",
     "ServiceOrderFinancial",
     "ServicePartRequest",
+    "ServicePartUsageReview",
+    "ServiceRemovedPart",
     "ServiceSlaPolicy",
     "StockCount",
     "StockCountLine",

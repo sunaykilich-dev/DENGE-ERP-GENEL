@@ -177,6 +177,10 @@ export interface Talep {
   notes: string | null;
   depo_id: number | null;
   depo_adi: string | null;
+  /** S5.3 araç ikmali (işe bağlı değil). */
+  ikmal?: boolean;
+  hedef_depo_id?: number | null;
+  hedef_depo_adi?: string | null;
   talep_eden: string | null;
   onaylayan: string | null;
   onay_at: string | null;
@@ -187,6 +191,72 @@ export interface Talep {
   created_at: string;
   created_by: number | null;
   version: number;
+}
+
+/** S5.1 sahada parça kullanımı (araç deposundan işe çıkış) ve şef onayı. */
+export interface Kullanim {
+  id: number;
+  hareket_id: number;
+  service_order_id: number;
+  so_no: string | null;
+  depo_adi: string | null;
+  product_id: number;
+  kod: string;
+  ad: string;
+  adet: number;
+  durum: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI";
+  kullanan_id: number | null;
+  kullanan: string | null;
+  onaylayan: string | null;
+  onay_at: string | null;
+  red_nedeni: string | null;
+  zimmet_durumu: "ACIK" | "CEVAPLANDI" | null;
+  zimmet_aciklama: string | null;
+  created_at: string;
+}
+
+export const KULLANIM_DURUM_ADLARI: Record<string, string> = {
+  BEKLIYOR: "Onay bekliyor",
+  ONAYLANDI: "Onaylandı",
+  REDDEDILDI: "Reddedildi (fark)",
+};
+
+/** S5.2 sökülen parça; karar zorunlu. */
+export interface Sokulen {
+  id: number;
+  service_order_id: number;
+  product_id: number | null;
+  kod: string | null;
+  ad: string | null;
+  tanim: string | null;
+  seri_no: string | null;
+  adet: number;
+  karar: string;
+  karar_adi: string;
+  depo_id: number | null;
+  depo_adi: string | null;
+  teslim_alindi: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
+export const SOKULEN_KARARLARI: { value: string; label: string }[] = [
+  { value: "IADE_TAMIR", label: "Depoya iade (tamir edilebilir)" },
+  { value: "IADE_HURDA", label: "Depoya iade (hurda)" },
+  { value: "MUSTERIDE", label: "Müşteride kaldı" },
+];
+
+/** S5.3 araç deposu ikmal önerisi. */
+export interface IkmalOnerisi {
+  hedef_depo_id: number;
+  hedef_depo_adi: string;
+  product_id: number;
+  kod: string;
+  ad: string;
+  birim: string;
+  bakiye: number;
+  tuketim: number;
+  onerilen_adet: number;
 }
 
 export interface IsParcaHareketi {
@@ -390,6 +460,30 @@ export const parcaApi = {
   talepOnayla: (id: number) => api.post<Talep>(`${PARCA_ONEK}/talepler/onayla`, { talep_id: id }),
   talepReddet: (id: number, neden: string) =>
     api.post<Talep>(`${PARCA_ONEK}/talepler/reddet`, { talep_id: id, neden }),
+  kullanimlar: (durum: string | undefined, limit: number, offset: number) =>
+    api.getSayfa<Kullanim>(`${PARCA_ONEK}/kullanimlar?${sayfali({ durum }, limit, offset)}`),
+  kullanimOnayla: (id: number) => api.post<Kullanim>(`${PARCA_ONEK}/kullanimlar/onayla`, { kullanim_id: id }),
+  kullanimReddet: (id: number, neden: string) =>
+    api.post<Kullanim>(`${PARCA_ONEK}/kullanimlar/reddet`, { kullanim_id: id, neden }),
+  zimmetCevapla: (id: number, aciklama: string) =>
+    api.post<Kullanim>(`${PARCA_ONEK}/kullanimlar/zimmet`, { kullanim_id: id, aciklama }),
+  sokulenler: (soId: number) => api.get<Sokulen[]>(`${PARCA_ONEK}/isler/${soId}/sokulen`),
+  sokulenEkle: (g: {
+    service_order_id: number;
+    karar: string;
+    adet: number;
+    product_id?: number | null;
+    tanim?: string | null;
+    seri_no?: string | null;
+    depo_id?: number | null;
+    notes?: string | null;
+  }) => api.post<Sokulen>(`${PARCA_ONEK}/sokulen`, g),
+  sokulenTeslim: (id: number) => api.post<Sokulen>(`${PARCA_ONEK}/sokulen/teslim`, { sokulen_id: id }),
+  ikmalOnerisi: () => api.get<IkmalOnerisi[]>(`${PARCA_ONEK}/ikmal-onerisi`),
+  ikmalTalebi: (g: { hedef_depo_id: number; product_id: number; adet: number }) =>
+    api.post<Talep>(`${PARCA_ONEK}/talepler/ikmal`, g),
+  /** S5.4 parça fişi (aynı işlemin satırları tek fişte; fiyat yok). */
+  fisYolu: (hareketId: number) => `${PARCA_ONEK}/fis.pdf?hareket_id=${hareketId}`,
   talepTeslim: (id: number) =>
     api.post<{ talep: Talep; hareketler: YazilanHareket[] }>(`${PARCA_ONEK}/talepler/teslim`, { talep_id: id }),
 

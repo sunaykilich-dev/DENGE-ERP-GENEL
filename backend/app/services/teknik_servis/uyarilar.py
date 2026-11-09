@@ -60,6 +60,7 @@ _KAYIT: dict[str, list[tuple[tuple[str, ...], UyariFn]]] = {a: [] for a in ALANL
 _YARDIMCI_MODULLER = (
     "app.services.teknik_servis.ana_veri",
     "app.services.teknik_servis.personel",
+    "app.services.teknik_servis.sahada_parca",
 )
 _yuklendi = False
 
