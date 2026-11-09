@@ -1941,6 +1941,10 @@ export function ServisIsListesi({
     queryFn: teknikServisApi.formVerileri,
     staleTime: 5 * 60_000,
   });
+  const birimSecenekleri = (sozluk.data?.birimler ?? []).filter(
+    (b) => !menuBirimleri || menuBirimleri.has(b.kod),
+  );
+  const tekBirim = birimSecenekleri.length === 1 ? birimSecenekleri[0].kod : undefined;
   const liste = useQuery({
     queryKey: ["servis-isleri", suzgec, sayfa],
     queryFn: () => teknikServisApi.liste(suzgec, SAYFA_BOYU, (sayfa - 1) * SAYFA_BOYU),
@@ -2368,15 +2372,16 @@ export function ServisIsListesi({
   const suzgecPaneli = (
     <Row gutter={[8, 8]}>
       <Col xs={12} md={6}>
+        {/* S7.2: birim menü kökü değil, burada süzgeç. Tek birimli kullanıcıda
+            kendiliğinden seçili ve kilitli (sunucu zaten o birimle süzer). */}
         <Select
-          allowClear
+          allowClear={!tekBirim}
+          disabled={!!tekBirim}
           style={{ width: "100%" }}
           placeholder="Birim"
-          value={suzgec.birim}
+          value={suzgec.birim ?? tekBirim}
           onChange={(v) => suzgecDegistir({ ...urlSuzgeci, birim: v })}
-          options={(sozluk.data?.birimler ?? [])
-            .filter((b) => !menuBirimleri || menuBirimleri.has(b.kod))
-            .map((b) => ({ value: b.kod, label: b.ad }))}
+          options={birimSecenekleri.map((b) => ({ value: b.kod, label: b.ad }))}
         />
       </Col>
       <Col xs={12} md={6}>
