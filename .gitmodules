@@ -1,0 +1,9 @@
+# ERP kodu ayni GitHub deposunda erp/* dallarinda durur (araclar/github_esitle.ps1).
+[submodule "denge-erp"]
+	path = denge-erp
+	url = https://github.com/sunaykilich-dev/DENGE-ERP-GENEL.git
+	branch = erp/main
+[submodule "denge-erp-deneme"]
+	path = denge-erp-deneme
+	url = https://github.com/sunaykilich-dev/DENGE-ERP-GENEL.git
+	branch = erp/deneme

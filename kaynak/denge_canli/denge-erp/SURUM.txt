@@ -1,5 +1,0 @@
-Denge Mobilite ERP
-paket tarihi : 2026-10-12 14:30
-commit       : 99bb74d fix: giris yaniti mfa_kurulumu_gerekli bayragini tasimiyordu
-commit tarihi: 2026-10-12
-goc surumu   : b30e012dd879

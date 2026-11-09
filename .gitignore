@@ -5,3 +5,6 @@ __pycache__/
 .venv/
 derleme_kontrol/
 
+
+# Canli paket ve veritabani dokumu: KVKK, depoya GIRMEZ (CLAUDE.md)
+kaynak/denge_canli/
