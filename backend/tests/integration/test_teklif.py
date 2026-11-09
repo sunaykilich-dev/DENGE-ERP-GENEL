@@ -198,7 +198,7 @@ class TestIskontoOnayi:
                         "description": "A",
                         "qty": 1,
                         "unit_price": 1000,
-                        "discount_pct": 25,  # varsayılan eşik %10
+                        "discount_pct": 25,  # satış temsilcisi limiti %10 (S1.1)
                     }
                 ],
             },
@@ -232,7 +232,9 @@ class TestIskontoOnayi:
         assert onay.status_code == 403, "satış temsilcisinde iskonto onay izni olmamalı"
 
     async def test_satis_muduru_onaylar(self, client, kullanici_ac, musteri_ac):
-        await _giris(client, kullanici_ac, "mudur", "SATIS_MUDURU")
+        """Satış temsilcisinin limit (%10) üstü iskontosu satış müdürüne düşer
+        (S1.4); müdür kendi limitine (%25) kadar onaylar."""
+        await _giris(client, kullanici_ac)
         m = await musteri_ac()
         r = await client.post(
             "/api/teklifler",
@@ -249,8 +251,11 @@ class TestIskontoOnayi:
                 ],
             },
         )
+        assert r.json()["iskonto_onay_kademesi"] == "SATIS_MUDURU"
+        await client.post("/api/auth/logout")
+        await _giris(client, kullanici_ac, "mudur", "SATIS_MUDURU")
         onay = await client.post(f"/api/teklifler/{r.json()['id']}/iskonto-onayla")
-        assert onay.status_code == 200
+        assert onay.status_code == 200, onay.text
         assert onay.json()["onay_gerekiyor"] is False
 
 

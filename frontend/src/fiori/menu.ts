@@ -199,6 +199,8 @@ export const MENU_AGACI: MenuOgesi[] = [
     [
       sayfa("/hesaplar", "Müşteri Kartları", "satis:hesaplar"),
       sayfa("/teklifler", "Teklifler", "satis:teklifler"),
+      sayfa("/tekliflerim", "Tekliflerim", "satis:tekliflerim"),
+      sayfa("/satislarim", "Satışlarımın Durumu", "satis:satislarim"),
       suzgecli(
         "satis:ariza-sonuclanan",
         "Sonuçlanan Arıza İşleri",

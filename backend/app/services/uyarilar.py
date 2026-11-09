@@ -203,4 +203,11 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
 
     ozet.uyarilar += await ts_uyarilar.topla(db, user, clock)
 
+    # --- Satış (KARARLAR 2026-11-09 S1.4, S2.3, S3.3): süresi yaklaşan ve
+    # yanıt bekleyen tekliflerim, keşfi tamamlanan teklifim, onayımı bekleyen
+    # iskonto. Kapsam `teklif_kapsami` ile (sayı = sızıntı).
+    from app.services import satis_takip
+
+    ozet.uyarilar += [u for u in await satis_takip.uyarilar(db, clock, user) if u.adet > 0]
+
     return ozet

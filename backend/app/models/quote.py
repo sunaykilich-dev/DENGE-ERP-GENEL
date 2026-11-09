@@ -62,6 +62,20 @@ TEKLIF_DURUMLARI = (
 # §9.4). PB/ATOLYE yalnız sistem açar; TOPLAMA kiralamanındır — burada yok.
 TEKLIF_IS_TURLERI = ("PLANSIZ_BAKIM", "ARIZA", "DESTEK", "KURULUM", "KESIF", "DEMONTAJ", "TASIMA")
 
+# Kaybedilme nedeni kataloğu (KARARLAR 2026-11-09 S2.1). Kod KALICIDIR (rapor
+# kırılımı ve `ck_quote_kayip_kod` buna bakar); "DIGER" seçilirse açıklama
+# (`lost_reason`) zorunludur. Eski serbest metin kayıtları migration
+# `fcsatis00001` ile DIGER + açıklama olarak taşındı.
+KAYIP_NEDENLERI: dict[str, str] = {
+    "FIYAT_YUKSEK": "Fiyat yüksek",
+    "RAKIP": "Rakip tercih edildi",
+    "BUTCE_YOK": "Bütçe yok veya ertelendi",
+    "TEKNIK_UYGUNSUZ": "Teknik uygunsuzluk",
+    "TESLIM_SURESI": "Teslim süresi",
+    "YANIT_YOK": "Müşteri yanıt vermedi",
+    "DIGER": "Diğer",
+}
+
 # ISCILIK: birimli servis teklifinde işçilik kalemi (DB CHECK'i yok).
 KALEM_TIPLERI = ("URUN", "PAKET", "HIZMET", "ABONELIK", "SIM_PAKETI", "SERBEST", "ISCILIK")
 # Gönderim kanalı (elle gönderimde not zorunlu; E07-05).
@@ -104,6 +118,17 @@ class Quote(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, Versione
             + ")",
             name="ck_quote_servis_turu",
         ),
+        # --- Satış takibi (fcsatis00001, KARARLAR 2026-11-09 S2.1) -----------
+        CheckConstraint(
+            "lost_reason_kod IS NULL OR lost_reason_kod IN ("
+            + ", ".join(f"'{k}'" for k in KAYIP_NEDENLERI)
+            + ")",
+            name="ck_quote_kayip_kod",
+        ),
+        CheckConstraint(
+            "lost_reason_kod IS NULL OR lost_reason_kod <> 'DIGER' OR lost_reason IS NOT NULL",
+            name="ck_quote_kayip_diger_aciklama",
+        ),
     )
 
     quote_no: Mapped[str] = mapped_column(String(24))
@@ -116,8 +141,11 @@ class Quote(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, Versione
     status: Mapped[str] = mapped_column(String(20), server_default=text("'TASLAK'"))
     current_version_id: Mapped[int | None] = mapped_column(BigInteger)
     title: Mapped[str | None] = mapped_column(String(200))
-    # Kayıp nedeni zorunlu (brief §4.8 satış hunisi).
+    # Kayıp nedeni zorunlu (brief §4.8 satış hunisi). S2.1'den beri neden
+    # `lost_reason_kod` kataloğundan seçilir; bu alan açıklamadır (DIGER'de
+    # zorunlu).
     lost_reason: Mapped[str | None] = mapped_column(String(200))
+    lost_reason_kod: Mapped[str | None] = mapped_column(String(20))
     # Teklifin ilgili olduğu tesis (E14-15). Servis işinden açılan teklifte
     # sunucu işten kopyalar; satış teklifinde boştur, bugünkü davranış aynı.
     address_id: Mapped[int | None] = mapped_column(

@@ -64,7 +64,12 @@ from app.models import (
     ServiceOrder,
     User,
 )
-from app.models.quote import BIRIMLI_KALEM_ACIKLAMA_UZUNLUGU, KALEM_TIPLERI, TEKLIF_IS_TURLERI
+from app.models.quote import (
+    BIRIMLI_KALEM_ACIKLAMA_UZUNLUGU,
+    KALEM_TIPLERI,
+    KAYIP_NEDENLERI,
+    TEKLIF_IS_TURLERI,
+)
 from app.models.rbac import BIRIM_KODLARI
 from app.permissions import (
     SCOPE_ALL,
@@ -198,9 +203,30 @@ async def versiyon_hesapla(db: AsyncSession, versiyon: QuoteVersion) -> QuoteVer
 
 
 async def onay_gerekiyor_mu(db: AsyncSession, versiyon: QuoteVersion) -> bool:
-    """Eşik üstü iskonto satış müdürü onayına düşer (brief §4.9)."""
-    esik = Decimal(str(await ayar_svc.get(db, "iskonto_onay_esigi_yuzde")))
-    return Decimal(str(versiyon.max_discount_pct)) > esik
+    """Hazırlayanın iskonto limitini aşan teklif onaya düşer (KARARLAR
+    2026-11-09 S1; ölçü ve kademe `services/iskonto.py`)."""
+    from app.services import iskonto
+
+    teklif = await db.get(Quote, versiyon.quote_id)
+    return (await iskonto.durum(db, teklif, versiyon)).onay_gerekli
+
+
+def kayip_nedeni_dogrula(kod: str | None, aciklama: str | None) -> tuple[str, str | None]:
+    """Kaybedilme nedeni (S2.1): katalogdan kod; DIGER'de açıklama zorunlu.
+
+    Kodsuz gelen ama açıklamalı ret (müşterinin linkten yazdığı neden, eski
+    istemci) DIGER + açıklama sayılır — eski kayıtların taşındığı kural.
+    """
+    metin = (aciklama or "").strip() or None
+    if kod is None:
+        if metin is None:
+            raise TeklifGirdiHatasi("Kaybedilme nedeni seçilmeli")
+        kod = "DIGER"
+    if kod not in KAYIP_NEDENLERI:
+        raise TeklifGirdiHatasi(f"Bilinmeyen kaybedilme nedeni: {kod}")
+    if kod == "DIGER" and metin is None:
+        raise TeklifGirdiHatasi("'Diğer' seçildiğinde açıklama zorunludur")
+    return kod, metin
 
 
 async def yeni_versiyon(
@@ -376,11 +402,13 @@ async def karar_ver(
     clock: Clock,
     kanal: str,
     red_nedeni: str | None = None,
+    kayip_kod: str | None = None,
 ) -> Quote:
     """Kabul veya red kaydeder.
 
     `kanal` LİNK ise müşteri kendi tıkladı, ELLE ise ekip işaretledi — ikisi
-    aynı kanıt değeri taşımaz, bu yüzden ayrı tutulur.
+    aynı kanıt değeri taşımaz, bu yüzden ayrı tutulur. Redde kaybedilme nedeni
+    katalogdan (`kayip_kod`); kodsuz ret DIGER + açıklamadır (S2.1).
     """
     simdi = clock.now()
     teklif = await db.get(Quote, versiyon.quote_id)
@@ -388,10 +416,13 @@ async def karar_ver(
         versiyon.accepted_at = simdi
         teklif.status = "KABUL"
     else:
+        kod, metin = kayip_nedeni_dogrula(kayip_kod, red_nedeni)
         versiyon.rejected_at = simdi
-        versiyon.reject_reason = red_nedeni
+        versiyon.reject_reason = metin or KAYIP_NEDENLERI[kod]
         teklif.status = "RED"
-        teklif.lost_reason = red_nedeni
+        # `lost_reason` 200 karakter; tam metin sürümün `reject_reason`'ında (300).
+        teklif.lost_reason = metin[:200] if metin else None
+        teklif.lost_reason_kod = kod
     versiyon.decision_channel = kanal
     versiyon.is_locked = True
     await db.flush()
@@ -656,6 +687,8 @@ class TeklifFiltresi:
     hazirlayan_id: int | None = None
     q: str | None = None
     idler: list[int] = field(default_factory=list)
+    # Keşif işi durumu (S3.4/S3.3): TAMAMLANDI | ACIK.
+    kesif: str | None = None
 
 
 def _filtre_dogrula(f: TeklifFiltresi) -> None:
@@ -671,6 +704,8 @@ def _filtre_dogrula(f: TeklifFiltresi) -> None:
         raise TeklifGirdiHatasi("Tarih alanı olusturma ya da gonderim olmalı")
     if f.tarih_bas and f.tarih_bit and f.tarih_bas > f.tarih_bit:
         raise TeklifGirdiHatasi("Başlangıç tarihi bitişten sonra olamaz")
+    if f.kesif is not None and f.kesif not in ("TAMAMLANDI", "ACIK"):
+        raise TeklifGirdiHatasi("Keşif süzgeci TAMAMLANDI ya da ACIK olmalı")
 
 
 def liste_sorgusu(
@@ -724,6 +759,10 @@ def liste_sorgusu(
         stmt = stmt.where(alan < yerel_gun_araligi(f.tarih_bit)[1])
     if f.idler:
         stmt = stmt.where(Quote.id.in_(f.idler))
+    if f.kesif:
+        from app.services.satis_takip import kesif_filtresi
+
+        stmt = stmt.where(kesif_filtresi(f.kesif))
     if f.kpi and not kpi_haric:
         stmt = stmt.where(filtre_ifadesi(f.kpi, bugun, takip_gun))
     return stmt.order_by(Quote.id.desc())
@@ -842,7 +881,7 @@ async def onayla(
     simdi = clock.now()
     v.approved_by = user.id
     v.approved_at = simdi
-    # Tek kademeli onay (K4): eşik üstü iskonto da bu onayla kapanır.
+    # Tek kademeli onay (K4): limit üstü iskonto da bu onayla kapanır.
     if await onay_gerekiyor_mu(db, v):
         v.discount_approved_by = user.id
         v.discount_approved_at = simdi
@@ -1189,6 +1228,11 @@ async def taslak_guncelle(
     if (baslik.birim is None) != (t.birim is None):
         raise TeklifGirdiHatasi("Teklif türü (satış/servis) değiştirilemez")
     eski_tutar = v.grand_total
+    from app.services import iskonto
+
+    eski_imza = iskonto.kalem_imzasi(
+        (await db.scalars(select(QuoteLine).where(QuoteLine.version_id == v.id))).all()
+    )
 
     t.customer_id = baslik.customer_id
     t.birim = baslik.birim
@@ -1210,6 +1254,22 @@ async def taslak_guncelle(
     await db.flush()
     await kalemleri_yaz(db, user, v, kalemler, teklif=t)
     await versiyon_hesapla(db, v)
+    # S1.5: onaydan sonra fiyat/adet/iskonto değiştiyse iskonto onayı düşer.
+    yeni_imza = iskonto.kalem_imzasi(
+        (await db.scalars(select(QuoteLine).where(QuoteLine.version_id == v.id))).all()
+    )
+    if v.discount_approved_at is not None and yeni_imza != eski_imza:
+        await audit.log(
+            db,
+            "quotes",
+            "iskonto.onay_dustu",
+            entity_id=t.id,
+            old_value={"onaylayan": v.discount_approved_by},
+            new_value={"neden": "Fiyat ya da iskonto değişti"},
+            user_id=user.id,
+        )
+        v.discount_approved_by = None
+        v.discount_approved_at = None
     return eski_tutar, v.grand_total
 
 
@@ -1447,6 +1507,9 @@ _EYLEM_ADLARI = {
     "elle_gonderildi": "Elle gönderildi",
     "karar": "Karar",
     "iskonto.onayla": "İskonto onaylandı",
+    "iskonto.onay_dustu": "İskonto onayı düştü",
+    "kesif_iste": "Keşif istendi",
+    "servis_isi_ac": "Servis işi açıldı",
     "goruntulendi": "Müşteri görüntüledi",
     "durum": "Durum değişti",
 }

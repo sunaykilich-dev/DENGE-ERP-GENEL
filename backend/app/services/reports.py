@@ -179,19 +179,18 @@ async def teklif_donusumu(
     kaybedilen = satirlar.get("RED", 0) + satirlar.get("SURESI_DOLDU", 0)
     karara_baglanan = kazanilan + kaybedilen
 
+    kod = _kayip_kodu(Quote.lost_reason_kod)
     kayip_nedenleri = (
         await db.execute(
-            select(Quote.lost_reason, func.count())
+            select(kod, func.count())
             .where(
                 Quote.is_deleted.is_(False),
                 _teklif_turu(birim),
                 Quote.status == "RED",
-                Quote.lost_reason.is_not(None),
                 func.date(Quote.created_at) >= baslangic,
             )
-            .group_by(Quote.lost_reason)
-            .order_by(func.count().desc())
-            .limit(10)
+            .group_by(kod)
+            .order_by(func.count().desc(), kod)
         )
     ).all()
 
@@ -207,8 +206,20 @@ async def teklif_donusumu(
         # teklifi "kaybedilmiş" saymak dönüşüm oranını olduğundan kötü
         # gösterirdi.
         "donusum_yuzde": (round(kazanilan / karara_baglanan * 100, 2) if karara_baglanan else None),
-        "kayip_nedenleri": [{"neden": n, "adet": a} for n, a in kayip_nedenleri],
+        "kayip_nedenleri": kayip_nedeni_listesi(kayip_nedenleri),
     }
+
+
+def _kayip_kodu(sutun):
+    """Kaybedilme nedeni kodu; kodsuz eski/ORM kaydı DIGER sayılır (S2.1)."""
+    return func.coalesce(sutun, "DIGER").label("kayip_kod")
+
+
+def kayip_nedeni_listesi(satirlar) -> list[dict]:
+    """Nedene göre dağılım: katalog kodu + adı (S2.1/S2.2)."""
+    from app.models.quote import KAYIP_NEDENLERI
+
+    return [{"kod": k, "neden": KAYIP_NEDENLERI.get(k, k), "adet": int(a)} for k, a in satirlar]
 
 
 # --- Servis (birimli) teklif dönüşümü (E07-24, TS-197) -----------------------------------
@@ -234,6 +245,7 @@ def _servis_teklif_sorgusu(*, gun: int, clock: Clock, birim: str, user=None):
             Quote.birim,
             Quote.created_at,
             Quote.lost_reason,
+            Quote.lost_reason_kod,
             durum,
             Account.title.label("musteri"),
             QuoteVersion.sent_at,
@@ -270,6 +282,16 @@ def _net_tl(r) -> Decimal | None:
     return yuvarla(net)
 
 
+def _kayip_metni(r) -> str | None:
+    from app.models.quote import KAYIP_NEDENLERI
+
+    kod = r.lost_reason_kod or ("DIGER" if r.lost_reason else None)
+    if kod is None:
+        return None
+    ad = KAYIP_NEDENLERI.get(kod, kod)
+    return f"{ad}: {r.lost_reason}" if r.lost_reason else ad
+
+
 async def servis_teklif_satirlari(
     db: AsyncSession, *, gun: int, clock: Clock, birim: str, user=None
 ) -> list[dict]:
@@ -294,7 +316,7 @@ async def servis_teklif_satirlari(
                     else None
                 ),
                 "net_tl": _net_tl(r),
-                "kayip_nedeni": r.lost_reason if r.etkin_durum == "RED" else None,
+                "kayip_nedeni": _kayip_metni(r) if r.etkin_durum == "RED" else None,
             }
         )
     return satirlar
@@ -335,14 +357,14 @@ async def servis_teklif_donusumu(
             ).select_from(alt)
         )
     ).one()
+    kod = _kayip_kodu(alt.c.lost_reason_kod)
     nedenler = (
         await db.execute(
-            select(alt.c.lost_reason, func.count())
+            select(kod, func.count())
             .select_from(alt)
-            .where(alt.c.etkin_durum == "RED", alt.c.lost_reason.is_not(None))
-            .group_by(alt.c.lost_reason)
-            .order_by(func.count().desc(), alt.c.lost_reason)
-            .limit(10)
+            .where(alt.c.etkin_durum == "RED")
+            .group_by(kod)
+            .order_by(func.count().desc(), kod)
         )
     ).all()
     kazanilan = durumlar.get("KABUL", 0) + durumlar.get("SIPARISE_DONUSTU", 0)
@@ -361,7 +383,7 @@ async def servis_teklif_donusumu(
         "kabul_tutari_net": yuvarla(Decimal(str(kabul_net))) if kabul_net is not None else None,
         "kabul_tutari_eksik": int(kabul_eksik or 0),
         "ort_yanit_gun": round(float(ort_yanit), 1) if ort_yanit is not None else None,
-        "kayip_nedenleri": [{"neden": n, "adet": a} for n, a in nedenler],
+        "kayip_nedenleri": kayip_nedeni_listesi(nedenler),
     }
 
 

@@ -34,7 +34,8 @@ from app.api.deps import (
 )
 from app.config import get_config
 from app.models import Account, Quote, QuoteLine, QuoteSend, QuoteVersion, ServiceOrder, User
-from app.services import audit, belgeler, mail
+from app.models.quote import KAYIP_NEDENLERI
+from app.services import audit, belgeler, iskonto, mail
 from app.services import export as export_svc
 from app.services import quotes as svc
 from app.services import settings as ayar_svc
@@ -45,7 +46,12 @@ router = APIRouter(prefix="/api/teklifler", tags=["teklif"])
 
 Okuyucu = Annotated[User, Depends(require_permission("teklif.gor"))]
 Yazici = Annotated[User, Depends(require_permission("teklif.yaz"))]
-Onaylayici = Annotated[User, Depends(require_permission("teklif.iskonto_onayla"))]
+# S1.4: Satış Müdürü (`teklif.iskonto_onayla`, kendi limitine kadar) ya da
+# Genel Müdür/ADMIN (`teklif.iskonto_ust_onay`, sınırsız).
+Onaylayici = Annotated[
+    User,
+    Depends(require_any_permission("teklif.iskonto_onayla", "teklif.iskonto_ust_onay")),
+]
 IcOnaylayici = Annotated[User, Depends(require_permission("teklif.onayla"))]
 # Excel: `teklif.gor` + (satış `rapor.disaaktar` | servis `servis_rapor.disaaktar`, KD-06).
 _AKTARIM_KAPISI = Depends(require_any_permission("rapor.disaaktar", "servis_rapor.disaaktar"))
@@ -176,8 +182,17 @@ class TeklifOut(BaseModel):
     status: str
     title: str | None
     lost_reason: str | None
+    # Kaybedilme nedeni kodu ve adı (S2.1).
+    lost_reason_kod: str | None = None
+    lost_reason_adi: str | None = None
     version: int
     onay_gerekiyor: bool = False
+    # İskonto yetkisi (S1): oran = max(kalem, toplam), limit = hazırlayanın
+    # limiti, kademe = onay kimde (SATIS_MUDURU | GENEL_MUDUR).
+    iskonto_orani: Decimal | None = None
+    iskonto_limiti: Decimal | None = None
+    iskonto_onay_kademesi: str | None = None
+    iskonto_onay_kademesi_adi: str | None = None
     guncel: VersiyonOut | None = None
     versiyon_sayisi: int = 0
     # --- Dalga 2 ---
@@ -257,7 +272,8 @@ async def _ciktilar(db: DbDep, teklifler: list[Quote], clock: ClockDep) -> list[
         | {t.submitted_by for t in teklifler}
         | {v.approved_by for v in surumler.values()},
     )
-    esik = Decimal(str(await ayar_svc.get(db, "iskonto_onay_esigi_yuzde")))
+    tablo = await iskonto.rol_limitleri(db)
+    hazirlayanlar = await iskonto.hazirlayanlar(db, teklifler)
     taban = get_config().public_base_url
     sonuc = []
     for t in teklifler:
@@ -267,6 +283,7 @@ async def _ciktilar(db: DbDep, teklifler: list[Quote], clock: ClockDep) -> list[
         out.owner_ad = adlar.get(t.owner_id) if t.owner_id else None
         out.submitted_by_ad = adlar.get(t.submitted_by) if t.submitted_by else None
         out.so_no = so_nolar.get(t.service_order_id) if t.service_order_id else None
+        out.lost_reason_adi = KAYIP_NEDENLERI.get(t.lost_reason_kod or "")
         v = surumler.get(t.current_version_id) if t.current_version_id else None
         out.etkin_durum = svc.etkin_durum(t, v, bugun)
         out.sonraki_durumlar = svc.sonraki_durumlar(t, v, bugun)
@@ -276,9 +293,12 @@ async def _ciktilar(db: DbDep, teklifler: list[Quote], clock: ClockDep) -> list[
             if v.public_token:
                 vout.public_url = svc.public_url(taban, v.public_token)
             out.guncel = vout
-            out.onay_gerekiyor = (
-                Decimal(str(v.max_discount_pct)) > esik and v.discount_approved_at is None
-            )
+            d = iskonto.durum_hesapla(v, hazirlayanlar.get(t.owner_id or 0), tablo)
+            out.onay_gerekiyor = d.onay_bekliyor
+            out.iskonto_orani = d.oran
+            out.iskonto_limiti = d.limit
+            out.iskonto_onay_kademesi = d.kademe
+            out.iskonto_onay_kademesi_adi = d.kademe_adi
             out.approved_by_ad = adlar.get(v.approved_by) if v.approved_by else None
             out.teklif_no_gosterim = svc.teklif_no_gosterim(t, v)
         sonuc.append(out)
@@ -320,6 +340,7 @@ def _filtre(
     hazirlayan_id: int | None,
     q: str | None,
     idler: list[int] | None = None,
+    kesif: str | None = None,
 ) -> svc.TeklifFiltresi:
     return svc.TeklifFiltresi(
         durum=durum,
@@ -334,6 +355,7 @@ def _filtre(
         hazirlayan_id=hazirlayan_id,
         q=(q or "").strip() or None,
         idler=idler or [],
+        kesif=kesif,
     )
 
 
@@ -370,6 +392,7 @@ async def listele(
     servis_isi_id: int | None = None,
     hazirlayan_id: int | None = None,
     q: str | None = Query(default=None, max_length=100),
+    kesif: Literal["TAMAMLANDI", "ACIK"] | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[TeklifOut]:
@@ -377,7 +400,7 @@ async def listele(
     (gövde canlıdaki gibi dizi). Canlıdaki "yalnız son 50" sınırı kalktı (G7)."""
     f = _filtre(
         durum, musteri_id, tur, birim, kpi, tarih_bas, tarih_bit, tarih_alani,
-        servis_isi_id, hazirlayan_id, q,
+        servis_isi_id, hazirlayan_id, q, kesif=kesif,
     )  # fmt: skip
     with _hatalar():
         bugun = svc.bugun_yerel(clock)
@@ -675,8 +698,18 @@ async def iskonto_onayla(
             "Servis teklifinde iskonto iç onayla birlikte verilir; 'Onayla' kullanın",
         )
     v = await _guncel_versiyon(db, t)
-    if not await svc.onay_gerekiyor_mu(db, v):
+    d = await iskonto.durum(db, t, v)
+    if not d.onay_gerekli:
         raise HTTPException(status.HTTP_409_CONFLICT, "Bu teklifte onay gerektiren iskonto yok")
+    if d.onaylandi:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Bu sürümün iskontosu zaten onaylı")
+    if not iskonto.onaylayabilir_mi(user, d.oran, await iskonto.rol_limitleri(db)):
+        # Kademeli onay (S1.4): müdür kendi limitinin üstünü onaylayamaz.
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"%{d.oran} iskonto onay limitinizi aşıyor; Genel Müdür ya da sistem "
+            "yöneticisi onaylar.",
+        )
     v.discount_approved_by = user.id
     v.discount_approved_at = clock.now()
     if t.status == "ONAY_BEKLIYOR":
@@ -686,7 +719,11 @@ async def iskonto_onayla(
         "quotes",
         "iskonto.onayla",
         entity_id=t.id,
-        new_value={"iskonto_yuzde": str(v.max_discount_pct)},
+        new_value={
+            "iskonto_yuzde": str(d.oran),
+            "limit": str(d.limit),
+            "kademe": d.kademe,
+        },
         user_id=user.id,
         ip=client_ip(request),
     )
@@ -824,13 +861,17 @@ async def _gonderim_izni(db: DbDep, t: Quote, v: QuoteVersion, *, yeniden_serbes
         if t.status in svc.YENIDEN_GONDERILEBILIR and yeniden_serbest:
             return False
         raise HTTPException(status.HTTP_409_CONFLICT, "Teklif onaylanmadan gönderilemez")
-    if await svc.onay_gerekiyor_mu(db, v) and v.discount_approved_at is None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"%{v.max_discount_pct} iskonto onay eşiğini aşıyor; "
-            "satış müdürü onayı olmadan gönderilemez.",
-        )
+    d = await iskonto.durum(db, t, v)
+    if d.onay_bekliyor:
+        raise HTTPException(status.HTTP_409_CONFLICT, _onay_mesaji(d))
     return t.status not in ("GONDERILDI", "GORUNTULENDI")
+
+
+def _onay_mesaji(d: iskonto.IskontoDurumu) -> str:
+    return (
+        f"%{d.oran} iskonto onay eşiğini aşıyor (limit %{d.limit}); "
+        f"{d.kademe_adi} onayı olmadan gönderilemez."
+    )
 
 
 async def _gonderim_hizi_denetle(db: DbDep, user: User, clock: ClockDep) -> None:
@@ -882,19 +923,14 @@ async def gonder(
     v = await _guncel_versiyon(db, t)
     await _gonderim_hizi_denetle(db, user, clock)
 
-    if (
-        not svc.birimli_mi(t)
-        and await svc.onay_gerekiyor_mu(db, v)
-        and v.discount_approved_at is None
-    ):
-        # Canlı davranış: eşik üstü iskontolu satış teklifi onaya düşer.
-        t.status = "ONAY_BEKLIYOR"
-        await db.commit()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"%{v.max_discount_pct} iskonto onay eşiğini aşıyor; "
-            "satış müdürü onayı olmadan gönderilemez.",
-        )
+    if not svc.birimli_mi(t):
+        d = await iskonto.durum(db, t, v)
+        if d.onay_bekliyor:
+            # Canlı davranış: limit üstü iskontolu satış teklifi onaya düşer
+            # (kademe: satış müdürü ya da genel müdür, S1.4).
+            t.status = "ONAY_BEKLIYOR"
+            await db.commit()
+            raise HTTPException(status.HTTP_409_CONFLICT, _onay_mesaji(d))
     ilk = await _gonderim_izni(db, t, v, yeniden_serbest=True)
 
     musteri = await db.get(Account, t.customer_id)
@@ -1125,6 +1161,9 @@ async def gonderimler(teklif_id: int, db: DbDep, user: Okuyucu) -> list[Gonderim
 class KararIn(BaseModel):
     kabul: bool
     red_nedeni: str | None = Field(default=None, max_length=300)
+    # Kaybedilme nedeni kodu (S2.1, `KAYIP_NEDENLERI`); DIGER'de açıklama
+    # (`red_nedeni`) zorunlu. Kodsuz ret DIGER + açıklama sayılır.
+    kayip_nedeni_kod: str | None = Field(default=None, max_length=20)
 
 
 @router.post("/{teklif_id}/karar", response_model=TeklifOut)
@@ -1140,8 +1179,9 @@ async def karar(
     kapanır. Satış teklifinde canlı davranış değişmez.
     """
     t = await _al(db, teklif_id, user, yazma=True)
-    if not payload.kabul and not (payload.red_nedeni or "").strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Red nedeni zorunludur")
+    if not payload.kabul:
+        with _hatalar():
+            svc.kayip_nedeni_dogrula(payload.kayip_nedeni_kod, payload.red_nedeni)
     v = await _guncel_versiyon(db, t)
     uyarilar: list[str] = []
     with _hatalar():
@@ -1158,6 +1198,7 @@ async def karar(
             clock=clock,
             kanal="ELLE",
             red_nedeni=payload.red_nedeni,
+            kayip_kod=payload.kayip_nedeni_kod,
         )
         if payload.kabul:
             uyarilar = await svc.kabul_sonrasi(db, t, user=user, clock=clock)
@@ -1168,7 +1209,12 @@ async def karar(
         "quotes",
         "karar",
         entity_id=t.id,
-        new_value={"kabul": payload.kabul, "kanal": "ELLE", "neden": payload.red_nedeni},
+        new_value={
+            "kabul": payload.kabul,
+            "kanal": "ELLE",
+            "neden": payload.red_nedeni,
+            "kayip_kod": t.lost_reason_kod if not payload.kabul else None,
+        },
         user_id=user.id,
         ip=client_ip(request),
     )

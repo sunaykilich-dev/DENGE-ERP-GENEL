@@ -144,10 +144,19 @@ _DALGA4_EKLERI = {
 _FAZ_A_EKLERI = {"ofis_ag_listesi", "servis_mesai_baslangic", "servis_mesai_bitis"}
 # KARARLAR 2026-11-05 §9: iki aşamalı kapanış (ekip lideri → müdür).
 _ONAY_ZINCIRI_EKLERI = {"servis_kapanis_onay_zinciri"}
+# KARARLAR 2026-11-09 S1.1: rol bazlı iskonto limitleri (tek genel eşiğin yerine).
+_SATIS_EKLERI = {"iskonto_rol_limitleri"}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
-    beklenen = _PLAN_1_9 | _DALGA1_EKLERI | _DALGA4_EKLERI | _FAZ_A_EKLERI | _ONAY_ZINCIRI_EKLERI
+    beklenen = (
+        _PLAN_1_9
+        | _DALGA1_EKLERI
+        | _DALGA4_EKLERI
+        | _FAZ_A_EKLERI
+        | _ONAY_ZINCIRI_EKLERI
+        | _SATIS_EKLERI
+    )
     assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.
     assert set(ayar.AYAR_SINIRLARI) == beklenen

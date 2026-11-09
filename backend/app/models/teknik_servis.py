@@ -121,6 +121,9 @@ SERVIS_TURLERI = (
     "DEMONTAJ",
     # KARARLAR 2026-11-04 §2: Set Bariyer taşıma işi (KURULUM/TOPLAMA gibi PROJE).
     "TASIMA",
+    # KARARLAR 2026-11-09 S4.1: satıştan (kabul edilen teklif/sipariş) açılan
+    # teslimat işi (KURULUM gibi PROJE; SLA yok). Migration fcsatis00001.
+    "TESLIMAT",
 )
 # Haberleşme saha işinin niteliği (KARARLAR §10; çoktan seçmeli, açılışta
 # zorunlu). KURULUM/MONTAJ seçili işte röle montaj bilgileri kapanışta zorunlu.

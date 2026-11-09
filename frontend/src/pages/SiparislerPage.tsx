@@ -31,6 +31,7 @@ import { api, type ApiError } from "../api/client";
 import { siparisBelgeApi } from "../api/irsaliye";
 import { useAuth } from "../auth/AuthContext";
 import IrsaliyeListesi from "../components/IrsaliyeListesi";
+import SatisIsleri from "./SatisIsleri";
 
 interface Kalem {
   id: number;
@@ -771,6 +772,18 @@ export default function SiparislerPage() {
                 description={s.muhasebe_notu ?? undefined}
               />
             )}
+
+            {/* KARARLAR 2026-11-09 S4.1/S4.2: bağlı kurulum/teslimat işleri ve aşamaları. */}
+            <Card size="small" title="Kurulum ve teslimat işleri">
+              <SatisIsleri
+                kaynak="siparis"
+                id={s.id}
+                teklifId={s.quote_id}
+                isAcilabilir={["ONAYLANDI", "REZERVE", "KISMI_SEVK", "SEVK_EDILDI", "TAMAMLANDI"].includes(
+                  s.status,
+                )}
+              />
+            </Card>
 
             {sevkBekleyenTransferler.length > 0 && yetkili("siparis.yaz") && (
               <Card size="small" title="Teslim onayı">

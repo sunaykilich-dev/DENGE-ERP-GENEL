@@ -42,6 +42,23 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "teklif.gor": ("Teklif", "Teklifleri görür"),
     "teklif.yaz": ("Teklif", "Teklif hazırlar, revize eder, gönderir"),
     "teklif.iskonto_onayla": ("Teklif", "Eşik üstü iskontoyu onaylar"),
+    # KARARLAR 2026-11-09 S1.4 (G5.5 kademeli onay): satış müdürünün kendi
+    # limitini aşan iskonto Genel Müdür'e ya da ADMIN'e gider. Genel Müdür
+    # rolü yok; bu izin ona kişi istisnası/özel rolle verilir (ADMIN'de hazır).
+    "teklif.iskonto_ust_onay": (
+        "Teklif",
+        "Satış müdürü limitini aşan iskontoyu onaylar (Genel Müdür kademesi)",
+    ),
+    # S2.2: "Tekliflerim" görünümünün satışçı kırılımı (satış müdürü).
+    "teklif.ekip_ozet": ("Teklif", "Teklif sonuçlarını satışçı kırılımıyla görür"),
+    # S3.1: satış rolleri servis işi AÇAMAZ; yalnız tekliften keşif ister
+    # (dar izin; iş PLANLAMADA doğar, planlamayı birim şefi yapar).
+    "teklif.kesif_iste": ("Teklif", "Tekliften bağlı KEŞİF servis işi ister"),
+    # S4.1: kabul edilen teklif ya da siparişten kurulum/teslimat işi.
+    "teklif.servis_isi_ac": (
+        "Teklif",
+        "Kabul edilen teklif ya da siparişten bağlı KURULUM/TESLİMAT işi açar",
+    ),
     # Sipariş
     "siparis.gor": ("Sipariş", "Siparişleri görür"),
     "siparis.yaz": ("Sipariş", "Sipariş açar, sevkiyat yapar"),
@@ -355,6 +372,7 @@ VEKALETE_KAPALI = YUKSEK_YETKILI_IZINLER | {
     "maliyet.gor",
     "maliyet.yaz",
     "teklif.onayla",
+    "teklif.iskonto_ust_onay",
     "hakedis.onayla",
     "hakedis.ode",
     "tahsilat.yaz",
@@ -385,6 +403,8 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "isemri.gor",
             "teklif.gor",
             "teklif.yaz",
+            "teklif.kesif_iste",
+            "teklif.servis_isi_ac",
             "siparis.gor",
             "siparis.yaz",
             "abonelik.gor",
@@ -415,6 +435,9 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "teklif.gor",
             "teklif.yaz",
             "teklif.iskonto_onayla",
+            "teklif.ekip_ozet",
+            "teklif.kesif_iste",
+            "teklif.servis_isi_ac",
             "siparis.gor",
             "siparis.yaz",
             "abonelik.gor",
@@ -806,6 +829,8 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
         (
             "teklif.gor",
             "teklif.yaz",
+            "teklif.kesif_iste",
+            "teklif.servis_isi_ac",
             "siparis.gor",
             "siparis.yaz",
             "servis.gor",

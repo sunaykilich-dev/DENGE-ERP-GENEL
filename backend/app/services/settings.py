@@ -41,7 +41,13 @@ DEFAULTS: dict[str, Any] = {
     "damga_vergisi_oran": 0.00759,  # binde 7,59
     "stopaj_gider_pusulasi_oran": 0.10,  # işin niteliğine göre değişir — TEYİT ET
     # --- Satış / teklif ----------------------------------------------------
-    "iskonto_onay_esigi_yuzde": 10.0,  # üstü satış müdürü onayına düşer
+    # İskonto yetkisi (KARARLAR 2026-11-09 S1.1): rol koduna göre üst limit
+    # (yüzde). "DIGER" = tabloda olmayan roller; eski tek genel eşiğin
+    # (`iskonto_onay_esigi_yuzde`, migration fcsatis00001 ile kaldırıldı)
+    # değeri buraya taşındı. Kişi limiti (`users.iskonto_limiti_yuzde`) rol
+    # limitinin yerine geçer. Limitin üstü satış müdürü onayına, satış müdürü
+    # limitinin üstü Genel Müdür/ADMIN onayına düşer (`services/iskonto.py`).
+    "iskonto_rol_limitleri": {"SATIS": 10, "SATIS_DESTEK": 5, "SATIS_MUDURU": 25, "DIGER": 10},
     "teklif_varsayilan_gecerlilik_gun": 15,
     # Standart ticari şartlar metni — henüz hazır değil (plan §8).
     "teklif_ticari_sartlar": "",
@@ -195,6 +201,8 @@ DEFAULTS: dict[str, Any] = {
 #   "liste" → metin listesi; `alt` izinli değerler kümesi (None: serbest)
 #   "saat"  → "SS:DD" metni
 #   "zaman" → ISO 8601 saat dilimli zaman ya da None/boş (kapalı)
+#   "rol_limitleri" → {rol kodu: yüzde}; değer [alt, ust], kod büyük harf
+#                  (DIGER = tabloda olmayan roller); kanonik: sayı, 2 hane
 #   "cidr_liste" → IPv4/IPv6 ağ listesi ("10.0.0.0/8", tek adres "1.2.3.4");
 #                  kanonik biçime çevrilir, tekrarlar atılır
 # Süre sınırları (15–1440 dk plan, 18 saat zaman bölümü, 62 gün takvim)
@@ -243,6 +251,7 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "teklif_takip_uyari_gun": ("tam", 1, 90),
     "teklif_sunulacak_uyari_is_gunu": ("tam", 1, 30),
     "teklif_gonderim_dakika_limiti": ("tam", 1, 100),
+    "iskonto_rol_limitleri": ("rol_limitleri", 0, 100),
     "ek_icerik_denetimi_canli_turler": ("bool", None, None),
     "erisim_girissiz_gun": ("tam", 7, 365),
     "servis_rapor_excel_azami_satir": ("tam", 1_000, 100_000),
@@ -271,6 +280,7 @@ class AyarHatasi(KeyError):
 
 
 _SAAT_KALIBI = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+_ROL_KALIBI = re.compile(r"^[A-Z][A-Z0-9_]{1,39}$")
 
 
 def ayar_dogrula(key: str, value: Any) -> Any:
@@ -320,6 +330,19 @@ def ayar_dogrula(key: str, value: Any) -> Any:
             # 3 saat kayardı.
             raise AyarHatasi(f"{key}: saat dilimi belirtilmeli (ör. +03:00)")
         return an.isoformat()
+    if tip == "rol_limitleri":
+        if not isinstance(value, dict) or not value:
+            raise AyarHatasi(f"{key}: rol koduna göre yüzde tablosu olmalı")
+        tablo: dict[str, float] = {}
+        for rol, oran in value.items():
+            if not isinstance(rol, str) or not _ROL_KALIBI.match(rol):
+                raise AyarHatasi(f"{key}: geçersiz rol kodu '{rol}'")
+            if isinstance(oran, bool) or not isinstance(oran, int | float):
+                raise AyarHatasi(f"{key}: {rol} için yüzde sayı olmalı")
+            if not alt <= oran <= ust:
+                raise AyarHatasi(f"{key}: {rol} limiti {alt} ile {ust} arasında olmalı")
+            tablo[rol] = round(float(oran), 2)
+        return tablo
     if tip == "cidr_liste":
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             raise AyarHatasi(f"{key}: ağ (CIDR) listesi olmalı")

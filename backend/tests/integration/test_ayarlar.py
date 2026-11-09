@@ -25,7 +25,7 @@ async def test_vergi_oranlari_koda_gomulu_degil(client, kullanici_ac):
         "stopaj_smm_oran",
         "damga_vergisi_oran",
         "stopaj_gider_pusulasi_oran",
-        "iskonto_onay_esigi_yuzde",
+        "iskonto_rol_limitleri",
     ):
         assert anahtar in ayarlar, f"{anahtar} ayarlarda yok"
 
@@ -67,11 +67,16 @@ async def test_ayar_degisikligi_denetime_yazilir_ama_sir_yazilmaz(client, kullan
     await _admin_girisi(client, kullanici_ac)
     await client.patch(
         "/api/ayarlar",
-        json={"values": {"iskonto_onay_esigi_yuzde": 25.0, "platform_api_key": "cok-gizli"}},
+        json={
+            "values": {
+                "iskonto_rol_limitleri": {"SATIS": 12, "SATIS_MUDURU": 25, "DIGER": 10},
+                "platform_api_key": "cok-gizli",
+            }
+        },
     )
     kayit = await db.scalar(select(AuditLog).where(AuditLog.entity == "settings"))
     assert kayit is not None
-    assert kayit.new_value["iskonto_onay_esigi_yuzde"] == 25.0
+    assert kayit.new_value["iskonto_rol_limitleri"]["SATIS"] == 12
     assert "cok-gizli" not in str(kayit.new_value)
 
 

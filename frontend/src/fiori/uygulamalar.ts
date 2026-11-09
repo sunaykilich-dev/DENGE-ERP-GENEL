@@ -376,6 +376,26 @@ export const UYGULAMALAR: Uygulama[] = [
     izin: "tahsilat.gor",
     grup: "raporlar",
   },
+  // KARARLAR 2026-11-09 S2.2 / S4.2: satışçının kendi teklif sonuçları ve
+  // kabul edilen satışlarının servis işi aşamaları (menüde Satış ve Müşteri).
+  {
+    id: "/tekliflerim",
+    baslik: "Tekliflerim",
+    altBaslik: "Sonuç ve kazanma oranı",
+    ikon: ProfileOutlined,
+    yol: "/tekliflerim",
+    izin: "teklif.gor",
+    grup: "raporlar",
+  },
+  {
+    id: "/satislarim",
+    baslik: "Satışlarımın Durumu",
+    altBaslik: "Kurulum ve teslimat aşamaları",
+    ikon: CheckSquareOutlined,
+    yol: "/satislarim",
+    izin: "teklif.gor",
+    grup: "raporlar",
+  },
   {
     id: "/servis-ana-veri",
     baslik: "Ana Veri Kalitesi",
