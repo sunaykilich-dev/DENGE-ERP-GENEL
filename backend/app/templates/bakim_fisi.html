@@ -1,0 +1,133 @@
+{#
+  Bakım fişi (KARARLAR 2026-11-09 S6) — servis formundan ayrı şablon.
+  Bağlam: `services/teknik_servis/servis_fisleri.baglam` (veri `onay._is_bolumu`).
+
+  BİLEREK YAPILANLAR:
+  * Kontrol listesi bakım fişinin ana gövdesidir (PB işinde); plansız
+    bakımda liste yoksa yapılan işlem basılır.
+  * Fiyat yalnız `fiyatli` iken (yetkiyle süzülmüş) "Hizmet bedeli" olarak;
+    parça maliyeti HİÇ basılmaz.
+  * Süre kaydı yoksa "Süre kaydı eksik" (0 değil).
+#}
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>{{ baslik }} {{ s.so_no }}</title>
+<style>
+{% include "_belge_fontlari.html" %}
+  td.durum { width: 30mm; }
+</style>
+</head>
+<body>
+  <div class="ust">
+    <div class="firma">
+      <div class="ad">{{ firma.unvan }}</div>
+      <div>{{ firma.adres }}</div>
+      <div>Tel: {{ firma.telefon }}{% if firma.eposta %} · {{ firma.eposta }}{% endif %}</div>
+    </div>
+    <div class="belge">
+      <div class="baslik">{{ baslik }}</div>
+      <div>Tarih: {{ belge_tarihi }}</div>
+      <div class="mono">{{ s.so_no }}</div>
+    </div>
+  </div>
+
+  <div class="bolum">Müşteri ve lokasyon</div>
+  <table class="bilgi">
+    <tr><th>Müşteri</th><td>{{ s.musteri or "—" }}</td></tr>
+    <tr><th>Lokasyon</th><td>
+      {{ s.lokasyon.ad or "" }}{% if s.lokasyon.adres %}{% if s.lokasyon.ad %} — {% endif %}{{ s.lokasyon.adres }}{% endif %}
+      {% if s.lokasyon.ilce or s.lokasyon.il %} ({{ [s.lokasyon.ilce, s.lokasyon.il] | select | join(" / ") }}){% endif %}
+      {% if not s.lokasyon.ad and not s.lokasyon.adres %}—{% endif %}
+    </td></tr>
+    {% if s.irtibat %}<tr><th>Saha yetkilisi</th><td>{{ s.irtibat }}</td></tr>{% endif %}
+  </table>
+
+  <div class="bolum">Bakım bilgisi</div>
+  <table class="bilgi">
+    <tr><th>Birim / Tür</th><td>{{ s.birim }} / {{ s.tur }}</td></tr>
+    <tr><th>Konu</th><td>{{ s.konu }}</td></tr>
+    <tr><th>Ekipman seri no</th><td class="mono">{{ s.seriler | join(", ") or "—" }}</td></tr>
+    <tr><th>Planlanan / açılış</th><td>{{ s.acilis or "—" }}</td></tr>
+    {% if s.tamamlanma %}<tr><th>Tamamlanma</th><td>{{ s.tamamlanma }}</td></tr>{% endif %}
+    <tr><th>Bakım ekibi</th><td>{{ s.ekip | join(", ") or "—" }}</td></tr>
+    <tr><th>Süre</th><td>
+      {% if s.sure.kayit_var %}
+        Toplam {{ s.sure.toplam }} —
+        {% for k in s.sure.kisiler %}{{ k.ad }}: {{ k.sure }}{% if not loop.last %}, {% endif %}{% endfor %}
+        {% if s.sure.acik_bolum %} (devam eden kayıt var){% endif %}
+      {% else %}
+        <span class="eksik">Süre kaydı eksik</span>
+      {% endif %}
+    </td></tr>
+  </table>
+
+  <div class="bolum">Kontrol listesi</div>
+  {% if s.kontrol_listesi and s.kontrol_listesi.var %}
+  <table>
+    <thead><tr><th style="width:8mm">#</th><th>Kontrol</th><th>Durum</th><th>Not</th></tr></thead>
+    <tbody>
+    {% for m in s.kontrol_listesi.maddeler %}
+      <tr><td class="mono">{{ loop.index }}</td><td>{{ m.etiket }}</td><td class="durum">{{ m.sonuc }}</td><td>{{ m.not or "" }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <table class="bilgi">
+    <tr><th>Bakım sonucu</th><td>{{ s.kontrol_listesi.sonuc or "—" }}{% if s.kontrol_listesi.bolge %} · Bölge: {{ s.kontrol_listesi.bolge }}{% endif %}</td></tr>
+    {% if s.kontrol_listesi.yapilan %}<tr><th>Yapılan işlem</th><td>{{ s.kontrol_listesi.yapilan }}</td></tr>{% endif %}
+  </table>
+  {% elif s.kontrol_listesi %}
+  <div class="eksik">Bakım formu doldurulmamış.</div>
+  {% else %}
+  <div>Bu bakım işinde kontrol listesi yok.</div>
+  {% endif %}
+
+  {% if s.sonuc %}
+  <table class="bilgi">
+    <tr><th>Yapılan işlem</th><td>{{ s.sonuc.yapilan }}</td></tr>
+    <tr><th>Sonuç</th><td>{{ s.sonuc.sonuc }} ({{ s.sonuc.kanal }})</td></tr>
+  </table>
+  {% endif %}
+
+  <div class="bolum">Kullanılan parçalar</div>
+  {% if s.parcalar %}
+  <table>
+    <thead><tr><th style="width:30mm">Kod</th><th>Parça</th><th class="sag" style="width:18mm">Miktar</th><th style="width:16mm">Birim</th></tr></thead>
+    <tbody>
+    {% for p in s.parcalar %}
+      <tr><td class="mono">{{ p.kod }}</td><td>{{ p.ad }}</td><td class="sag mono">{{ p.miktar }}</td><td>{{ p.birim }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div>Parça kullanılmadı.</div>
+  {% endif %}
+
+  {% if fiyatli %}
+  <table class="bilgi">
+    <tr><th>Hizmet bedeli</th><td class="mono">{{ hizmet_bedeli }}{% if hizmet_bedeli != "Tutar kaydı yok" %} ₺ (KDV hariç){% endif %}</td></tr>
+  </table>
+  {% endif %}
+
+  {% set onay = s.onay %}
+  <div class="bolum">Onay</div>
+  <div class="imza">
+    <div class="kutu">
+      <div>Müşteri yetkilisi</div>
+      {% if onay %}
+        <div>{{ onay.tur }}{% if onay.tarih %} · {{ onay.tarih }}{% endif %}</div>
+        {% if onay.imzalayan_ad %}<div>{{ onay.imzalayan_ad }}{% if onay.imzalayan_unvan %} ({{ onay.imzalayan_unvan }}){% endif %}</div>{% endif %}
+        {% if onay.imza %}<img src="{{ onay.imza }}" alt="İmza">{% endif %}
+      {% else %}
+        <div>Ad Soyad / İmza:</div>
+      {% endif %}
+    </div>
+    <div class="kutu">
+      <div>Bakımı yapan teknisyen</div>
+      <div>{{ s.ekip[0] if s.ekip else "" }}</div>
+    </div>
+  </div>
+  <div class="not">Bu fiş yapılan bakımın kaydıdır.{% if not fiyatli %} Ticari koşul içermez.{% endif %}</div>
+</body>
+</html>

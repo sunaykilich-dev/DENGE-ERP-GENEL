@@ -99,6 +99,14 @@ class Order(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin, Versione
 
     notes: Mapped[str | None] = mapped_column(Text)
 
+    # S4.4 (KARARLAR 2026-11-09): "muhasebeye devredildi" işareti. Logo
+    # entegrasyonu DEĞİL; kim/ne zaman/not tutulur, geri alma gerekçelidir.
+    muhasebe_devri_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    muhasebe_devri_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    muhasebe_notu: Mapped[str | None] = mapped_column(String(300))
+
     lines: Mapped[list["OrderLine"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin"
     )

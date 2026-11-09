@@ -670,6 +670,11 @@ export const teknikServisApi = {
   ziyaretOnayi: (is_idler: number[], g: OnayGirdisi) =>
     api.post<Onay[]>(`${TS}/isler/ziyaret-onayi`, { ...g, is_idler }),
   servisFormuYolu: (id: number) => `${isYolu(id)}/servis-formu.pdf`,
+  /** Bakım fişi (PB / plansız bakım) ve onarım fişi (arıza / atölye) — S6. */
+  bakimFisiYolu: (id: number, fiyatli = false) =>
+    `${isYolu(id)}/bakim-fisi.pdf${fiyatli ? "?fiyatli=true" : ""}`,
+  onarimFisiYolu: (id: number, fiyatli = false) =>
+    `${isYolu(id)}/onarim-fisi.pdf${fiyatli ? "?fiyatli=true" : ""}`,
   ziyaretFormuYolu: (idler: number[]) =>
     `${TS}/isler/ziyaret-formu.pdf?${idler.map((i) => `is_id=${i}`).join("&")}`,
   arizaNedenleri: (birim: string) =>

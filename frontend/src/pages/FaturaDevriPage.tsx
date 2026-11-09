@@ -218,6 +218,16 @@ function DevirListesi({ durum }: { durum: "bekleyen" | "iletildi" }) {
             Excel
           </Button>
         )}
+        {yetkili("servis_rapor.disaaktar") && (
+          <Button
+            icon={<DownloadOutlined />}
+            onClick={() =>
+              window.open(`${servisMaliyetApi.faturaDevriExcelAdresi(suzgec)}&bicim=csv`, "_blank")
+            }
+          >
+            CSV (Logo)
+          </Button>
+        )}
       </Space>
       {hata && <Alert type="error" showIcon closable message={hata} onClose={() => setHata(null)} />}
       {liste.isError && <Alert type="error" message={(liste.error as Error).message} />}

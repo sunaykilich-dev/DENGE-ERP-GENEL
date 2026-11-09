@@ -595,7 +595,10 @@ async def fatura_devri_xlsx(
     donem: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
     birim: str | None = None,
     musteri_id: int | None = None,
+    bicim: Literal["xlsx", "csv"] = "xlsx",
 ) -> Response:
+    """Fatura devri dökümü. `bicim=csv`: Logo aktarımı için `;` ayraçlı, UTF-8
+    BOM'lu CSV (KARARLAR 2026-11-09 S4.4; Logo API'si DEĞİL)."""
     with _hatalar():
         stmt = fatura_devri.liste_sorgusu(user, _devir_suzgeci(durum, donem, birim, musteri_id))
     satirlar = await fatura_devri.satirlar(db, user, list((await db.execute(stmt)).all()))
@@ -640,6 +643,14 @@ async def fatura_devri_xlsx(
         {"durum": durum, "donem": donem, "birim": birim, "musteri_id": musteri_id},
         len(tablo),
     )
+    if bicim == "csv":
+        from app.services.muhasebe_aktarim import csv_uret
+
+        return Response(
+            content=csv_uret(sutunlar, tablo),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="fatura-devri-{durum}.csv"'},
+        )
     icerik = await export_svc.sayfalari_xlsx_async(
         [export_svc.Sayfa("Fatura Devri", sutunlar, tablo)]
     )

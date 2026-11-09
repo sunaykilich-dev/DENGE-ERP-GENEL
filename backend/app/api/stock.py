@@ -13,6 +13,7 @@ from app.models import (
     Account,
     Device,
     DeviceCustodyHistory,
+    Irsaliye,
     Transfer,
     TransferItem,
     User,
@@ -21,6 +22,7 @@ from app.models import (
 from app.models.stock import KONUM_TIPLERI, SAHIPLIK_DURUMLARI, TRANSFER_TIPLERI
 from app.services import audit
 from app.services import devices as cihaz_svc
+from app.services import irsaliye as irsaliye_svc
 from app.services import stock as svc
 from app.services.statemachine import IzinsizGecis
 
@@ -78,6 +80,9 @@ class TransferOut(BaseModel):
     notes: str | None
     kalemler: list[TransferKalemOut] = []
     version: int
+    # S4.3: depodan şirket dışına çıkan transferin irsaliyesi.
+    irsaliye_id: int | None = None
+    irsaliye_no: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -105,6 +110,13 @@ async def _transfer_cikti(db: DbDep, t: Transfer) -> TransferOut:
     for k in t.items:
         c = await db.get(Device, k.device_id)
         out.kalemler.append(TransferKalemOut(device_id=k.device_id, kimlik=c.kimlik if c else None))
+    irs = (
+        await db.execute(
+            select(Irsaliye.id, Irsaliye.irsaliye_no).where(Irsaliye.transfer_id == t.id)
+        )
+    ).first()
+    if irs is not None:
+        out.irsaliye_id, out.irsaliye_no = irs
     return out
 
 
@@ -145,6 +157,17 @@ async def transfer_olustur(
                 status.HTTP_409_CONFLICT,
                 "Servis ve kiralama depoları mobilite transferinde kullanılamaz.",
             )
+
+    # S4.3: depodan şirket dışına çıkış irsaliye ister; irsaliye alıcısız
+    # düzenlenemez — transfer açılmadan önce reddedilir (yarım belge yok).
+    irsaliyeli = irsaliye_svc.irsaliye_gerekir_mi(
+        payload.from_location_type, payload.to_location_type
+    )
+    if irsaliyeli and payload.to_account_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Depodan şirket dışına sevkte alıcı hesap seçilmeli; irsaliye alıcısız düzenlenemez.",
+        )
 
     kimlikler = [k.strip() for k in payload.kimlikler if k.strip()]
     cihazlar = (
@@ -200,6 +223,22 @@ async def transfer_olustur(
             atlanan.append(c.kimlik or str(c.id))
     await db.flush()
 
+    irsaliye = None
+    if irsaliyeli:
+        try:
+            irsaliye = await irsaliye_svc.olustur(
+                db,
+                transfer,
+                await irsaliye_svc.cihaz_kalemleri(db, [c.id for c in cihazlar]),
+                clock=clock,
+                user_id=user.id,
+                ip=client_ip(request),
+            )
+        except irsaliye_svc.IrsaliyeGirdiHatasi as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        except irsaliye_svc.IrsaliyeHatasi as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
     await audit.log(
         db,
         "transfers",
@@ -209,6 +248,7 @@ async def transfer_olustur(
             "no": transfer.transfer_no,
             "adet": len(cihazlar),
             "tip": transfer.type,
+            **({"irsaliye": irsaliye.irsaliye_no} if irsaliye else {}),
             **({"durumu_degismeyen": atlanan} if atlanan else {}),
         },
         user_id=user.id,

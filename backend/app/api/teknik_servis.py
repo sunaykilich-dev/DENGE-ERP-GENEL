@@ -2450,6 +2450,43 @@ async def servis_formu(so_id: int, db: DbDep, clock: ClockDep, user: Okuyucu) ->
     )
 
 
+async def _servis_fisi(so_id: int, tur: str, db, clock, user: User, fiyatli: bool) -> Response:
+    """Bakım/onarım fişi (KARARLAR 2026-11-09 S6; `s/servis_fisleri`). Fiyat
+    yalnız `fiyatli=true` VE tutar görme yetkisiyle; yoksa fiyatsız basılır."""
+    from app.services.teknik_servis import servis_fisleri
+
+    so = await _kapsamli_is(db, so_id, user)
+    try:
+        icerik = await servis_fisleri.pdf(
+            db, so, tur, fiyatli=fiyatli and servis_fisleri.tutar_hakki(user), clock=clock
+        )
+    except PdfUretilemedi as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    return Response(
+        content=icerik,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{so.so_no}-{tur}-fisi.pdf"'},
+    )
+
+
+@router.get("/isler/{so_id}/bakim-fisi.pdf")
+async def bakim_fisi(
+    so_id: int, db: DbDep, clock: ClockDep, user: Okuyucu, fiyatli: bool = False
+) -> Response:
+    """Bakım fişi (PB / plansız bakım işi; diğer türde 409)."""
+    return await _servis_fisi(so_id, "bakim", db, clock, user, fiyatli)
+
+
+@router.get("/isler/{so_id}/onarim-fisi.pdf")
+async def onarim_fisi(
+    so_id: int, db: DbDep, clock: ClockDep, user: Okuyucu, fiyatli: bool = False
+) -> Response:
+    """Onarım fişi (arıza / atölye işi; diğer türde 409)."""
+    return await _servis_fisi(so_id, "onarim", db, clock, user, fiyatli)
+
+
 # --- Panel (TS-035; iş kuralı D1-C `s/panel.py`) ---------------------------------------------
 
 

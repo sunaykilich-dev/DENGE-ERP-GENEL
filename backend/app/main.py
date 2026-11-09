@@ -21,6 +21,7 @@ from app.api import egitim as egitim_api
 from app.api import gorevler as gorevler_api
 from app.api import ik_belgeler as ik_belgeler_api
 from app.api import imports as imports_api
+from app.api import irsaliyeler as irsaliyeler_api
 from app.api import kiralamalar as kiralamalar_api
 from app.api import kvkk as kvkk_api
 from app.api import lokasyonlar as lokasyonlar_api
@@ -215,6 +216,8 @@ def create_app() -> FastAPI:
     # şirket kuralı yönlendiricide değil `services/quotes._sirket_kosulu`'nda.
     app.include_router(quotes_api.router)
     app.include_router(orders_api.router, dependencies=MOBILITE_KAPISI)
+    # S4.3: irsaliye mobilite stoğundan sevkte doğar; aynı şirket kapısı.
+    app.include_router(irsaliyeler_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(subscriptions_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(tariffs_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(pricing_api.router, dependencies=MOBILITE_KAPISI)

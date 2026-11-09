@@ -1,0 +1,93 @@
+{#
+  Sipariş onayı (KARARLAR 2026-11-09 S6). Bağlam: `services/siparis_belgeleri.onay_baglami`.
+
+  Müşteriye "siparişiniz alındı" belgesi. Fiyatlıdır (sipariş fiyatı
+  `siparis.gor` sahibine sipariş ekranında zaten açık); MALİYET BASILMAZ.
+  TASLAK ve İPTAL siparişte üretilmez (409). Tutarlar teklif.html ile aynı
+  biçimde (`tl` süzgeci, KDV kalem bazında dondurulmuş).
+#}
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Sipariş onayı {{ siparis.order_no }}</title>
+<style>
+{% include "_belge_fontlari.html" %}
+  table.toplam { width: 70mm; margin-left: auto; }
+  table.toplam th { width: auto; }
+</style>
+</head>
+<body>
+  <div class="ust">
+    <div class="firma">
+      <div class="ad">{{ firma.unvan }}</div>
+      <div>{{ firma.adres }}</div>
+      <div>Tel: {{ firma.telefon }}{% if firma.eposta %} · {{ firma.eposta }}{% endif %}</div>
+      {% if firma.vkn %}<div>VKN: {{ firma.vkn }}{% if firma.vergi_dairesi %} · {{ firma.vergi_dairesi }} V.D.{% endif %}</div>{% endif %}
+    </div>
+    <div class="belge">
+      <div class="baslik">SİPARİŞ ONAYI</div>
+      <div class="mono">{{ siparis.order_no }}</div>
+      <div>Sipariş tarihi: {{ tarih }}</div>
+      {% if istenen_tarih %}<div>İstenen teslim: {{ istenen_tarih }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="bolum">Müşteri</div>
+  <table class="bilgi">
+    <tr><th>Unvan</th><td>{{ musteri.title if musteri else "—" }}</td></tr>
+    {% if musteri and musteri.tax_no %}<tr><th>VKN / TCKN</th><td class="mono">{{ musteri.tax_no }}{% if musteri.tax_office %} · {{ musteri.tax_office }} V.D.{% endif %}</td></tr>{% endif %}
+    <tr><th>Adres</th><td>{{ adres or "—" }}</td></tr>
+    <tr><th>Satış temsilcisi</th><td>{{ hazirlayan }}</td></tr>
+  </table>
+
+  <div class="bolum">Sipariş kalemleri</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:8mm">#</th>
+        <th>Açıklama</th>
+        <th class="sag" style="width:15mm">Miktar</th>
+        <th class="sag" style="width:26mm">Birim fiyat</th>
+        <th class="sag" style="width:13mm">İsk. %</th>
+        <th class="sag" style="width:12mm">KDV %</th>
+        <th class="sag" style="width:28mm">Tutar</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for k in kalemler %}
+      <tr>
+        <td class="mono">{{ loop.index }}</td>
+        <td>{{ k.description }}</td>
+        <td class="sag mono">{{ k.qty }}</td>
+        <td class="sag mono">{{ k.unit_price }} {{ para }}</td>
+        <td class="sag mono">{{ k.discount_pct if k.iskonto_var else "" }}</td>
+        <td class="sag mono">{{ k.vat_pct }}</td>
+        <td class="sag mono">{{ k.line_total }} {{ para }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <table class="toplam">
+    <tr><th>Ara toplam</th><td class="sag mono">{{ toplam.ara }} {{ para }}</td></tr>
+    {% if toplam.iskonto_var %}<tr><th>İskonto</th><td class="sag mono">-{{ toplam.iskonto }} {{ para }}</td></tr>{% endif %}
+    <tr><th>KDV</th><td class="sag mono">{{ toplam.kdv }} {{ para }}</td></tr>
+    <tr><th>Genel toplam</th><td class="sag mono"><strong>{{ toplam.genel }} {{ para }}</strong></td></tr>
+  </table>
+  {% if kur %}<div class="not">Döviz kuru: {{ kur }}</div>{% endif %}
+  {% if notlar %}<div class="not">Not: {{ notlar }}</div>{% endif %}
+
+  <div class="imza">
+    <div class="kutu">
+      <div>{{ firma.unvan }}</div>
+      <div>Onaylayan / İmza:</div>
+    </div>
+    <div class="kutu">
+      <div>Müşteri onayı</div>
+      <div>Ad Soyad / İmza / Kaşe:</div>
+    </div>
+  </div>
+  <div class="not">Bu belge siparişin alındığını teyit eder; fatura ve irsaliye yerine geçmez.</div>
+</body>
+</html>

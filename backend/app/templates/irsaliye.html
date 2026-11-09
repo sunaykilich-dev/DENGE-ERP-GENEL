@@ -1,0 +1,103 @@
+{#
+  Sevk irsaliyesi (KARARLAR 2026-11-09 S4.3). e-İrsaliye DEĞİLDİR.
+  Bağlam: `services/irsaliye.pdf_baglami`.
+
+  BİLEREK YAPILANLAR:
+  * Fiyat kolonları YALNIZ `fiyatli` iken basılır; `fiyatli` çağıranda yetkiyle
+    süzülür (`fiyat_gorur_mu`). Maliyet hiçbir koşulda basılmaz.
+  * Seri numaraları metin olarak, kalemin altında tam liste basılır.
+  * İptal edilmiş irsaliye "İPTAL" damgasıyla basılır (numara boşluksuz kalır).
+#}
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>{{ irs.irsaliye_no }}</title>
+<style>
+{% include "_belge_fontlari.html" %}
+  .seri { font-size: 7pt; margin-top: 0.8mm; word-break: break-all; }
+</style>
+</head>
+<body>
+  <div class="ust">
+    <div class="firma">
+      <div class="ad">{{ firma.unvan }}</div>
+      <div>{{ firma.adres }}</div>
+      <div>Tel: {{ firma.telefon }}{% if firma.eposta %} · {{ firma.eposta }}{% endif %}</div>
+      {% if firma.vkn %}<div>VKN: {{ firma.vkn }}{% if firma.vergi_dairesi %} · {{ firma.vergi_dairesi }} V.D.{% endif %}</div>{% endif %}
+      {% if firma.mersis %}<div>MERSİS: {{ firma.mersis }}</div>{% endif %}
+    </div>
+    <div class="belge">
+      <div class="baslik">{{ baslik }}</div>
+      <div class="mono">{{ irs.irsaliye_no }}</div>
+      <div>Düzenleme tarihi: {{ duzenleme_tarihi }}</div>
+      <div>Fiili sevk tarihi: {{ sevk_tarihi }}</div>
+      {% if iptal %}<div class="damga">İPTAL</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="bolum">Alıcı</div>
+  <table class="bilgi">
+    <tr><th>Unvan</th><td>{{ irs.alici_unvan }}</td></tr>
+    {% if irs.alici_vkn %}<tr><th>VKN / TCKN</th><td class="mono">{{ irs.alici_vkn }}{% if irs.alici_vergi_dairesi %} · {{ irs.alici_vergi_dairesi }} V.D.{% endif %}</td></tr>{% endif %}
+    <tr><th>Sevk adresi</th><td>{{ irs.alici_adres or "—" }}</td></tr>
+    <tr><th>Gönderim</th><td>{{ hedef }}{% if irs.cikis_depo_adi %} · Çıkış deposu: {{ irs.cikis_depo_adi }}{% endif %}</td></tr>
+    {% if siparis_no %}<tr><th>Sipariş no</th><td class="mono">{{ siparis_no }}</td></tr>{% endif %}
+    {% if transfer_no %}<tr><th>Sevk belgesi</th><td class="mono">{{ transfer_no }}</td></tr>{% endif %}
+  </table>
+
+  <div class="bolum">Sevk edilen mallar</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:8mm">#</th>
+        <th style="width:26mm">Kod</th>
+        <th>Açıklama</th>
+        <th class="sag" style="width:16mm">Miktar</th>
+        <th style="width:14mm">Birim</th>
+        {% if fiyatli %}
+        <th class="sag" style="width:24mm">Birim fiyat</th>
+        <th class="sag" style="width:13mm">İsk. %</th>
+        <th class="sag" style="width:12mm">KDV %</th>
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for k in kalemler %}
+      <tr>
+        <td class="mono">{{ k.sira }}</td>
+        <td class="mono">{{ k.kod }}</td>
+        <td>{{ k.aciklama }}
+          {% if k.seri_nolar %}<div class="seri mono">Seri / IMEI: {{ k.seri_nolar }}</div>{% endif %}
+        </td>
+        <td class="sag mono">{{ k.miktar }}</td>
+        <td>{{ k.birim }}</td>
+        {% if fiyatli %}
+        <td class="sag mono">{{ k.birim_fiyat or "" }}</td>
+        <td class="sag mono">{{ k.iskonto or "" }}</td>
+        <td class="sag mono">{{ k.kdv or "" }}</td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div style="text-align:right; margin-top:2mm;">Toplam miktar: <span class="mono">{{ toplam_miktar }}</span></div>
+
+  {% if irs.notlar %}<div class="not">Not: {{ irs.notlar }}</div>{% endif %}
+  {% if iptal and irs.iptal_nedeni %}<div class="not">İptal nedeni: {{ irs.iptal_nedeni }}</div>{% endif %}
+
+  <div class="imza">
+    <div class="kutu">
+      <div>Teslim eden</div>
+      <div>{{ irs.teslim_eden or "" }}</div>
+      <div style="margin-top:8mm">İmza:</div>
+    </div>
+    <div class="kutu">
+      <div>Teslim alan</div>
+      <div>Ad Soyad:</div>
+      <div style="margin-top:8mm">İmza / Kaşe:</div>
+    </div>
+  </div>
+  <div class="not">Bu belge kâğıt sevk irsaliyesidir; e-İrsaliye yerine geçmez.</div>
+</body>
+</html>
