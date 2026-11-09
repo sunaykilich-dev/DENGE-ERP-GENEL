@@ -262,7 +262,10 @@
 
 .fl-aciklama {
   display: block;
-  max-width: 100%;
+  /* Sabit üst sınır ŞART: tablo "auto" düzende; nowrap metin %100 ile sütunu
+     en uzun açıklama kadar açar, diğer sütunlar sıkışıp satırlar uzar
+     (2026-11-09, uzun açıklamalı SRV-202611-000814). */
+  max-width: 340px;
   padding: 0;
   border: 0;
   background: none;
