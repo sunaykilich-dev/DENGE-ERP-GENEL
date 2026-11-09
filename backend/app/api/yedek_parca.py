@@ -51,7 +51,7 @@ from app.models import (
 )
 from app.models.catalog import OLCU_BIRIMLERI
 from app.models.stock import KONUM_TIPLERI
-from app.permissions import BIRIMLER
+from app.permissions import BIRIMLER, SCOPE_OWN_JOBS
 from app.services import audit
 from app.services import export as export_svc
 from app.services.teknik_servis import kapsam
@@ -69,6 +69,7 @@ Yonetici = Annotated[User, Depends(require_permission("parca.yonet"))]
 Aktarici = Annotated[User, Depends(require_permission("parca.gor", "servis_rapor.disaaktar"))]
 IsOkuyucu = Annotated[User, Depends(require_permission("servis.gor"))]
 DepoTanimci = Annotated[User, Depends(require_permission("sistem.ayar"))]
+TalepOnaylayici = Annotated[User, Depends(require_permission("parca.talep_onay"))]
 
 EXCEL_UST_SINIR = 20_000
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -253,10 +254,28 @@ class TalepIn(_Kati):
     adet: int = Field(gt=0, le=1_000_000)
     notes: str | None = Field(default=None, max_length=500)
     isi_beklet: bool = False
+    # Talep edilen depo; boşsa işin biriminin TEK deposu (araç depoları hariç).
+    depo_id: int | None = None
 
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={"examples": [{"service_order_id": 1, "product_id": 1, "adet": 1}]},
+    )
+
+
+class TalepKimlikIn(_Kati):
+    talep_id: int
+
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [{"talep_id": 1}]})
+
+
+class TalepRedIn(_Kati):
+    talep_id: int
+    neden: str = Field(min_length=3, max_length=200)
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"examples": [{"talep_id": 1, "neden": "Stokta muadili var"}]},
     )
 
 
@@ -1109,9 +1128,18 @@ async def cikis(
     payload: IsHareketiIn, request: Request, db: DbDep, clock: ClockDep, user: Kullanici
 ) -> list[dict[str, Any]]:
     """Açık servis işine toplu çıkış (tek transaction). Kapalı iş 409; stok
-    yetersiz 409 ve hiçbir satır yazılmaz; kapsam dışı iş/depo 404."""
+    yetersiz 409 ve hiçbir satır yazılmaz; kapsam dışı iş/depo 404.
+
+    Teknisyen (KENDI_ISLERI kapsamı) yalnız KENDİ ARAÇ deposundan çıkış
+    yapar; birim deposundan parça amir onaylı talep + depo teslimiyle gelir
+    (2026-11-09) — aksi hâlde onay adımı dolanılırdı (403)."""
     so = await _is(db, user, payload.service_order_id)
     depo = await _depo(db, user, payload.depo_id)
+    if _teknisyen_mi(user) and not (depo.location_type == "TEKNISYEN" and depo.user_id == user.id):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Depodan parça amir onaylı talep ile alınır; doğrudan çıkış yalnız araç deposundan",
+        )
     try:
         hareketler = await svc.cikis_yap(
             db,
@@ -1339,7 +1367,18 @@ async def is_parcalari(so_id: int, db: DbDep, user: IsOkuyucu) -> dict[str, Any]
 # --- Parça talepleri (TS-138) -------------------------------------------------------------------
 
 
-def _talep_cikti(t: ServicePartRequest, u: Product, so_no: str | None) -> dict[str, Any]:
+def _teknisyen_mi(user: User) -> bool:
+    return user.role is not None and user.role.scope == SCOPE_OWN_JOBS
+
+
+def _talep_cikti(
+    t: ServicePartRequest,
+    u: Product,
+    so_no: str | None,
+    depo: Warehouse | None = None,
+    adlar: dict[int, str] | None = None,
+) -> dict[str, Any]:
+    adlar = adlar or {}
     return {
         "id": t.id,
         "service_order_id": t.service_order_id,
@@ -1350,6 +1389,12 @@ def _talep_cikti(t: ServicePartRequest, u: Product, so_no: str | None) -> dict[s
         "adet": t.adet,
         "durum": t.durum,
         "notes": t.notes,
+        "depo_id": t.warehouse_id,
+        "depo_adi": depo.name if depo is not None else None,
+        "talep_eden": adlar.get(t.created_by) if t.created_by else None,
+        "onaylayan": adlar.get(t.onaylayan_id) if t.onaylayan_id else None,
+        "onay_at": t.onay_at,
+        "red_nedeni": t.red_nedeni,
         "iptal_nedeni": t.iptal_nedeni,
         "karsilanma_at": t.karsilanma_at,
         "beklemeye_bagli": t.hold_id is not None,
@@ -1372,9 +1417,10 @@ async def talepler(
 ) -> list[dict[str, Any]]:
     stmt = (
         svc.talep_sorgusu(user)
-        .add_columns(Product, ServiceOrder.so_no)
+        .add_columns(Product, ServiceOrder.so_no, Warehouse)
         .join(Product, Product.id == ServicePartRequest.product_id)
         .join(ServiceOrder, ServiceOrder.id == ServicePartRequest.service_order_id)
+        .outerjoin(Warehouse, Warehouse.id == ServicePartRequest.warehouse_id)
         .order_by(ServicePartRequest.created_at.desc(), ServicePartRequest.id.desc())
     )
     if durum:
@@ -1384,7 +1430,9 @@ async def talepler(
     if benim:
         stmt = stmt.where(ServicePartRequest.created_by == user.id)
     satirlar = await sayfala(db, response, stmt, limit=limit, offset=offset)
-    return [_talep_cikti(t, u, so_no) for t, u, so_no in satirlar]
+    idler = {k for t, *_ in satirlar for k in (t.created_by, t.onaylayan_id) if k}
+    adlar = await _kullanici_adlari(db, idler)
+    return [_talep_cikti(t, u, so_no, w, adlar) for t, u, so_no, w in satirlar]
 
 
 @router.post("/talepler", status_code=status.HTTP_201_CREATED)
@@ -1392,8 +1440,34 @@ async def talep_ac(
     payload: TalepIn, request: Request, db: DbDep, clock: ClockDep, user: Kullanici
 ) -> dict[str, Any]:
     """Açık işe parça talebi; `isi_beklet` ile MALZEME beklemesi. İş + parça
-    başına tek açık talep (409)."""
+    başına tek açık talep (409).
+
+    Amir onayı (2026-11-09): talep işin biriminin deposuna gider (başka
+    birimin deposu 404, araç deposu 400). Depo seçilmediyse o birimin tek
+    deposu kullanılır (teknisyen seçmek zorunda kalmaz); birden çoksa 400.
+    Talep ONAY_BEKLIYOR açılır; onay yetkilisinin kendi talebi ACIK."""
     so = await _is(db, user, payload.service_order_id)
+    if payload.depo_id is not None:
+        depo = await _depo(db, user, payload.depo_id)
+    else:
+        adaylar = (
+            await db.scalars(
+                select(Warehouse).where(
+                    svc.depo_kosulu(user),
+                    Warehouse.is_active.is_(True),
+                    Warehouse.birim == so.birim,
+                    Warehouse.location_type != "TEKNISYEN",
+                )
+            )
+        ).all()
+        if len(adaylar) != 1:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Talep edilecek depoyu seçin"
+                if adaylar
+                else "Bu işin biriminde talep edilebilecek depo yok",
+            )
+        depo = adaylar[0]
     try:
         talep = await svc.talep_ac(
             db,
@@ -1404,6 +1478,7 @@ async def talep_ac(
             clock=clock,
             notes=payload.notes,
             isi_beklet=payload.isi_beklet,
+            depo=depo,
         )
     except _HATALAR as exc:
         raise _hata(exc) from exc
@@ -1417,13 +1492,22 @@ async def talep_ac(
             "product_id": talep.product_id,
             "adet": talep.adet,
             "isi_beklet": payload.isi_beklet,
+            "depo_id": depo.id,
+            "durum": talep.durum,
         },
         user_id=user.id,
         ip=client_ip(request),
     )
     await db.commit()
+    return await _talep_yaniti(db, talep)
+
+
+async def _talep_yaniti(db: DbDep, talep: ServicePartRequest) -> dict[str, Any]:
     urun = await db.get(Product, talep.product_id)
-    return _talep_cikti(talep, urun, so.so_no)
+    so = await db.get(ServiceOrder, talep.service_order_id)
+    depo = await db.get(Warehouse, talep.warehouse_id) if talep.warehouse_id else None
+    adlar = await _kullanici_adlari(db, {k for k in (talep.created_by, talep.onaylayan_id) if k})
+    return _talep_cikti(talep, urun, so.so_no if so else None, depo, adlar)
 
 
 async def _talep_getir(db: DbDep, user: User, talep_id: int) -> ServicePartRequest:
@@ -1457,9 +1541,100 @@ async def talep_iptal(
         ip=client_ip(request),
     )
     await db.commit()
-    urun = await db.get(Product, talep.product_id)
+    return await _talep_yaniti(db, talep)
+
+
+async def _onay_talebi(db: DbDep, user: User, talep_id: int) -> ServicePartRequest:
+    """Onaylayıcı için talep: iş kapsamı (şef: kendi birimi) VE talep deposu
+    kapsamı; ikisinden biri dışarıdaysa 404 (başka birimin talebi görünmez)."""
+    talep = await _talep_getir(db, user, talep_id)
+    if talep.warehouse_id is not None:
+        await _depo(db, user, talep.warehouse_id)
+    return talep
+
+
+@router.post("/talepler/onayla")
+async def talep_onayla(
+    payload: TalepKimlikIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: TalepOnaylayici,
+) -> dict[str, Any]:
+    """Amir onayı (`parca.talep_onay`, tek adım): ONAY_BEKLIYOR → ACIK.
+    Başka birimin talebi 404; onay bekleyen değilse 409."""
+    talep = await _onay_talebi(db, user, payload.talep_id)
+    try:
+        await svc.talep_onayla(db, talep, user=user, clock=clock)
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await audit.log(
+        db,
+        "service_part_requests",
+        "parca.talep_onayla",
+        entity_id=talep.id,
+        new_value={"durum": talep.durum},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return await _talep_yaniti(db, talep)
+
+
+@router.post("/talepler/reddet")
+async def talep_reddet(
+    payload: TalepRedIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: TalepOnaylayici,
+) -> dict[str, Any]:
+    """Amir reddi (gerekçe zorunlu): ONAY_BEKLIYOR → REDDEDILDI; teknisyen görür."""
+    talep = await _onay_talebi(db, user, payload.talep_id)
+    try:
+        await svc.talep_reddet(db, talep, neden=payload.neden, user=user, clock=clock)
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await audit.log(
+        db,
+        "service_part_requests",
+        "parca.talep_reddet",
+        entity_id=talep.id,
+        new_value={"durum": talep.durum, "neden": payload.neden},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return await _talep_yaniti(db, talep)
+
+
+@router.post("/talepler/teslim")
+async def talep_teslim(
+    payload: TalepKimlikIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yonetici,
+) -> dict[str, Any]:
+    """Depo teslimi (`parca.yonet`): onaylı talebin deposundan işe kalan adet
+    kadar çıkış; talep KARSILANDI. Talep/depo kapsam dışı 404; onaysız talep,
+    depo bilgisi olmayan eski talep ya da yetersiz stok 409."""
+    talep = await _talep_getir(db, user, payload.talep_id)
+    if talep.warehouse_id is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Talepte depo yok; parçayı Çıkış ile verin")
+    depo = await _depo(db, user, talep.warehouse_id)
+    try:
+        hareketler = await svc.talep_teslim(db, talep, depo=depo, user=user, clock=clock)
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
     so = await db.get(ServiceOrder, talep.service_order_id)
-    return _talep_cikti(talep, urun, so.so_no if so else None)
+    await _denetim(db, request, user, "cikis", hareketler, so_no=so.so_no if so else None)
+    await db.commit()
+    await db.refresh(talep)
+    return {
+        "talep": await _talep_yaniti(db, talep),
+        "hareketler": await _hareket_ciktilari(db, user, hareketler),
+    }
 
 
 # --- Sayım (TS-137) ------------------------------------------------------------------------------

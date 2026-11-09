@@ -59,6 +59,9 @@ export interface MenuYapragi {
   /** İzni veren katalog uygulaması (`uygulamalar.ts` kimliği); null = herkese açık. */
   uygulama: string | null;
   ikon?: IkonBileseni;
+  /** Uygulamanın iznine EK olarak bu izinlerden biri de gerekir (aynı sayfanın
+   *  ekip görünümü; ör. kalite onayı bekleyenler yalnız onaylayana). */
+  izin?: string[];
 }
 
 export interface MenuGrubu {
@@ -68,6 +71,8 @@ export interface MenuGrubu {
   ikon?: IkonBileseni;
   /** Doluysa bölüm yalnız etkin şirketin bu birimlerinden biri varsa görünür. */
   birimler?: string[];
+  /** Doluysa bölüm yalnız bu izinlerden biri varsa görünür (departman bölümü). */
+  izin?: string[];
   altlar: MenuOgesi[];
 }
 
@@ -102,7 +107,7 @@ function grup(
   anahtar: string,
   baslik: string,
   altlar: MenuOgesi[],
-  ek: { ikon?: IkonBileseni; birimler?: string[] } = {},
+  ek: { ikon?: IkonBileseni; birimler?: string[]; izin?: string[] } = {},
 ): MenuGrubu {
   return { tur: "grup", anahtar, baslik, altlar, ...ek };
 }
@@ -214,7 +219,13 @@ export const MENU_AGACI: MenuOgesi[] = [
       ),
       sayfa("/urunler", "Ürün Kataloğu", "satis:urunler"),
     ],
-    { ikon: ShopOutlined, birimler: ["GUVENLIK", "BARIYER", "HABERLESME", "POC"] },
+    // 2026-11-09: satışın bölümü. Teknisyen burada yalnız kendi işlerinin
+    // süzülmüş görünümlerini görüyordu (servis.gor); bölüm satış izni ister.
+    {
+      ikon: ShopOutlined,
+      birimler: ["GUVENLIK", "BARIYER", "HABERLESME", "POC"],
+      izin: ["hesap.gor", "teklif.gor"],
+    },
   ),
 
   // --- Ortak bölümler (her şirkette) ----------------------------------------
@@ -241,11 +252,15 @@ export const MENU_AGACI: MenuOgesi[] = [
     "takip",
     "Takip ve Onaylar",
     [
-      sayfa("/servis-isleri", "Tüm Servis İşleri"),
+      // Ekip listesi: teknisyen kendi işlerini "Benim İşlerim" ve birim bölümünden açar.
+      { ...sayfa("/servis-isleri", "Tüm Servis İşleri"), izin: ["takip.gor"] },
       sayfa("/servis-paneli"),
       sayfa("kpi:atanmamis"),
       sayfa("kpi:kapanis_bekleyen"),
-      suzgecli("kalite:bekleyen", "Kalite Onayı Bekleyen", "/servis-isleri?kalite=BEKLEYEN", "/servis-isleri"),
+      {
+        ...suzgecli("kalite:bekleyen", "Kalite Onayı Bekleyen", "/servis-isleri?kalite=BEKLEYEN", "/servis-isleri"),
+        izin: ["servis.kalite_onay"],
+      },
       sayfa("kpi:beklemede"),
       sayfa("/gorevler"),
     ],
@@ -299,6 +314,7 @@ export interface MenuSuzgeci {
 }
 
 export function yaprakYetkili(y: MenuYapragi, yetkili: Yetkili): boolean {
+  if (y.izin && !y.izin.some((i) => yetkili(i))) return false;
   if (y.uygulama === null) return true;
   const u = KATALOG.get(y.uygulama);
   return !!u && uygulamaYetkili(u, yetkili);
@@ -313,6 +329,7 @@ export function gorunurMenu(agac: MenuOgesi[], s: MenuSuzgeci): MenuOgesi[] {
       continue;
     }
     if (o.birimler && s.aktifBirimler && !o.birimler.some((b) => s.aktifBirimler!.has(b))) continue;
+    if (o.izin && !o.izin.some((i) => s.yetkili(i))) continue;
     const altlar = gorunurMenu(o.altlar, s);
     if (altlar.length) sonuc.push({ ...o, altlar });
   }

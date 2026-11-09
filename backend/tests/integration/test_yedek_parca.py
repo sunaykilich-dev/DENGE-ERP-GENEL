@@ -701,6 +701,12 @@ async def test_talep_malzeme_beklemesi_ve_karsilanma(
     await db.refresh(so)
     assert so.status == "BEKLEMEDE"
     assert (await tekn.post(f"{URL}/talepler", json=govde)).status_code == 409
+    # Teknisyen talebi amir onayı bekler (2026-11-09); şef tek adımda onaylar.
+    assert r.json()["durum"] == "ONAY_BEKLIYOR" and r.json()["depo_id"] == ortam.depo.id
+    await birimli_kullanici_ac("sef_t", "SERVIS_SEF", ["GUVENLIK"])
+    sef = await giris("sef_t")
+    r = await sef.post(f"{URL}/talepler/onayla", json={"talep_id": talep_id})
+    assert r.status_code == 200 and r.json()["durum"] == "ACIK", r.text
     # Talep depo listesinde; parça gelince talep sahibine uyarı.
     liste = await ortam.depocu.get(f"{URL}/talepler", params={"durum": "ACIK"})
     assert liste.headers["X-Toplam-Kayit"] == "1"
@@ -734,7 +740,8 @@ async def test_onceki_cikis_talebi_karsilamaz_ve_is_kapaninca_iptal(
         f"{URL}/talepler", json={"service_order_id": so.id, "product_id": ortam.urun.id, "adet": 2}
     )
     talep = await db.get(ServicePartRequest, r.json()["id"])
-    assert talep.durum == "ACIK"
+    # Onay yetkisi olmayan depocunun talebi de amir onayı bekler.
+    assert talep.durum == "ONAY_BEKLIYOR"
     so_db = await db.get(ServiceOrder, so.id)
     await is_emirleri.durum_degistir(
         db, so_db, "IPTAL", kaynak="iptal", user=None, clock=FakeClock(), gerekce="Vazgeçildi"

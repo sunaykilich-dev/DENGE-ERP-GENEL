@@ -74,6 +74,7 @@ from app.models import (
     StockMovement,
     Warehouse,
 )
+from app.models.servis_parca import PARCA_TALEP_ACIK_DURUMLAR
 from app.models.stock import SERVIS_HAREKET_TURLERI, SERVIS_HAREKET_YONU
 from app.models.teknik_servis import DURUM_GRUPLARI
 from app.permissions import BIRIMLER, SCOPE_ALL, SCOPE_OWN_JOBS, SCOPES
@@ -597,8 +598,6 @@ async def _talepleri_degerlendir(
 ) -> None:
     """Bağlı çıkışların neti talep adedine ulaşan talep KARSILANDI olur; bağlı
     MALZEME beklemesinde başka açık talep kalmadıysa bekleme biter."""
-    from app.services.teknik_servis import bekletme
-
     biten_beklemeler: set[int] = set()
     for talep in talepler:
         if talep.durum != "ACIK":
@@ -620,14 +619,26 @@ async def _talepleri_degerlendir(
         if talep.hold_id is not None:
             biten_beklemeler.add(talep.hold_id)
     await db.flush()
-    for hold_id in biten_beklemeler:
+    await _beklemeleri_bitir(
+        db, so, biten_beklemeler, clock=clock, not_="Talep edilen parça karşılandı"
+    )
+
+
+async def _beklemeleri_bitir(
+    db: AsyncSession, so: ServiceOrder, hold_idler: Iterable[int], *, clock: Clock, not_: str
+) -> None:
+    """Bağlı MALZEME beklemesinde başka AÇIK (onay bekleyen ya da onaylı) talep
+    kalmadıysa bekleme biter."""
+    from app.services.teknik_servis import bekletme
+
+    for hold_id in set(hold_idler):
         bekleme = await db.get(ServiceHold, hold_id)
         if bekleme is None or bekleme.released_at is not None or so.status != "BEKLEMEDE":
             continue
         baska_acik = await db.scalar(
             select(func.count()).where(
                 ServicePartRequest.hold_id == hold_id,
-                ServicePartRequest.durum == "ACIK",
+                ServicePartRequest.durum.in_(PARCA_TALEP_ACIK_DURUMLAR),
                 ServicePartRequest.is_deleted.is_(False),
             )
         )
@@ -635,9 +646,7 @@ async def _talepleri_degerlendir(
             continue
         # Sistem kapatır (user=None): beklemeyi açan izin (servis.yaz) çıkışı
         # yapan depo sorumlusunda olmayabilir; karşılanma olgusu kişiye bağlı değil.
-        await bekletme.beklemeyi_bitir(
-            db, so, user=None, clock=clock, not_="Talep edilen parça karşılandı"
-        )
+        await bekletme.beklemeyi_bitir(db, so, user=None, clock=clock, not_=not_)
 
 
 async def cikis_yap(
@@ -727,20 +736,39 @@ async def talep_ac(
     clock: Clock,
     notes: str | None = None,
     isi_beklet: bool = False,
+    depo: Warehouse | None = None,
 ) -> ServicePartRequest:
     """Açık işe parça talebi (E11-19). `isi_beklet` → MALZEME beklemesi (iş
-    zaten MALZEME'de bekliyorsa ona bağlanır). İş + parça başına tek açık talep."""
+    zaten MALZEME'de bekliyorsa ona bağlanır). İş + parça başına tek açık talep.
+
+    **Amir onayı (2026-11-09):** talep `depo`dan (işin biriminin deposu, araç
+    deposu değil) istenir ve ONAY_BEKLIYOR açılır; onay yetkilisinin
+    (`parca.talep_onay`) kendi talebi doğrudan ACIK (tek adım, G1.9).
+    """
     from app.services.teknik_servis import bekletme
 
     so = await _isi_kilitle(db, so)
     if _kapali_mi(so):
         raise ParcaHatasi("Kapalı iş emrine parça talebi açılamaz.")
+    if depo is not None:
+        if depo.location_type == "TEKNISYEN":
+            raise ServisGirdiHatasi("Parça araç deposundan talep edilmez; birim deposunu seçin")
+        if not depo.is_active:
+            raise ParcaHatasi(f"'{depo.name}' pasif; talep açılamaz.")
+        birim_uyumu_dogrula(depo, so.birim, ne="işi için talepte")
     adet = _adet_dogrula(adet)
     notes = _metin(notes, 500, "Not")
     urun = _parca_dogrula(await db.get(Product, product_id), "TALEP", product_id)
     if not urun.is_active:
         raise ParcaHatasi(f"{urun.code} pasif; talep açılamaz.")
-    if await _acik_talepler(db, so.id, [urun.id]):
+    if await db.scalar(
+        select(ServicePartRequest.id).where(
+            ServicePartRequest.service_order_id == so.id,
+            ServicePartRequest.product_id == urun.id,
+            ServicePartRequest.durum.in_(PARCA_TALEP_ACIK_DURUMLAR),
+            ServicePartRequest.is_deleted.is_(False),
+        )
+    ):
         raise ParcaHatasi(f"Bu işte {urun.code} için zaten açık bir talep var.")
     hold_id: int | None = None
     if isi_beklet:
@@ -759,11 +787,15 @@ async def talep_ac(
                 aciklama=f"Parça talebi: {urun.code} × {adet}",
             )
             hold_id = bekleme.id
+    kendi_onayi = user.has("parca.talep_onay")
     talep = ServicePartRequest(
         service_order_id=so.id,
         product_id=urun.id,
         adet=adet,
-        durum="ACIK",
+        durum="ACIK" if kendi_onayi else "ONAY_BEKLIYOR",
+        warehouse_id=depo.id if depo is not None else None,
+        onaylayan_id=user.id if kendi_onayi else None,
+        onay_at=clock.now() if kendi_onayi else None,
         notes=notes,
         hold_id=hold_id,
         created_by=user.id,
@@ -789,14 +821,117 @@ async def talep_iptal(
     neden_ = _metin(neden, 200, "İptal nedeni")
     if neden_ is None:
         raise ServisGirdiHatasi("İptal nedeni zorunlu")
-    if talep.durum != "ACIK":
+    if talep.durum not in PARCA_TALEP_ACIK_DURUMLAR:
         raise ParcaHatasi("Yalnız açık talep iptal edilir.")
     PARCA_TALEBI.dogrula(talep.durum, "IPTAL")
     talep.durum = "IPTAL"
     talep.iptal_nedeni = neden_
     talep.updated_by = user.id
     await db.flush()
+    await _talep_beklemesini_degerlendir(db, talep, clock=clock, not_="Parça talebi iptal edildi")
     return talep
+
+
+async def _talep_beklemesini_degerlendir(
+    db: AsyncSession, talep: ServicePartRequest, *, clock: Clock, not_: str
+) -> None:
+    if talep.hold_id is None:
+        return
+    so = await db.get(ServiceOrder, talep.service_order_id)
+    if so is not None:
+        await _beklemeleri_bitir(db, so, [talep.hold_id], clock=clock, not_=not_)
+
+
+async def talep_onayla(
+    db: AsyncSession, talep: ServicePartRequest, *, user: User, clock: Clock
+) -> ServicePartRequest:
+    """Amir onayı (tek adım): ONAY_BEKLIYOR → ACIK; depo hazırlar/teslim eder.
+    Yetki (`parca.talep_onay`) ve kapsam (kendi birimi) API'de denetlenir."""
+    if talep.durum != "ONAY_BEKLIYOR":
+        raise ParcaHatasi("Yalnız onay bekleyen talep onaylanır.")
+    PARCA_TALEBI.dogrula(talep.durum, "ACIK")
+    talep.durum = "ACIK"
+    talep.onaylayan_id = user.id
+    talep.onay_at = clock.now()
+    talep.updated_by = user.id
+    await db.flush()
+    so = await db.get(ServiceOrder, talep.service_order_id)
+    if so is not None:
+        urun = await db.get(Product, talep.product_id)
+        await gecmis.olay_yaz(
+            db,
+            so,
+            "PARCA",
+            f"Parça talebi onaylandı: {urun.code if urun else talep.product_id} × {talep.adet}",
+            user=user,
+            clock=clock,
+            veri={"alt_tur": "TALEP_ONAY", "talep_id": talep.id},
+        )
+    return talep
+
+
+async def talep_reddet(
+    db: AsyncSession, talep: ServicePartRequest, *, neden: str, user: User, clock: Clock
+) -> ServicePartRequest:
+    """ONAY_BEKLIYOR → REDDEDILDI (gerekçe zorunlu); teknisyen listede görür.
+    Talebe bağlı MALZEME beklemesinde başka açık talep yoksa bekleme biter."""
+    neden_ = _metin(neden, 200, "Red gerekçesi")
+    if neden_ is None:
+        raise ServisGirdiHatasi("Red gerekçesi zorunlu")
+    if talep.durum != "ONAY_BEKLIYOR":
+        raise ParcaHatasi("Yalnız onay bekleyen talep reddedilir.")
+    PARCA_TALEBI.dogrula(talep.durum, "REDDEDILDI")
+    talep.durum = "REDDEDILDI"
+    talep.red_nedeni = neden_
+    talep.onaylayan_id = user.id
+    talep.onay_at = clock.now()
+    talep.updated_by = user.id
+    await db.flush()
+    await _talep_beklemesini_degerlendir(db, talep, clock=clock, not_="Parça talebi reddedildi")
+    return talep
+
+
+async def talep_kalani(db: AsyncSession, talep: ServicePartRequest) -> int:
+    """Talebin henüz karşılanmamış adedi (bağlı çıkışların neti düşülür)."""
+    net = -int(
+        await db.scalar(
+            select(func.coalesce(func.sum(StockMovement.qty), 0)).where(
+                StockMovement.part_request_id == talep.id
+            )
+        )
+        or 0
+    )
+    return max(talep.adet - net, 0)
+
+
+async def talep_teslim(
+    db: AsyncSession,
+    talep: ServicePartRequest,
+    *,
+    depo: Warehouse,
+    user: User,
+    clock: Clock,
+) -> list[StockMovement]:
+    """Depo onaylı talebi teslim eder: talep deposundan işe kalan adet kadar
+    çıkış (`cikis_yap`; talebe bağlanır ve KARSILANDI olur). Stok yetersizse
+    409 ve hiçbir şey yazılmaz."""
+    if talep.durum != "ACIK":
+        raise ParcaHatasi("Yalnız onaylı (depoda bekleyen) talep teslim edilir.")
+    so = await db.get(ServiceOrder, talep.service_order_id)
+    if so is None:
+        raise ParcaBulunamadi("Servis işi bulunamadı")
+    kalan = await talep_kalani(db, talep)
+    if kalan <= 0:
+        raise ParcaHatasi("Talep zaten karşılanmış.")
+    return await cikis_yap(
+        db,
+        so=so,
+        depo=depo,
+        satirlar=[Satir(talep.product_id, kalan)],
+        user=user,
+        clock=clock,
+        notes=f"Parça talebi #{talep.id} teslimi",
+    )
 
 
 async def talepleri_kapat(
@@ -811,7 +946,7 @@ async def talepleri_kapat(
         await db.scalars(
             select(ServicePartRequest).where(
                 ServicePartRequest.service_order_id == so.id,
-                ServicePartRequest.durum == "ACIK",
+                ServicePartRequest.durum.in_(PARCA_TALEP_ACIK_DURUMLAR),
                 ServicePartRequest.is_deleted.is_(False),
             )
         )
@@ -1699,3 +1834,41 @@ async def parca_tuketimi(
 kancalar.kaydet("durum_degisti", talepleri_kapat)
 ts_uyarilar.kaydet("parca", "parca.yonet", az_stok_uyarisi)
 ts_uyarilar.kaydet("parca", "parca.kullan", parca_geldi_uyarisi)
+
+
+async def talep_onay_uyarisi(db: AsyncSession, user: User, clock: Clock) -> list[Uyari]:
+    """Amirin onayını bekleyen parça talepleri (kendi birimi)."""
+    adet = await say(db, talep_sorgusu(user).where(ServicePartRequest.durum == "ONAY_BEKLIYOR"))
+    return [
+        Uyari(
+            kod="parca.talep_onay",
+            baslik="Onayınızı bekleyen parça talebi",
+            adet=adet,
+            yol="/yedek-parca?sekme=talepler&durum=ONAY_BEKLIYOR",
+            onem="uyari",
+        )
+    ]
+
+
+async def talep_teslim_uyarisi(db: AsyncSession, user: User, clock: Clock) -> list[Uyari]:
+    """Onaylanmış, depoda hazırlanacak talepler (erişilebilir depolar)."""
+    adet = await say(
+        db,
+        talep_sorgusu(user).where(
+            ServicePartRequest.durum == "ACIK",
+            ServicePartRequest.warehouse_id.in_(erisilebilir_depo_sorgusu(user)),
+        ),
+    )
+    return [
+        Uyari(
+            kod="parca.talep_teslim",
+            baslik="Hazırlanacak parça talebi",
+            adet=adet,
+            yol="/yedek-parca?sekme=talepler&durum=ACIK",
+            onem="bilgi",
+        )
+    ]
+
+
+ts_uyarilar.kaydet("parca", "parca.talep_onay", talep_onay_uyarisi)
+ts_uyarilar.kaydet("parca", "parca.yonet", talep_teslim_uyarisi)

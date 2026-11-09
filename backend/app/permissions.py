@@ -72,6 +72,13 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Teknik Servis",
         "Servis işlerini, planı ve servis panelini görür (kapsamı kadar)",
     ),
+    # 2026-11-09: teknisyen menüsü sadeleşti. Ana panel, servis paneli,
+    # planlama panosu ve takip/KPI listeleri ekip yönetimi ekranlarıdır;
+    # saha teknisyeni kendi işini "Benim İşlerim"den yürütür.
+    "takip.gor": (
+        "Teknik Servis",
+        "Ana panel, servis paneli, planlama panosu ve takip listelerini görür",
+    ),
     "servis.yaz": (
         "Teknik Servis",
         "Servis işi açar; not, ek, seri, irtibat girer; müşteri/lokasyon seçer",
@@ -215,6 +222,11 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Yedek Parça",
         "Giriş, transfer, zayi, ters kayıt, sayım ve onayı, açılış stoğu, "
         "parça kartı stok alanları",
+    ),
+    # Kullanıcı isteği 2026-11-09: teknisyen depodan amir onayıyla parça ister.
+    "parca.talep_onay": (
+        "Yedek Parça",
+        "Kendi biriminin teknisyenlerinin depo parça taleplerini onaylar ya da reddeder",
     ),
     # --- Eğitim ---------------------------------------------------------------------
     "egitim.gor": ("Eğitim", "Eğitim özeti, plan, katalog ve skorları görür"),
@@ -580,6 +592,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "parca.gor",
             "parca.kullan",
             "parca.yonet",
+            "parca.talep_onay",
             "egitim.gor",
             "egitim.detay",
             "egitim.yaz",
@@ -628,6 +641,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "operasyon.gor",
             "parca.gor",
             "parca.kullan",
+            "parca.talep_onay",
             "egitim.gor",
             "egitim.detay",
             "egitim.gozlem",
@@ -668,6 +682,8 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
         ),
         SCOPE_OWN_UNITS,
     ),
+    # `urun.gor` YOK (2026-11-09): Ürün Kataloğu satışın ekranı; teknisyen
+    # parçayı `parca.gor` ile (yedek parça listesi) seçer.
     # `hesap.gor` YOK (KD-09): müşteri/irtibat bilgisi servis işi detayında
     # gömülü döner; yeni kapsam canlı hesap ekranında TUMU gibi davranacağı
     # için izin verilseydi teknisyen bütün cari listesini görürdü.
@@ -678,7 +694,6 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis.yaz",
             "servis.tamamla",
             "servis.irtibat_gor",
-            "urun.gor",
             "cihaz.gor",
             "ekipman.gor",
             "zaman.yaz",
@@ -845,6 +860,16 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
         SCOPE_ALL,
     ),
 }
+
+# `takip.gor` (2026-11-09): `servis.gor` taşıyan her rolde VAR, saha
+# teknisyeninde YOK. Elle her role yazılsaydı yeni rol eklenirken unutulurdu;
+# kural burada tek yerde. Canlıda özelleştirilmiş rollere migration
+# fbb000000001 aynı kuralla ekler.
+TAKIP_IZNI_OLMAYAN_ROLLER = frozenset({"SERVIS_TEKNISYEN"})
+for _kod, (_ad, _izinler, _kapsam) in list(ROLES.items()):
+    if "servis.gor" in _izinler and _kod not in TAKIP_IZNI_OLMAYAN_ROLLER:
+        ROLES[_kod] = (_ad, (*_izinler, "takip.gor"), _kapsam)
+del _kod, _ad, _izinler, _kapsam
 
 # Teknik servis rolleri (Dalga 0). Unit testler "mobilite finans/yazma izni
 # yok" kuralını bu küme üzerinden kilitler.

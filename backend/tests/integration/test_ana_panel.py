@@ -331,16 +331,12 @@ async def test_fatura_devri_bekleyen_tutarsiz_aksiyon(client, db, kullanici_ac, 
     assert "Mali İşler" not in hedefler
 
 
-async def test_teknisyen_kendi_isleri_ekip_gizli(client, veri) -> None:
+async def test_teknisyen_ana_panele_erisemez(client, veri) -> None:
+    """2026-11-09: Ana Panel ekip yönetimi ekranı (`takip.gor`); saha teknisyeni
+    işini "Benim İşlerim"den yürütür, menüde de görmez."""
     await giris(client, "tek_g")
     r = await client.get(YOL)
-    assert r.status_code == 200, r.text
-    govde = r.json()
-    assert _kpi(govde)["acik_is"]["deger"] == 2  # yalnız tayinli olduğu işler
-    assert govde["ekip_durumu"]["gorunur"] is False
-    assert govde["ekip_durumu"]["satirlar"] == []
-    assert _kpi(govde)["sahadaki_ekip"]["liste_yolu"] is None
-    await _sayi_liste_esit(client, govde)
+    assert r.status_code == 403, r.text
 
 
 # --- Süzgeçler ------------------------------------------------------------------------------

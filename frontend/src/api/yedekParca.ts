@@ -40,9 +40,12 @@ export const STOK_DURUM_RENKLERI: Record<string, string> = {
   YETERLI: "green",
 };
 
+/** Parça talebi durumları (2026-11-09: amir onayı). ACIK = onaylı, depoda bekliyor. */
 export const TALEP_DURUM_ADLARI: Record<string, string> = {
-  ACIK: "Açık",
-  KARSILANDI: "Karşılandı",
+  ONAY_BEKLIYOR: "Onay bekliyor",
+  ACIK: "Onaylandı (depoda)",
+  KARSILANDI: "Teslim edildi",
+  REDDEDILDI: "Reddedildi",
   IPTAL: "İptal",
 };
 
@@ -172,6 +175,12 @@ export interface Talep {
   adet: number;
   durum: string;
   notes: string | null;
+  depo_id: number | null;
+  depo_adi: string | null;
+  talep_eden: string | null;
+  onaylayan: string | null;
+  onay_at: string | null;
+  red_nedeni: string | null;
   iptal_nedeni: string | null;
   karsilanma_at: string | null;
   beklemeye_bagli: boolean;
@@ -374,9 +383,15 @@ export const parcaApi = {
     adet: number;
     notes?: string | null;
     isi_beklet?: boolean;
+    depo_id?: number | null;
   }) => api.post<Talep>(`${PARCA_ONEK}/talepler`, g),
   talepIptal: (id: number, neden: string) =>
     api.post<Talep>(`${PARCA_ONEK}/talepler/iptal`, { talep_id: id, neden }),
+  talepOnayla: (id: number) => api.post<Talep>(`${PARCA_ONEK}/talepler/onayla`, { talep_id: id }),
+  talepReddet: (id: number, neden: string) =>
+    api.post<Talep>(`${PARCA_ONEK}/talepler/reddet`, { talep_id: id, neden }),
+  talepTeslim: (id: number) =>
+    api.post<{ talep: Talep; hareketler: YazilanHareket[] }>(`${PARCA_ONEK}/talepler/teslim`, { talep_id: id }),
 
   sayimlar: (durum: string | undefined, limit: number, offset: number) =>
     api.getSayfa<Sayim>(`${PARCA_ONEK}/sayimlar?${sayfali({ durum }, limit, offset)}`),

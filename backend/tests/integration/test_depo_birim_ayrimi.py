@@ -358,7 +358,9 @@ async def test_migration_eslemesi(client, db, birimli_kullanici_ac) -> None:
     sahip = await birimli_kullanici_ac(
         "esle_t", "SERVIS_TEKNISYEN", ["HABERLESME", "GUVENLIK"], birincil="HABERLESME"
     )
-    await db.execute(text("ALTER TABLE warehouses DROP CONSTRAINT ck_warehouse_servis_birim_zorunlu"))
+    await db.execute(
+        text("ALTER TABLE warehouses DROP CONSTRAINT ck_warehouse_servis_birim_zorunlu")
+    )
     await db.execute(
         text(
             "INSERT INTO warehouses (code, name, servis_deposu, location_type, user_id) VALUES "

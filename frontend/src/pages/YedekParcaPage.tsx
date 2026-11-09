@@ -88,7 +88,7 @@ import {
   saati,
   tekliGruplar,
 } from "../fiori/ListeOgeleri";
-import ListeRaporu, { KpiKutucugu } from "../fiori/ListeRaporu";
+import ListeRaporu from "../fiori/ListeRaporu";
 import ParcaHareketPenceresi, { type ParcaHareketTuru } from "../components/ParcaHareketPenceresi";
 import ParcaTuketimRaporu from "../components/ParcaTuketimRaporu";
 import ServisParcalari from "../components/ServisParcalari";
@@ -106,35 +106,10 @@ export default function YedekParcaPage() {
   const [pencere, setPencere] = useState<ParcaHareketTuru | null>(null);
   const [kartAcik, setKartAcik] = useState(false);
 
-  const ozet = useQuery({ queryKey: ["parca", "ozet"], queryFn: parcaApi.ozet });
-  const bugun = dayjs().format("YYYY-MM-DD");
-  const kutular = [
-    { kod: "az_stok", baslik: "Az stok", deger: ozet.data?.az_stok, yol: "/yedek-parca?sekme=stok&durum=AZ", vurgu: "uyari" as const, tanim: "Asgari stoku tanımlı ve toplamı asgarinin altında olan parçalar" },
-    { kod: "stok_yok", baslik: "Stok yok", deger: ozet.data?.stok_yok, yol: "/yedek-parca?sekme=stok&durum=YOK", vurgu: "kritik" as const, tanim: "Erişebildiğiniz servis depolarında toplamı 0 olan aktif parçalar" },
-    { kod: "acik_talep", baslik: "Açık talep", deger: ozet.data?.acik_talep, yol: "/yedek-parca?sekme=talepler&durum=ACIK", vurgu: "normal" as const, tanim: "Karşılanmamış parça talepleri" },
-    { kod: "acik_sayim", baslik: "Açık sayım", deger: ozet.data?.acik_sayim, yol: "/yedek-parca?sekme=sayimlar&durum=ACIK", vurgu: "normal" as const, tanim: "Onay bekleyen stok sayımları" },
-    { kod: "bugun_cikis", baslik: "Bugünkü çıkış", deger: ozet.data?.bugun_cikis, yol: `/yedek-parca?sekme=hareketler&tur=CIKIS_SERVIS&bas=${bugun}&bit=${bugun}`, vurgu: "normal" as const, tanim: "Bugün servis işlerine yapılan parça çıkışı satırları" },
-  ];
-
   const sekmeDegistir = (k: string) => setParams(new URLSearchParams({ sekme: k }));
 
   return (
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
-      <div className="fl-kutucuklar">
-        {kutular.map((k) => (
-          <KpiKutucugu
-            key={k.kod}
-            kod={k.kod}
-            baslik={k.baslik}
-            tanim={k.tanim}
-            yol={k.yol}
-            deger={k.deger ?? 0}
-            ikon={<InboxOutlined />}
-            vurgu={k.vurgu === "normal" || !k.deger ? "normal" : k.vurgu}
-            yukleniyor={ozet.isLoading}
-          />
-        ))}
-      </div>
       {yetkili("parca.yonet") && (
         <div className="fm-arac-cubugu">
           <span className="fm-arac-baslik">Stok İşlemleri</span>
@@ -614,17 +589,41 @@ function TalepSekmesi() {
     queryKey: ["parca", "talepler", durum, benim, sayfa],
     queryFn: () => parcaApi.talepler({ durum, benim }, SAYFA, (sayfa - 1) * SAYFA),
   });
+  const tazele = async (mesaj: string) => {
+    message.success(mesaj);
+    await qc.invalidateQueries({ queryKey: ["parca"] });
+  };
   const iptal = useMutation({
     mutationFn: (id: number) => parcaApi.talepIptal(id, "Kullanıcı iptal etti"),
+    onSuccess: () => tazele("Talep iptal edildi"),
+    onError: (e) => message.error(parcaHatasi(e).mesaj),
+  });
+  const onayla = useMutation({
+    mutationFn: (id: number) => parcaApi.talepOnayla(id),
+    onSuccess: () => tazele("Talep onaylandı; depoya iletildi"),
+    onError: (e) => message.error(parcaHatasi(e).mesaj),
+  });
+  const [redAcik, setRedAcik] = useState(false);
+  const [redNedeni, setRedNedeni] = useState("");
+  const reddet = useMutation({
+    mutationFn: ({ id, neden }: { id: number; neden: string }) => parcaApi.talepReddet(id, neden),
     onSuccess: async () => {
-      message.success("Talep iptal edildi");
-      await qc.invalidateQueries({ queryKey: ["parca"] });
+      setRedAcik(false);
+      setRedNedeni("");
+      await tazele("Talep reddedildi");
     },
+    onError: (e) => message.error(parcaHatasi(e).mesaj),
+  });
+  const teslim = useMutation({
+    mutationFn: (id: number) => parcaApi.talepTeslim(id),
+    onSuccess: () => tazele("Parça teslim edildi; stoktan çıkış yapıldı"),
     onError: (e) => message.error(parcaHatasi(e).mesaj),
   });
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((t) => t.id === secili[0]) ?? null;
   const kullanir = yetkili("parca.kullan");
+  const onaylayici = yetkili("parca.talep_onay");
+  const depocu = yetkili("parca.yonet");
   const sutunlar: ColumnsType<Talep> = [
     {
       title: "Durum",
@@ -634,8 +633,18 @@ function TalepSekmesi() {
       render: (_, t) => (
         <DurumBaglantisi
           metin={TALEP_DURUM_ADLARI[t.durum] ?? t.durum}
-          ton={t.durum === "IPTAL" ? "olumsuz" : t.durum === "ACIK" ? undefined : "kapali"}
-          alt={t.beklemeye_bagli && t.durum === "ACIK" ? <AltNot tur="uyari">İŞ BEKLİYOR</AltNot> : undefined}
+          ton={
+            t.durum === "IPTAL" || t.durum === "REDDEDILDI"
+              ? "olumsuz"
+              : t.durum === "ACIK" || t.durum === "ONAY_BEKLIYOR"
+                ? undefined
+                : "kapali"
+          }
+          alt={
+            t.beklemeye_bagli && (t.durum === "ACIK" || t.durum === "ONAY_BEKLIYOR") ? (
+              <AltNot tur="uyari">İŞ BEKLİYOR</AltNot>
+            ) : undefined
+          }
         />
       ),
     },
@@ -662,7 +671,28 @@ function TalepSekmesi() {
     { title: "Açıklama", key: "p", width: 260, render: (_, t) => <Aciklama metin={`${t.kod} — ${t.ad}`} /> },
     { title: "Adet", dataIndex: "adet", key: "a", width: 70, align: "right" },
     {
-      title: "Karşılanma",
+      title: "Depo",
+      key: "dp",
+      width: 150,
+      align: "center",
+      responsive: ["sm"],
+      render: (_, t) => <Kucuk>{t.depo_adi ?? "—"}</Kucuk>,
+    },
+    {
+      title: "Talep Eden /\nOnaylayan",
+      key: "kim",
+      width: 160,
+      align: "center",
+      responsive: ["md"],
+      render: (_, t) => (
+        <KucukGri>
+          {t.talep_eden ?? "—"}
+          {t.onaylayan ? ` / ${t.onaylayan}` : ""}
+        </KucukGri>
+      ),
+    },
+    {
+      title: "Teslim",
       key: "k",
       width: 140,
       align: "center",
@@ -670,19 +700,20 @@ function TalepSekmesi() {
       render: (_, t) => <KucukGri>{t.karsilanma_at ? zaman(t.karsilanma_at) : null}</KucukGri>,
     },
     {
-      title: "Not / İptal Nedeni",
+      title: "Not / Red-İptal Nedeni",
       key: "n",
       width: 200,
       align: "center",
-      responsive: ["lg"],
-      render: (_, t) => <KucukGri>{t.iptal_nedeni ?? t.notes}</KucukGri>,
+      responsive: ["sm"],
+      render: (_, t) => <KucukGri>{t.red_nedeni ?? t.iptal_nedeni ?? t.notes}</KucukGri>,
     },
   ];
   return (
     <>
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
-        Talep, aynı işe aynı parçadan talep adedi kadar çıkış yapılınca kendiliğinden karşılanır; iş
-        kapanınca açık talepler iptal olur.
+        Teknisyen parçayı işin biriminin deposundan talep eder; talep şefin onayına düşer (tek adım).
+        Onaylanan talebi depo teslim eder ve stoktan işe çıkış yapılır. Reddedilen talep gerekçesiyle
+        teknisyene görünür; iş kapanınca açık talepler iptal olur.
       </Typography.Text>
       <ListeRaporu<Talep>
         kayitSayisi={liste.data?.toplam}
@@ -713,18 +744,61 @@ function TalepSekmesi() {
             onMenu: () => void liste.refetch(),
           },
           {
+            anahtar: "onayla",
+            ad: "Onayla",
+            gizli: !onaylayici,
+            devreDisi: !tek || tek.durum !== "ONAY_BEKLIYOR",
+            yukleniyor: onayla.isPending,
+            onClick: () => tek && onayla.mutate(tek.id),
+          },
+          {
+            anahtar: "reddet",
+            ad: "Reddet",
+            tehlikeli: true,
+            gizli: !onaylayici,
+            devreDisi: !tek || tek.durum !== "ONAY_BEKLIYOR",
+            onClick: () => setRedAcik(true),
+          },
+          {
+            anahtar: "teslim",
+            ad: "Teslim Et",
+            gizli: !depocu,
+            devreDisi: !tek || tek.durum !== "ACIK" || tek.depo_id == null,
+            yukleniyor: teslim.isPending,
+            onClick: () => tek && teslim.mutate(tek.id),
+          },
+          {
             anahtar: "iptal",
             ad: "Talebi İptal Et",
             ikon: <StopOutlined />,
             yalnizIkon: true,
             tehlikeli: true,
             gizli: !kullanir,
-            devreDisi: !tek || tek.durum !== "ACIK",
+            devreDisi: !tek || (tek.durum !== "ACIK" && tek.durum !== "ONAY_BEKLIYOR"),
             yukleniyor: iptal.isPending,
             onClick: () => tek && iptal.mutate(tek.id),
           },
         ]}
       />
+      <Modal
+        open={redAcik}
+        title="Talebi reddet"
+        okText="Reddet"
+        okButtonProps={{ danger: true, disabled: redNedeni.trim().length < 3 }}
+        cancelText="Vazgeç"
+        confirmLoading={reddet.isPending}
+        onCancel={() => setRedAcik(false)}
+        onOk={() => tek && reddet.mutate({ id: tek.id, neden: redNedeni.trim() })}
+        destroyOnHidden
+      >
+        <Input.TextArea
+          rows={3}
+          maxLength={200}
+          placeholder="Red gerekçesi (teknisyen görür)"
+          value={redNedeni}
+          onChange={(e) => setRedNedeni(e.target.value)}
+        />
+      </Modal>
     </>
   );
 }
