@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Checkbox, Form, Input, Modal, Select, Typography } from "antd";
+import { Alert, App, Button, Checkbox, Form, Input, Modal, Select, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
@@ -9,6 +9,10 @@ interface Izin {
   kod: string;
   modul: string;
   aciklama: string;
+  /** Kişisel veri, ücret/maliyet, sistem yönetimi: ayrıca işaretlenir. */
+  hassas?: boolean;
+  /** Bu iznin açtığı sayfalar (sayfa listesi izinden türetilir). */
+  sayfalar?: string[];
 }
 
 interface Yetki {
@@ -17,6 +21,9 @@ interface Yetki {
   scope: string;
   yalniz_ofis?: boolean;
   izinler: Izin[];
+  version?: number;
+  ozellestirildi?: boolean;
+  varsayilana_donebilir?: boolean;
 }
 
 /**
@@ -29,6 +36,11 @@ interface Yetki {
  * Sistem rolleri de düzenlenebilir; düzenlenen rol "özelleştirilmiş"
  * işaretlenir ve açılıştaki katalog senkronu ona bir daha dokunmaz — aksi
  * halde değişiklik bir sonraki yeniden başlatmada sessizce geri alınırdı.
+ *
+ * 2026-11-09: "Erişebileceği sayfalar" izinden türetilir; her izin satırı açtığı
+ * sayfaları gösterir, üstte seçimin açtığı sayfaların özeti durur. Hassas
+ * izinler rozetle işaretlenir. Kayıt iyimser kilitlidir (`version`); sistem
+ * rolü koddaki varsayılana döndürülebilir. Ek onay adımı yok (G1.9).
  */
 export default function RolDuzenle({
   acik,
@@ -75,17 +87,38 @@ export default function RolDuzenle({
     }
   }, [acik, rolKodu, mevcut.data, form]);
 
+  const tazele = () => {
+    void qc.invalidateQueries({ queryKey: ["roller"] });
+    void qc.invalidateQueries({ queryKey: ["rol-yetkileri"] });
+    void qc.invalidateQueries({ queryKey: ["kullanici-yetkileri"] });
+  };
   const kaydet = useMutation({
     mutationFn: (v: Record<string, unknown>) =>
       rolKodu ? api.patch(`/api/roller/${rolKodu}`, v) : api.post("/api/roller", v),
     onSuccess: () => {
-      message.success(rolKodu ? "Rol güncellendi" : "Rol oluşturuldu");
-      void qc.invalidateQueries({ queryKey: ["roller"] });
-      void qc.invalidateQueries({ queryKey: ["rol-yetkileri"] });
+      message.success(
+        rolKodu
+          ? `Rol güncellendi${kullaniciSayisi ? ` (${kullaniciSayisi} kullanıcı etkilendi)` : ""}`
+          : "Rol oluşturuldu",
+      );
+      tazele();
       onKapat();
     },
     onError: (e: Error) => message.error(e.message),
   });
+  const varsayilan = useMutation({
+    mutationFn: () => api.post(`/api/roller/${rolKodu}/varsayilan`, { version: mevcut.data?.version }),
+    onSuccess: () => {
+      message.success("Rol varsayılan sayfa ve izinlerine döndü");
+      tazele();
+      onKapat();
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const izinSayfalari = new Map((katalog.data ?? []).map((i) => [i.kod, i.sayfalar ?? []]));
+  const acilanSayfalar = [...new Set(secili.flatMap((k) => izinSayfalari.get(k) ?? []))].sort((a, b) =>
+    a.localeCompare(b, "tr"),
+  );
 
   const modulller = new Map<string, Izin[]>();
   for (const i of katalog.data ?? []) {
@@ -98,14 +131,37 @@ export default function RolDuzenle({
       title={rolKodu ? `${mevcut.data?.name ?? rolKodu} — rolü düzenle` : "Yeni rol"}
       okText="Kaydet"
       cancelText="Vazgeç"
-      width={640}
+      width={720}
       confirmLoading={kaydet.isPending}
       onCancel={onKapat}
+      footer={(_, { OkBtn, CancelBtn }) => (
+        <>
+          {rolKodu && mevcut.data?.varsayilana_donebilir && (
+            <Button
+              style={{ float: "left" }}
+              disabled={!mevcut.data.ozellestirildi}
+              loading={varsayilan.isPending}
+              onClick={() => varsayilan.mutate()}
+              title={mevcut.data.ozellestirildi ? undefined : "Rol zaten varsayılan izinlerinde"}
+            >
+              Varsayılana dön
+            </Button>
+          )}
+          <CancelBtn />
+          <OkBtn />
+        </>
+      )}
       onOk={() =>
         form.validateFields().then((v) =>
           kaydet.mutate(
             rolKodu
-              ? { name: v.name, scope: v.scope, yalniz_ofis: !!v.yalniz_ofis, izinler: secili }
+              ? {
+                  name: v.name,
+                  scope: v.scope,
+                  yalniz_ofis: !!v.yalniz_ofis,
+                  izinler: secili,
+                  version: mevcut.data?.version,
+                }
               : {
                   code: v.code,
                   name: v.name,
@@ -176,9 +232,21 @@ export default function RolDuzenle({
       </Form>
 
       <Typography.Text strong style={{ fontSize: 12 }}>
-        İzinler ({secili.length} seçili)
+        Erişebileceği sayfalar ({acilanSayfalar.length})
       </Typography.Text>
-      <div style={{ maxHeight: 300, overflowY: "auto", marginTop: 8 }}>
+      <div style={{ margin: "6px 0 12px", display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {acilanSayfalar.length ? (
+          acilanSayfalar.map((s) => <Tag key={s}>{s}</Tag>)
+        ) : (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Sayfa yok — aşağıdan izin seçin.
+          </Typography.Text>
+        )}
+      </div>
+      <Typography.Text strong style={{ fontSize: 12 }}>
+        İzin verilen aksiyonlar ({secili.length} seçili)
+      </Typography.Text>
+      <div style={{ maxHeight: 340, overflowY: "auto", marginTop: 8 }}>
         {[...modulller.entries()].map(([modul, izinler]) => (
           <div key={modul} style={{ marginBottom: 10 }}>
             <Typography.Text type="secondary" style={{ fontSize: 11 }}>
@@ -198,6 +266,18 @@ export default function RolDuzenle({
                   <Typography.Text type="secondary" className="mono" style={{ fontSize: 10 }}>
                     {i.kod}
                   </Typography.Text>
+                  {i.hassas && (
+                    <Tooltip title="Kişisel veri, ücret/maliyet ya da sistem yönetimi: bilerek verin">
+                      <Tag color="red" style={{ marginLeft: 6, fontSize: 10 }}>
+                        hassas
+                      </Tag>
+                    </Tooltip>
+                  )}
+                  {(i.sayfalar ?? []).length > 0 && (
+                    <Typography.Text type="secondary" style={{ fontSize: 10, marginLeft: 6 }}>
+                      → {(i.sayfalar ?? []).join(", ")}
+                    </Typography.Text>
+                  )}
                 </Checkbox>
               </div>
             ))}

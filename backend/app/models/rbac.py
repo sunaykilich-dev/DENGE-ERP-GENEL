@@ -13,7 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.models.mixins import ActorMixin, PkMixin, TimestampMixin
+from app.models.mixins import ActorMixin, PkMixin, TimestampMixin, VersionedMixin
 
 # Süreli vekâletin azami süresi (gün) — `ck_user_permissions_vekalet`'in ve
 # API doğrulamasının tek kaynağı (M13-04: "en fazla 30 gün").
@@ -138,7 +138,11 @@ class UserPermission(Base):
         return self.baslangic_at <= an < self.bitis_at
 
 
-class Role(Base, PkMixin, TimestampMixin):
+class Role(Base, PkMixin, TimestampMixin, VersionedMixin):
+    """Rol. İzin eşlemesi ekrandan düzenlenir; iyimser kilit (`version`,
+    2026-11-09, fbc000000001): iki yönetici aynı rolü açıp kaydederse ikinci
+    409 alır, biri ötekinin değişikliğini sessizce ezmez."""
+
     __tablename__ = "roles"
 
     code: Mapped[str] = mapped_column(String(30), unique=True)

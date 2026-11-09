@@ -770,6 +770,25 @@ export default function UsersPage() {
             <Switch disabled={duzenlenen?.id === kendisi?.id} />
           </Form.Item>
           <Divider style={{ margin: "4px 0 12px" }}>Erişim ve izinler</Divider>
+          {/* 2026-11-09: sayfa ve aksiyon listesi rolden gelir; yönetici rolü
+              buradan da düzenler (değişiklik o roldeki herkesi etkiler). */}
+          {duzenlenen && (!duzenlenenRol || duzenlenenRol === duzenlenen.role.code) && (
+            <div style={{ textAlign: "right", marginBottom: 8 }}>
+              <Button
+                size="small"
+                onClick={() =>
+                  setRolDuzenle({
+                    acik: true,
+                    kod: duzenlenen.role.code,
+                    sayi: (kullanicilar.data ?? []).filter((k) => k.role.code === duzenlenen.role.code)
+                      .length,
+                  })
+                }
+              >
+                Rolün sayfa ve izinlerini düzenle
+              </Button>
+            </div>
+          )}
           {/* Rol açılır menüden DEĞİŞTİRİLDİYSE henüz kaydedilmemiş o rolün
               listesini göster; değişmediyse kişinin istisnalar dahil etkin
               yetkisini. */}

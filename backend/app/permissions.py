@@ -351,6 +351,20 @@ AYRILIS_NEDENLERI = ("ISTIFA", "FESIH", "EMEKLILIK", "SOZLESME_BITIMI", "DIGER")
 YUKSEK_YETKILI_IZINLER = frozenset(
     {"sistem.kullanici", "sistem.denetim", "sistem.ayar", "sistem.goc", "kvkk.yonet"}
 )
+# Rol düzenleme ekranında AYRICA işaretlenen hassas izinler (2026-11-09):
+# kişisel veri, ücret/maliyet ve sistem yönetimi. Yönetici bunları bilerek
+# vermeli; ekran uyarı rozeti çizer. Tek kaynak burası (`/api/izinler` döner).
+HASSAS_IZINLER = YUKSEK_YETKILI_IZINLER | {
+    "maliyet.gor",
+    "maliyet.yaz",
+    "bordro.yonet",
+    "ik_belge.yonet",
+    "personel.yaz",
+    "personel.cikis",
+    "servis.irtibat_gor",
+    "tahsilat.gor",
+}
+
 # Süreli vekâletle verilemeyecek izinler (Dalga 4, TS-213; `api/vekalet.py`
 # 403 + `yetki.ret` denetimi). Yüksek yetki, fiyat/maliyet, hak ediş onay/ödeme,
 # tahsilat ve teklif onayı "birkaç günlüğüne" devredilmez; `vekalet.ver` de
