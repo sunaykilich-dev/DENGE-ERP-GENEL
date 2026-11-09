@@ -8,6 +8,7 @@ from app.models.account import (
     Contact,
     InstallationPartner,
 )
+from app.models.ana_panel import AnaPanelDuzeni
 from app.models.attachment import Attachment
 from app.models.audit import AuditLog
 from app.models.catalog import Product, ProductBundleItem
@@ -281,4 +282,6 @@ __all__ = [
     "IkBelgeOlayi",
     "IkBelgeSablonu",
     "IkGonderim",
+    # --- Ana Panel düzeni (KARARLAR 2026-11-09 S8) ---
+    "AnaPanelDuzeni",
 ]

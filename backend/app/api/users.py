@@ -116,6 +116,9 @@ class RolYetkisi(BaseModel):
 # yöneticiye kod okumadan cevaplanabilmeli. İzin bir demetse "herhangi biri"
 # yeter (MENU'deki liste izniyle aynı anlam).
 _SAYFA_IZINLERI: list[tuple[str, str | tuple[str, ...]]] = [
+    # Ana Panel (KARARLAR 2026-11-09 S8): bileşenleri izinle süzülür; servis ya
+    # da teklif bileşeni görebilen her rol açar (`services/ana_panel_duzeni`).
+    ("Ana Panel", ("servis.gor", "teklif.gor")),
     ("Panel", "rapor.gor"),
     ("Hesaplar", "hesap.gor"),
     ("Ürün Kataloğu", "urun.gor"),

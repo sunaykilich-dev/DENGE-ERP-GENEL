@@ -262,6 +262,14 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "İK Belgeleri",
         "Form/talimat/taahhütname şablonu tanımlar, personele gönderir, imzayı takip eder",
     ),
+    # --- Ana Panel (KARARLAR 2026-11-09 S8.3, G7.3) ---------------------------------
+    # Kişisel düzen izne bağlı DEĞİLDİR (S8.1: herkes kendi panelini düzenler;
+    # bileşenler ayrıca kendi veri izinleriyle süzülür). Rolün VARSAYILAN
+    # düzenini yalnız yönetici belirler; `.gor` ile bitmez → YONETIM'e inmez.
+    "panel.yonet": (
+        "Ana Panel",
+        "Rollerin varsayılan Ana Panel düzenini belirler (kendi göremediği bileşeni ekleyemez)",
+    ),
     # Sistem
     "sistem.kullanici": ("Sistem", "Kullanıcı ve rol yönetir"),
     "sistem.ayar": ("Sistem", "Parametreleri ve entegrasyon ayarlarını yönetir"),
@@ -415,6 +423,8 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "rapor.gor",
             "rapor.disaaktar",
             "maliyet.gor",
+            # S8.3: satış rollerinin varsayılan Ana Panel düzeni.
+            "panel.yonet",
         ),
         SCOPE_ALL,
     ),
@@ -594,6 +604,8 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis_rapor.personel",
             "gorev.gor",
             "gorev.yaz",
+            # S8.3: servis rollerinin varsayılan Ana Panel düzeni.
+            "panel.yonet",
         ),
         SCOPE_ALL,
     ),

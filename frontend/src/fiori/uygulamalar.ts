@@ -133,14 +133,17 @@ export const GRUPLAR: Grup[] = [
 export const UYGULAMALAR: Uygulama[] = [
   // --- Teknik Servis Uygulamaları ------------------------------------------
   {
-    // KARARLAR 2026-11-04 §4: ana sayfa. Sunucu ucu `servis.gor` ister; izni
-    // olmayan rolün açılışı menüdeki ilk yetkili sayfadır (rol testi B-01).
+    // KARARLAR 2026-11-04 §4: ana sayfa. KARARLAR 2026-11-09 S8: panel
+    // bileşenlerden oluşur ve her bileşen kendi izniyle süzülür (sunucu
+    // `services/ana_panel_duzeni.BILESENLER`); servis ya da teklif bileşeni
+    // görebilen açar. Hiçbirini göremeyen rolün açılışı menüdeki ilk yetkili
+    // sayfadır (rol testi B-01). Yeni izinli bileşen grubu eklenince buraya da.
     id: "/ana-panel",
     baslik: "Ana Panel",
     altBaslik: "Operasyon özeti",
     ikon: DashboardOutlined,
     yol: "/ana-panel",
-    izin: "servis.gor",
+    izin: ["servis.gor", "teklif.gor"],
     grup: "servis",
   },
   {
