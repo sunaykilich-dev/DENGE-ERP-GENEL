@@ -4,9 +4,12 @@ import {
   App,
   Button,
   Card,
+  Checkbox,
   DatePicker,
   Descriptions,
   Drawer,
+  Dropdown,
+  Modal,
   Empty,
   Form,
   Input,
@@ -22,8 +25,12 @@ import {
 import dayjs from "dayjs";
 import { useState } from "react";
 
+import { DownloadOutlined, FilePdfOutlined } from "@ant-design/icons";
+
 import { api, type ApiError } from "../api/client";
+import { siparisBelgeApi } from "../api/irsaliye";
 import { useAuth } from "../auth/AuthContext";
+import IrsaliyeListesi from "../components/IrsaliyeListesi";
 
 interface Kalem {
   id: number;
@@ -70,7 +77,30 @@ interface Siparis {
   sonraki_durumlar: string[];
   kalemler: Kalem[];
   rezervasyonlar: Rezervasyon[];
+  muhasebe_devri_at: string | null;
+  muhasebe_notu: string | null;
+  irsaliyeler: {
+    id: number;
+    irsaliye_no: string;
+    durum: string;
+    duzenleme_tarihi: string;
+    transfer_id: number;
+  }[];
 }
+
+interface Depo {
+  id: number;
+  code: string;
+  name: string;
+}
+
+// Sevk edilebilen kalem tipleri (sunucu `SEVK_EDILEBILIR_KALEM`).
+const SEVK_EDILEBILIR = ["URUN", "PAKET", "SIM_PAKETI", "SERBEST"];
+
+const serisizKalan = (k: Kalem) =>
+  !k.kimlik_gerekir && SEVK_EDILEBILIR.includes(k.item_type)
+    ? Math.max(Number(k.qty) - Number(k.qty_shipped), 0)
+    : 0;
 
 interface UygunCihaz {
   id: number;
@@ -131,6 +161,17 @@ export default function SiparislerPage() {
   const [secilenCihazlar, setSecilenCihazlar] = useState<number[]>([]);
   const [cihazAra, setCihazAra] = useState("");
   const [yeniForm] = Form.useForm();
+  // Sevk penceresi (S4.3): cihazlar + serisiz kalem adetleri + çıkış deposu.
+  const [sevkAcik, setSevkAcik] = useState(false);
+  const [sevkCihaz, setSevkCihaz] = useState(true);
+  const [sevkAdet, setSevkAdet] = useState<Record<number, number>>({});
+  const [sevkDepo, setSevkDepo] = useState<number | undefined>();
+  const [sevkBelge, setSevkBelge] = useState("");
+  // Muhasebe devri (S4.4)
+  const [devir, setDevir] = useState<"bekleyen" | "devredildi">("bekleyen");
+  const [devirSecili, setDevirSecili] = useState<number[]>([]);
+  const devreder = yetkili("tahsilat.yaz");
+  const aktarir = yetkili("rapor.disaaktar");
 
   const siparisler = useQuery({
     queryKey: ["siparisler", durum],
@@ -170,7 +211,21 @@ export default function SiparislerPage() {
     enabled: yeniAcik,
   });
 
+  const depolar = useQuery({
+    queryKey: ["stok-depolar"],
+    queryFn: () => api.get<Depo[]>("/api/stok/depolar"),
+    enabled: sevkAcik,
+  });
+
+  const devirListesi = useQuery({
+    queryKey: ["siparis-muhasebe", devir],
+    queryFn: () => api.get<Siparis[]>(`/api/siparisler/muhasebe-devri?devir=${devir}`),
+    enabled: devreder || aktarir,
+  });
+
   const yenile = () => {
+    void qc.invalidateQueries({ queryKey: ["siparis-muhasebe"] });
+    void qc.invalidateQueries({ queryKey: ["irsaliyeler"] });
     void qc.invalidateQueries({ queryKey: ["siparisler"] });
     void qc.invalidateQueries({ queryKey: ["siparis"] });
     void qc.invalidateQueries({ queryKey: ["siparis-bekleyen"] });
@@ -224,10 +279,34 @@ export default function SiparislerPage() {
   });
 
   const sevk = useMutation({
-    mutationFn: ({ id, ...v }: { id: number; belge_no?: string }) =>
-      api.post<{ transfer_no: string; adet: number }>(`/api/siparisler/${id}/sevk`, v),
+    mutationFn: ({ id, ...v }: { id: number } & Record<string, unknown>) =>
+      api.post<{ transfer_no: string; adet: number; irsaliye_no: string }>(
+        `/api/siparisler/${id}/sevk`,
+        v,
+      ),
     onSuccess: (r) => {
-      message.success(`${r.transfer_no} ile ${r.adet} cihaz sevk edildi`);
+      message.success(`${r.transfer_no} ile sevk edildi · irsaliye ${r.irsaliye_no}`);
+      setSevkAcik(false);
+      yenile();
+    },
+    onError: hata,
+  });
+
+  const devret = useMutation({
+    mutationFn: (v: { idler: number[]; not?: string }) => siparisBelgeApi.devret(v.idler, v.not),
+    onSuccess: (r) => {
+      message.success(`${r.devredilen.length} sipariş muhasebeye devredildi`);
+      setDevirSecili([]);
+      yenile();
+    },
+    onError: hata,
+  });
+
+  const devirGeriAl = useMutation({
+    mutationFn: (v: { id: number; gerekce: string }) =>
+      siparisBelgeApi.devriGeriAl(v.id, v.gerekce),
+    onSuccess: () => {
+      message.success("Muhasebe devri geri alındı");
       yenile();
     },
     onError: hata,
@@ -286,40 +365,95 @@ export default function SiparislerPage() {
 
   function sevkSor(siparis: Siparis) {
     const acik = siparis.rezervasyonlar.filter((r) => r.shipped_at == null);
-    if (acik.length === 0) {
-      message.warning("Sevk edilecek açık rezervasyon yok");
+    const adetler: Record<number, number> = {};
+    for (const k of siparis.kalemler) {
+      const kalan = serisizKalan(k);
+      if (kalan > 0) adetler[k.id] = kalan;
+    }
+    if (acik.length === 0 && Object.keys(adetler).length === 0) {
+      message.warning("Sevk edilecek açık rezervasyon ya da kalem yok");
       return;
     }
-    let belge = "";
+    setSevkCihaz(acik.length > 0);
+    setSevkAdet(adetler);
+    setSevkDepo(undefined);
+    setSevkBelge("");
+    setSevkAcik(true);
+  }
+
+  function sevkGonder(siparis: Siparis) {
+    const serisiz = Object.entries(sevkAdet)
+      .filter(([, adet]) => adet > 0)
+      .map(([kalem_id, adet]) => ({ kalem_id: Number(kalem_id), adet }));
+    sevk.mutate({
+      id: siparis.id,
+      yalniz_secilenler: !sevkCihaz,
+      serisiz,
+      from_warehouse_id: sevkDepo,
+      belge_no: sevkBelge || undefined,
+    });
+  }
+
+  function devirSor(idler: number[]) {
+    let not = "";
     modal.confirm({
-      title: `Sevk et · ${acik.length} cihaz`,
+      title: `${idler.length} sipariş muhasebeye devredilsin mi?`,
       content: (
         <Space orientation="vertical" style={{ width: "100%" }}>
           <Typography.Text type="secondary">
-            Stok transfer belgesi YOLDA olarak açılır. Konum ve sahiplik, teslim
-            işaretlendiğinde güncellenir.
+            Logo entegrasyonu değildir; siparişin muhasebeye iletildiğini işaretler. Seçilenlerden
+            biri uygun değilse hiçbiri işaretlenmez.
           </Typography.Text>
-          <Input
-            placeholder="İrsaliye / belge no (isteğe bağlı)"
-            onChange={(e) => (belge = e.target.value)}
+          <Input.TextArea
+            rows={2}
+            maxLength={300}
+            placeholder="Not (isteğe bağlı)"
+            onChange={(e) => (not = e.target.value)}
           />
         </Space>
       ),
-      okText: "Sevk et",
+      okText: "Devret",
       cancelText: "Vazgeç",
-      onOk: () => sevk.mutateAsync({ id: siparis.id, belge_no: belge || undefined }),
+      onOk: () => devret.mutateAsync({ idler, not: not.trim() || undefined }),
+    });
+  }
+
+  function devirGeriAlSor(id: number) {
+    let gerekce = "";
+    modal.confirm({
+      title: "Muhasebe devri geri alınsın mı?",
+      content: (
+        <Input.TextArea
+          rows={2}
+          maxLength={300}
+          placeholder="Gerekçe (zorunlu)"
+          onChange={(e) => (gerekce = e.target.value)}
+        />
+      ),
+      okText: "Geri al",
+      cancelText: "Vazgeç",
+      onOk: () => {
+        if (gerekce.trim().length < 3) {
+          message.error("Gerekçe zorunludur");
+          return Promise.reject();
+        }
+        return devirGeriAl.mutateAsync({ id, gerekce: gerekce.trim() });
+      },
     });
   }
 
   const sevkBekleyenTransferler = s
     ? [
-        ...new Set(
-          s.rezervasyonlar
+        ...new Set([
+          ...s.rezervasyonlar
             .filter((r) => r.shipped_at != null && r.transfer_id != null)
             .map((r) => r.transfer_id as number),
-        ),
+          ...(s.irsaliyeler ?? []).map((i) => i.transfer_id),
+        ]),
       ]
     : [];
+  const serisizBekleyen = s ? s.kalemler.some((k) => serisizKalan(k) > 0) : false;
+  const acikRezervasyon = s ? s.rezervasyonlar.filter((r) => r.shipped_at == null).length : 0;
 
   return (
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
@@ -455,20 +589,30 @@ export default function SiparislerPage() {
         }}
         loading={detay.isLoading}
         extra={
-          s &&
-          yetkili("siparis.yaz") && (
+          s && (
             <Space>
-              {s.status === "TASLAK" && (
+              {!["TASLAK", "IPTAL"].includes(s.status) && (
+                <Button
+                  icon={<FilePdfOutlined />}
+                  href={siparisBelgeApi.onayPdfYolu(s.id)}
+                  target="_blank"
+                >
+                  Sipariş onayı (PDF)
+                </Button>
+              )}
+              {yetkili("siparis.yaz") && s.status === "TASLAK" && (
                 <Button type="primary" onClick={() => onayla.mutate(s.id)}>
                   Onayla
                 </Button>
               )}
-              {["REZERVE", "KISMI_SEVK"].includes(s.status) && (
-                <Button type="primary" onClick={() => sevkSor(s)}>
-                  Sevk et
-                </Button>
-              )}
-              {!["IPTAL", "TAMAMLANDI"].includes(s.status) && (
+              {yetkili("siparis.yaz") &&
+                ["ONAYLANDI", "REZERVE", "KISMI_SEVK"].includes(s.status) &&
+                (acikRezervasyon > 0 || serisizBekleyen) && (
+                  <Button type="primary" onClick={() => sevkSor(s)}>
+                    Sevk et
+                  </Button>
+                )}
+              {yetkili("siparis.yaz") && !["IPTAL", "TAMAMLANDI"].includes(s.status) && (
                 <Button danger onClick={() => iptalSor(s.id)}>
                   İptal
                 </Button>
@@ -539,8 +683,10 @@ export default function SiparislerPage() {
                       k.kimlik_gerekir ? (
                         `${k.rezerve_adet} / ${Number(k.qty_shipped)}`
                       ) : (
-                        <Tooltip title="Bu ürün kimlik taşımıyor; IMEI ayrılmaz">
-                          <Typography.Text type="secondary">—</Typography.Text>
+                        <Tooltip title="Kimlik taşımayan kalem: IMEI ayrılmaz, sevkte stoktan adetle düşülür">
+                          <Typography.Text type="secondary">
+                            — / {Number(k.qty_shipped)}
+                          </Typography.Text>
                         </Tooltip>
                       ),
                   },
@@ -612,6 +758,20 @@ export default function SiparislerPage() {
               />
             </Card>
 
+            {s.irsaliyeler.length > 0 && (
+              <Card size="small" title="İrsaliyeler">
+                <IrsaliyeListesi siparisId={s.id} />
+              </Card>
+            )}
+
+            {s.muhasebe_devri_at && (
+              <Alert
+                type="success"
+                title={`Muhasebeye devredildi · ${dayjs(s.muhasebe_devri_at).format("DD.MM.YYYY HH:mm")}`}
+                description={s.muhasebe_notu ?? undefined}
+              />
+            )}
+
             {sevkBekleyenTransferler.length > 0 && yetkili("siparis.yaz") && (
               <Card size="small" title="Teslim onayı">
                 <Space orientation="vertical" style={{ width: "100%" }}>
@@ -630,6 +790,188 @@ export default function SiparislerPage() {
           </Space>
         )}
       </Drawer>
+
+      {(devreder || aktarir) && (
+        <Card
+          title="Muhasebe devri"
+          extra={
+            <Space wrap>
+              <Select
+                style={{ width: 200 }}
+                value={devir}
+                onChange={(v) => {
+                  setDevir(v);
+                  setDevirSecili([]);
+                }}
+                options={[
+                  { value: "bekleyen", label: "Devir bekleyen" },
+                  { value: "devredildi", label: "Muhasebeye devredilen" },
+                ]}
+              />
+              {devreder && devir === "bekleyen" && (
+                <Button
+                  type="primary"
+                  disabled={!devirSecili.length}
+                  onClick={() => devirSor(devirSecili)}
+                >
+                  Muhasebeye devret{devirSecili.length ? ` (${devirSecili.length})` : ""}
+                </Button>
+              )}
+              {aktarir && (
+                <Dropdown
+                  menu={{
+                    items: [
+                      { key: "xlsx", label: "Logo aktarım (Excel)" },
+                      { key: "csv", label: "Logo aktarım (CSV)" },
+                    ],
+                    onClick: ({ key }) =>
+                      window.open(siparisBelgeApi.logoYolu(devir, key as "xlsx" | "csv"), "_blank"),
+                  }}
+                >
+                  <Button icon={<DownloadOutlined />}>Logo dökümü</Button>
+                </Dropdown>
+              )}
+            </Space>
+          }
+        >
+          <Table
+            rowKey="id"
+            size="small"
+            loading={devirListesi.isLoading}
+            dataSource={devirListesi.data ?? []}
+            pagination={{ pageSize: 10, showSizeChanger: false }}
+            locale={{ emptyText: <Empty description="Kayıt yok" /> }}
+            rowSelection={
+              devreder && devir === "bekleyen"
+                ? {
+                    selectedRowKeys: devirSecili,
+                    onChange: (k) => setDevirSecili(k as number[]),
+                  }
+                : undefined
+            }
+            columns={[
+              { title: "Sipariş no", dataIndex: "order_no", width: 140, className: "mono" },
+              { title: "Müşteri", dataIndex: "customer_title" },
+              {
+                title: "Tarih",
+                dataIndex: "order_date",
+                width: 110,
+                className: "mono",
+                render: (x: string) => dayjs(x).format("DD.MM.YYYY"),
+              },
+              {
+                title: "Tutar",
+                width: 140,
+                className: "tutar",
+                render: (_: unknown, r: Siparis) => tl(r.grand_total, r.currency),
+              },
+              {
+                title: "Durum",
+                width: 130,
+                render: (_: unknown, r: Siparis) => (
+                  <Tag color={DURUM_RENGI[r.status]}>{r.status.replaceAll("_", " ")}</Tag>
+                ),
+              },
+              ...(devir === "devredildi"
+                ? [
+                    {
+                      title: "Devredildi",
+                      width: 150,
+                      className: "mono",
+                      render: (_: unknown, r: Siparis) =>
+                        r.muhasebe_devri_at
+                          ? dayjs(r.muhasebe_devri_at).format("DD.MM.YYYY HH:mm")
+                          : "—",
+                    },
+                    {
+                      title: "",
+                      width: 120,
+                      render: (_: unknown, r: Siparis) =>
+                        devreder ? (
+                          <Button size="small" type="text" onClick={() => devirGeriAlSor(r.id)}>
+                            Devri geri al
+                          </Button>
+                        ) : null,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </Card>
+      )}
+
+      <Modal
+        title={s ? `Sevk et · ${s.order_no}` : "Sevk et"}
+        open={sevkAcik && s != null}
+        onCancel={() => setSevkAcik(false)}
+        onOk={() => s && sevkGonder(s)}
+        confirmLoading={sevk.isPending}
+        okText="Sevk et ve irsaliye düzenle"
+        cancelText="Vazgeç"
+        width={620}
+      >
+        {s && (
+          <Space orientation="vertical" size={12} style={{ width: "100%" }}>
+            <Typography.Text type="secondary">
+              Stok transfer belgesi YOLDA açılır ve numaralı irsaliye otomatik düzenlenir (e-İrsaliye
+              değildir). Kimlik taşımayan kalemler seçilen depodan stoktan düşülür.
+            </Typography.Text>
+            {acikRezervasyon > 0 && (
+              <Checkbox checked={sevkCihaz} onChange={(e) => setSevkCihaz(e.target.checked)}>
+                Rezerve cihazların tamamı ({acikRezervasyon} cihaz)
+              </Checkbox>
+            )}
+            {s.kalemler.filter((k) => serisizKalan(k) > 0).length > 0 && (
+              <Table
+                rowKey="id"
+                size="small"
+                pagination={false}
+                dataSource={s.kalemler.filter((k) => serisizKalan(k) > 0)}
+                columns={[
+                  { title: "Kalem", dataIndex: "description" },
+                  {
+                    title: "Kalan",
+                    width: 70,
+                    className: "mono",
+                    render: (_: unknown, k: Kalem) => serisizKalan(k),
+                  },
+                  {
+                    title: "Sevk adedi",
+                    width: 120,
+                    render: (_: unknown, k: Kalem) => (
+                      <InputNumber
+                        min={0}
+                        max={serisizKalan(k)}
+                        value={sevkAdet[k.id] ?? 0}
+                        onChange={(v) => setSevkAdet((o) => ({ ...o, [k.id]: Number(v ?? 0) }))}
+                        style={{ width: 100 }}
+                      />
+                    ),
+                  },
+                ]}
+              />
+            )}
+            <Select
+              allowClear
+              placeholder="Çıkış deposu (stok bu depodan düşülür)"
+              style={{ width: "100%" }}
+              loading={depolar.isLoading}
+              value={sevkDepo}
+              onChange={setSevkDepo}
+              options={(depolar.data ?? []).map((d) => ({
+                value: d.id,
+                label: `${d.code} · ${d.name}`,
+              }))}
+            />
+            <Input
+              placeholder="Harici belge no (isteğe bağlı; boşsa irsaliye no yazılır)"
+              value={sevkBelge}
+              maxLength={40}
+              onChange={(e) => setSevkBelge(e.target.value)}
+            />
+          </Space>
+        )}
+      </Modal>
 
       <Drawer
         title={rezerveKalem ? `IMEI ayır · ${rezerveKalem.description}` : "IMEI ayır"}

@@ -112,6 +112,7 @@ import ListeRaporu, { type FioriEylem, type FioriKategori } from "../fiori/Liste
 import { useYeniParametresi } from "../fiori/useYeniParametresi";
 import { yerelOku, yerelYaz } from "../fiori/yerelDepo";
 import EkYukleyici from "../components/EkYukleyici";
+import ServisFisiDugmesi, { fisTuru } from "../components/ServisFisiDugmesi";
 import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
 import { PlanGecmisiSekmesi, ZamanSekmesi } from "../components/ServisIsSekmeleri";
@@ -782,6 +783,14 @@ function IsDetayCekmecesi({
             <Button icon={<FilePdfOutlined />} href={teknikServisApi.servisFormuYolu(d.id)} target="_blank">
               {ekran.sm ? "Servis formu" : ""}
             </Button>
+          )}
+          {d && fisTuru(d.tur) && (
+            <ServisFisiDugmesi
+              id={d.id}
+              tur={fisTuru(d.tur)!}
+              fiyatli={yetkili("teklif.gor") || yetkili("maliyet.gor")}
+              etiket={ekran.sm}
+            />
           )}
         </Space>
       }

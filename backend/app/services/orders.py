@@ -18,6 +18,7 @@ from app.models import (
     QuoteVersion,
     Transfer,
     TransferItem,
+    Warehouse,
 )
 from app.services import stock as stok_svc
 from app.services.devices import durum_degistir
@@ -293,17 +294,68 @@ async def sevk_et(
     teslim_eden: str | None = None,
     user_id: int | None = None,
     ip: str | None = None,
+    serisiz: dict[int, Decimal] | None = None,
 ) -> Transfer:
-    """Rezerve cihazları müşteriye sevk eder.
+    """Rezerve cihazları ve serisiz kalemleri müşteriye sevk eder.
 
     Sevkiyat, stok modülünün `transfers` belgesiyle yapılır — ikinci bir sevk
     mekanizması konum geçmişini iki yoldan yazmak olurdu. Belge `YOLDA`
     açılır; teslim ve konum güncellemesi mevcut stok akışından yürür.
+
+    **İrsaliye (KARARLAR 2026-11-09 S4.3):** aynı işlemde numaralı irsaliye
+    yazılır (`services/irsaliye`). Oluşan irsaliye `transfer.irsaliye`
+    özniteliğinde döner.
+
+    **Serisiz kalemler (S4.3):** kimlik taşımayan ürün satırı (aksesuar,
+    kablo) `serisiz = {kalem_id: adet}` ile sevk edilir ve stoktan düşülür
+    (`stock_movements` CIKIS, belge no = irsaliye no). Stok yetersizse sevk
+    REDDEDİLİR — irsaliyede olmayan malı yazmak sayımı bozar. Ürünü olmayan
+    serbest satır stok tutmaz; yalnız irsaliyeye yazılır.
     """
-    if not rezervasyonlar:
-        raise SiparisHatasi("Sevk edilecek rezervasyon seçilmedi.")
+    from app.services import irsaliye as irsaliye_svc
+
+    serisiz = {int(k): Decimal(str(v)) for k, v in (serisiz or {}).items() if Decimal(str(v)) != 0}
+    if not rezervasyonlar and not serisiz:
+        raise SiparisHatasi("Sevk edilecek cihaz ya da kalem seçilmedi.")
     if siparis.status not in ("REZERVE", "ONAYLANDI", "KISMI_SEVK"):
         raise SiparisHatasi(f"{siparis.status} durumundaki sipariş sevk edilemez.")
+    if from_warehouse_id is not None:
+        depo = await db.get(Warehouse, from_warehouse_id)
+        if depo is None:
+            raise SiparisHatasi("Çıkış deposu bulunamadı.")
+        if depo.servis_deposu or depo.kiralama_deposu:
+            raise SiparisHatasi("Servis ve kiralama depolarından satış sevki yapılamaz.")
+
+    # Serisiz kalemler önce doğrulanır: hata varsa hiçbir şey yazılmaz.
+    serisiz_kalemler: list[tuple[OrderLine, Product | None, Decimal]] = []
+    for kalem_id, adet in sorted(serisiz.items()):
+        kalem = await db.get(OrderLine, kalem_id)
+        if kalem is None or kalem.order_id != siparis.id:
+            raise SiparisHatasi(f"Kalem bu siparişe ait değil: {kalem_id}")
+        if kalem.item_type not in SEVK_EDILEBILIR_KALEM:
+            raise SiparisHatasi(f"'{kalem.item_type}' kalemi sevk edilmez.")
+        urun = await db.get(Product, kalem.product_id) if kalem.product_id else None
+        if urun is not None and urun.identity_kind != "YOK":
+            raise SiparisHatasi(f"{urun.name} seri numaralı; sevk için önce cihaz rezerve edin.")
+        if adet <= 0:
+            raise SiparisHatasi("Sevk adedi sıfırdan büyük olmalı.")
+        kalan = Decimal(str(kalem.qty)) - Decimal(str(kalem.qty_shipped or 0))
+        if adet > kalan:
+            raise SiparisHatasi(
+                f"{kalem.description}: kalan adet {kalan:g}, {adet:g} sevk edilemez."
+            )
+        if urun is not None:
+            if adet != adet.to_integral_value():
+                raise SiparisHatasi(
+                    f"{kalem.description}: ondalıklı adet stoktan düşülemez ({adet:g})."
+                )
+            eldeki = await irsaliye_svc.serisiz_bakiye(db, urun.id, from_warehouse_id)
+            if eldeki < int(adet):
+                raise SiparisHatasi(
+                    f"Stok yetersiz: {urun.code} için {eldeki} adet var, {int(adet)} adet "
+                    "sevk edilemez. Önce stok girişi ya da sayım düzeltmesi yapın."
+                )
+        serisiz_kalemler.append((kalem, urun, adet))
 
     simdi = clock.now()
     sira = (await db.scalar(select(Transfer.id).order_by(Transfer.id.desc()).limit(1)) or 0) + 1
@@ -324,8 +376,10 @@ async def sevk_et(
     )
     db.add(transfer)
     await db.flush()
+    numara = await irsaliye_svc.numara_al(db, clock)
 
     kalem_artis: dict[int, Decimal] = {}
+    cihaz_kalemi: dict[int, int] = {}
     for rez in rezervasyonlar:
         if rez.order_id != siparis.id:
             raise SiparisHatasi("Rezervasyon bu siparişe ait değil.")
@@ -339,6 +393,7 @@ async def sevk_et(
         rez.release_reason = "Sevk edildi"
         rez.transfer_id = transfer.id
         kalem_artis[rez.order_line_id] = kalem_artis.get(rez.order_line_id, Decimal("0")) + 1
+        cihaz_kalemi[rez.device_id] = rez.order_line_id
 
         cihaz = await db.get(Device, rez.device_id)
         if cihaz is not None:
@@ -352,10 +407,54 @@ async def sevk_et(
                 ip=ip,
             )
 
+    irsaliye_kalemleri = await irsaliye_svc.cihaz_kalemleri(
+        db, list(cihaz_kalemi), kalem_esleme=cihaz_kalemi
+    )
+    for kalem, urun, adet in serisiz_kalemler:
+        hareket_id = None
+        if urun is not None:
+            hareket = await stok_svc.stok_hareketi(
+                db,
+                product_id=urun.id,
+                qty=-int(adet),
+                reason="CIKIS",
+                warehouse_id=from_warehouse_id,
+                document_no=numara[2],
+                notes=f"{siparis.order_no} satış sevki",
+                user_id=user_id,
+            )
+            hareket_id = hareket.id
+        kalem_artis[kalem.id] = kalem_artis.get(kalem.id, Decimal("0")) + adet
+        irsaliye_kalemleri.append(
+            irsaliye_svc.KalemGirdisi(
+                aciklama=kalem.description,
+                miktar=adet,
+                product_id=kalem.product_id,
+                order_line_id=kalem.id,
+                stock_movement_id=hareket_id,
+                urun_kodu=urun.code if urun else None,
+                birim=(urun.birim if urun and urun.birim else "ADET"),
+                birim_fiyat=kalem.unit_price,
+                iskonto_yuzde=kalem.discount_pct,
+                kdv_orani=kalem.vat_rate,
+            )
+        )
+
     for kalem_id, adet in kalem_artis.items():
         kalem = await db.get(OrderLine, kalem_id)
         kalem.qty_shipped = Decimal(str(kalem.qty_shipped or 0)) + adet
     await db.flush()
+
+    transfer.irsaliye = await irsaliye_svc.olustur(  # type: ignore[attr-defined]
+        db,
+        transfer,
+        irsaliye_kalemleri,
+        clock=clock,
+        user_id=user_id,
+        numara=numara,
+        notlar=f"Sipariş {siparis.order_no}",
+        ip=ip,
+    )
 
     await durum_yenile(db, siparis)
     return transfer
@@ -464,7 +563,19 @@ async def teslim_et(
     db: AsyncSession, transfer: Transfer, *, clock: Clock, teslim_alan: str | None = None
 ) -> int:
     """Sevkiyatı teslim alındı işaretler; konum/sahiplik stok akışından yürür."""
-    adet = await stok_svc.transferi_teslim_et(db, transfer, clock=clock, teslim_alan=teslim_alan)
+    if transfer.status == "YOLDA" and not transfer.items:
+        # Yalnız serisiz kalem sevk edilmiş: konum güncellenecek cihaz yok,
+        # stok çıkışı sevkte yazıldı. Teslim yalnız belgeyi kapatır.
+        transfer.status = "TESLIM_EDILDI"
+        transfer.delivered_at = clock.now().date()
+        if teslim_alan:
+            transfer.received_by = teslim_alan
+        await db.flush()
+        adet = 0
+    else:
+        adet = await stok_svc.transferi_teslim_et(
+            db, transfer, clock=clock, teslim_alan=teslim_alan
+        )
     if transfer.order_id:
         siparis = await db.get(Order, transfer.order_id)
         if siparis is not None and siparis.status == "SEVK_EDILDI":

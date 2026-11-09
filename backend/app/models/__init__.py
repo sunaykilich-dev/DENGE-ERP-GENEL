@@ -39,6 +39,7 @@ from app.models.gorev import (
 )
 from app.models.ik_belge import IkBelge, IkBelgeOlayi, IkBelgeSablonu, IkGonderim
 from app.models.import_batch import ImportBatch
+from app.models.irsaliye import BelgeSayaci, Irsaliye, IrsaliyeKalemi
 from app.models.login_attempt import LoginAttempt
 from app.models.order import Order, OrderLine, OrderReservation
 from app.models.personel import PersonnelNameMap
@@ -151,6 +152,9 @@ __all__ = [
     "ImportFile",
     "GoodsReceipt",
     "ImportBatch",
+    "BelgeSayaci",
+    "Irsaliye",
+    "IrsaliyeKalemi",
     "PriceBatch",
     "Subscription",
     "SubscriptionEvent",

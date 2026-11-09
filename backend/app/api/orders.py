@@ -2,9 +2,9 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -22,7 +22,11 @@ from app.models import (
     User,
 )
 from app.services import audit
+from app.services import irsaliye as irsaliye_svc
+from app.services import muhasebe_aktarim as aktarim_svc
 from app.services import orders as svc
+from app.services import siparis_belgeleri as belge_svc
+from app.services.pdf import PdfUretilemedi
 from app.services.quotes import kalem_alanlari
 from app.services.statemachine import SIPARIS, IzinsizGecis
 
@@ -30,6 +34,10 @@ router = APIRouter(prefix="/api/siparisler", tags=["siparis"])
 
 Okuyucu = Annotated[User, Depends(require_permission("siparis.gor"))]
 Yazici = Annotated[User, Depends(require_permission("siparis.yaz"))]
+# S4.4: muhasebe devri işareti fatura devriyle aynı izinle (`tahsilat.yaz`);
+# Logo dökümü dışa aktarım iznini de ister.
+Devredici = Annotated[User, Depends(require_permission("siparis.gor", "tahsilat.yaz"))]
+Aktarici = Annotated[User, Depends(require_permission("siparis.gor", "rapor.disaaktar"))]
 
 
 # --- Şemalar ------------------------------------------------------------------
@@ -113,6 +121,10 @@ class SiparisOut(BaseModel):
     sonraki_durumlar: list[str] = []
     kalemler: list[KalemOut] = []
     rezervasyonlar: list[RezervasyonOut] = []
+    # S4.3/S4.4 (KARARLAR 2026-11-09)
+    muhasebe_devri_at: datetime | None = None
+    muhasebe_notu: str | None = None
+    irsaliyeler: list[dict] = []
 
     model_config = {"from_attributes": True}
 
@@ -169,6 +181,7 @@ async def _cikti(db: DbDep, s: Order, *, detay: bool = True) -> SiparisOut:
             acik_sayac[r.order_line_id] = acik_sayac.get(r.order_line_id, 0) + 1
 
     out.kalemler = [await _kalem_ciktisi(db, k, acik_sayac.get(k.id, 0)) for k in kalemler]
+    out.irsaliyeler = await belge_svc.irsaliye_ozetleri(db, s.id)
 
     kimlikler = {
         c.id: (c.imei or c.serial_no)
@@ -238,6 +251,128 @@ async def listele(
 async def bekleyen_sevkiyat(db: DbDep, user: Okuyucu) -> list[dict]:
     """Depo iş listesi: onaylanmış ama tamamen sevk edilmemiş siparişler."""
     return await svc.bekleyen_sevkiyat(db)
+
+
+# --- Muhasebe devri ve Logo dökümü (S4.4) -------------------------------------------
+
+
+_DONEM = r"^\d{4}-(0[1-9]|1[0-2])$"
+
+
+def _devir_suzgeci(devir: str, musteri_id: int | None, donem: str | None):
+    return belge_svc.DevirSuzgeci(devir=devir, musteri_id=musteri_id, donem=donem or None)
+
+
+@router.get("/muhasebe-devri", response_model=list[SiparisOut])
+async def muhasebe_devri_listesi(
+    db: DbDep,
+    user: Okuyucu,
+    devir: Literal["bekleyen", "devredildi"] = "bekleyen",
+    musteri_id: int | None = None,
+    donem: str | None = Query(default=None, pattern=_DONEM),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[SiparisOut]:
+    """Muhasebeye devri bekleyen ya da devredilmiş siparişler (kapsamlı)."""
+    stmt = belge_svc.devir_sorgusu(user, _devir_suzgeci(devir, musteri_id, donem)).limit(limit)
+    return [await _cikti(db, s, detay=False) for s in (await db.scalars(stmt)).all()]
+
+
+@router.get("/muhasebe-aktarim")
+async def muhasebe_aktarim(
+    request: Request,
+    db: DbDep,
+    user: Aktarici,
+    devir: Literal["bekleyen", "devredildi"] = "bekleyen",
+    musteri_id: int | None = None,
+    donem: str | None = Query(default=None, pattern=_DONEM),
+    bicim: Literal["xlsx", "csv"] = "xlsx",
+) -> Response:
+    """Logo'ya aktarılabilir sipariş dökümü (Excel/CSV). Logo API'si DEĞİL."""
+    siparisler = list(
+        (
+            await db.scalars(
+                belge_svc.devir_sorgusu(user, _devir_suzgeci(devir, musteri_id, donem))
+            )
+        ).all()
+    )
+    sutunlar, satirlar = await aktarim_svc.siparis_tablosu(db, siparisler)
+    icerik, medya, uzanti = await aktarim_svc.dosya_uret(bicim, "Siparişler", sutunlar, satirlar)
+    await audit.log(
+        db,
+        "orders",
+        "logo_aktarim",
+        new_value={"devir": devir, "donem": donem, "bicim": bicim, "satir": len(satirlar)},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return Response(
+        content=icerik,
+        media_type=medya,
+        headers={"Content-Disposition": f'attachment; filename="siparis-logo-{devir}.{uzanti}"'},
+    )
+
+
+class DevretIn(BaseModel):
+    siparis_idler: list[int] = Field(min_length=1, max_length=200)
+    not_: str | None = Field(default=None, alias="not", max_length=300)
+
+    model_config = {"populate_by_name": True}
+
+
+class GeriAlIn(BaseModel):
+    gerekce: str = Field(min_length=1, max_length=300)
+
+
+@router.post("/muhasebe-devri")
+async def muhasebe_devret(
+    payload: DevretIn, request: Request, db: DbDep, clock: ClockDep, user: Devredici
+) -> dict:
+    """Toplu "muhasebeye devredildi"; biri uygun değilse TAMAMI 409."""
+    try:
+        idler = await belge_svc.devret(
+            db, user, payload.siparis_idler, not_=payload.not_, clock=clock, ip=client_ip(request)
+        )
+    except belge_svc.SiparisBelgeGirdiHatasi as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except belge_svc.SiparisBelgeHatasi as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, {"mesaj": str(exc), "sorunlu": exc.sorunlu}
+        ) from exc
+    await db.commit()
+    return {"devredilen": idler}
+
+
+@router.post("/{siparis_id}/muhasebe-devri/geri-al", response_model=SiparisOut)
+async def muhasebe_devri_geri_al(
+    siparis_id: int, payload: GeriAlIn, request: Request, db: DbDep, user: Devredici
+) -> SiparisOut:
+    s = await _getir(db, siparis_id, user)
+    try:
+        await belge_svc.devri_geri_al(db, user, s, gerekce=payload.gerekce, ip=client_ip(request))
+    except belge_svc.SiparisBelgeGirdiHatasi as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except belge_svc.SiparisBelgeHatasi as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    await db.commit()
+    return await _cikti(db, s)
+
+
+@router.get("/{siparis_id}/onay.pdf")
+async def siparis_onayi_pdf(siparis_id: int, db: DbDep, user: Okuyucu) -> Response:
+    """Sipariş onayı belgesi (S6). Fiyatlıdır; TASLAK/İPTAL siparişte 409."""
+    s = await _getir(db, siparis_id, user)
+    try:
+        icerik = await belge_svc.onay_pdf(db, s)
+    except belge_svc.SiparisBelgeHatasi as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except PdfUretilemedi as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    return Response(
+        content=icerik,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="siparis-onayi-{s.order_no}.pdf"'},
+    )
 
 
 @router.get("/{siparis_id}", response_model=SiparisOut)
@@ -623,8 +758,19 @@ async def rezervasyon_birak(
     return await _cikti(db, s)
 
 
+class SerisizSevkIn(BaseModel):
+    kalem_id: int
+    adet: Decimal = Field(gt=0)
+
+
 class SevkIn(BaseModel):
     rezervasyon_ids: list[int] = Field(default_factory=list)
+    # Kimlik taşımayan kalemlerin sevk adedi (S4.3). Verilmezse serisiz kalem
+    # sevk edilmez (önceki davranış); arayüz kalan adedi önerir.
+    serisiz: list[SerisizSevkIn] = Field(default_factory=list)
+    # Yalnız serisiz kalem sevk edilecekse açık rezervasyonlar otomatik
+    # seçilmesin diye: True iken boş `rezervasyon_ids` "hiç cihaz yok" demektir.
+    yalniz_secilenler: bool = False
     from_warehouse_id: int | None = None
     belge_no: str | None = Field(default=None, max_length=40)
 
@@ -633,6 +779,8 @@ class SevkOut(BaseModel):
     transfer_id: int
     transfer_no: str
     adet: int
+    irsaliye_id: int
+    irsaliye_no: str
     siparis: SiparisOut
 
 
@@ -647,7 +795,9 @@ async def sevk_et(
 ) -> SevkOut:
     """Rezerve cihazları sevk eder; stok transfer belgesi üretilir.
 
-    `rezervasyon_ids` boşsa siparişin TÜM açık rezervasyonları sevk edilir.
+    `rezervasyon_ids` boşsa siparişin TÜM açık rezervasyonları sevk edilir
+    (`yalniz_secilenler=true` iken hiçbiri). `serisiz` kimlik taşımayan
+    kalemleri stoktan düşerek sevk eder. Her sevkiyat numaralı irsaliye üretir.
     """
     s = await _getir(db, siparis_id, user)
     acik = await svc.acik_rezervasyonlar(db, s.id)
@@ -658,7 +808,10 @@ async def sevk_et(
                 status.HTTP_400_BAD_REQUEST, "Seçilen rezervasyonların bir kısmı açık değil"
             )
     else:
-        secili = acik
+        secili = [] if payload.yalniz_secilenler else acik
+    serisiz: dict[int, Decimal] = {}
+    for k in payload.serisiz:
+        serisiz[k.kalem_id] = serisiz.get(k.kalem_id, Decimal("0")) + k.adet
 
     try:
         transfer = await svc.sevk_et(
@@ -671,18 +824,29 @@ async def sevk_et(
             teslim_eden=user.full_name,
             user_id=user.id,
             ip=client_ip(request),
+            serisiz=serisiz,
         )
     except svc.SiparisHatasi as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except IzinsizGecis as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except irsaliye_svc.IrsaliyeGirdiHatasi as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except irsaliye_svc.IrsaliyeHatasi as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    irsaliye = transfer.irsaliye  # type: ignore[attr-defined]
 
     await audit.log(
         db,
         "orders",
         "sevk",
         entity_id=s.id,
-        new_value={"transfer": transfer.transfer_no, "adet": len(secili)},
+        new_value={
+            "transfer": transfer.transfer_no,
+            "irsaliye": irsaliye.irsaliye_no,
+            "adet": len(secili),
+            "serisiz": {str(k): str(v) for k, v in serisiz.items()},
+        },
         user_id=user.id,
         ip=client_ip(request),
     )
@@ -691,6 +855,8 @@ async def sevk_et(
         transfer_id=transfer.id,
         transfer_no=transfer.transfer_no,
         adet=len(secili),
+        irsaliye_id=irsaliye.id,
+        irsaliye_no=irsaliye.irsaliye_no,
         siparis=await _cikti(db, s),
     )
 

@@ -24,6 +24,8 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api, type ApiError } from "../api/client";
+import { DEPO_KAYNAKLARI, DIS_HEDEFLER, irsaliyeApi } from "../api/irsaliye";
+import IrsaliyeListesi from "../components/IrsaliyeListesi";
 import Statistic from "../components/Statistic";
 import { useAuth } from "../auth/AuthContext";
 
@@ -67,6 +69,9 @@ interface Transfer {
   shipped_at: string | null;
   delivered_at: string | null;
   kalemler: { device_id: number; kimlik: string | null }[];
+  document_no: string | null;
+  irsaliye_id: number | null;
+  irsaliye_no: string | null;
 }
 
 interface BayiStok {
@@ -148,6 +153,16 @@ export default function StokPage() {
     queryKey: ["transferler"],
     queryFn: () => api.get<Transfer[]>("/api/stok/transferler"),
   });
+  // S4.3: depodan şirket dışına transfer irsaliye üretir; alıcı hesap zorunlu.
+  const formKaynak = Form.useWatch("from_location_type", form) as string | undefined;
+  const formHedef = Form.useWatch("to_location_type", form) as string | undefined;
+  const irsaliyeli =
+    DEPO_KAYNAKLARI.includes(formKaynak ?? "") && DIS_HEDEFLER.includes(formHedef ?? "");
+  const hesaplar = useQuery({
+    queryKey: ["hesaplar-transfer"],
+    queryFn: () => api.get<{ id: number; title: string }[]>("/api/hesaplar?limit=500"),
+    enabled: acik,
+  });
   const bayiStok = useQuery({
     queryKey: ["bayi-stok"],
     queryFn: () => api.get<BayiStok[]>("/api/stok/bayi-stogu"),
@@ -166,7 +181,11 @@ export default function StokPage() {
   const olustur = useMutation({
     mutationFn: (v: Record<string, unknown>) => api.post<Transfer>("/api/stok/transferler", v),
     onSuccess: (t) => {
-      message.success(`${t.transfer_no} oluşturuldu · ${t.kalemler.length} cihaz`);
+      message.success(
+        `${t.transfer_no} oluşturuldu · ${t.kalemler.length} cihaz` +
+          (t.irsaliye_no ? ` · irsaliye ${t.irsaliye_no}` : ""),
+      );
+      void qc.invalidateQueries({ queryKey: ["irsaliyeler"] });
       setAcik(false);
       form.resetFields();
       yenile();
@@ -553,6 +572,26 @@ export default function StokPage() {
                             render: (_, t: Transfer) => t.kalemler.length,
                           },
                           {
+                            title: "İrsaliye",
+                            width: 190,
+                            render: (_, t: Transfer) =>
+                              t.irsaliye_id ? (
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  href={irsaliyeApi.pdfYolu(t.irsaliye_id)}
+                                  target="_blank"
+                                  className="mono"
+                                >
+                                  {t.irsaliye_no} · PDF
+                                </Button>
+                              ) : (
+                                <Typography.Text type="secondary" className="mono">
+                                  {t.document_no ?? "—"}
+                                </Typography.Text>
+                              ),
+                          },
+                          {
                             title: "Durum",
                             width: 190,
                             render: (_, t: Transfer) => (
@@ -571,6 +610,11 @@ export default function StokPage() {
                         ]}
                       />
                     ),
+                  },
+                  {
+                    key: "irsaliyeler",
+                    label: "İrsaliyeler",
+                    children: <IrsaliyeListesi />,
                   },
                   {
                     key: "hareketler",
@@ -680,6 +724,21 @@ export default function StokPage() {
               />
             </Form.Item>
           </Space>
+          {irsaliyeli && (
+            <Form.Item
+              name="to_account_id"
+              label="Alıcı hesap"
+              rules={[{ required: true, message: "İrsaliye için alıcı seçin" }]}
+              extra="Depodan şirket dışına çıkışta numaralı irsaliye otomatik düzenlenir (e-İrsaliye değildir)."
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                loading={hesaplar.isLoading}
+                options={(hesaplar.data ?? []).map((h) => ({ value: h.id, label: h.title }))}
+              />
+            </Form.Item>
+          )}
           <Form.Item
             name="new_ownership"
             label="Yeni sahiplik"

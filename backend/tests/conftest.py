@@ -51,7 +51,8 @@ TRUNCATE TABLE audit_logs, attachments, sim_device_history, sim_plan_history,
                rental_catalog_items, rental_inventory_movements, stock_count_lines,
                service_alert_reads, training_observation_ratings,
                rental_counts, rental_count_lines, service_notification_prefs,
-               service_mail_outbox, course_competencies, service_competency_requirements
+               service_mail_outbox, course_competencies, service_competency_requirements,
+               belge_sayaclari
 RESTART IDENTITY CASCADE
 """
 
