@@ -41,11 +41,12 @@ async def kisiler(kullanici_ac, birimli_kullanici_ac) -> dict:
         "admin": await kullanici_ac("admin_p", "ADMIN"),
         "mudur": await birimli_kullanici_ac("mudur_p", "SERVIS_YONETICI", ["GUVENLIK"]),
         "sef": await birimli_kullanici_ac("sef_p", "SERVIS_SEF", ["GUVENLIK"], saha_rolu="SEF"),
-        "tek": await birimli_kullanici_ac(
-            "tek_p", "SERVIS_TEKNISYEN", ["GUVENLIK"], saha_rolu="TEKNISYEN"
-        ),
-        "tek2": await birimli_kullanici_ac(
-            "tek_p2", "SERVIS_TEKNISYEN", ["GUVENLIK"], saha_rolu="TEKNISYEN"
+        # Atölye: servis.gor + takip.gor var, operasyon.gor ve teklif.gor yok.
+        "tek": await birimli_kullanici_ac("tek_p", "ATOLYE", ["GUVENLIK"]),
+        "tek2": await birimli_kullanici_ac("tek_p2", "ATOLYE", ["GUVENLIK"]),
+        # Saha teknisyeninde takip.gor yok (2026-11-09): Ana Panel bileşeni yok.
+        "saha": await birimli_kullanici_ac(
+            "saha_p", "SERVIS_TEKNISYEN", ["GUVENLIK"], saha_rolu="TEKNISYEN"
         ),
         "satis_muduru": await kullanici_ac("satismd_p", "SATIS_MUDURU"),
         "depo": await kullanici_ac("depo_p", "DEPO"),
@@ -66,11 +67,17 @@ async def test_duzen_yoksa_bugunku_panel_izinle_suzulur(client, kisiler) -> None
     assert "tekliflerim" in _katalog(g)  # teklif.gor var; varsayılanda değil, katalogda
     assert g["rol_duzenleyebilir"] is False
 
-    # Teknisyende operasyon.gor ve teklif.gor yok: ekip kartı ve teklif bileşeni yok.
+    # Atölyede operasyon.gor ve teklif.gor yok: ekip kartı ve teklif bileşeni yok.
     await giris(client, "tek_p")
     g = (await client.get(YOL)).json()
     assert _kodlar(g) == _sistem("ekip_durumu")
     assert {"ekip_durumu", "tekliflerim"} & _katalog(g) == set()
+
+    # Saha teknisyeni (takip.gor yok): boş panel, boş katalog — servis ucu 403 verirdi.
+    await giris(client, "saha_p")
+    g = (await client.get(YOL)).json()
+    assert g["bilesenler"] == [] and g["katalog"] == []
+    assert (await client.get("/api/teknik-servis/ana-panel")).status_code == 403
 
 
 async def test_servis_izni_olmayan_yalniz_izinli_bilesenleri_gorur(client, kisiler) -> None:
@@ -198,19 +205,19 @@ async def test_rol_varsayilani_kullaniciya_gecer_kisisel_duzen_ustune_yazar(
         {"kod": "kpi_acik_is", "boyut": "DAR", "gorunur": True},
     ]
     await giris(client, "mudur_p")
-    r = await client.get(f"{ROL}/SERVIS_TEKNISYEN")
+    r = await client.get(f"{ROL}/ATOLYE")
     assert r.status_code == 200, r.text
     g = r.json()
     assert g["kaynak"] == "SISTEM" and g["version"] is None
     assert _kodlar(g) == _sistem("ekip_durumu")
-    # Katalog = rolün izni ∩ düzenleyenin izni (teknisyende operasyon.gor yok).
+    # Katalog = rolün izni ∩ düzenleyenin izni (atölyede operasyon.gor yok).
     assert "ekip_durumu" not in _katalog(g) and "tekliflerim" not in _katalog(g)
 
-    r = await client.put(f"{ROL}/SERVIS_TEKNISYEN", json={"bilesenler": rol_duzen})
+    r = await client.put(f"{ROL}/ATOLYE", json={"bilesenler": rol_duzen})
     assert r.status_code == 200, r.text
     assert r.json()["kaynak"] == "ROL" and r.json()["version"] == 1
 
-    # Teknisyen (kişisel düzeni yok) rol varsayılanını görür.
+    # Atölye kullanıcısı (kişisel düzeni yok) rol varsayılanını görür.
     await giris(client, "tek_p")
     g = (await client.get(YOL)).json()
     assert g["kaynak"] == "ROL" and g["bilesenler"] == rol_duzen
@@ -226,7 +233,7 @@ async def test_rol_varsayilani_kullaniciya_gecer_kisisel_duzen_ustune_yazar(
 
     # Rol varsayılanı kaldırılınca sistem varsayılanı (bugünkü panel) geçer.
     await giris(client, "mudur_p")
-    r = await client.delete(f"{ROL}/SERVIS_TEKNISYEN?version=1")
+    r = await client.delete(f"{ROL}/ATOLYE?version=1")
     assert r.status_code == 200 and r.json()["kaynak"] == "SISTEM"
     await giris(client, "tek_p")
     g = (await client.get(YOL)).json()
@@ -242,9 +249,9 @@ async def test_rol_varsayilani_yetki_ve_dogrulama(client, kisiler) -> None:
     assert r.status_code == 403
 
     await giris(client, "admin_p")
-    # Rolün izni olmayan bileşen (teknisyende operasyon.gor yok) → 403.
+    # Rolün izni olmayan bileşen (atölyede operasyon.gor yok) → 403.
     r = await client.put(
-        f"{ROL}/SERVIS_TEKNISYEN", json={"bilesenler": [{"kod": "ekip_durumu", "boyut": "DAR"}]}
+        f"{ROL}/ATOLYE", json={"bilesenler": [{"kod": "ekip_durumu", "boyut": "DAR"}]}
     )
     assert r.status_code == 403
     assert (await client.get(f"{ROL}/OLMAYAN_ROL")).status_code == 404

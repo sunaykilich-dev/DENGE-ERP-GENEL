@@ -46,20 +46,17 @@ async def test_aralik_siniri_ve_birim_kapsami(ortam, servis_isi_ac) -> None:
     assert {s["is_id"] for s in r.json()} == {guv.id, hab.id}
 
 
-async def test_teknisyen_yalniz_kendi_islerini_gorur(ortam, servis_isi_ac) -> None:
+async def test_teknisyen_takvime_ve_kpiya_erisemez(ortam, servis_isi_ac) -> None:
+    """2026-11-09: saha teknisyeninde `takip.gor` yok (menü sadeleşti). Kendi
+    işlerini Benim İşlerim'de görür; takip takvimi ve KPI ona kapalı."""
     benim = await servis_isi_ac(musteri=ortam.musteri, lokasyon=ortam.lokasyon)
-    baskasi = await servis_isi_ac(musteri=ortam.musteri, lokasyon=ortam.lokasyon)
     sef = await ortam.ist("sef_g")
     await _planla(sef, benim.id, ekip={"teknisyen_idler": [ortam.kisi("tek1").id]})
-    await _planla(sef, baskasi.id, ekip={"teknisyen_idler": [ortam.kisi("tek2").id]})
     tek = await ortam.ist("tek1")
     r = await tek.get(f"{ON}/takvim", params={"baslangic": "2026-01-15", "bitis": "2026-01-15"})
-    assert [s["is_id"] for s in r.json()] == [benim.id]
-    # Ekibinde olduğu işte irtibatı izinden bağımsız görür (anahtar var).
-    assert "irtibat_telefon" in r.json()[0]
+    assert r.status_code == 403
     r = await tek.get(f"{ON}/kpi", params={"gun": "2026-01-15"})
-    kutular = {k["kod"]: k["deger"] for k in r.json()}
-    assert kutular["bugun_planli"] == 1
+    assert r.status_code == 403
 
 
 async def test_kapali_isin_plani_soluk_bayrakla_doner(ortam, servis_isi_ac, db) -> None:

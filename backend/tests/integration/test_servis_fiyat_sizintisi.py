@@ -82,6 +82,13 @@ TARANMAYAN: dict[str, str] = {
     "/api/teknik-servis/bakim/sozlesmeler/{sozlesme_id}/donemler/{donem_id}/cihazlar": (
         "bakım dönemi üretimi (test_bakim_*); yanıt cihaz/ekipman listesi, ücret yok"
     ),
+    "/api/teknik-servis/isler/{so_id}/bakim-fisi.pdf": (
+        "bakım işi ister (taramanın işi arıza → 409); PDF, JSON değil; fiyat yalnız "
+        "fiyatli + maliyet.gor ile basılır (test_irsaliye)"
+    ),
+    "/api/teknik-servis/parca/fis.pdf": (
+        "sahada parça hareketi ister (test_sahada_parca); PDF, fiyat/maliyet basılmaz"
+    ),
 }
 
 # Zorunlu sorgu parametresi yer tutucuyla (ornek_sorgu) geçersiz kalan uçlar:
