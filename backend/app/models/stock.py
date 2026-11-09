@@ -74,8 +74,10 @@ class Warehouse(Base, PkMixin, TimestampMixin):
     (`ck_warehouse_tur_tekil`). Mevcut satırlar iki bayrakta da false kalır
     ve mobilite uçları (`/api/stok/depolar`, hareket/transfer) YALNIZ iki
     bayrağı da false olan depoları görür/kabul eder — aksi hâlde mobilite
-    cihazı kiralama deposuna yazılabilirdi (E06-D01, E11-D01). `birim` NULL =
-    ortak depo.
+    cihazı kiralama deposuna yazılabilirdi (E06-D01, E11-D01). Kiralama
+    deposunda `birim` NULL = ortak depo. Servis deposu birimsiz OLAMAZ
+    (kullanıcı isteği 2026-11-09: Haberleşme/Güvenlik depoları tamamen ayrı,
+    `ck_warehouse_servis_birim_zorunlu`; görünürlük `teknik_servis.parca.depo_kosulu`).
     """
 
     __tablename__ = "warehouses"
@@ -83,6 +85,11 @@ class Warehouse(Base, PkMixin, TimestampMixin):
         UniqueConstraint("code", name="uq_warehouse_code"),
         CheckConstraint(birim_check("birim", bos_olabilir=True), name="ck_warehouse_birim"),
         CheckConstraint("NOT (servis_deposu AND kiralama_deposu)", name="ck_warehouse_tur_tekil"),
+        # Birim ayrımı (2026-11-09, fba000000001): servis deposu birimsiz olamaz.
+        # Canlıda NOT VALID eklenir; eşlenemeyen eski satır güncellenene dek kalır.
+        CheckConstraint(
+            "NOT servis_deposu OR birim IS NOT NULL", name="ck_warehouse_servis_birim_zorunlu"
+        ),
     )
 
     code: Mapped[str] = mapped_column(String(20))

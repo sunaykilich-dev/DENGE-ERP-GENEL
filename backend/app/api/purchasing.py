@@ -329,6 +329,18 @@ async def mal_kabul(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Kimlik listesi ya da (serisiz kalemde) adet girilmeli"
         )
+    if payload.warehouse_id is not None:
+        # Servis deposu birim kapsamlıdır (2026-11-09): başka birimin deposuna
+        # mal kabul girilemez; varlığı gizlenir (404). Mobilite deposu değişmez.
+        from app.models import Warehouse
+        from app.services.teknik_servis import parca
+
+        depo = await db.get(Warehouse, payload.warehouse_id)
+        if depo is not None and depo.servis_deposu:
+            try:
+                await parca.depo_getir(db, user, depo.id)
+            except parca.ParcaBulunamadi as exc:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Depo bulunamadı") from exc
 
     try:
         fis = await svc.mal_kabul(

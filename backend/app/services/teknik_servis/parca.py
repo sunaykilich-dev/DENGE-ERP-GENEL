@@ -76,7 +76,7 @@ from app.models import (
 )
 from app.models.stock import SERVIS_HAREKET_TURLERI, SERVIS_HAREKET_YONU
 from app.models.teknik_servis import DURUM_GRUPLARI
-from app.permissions import SCOPE_ALL, SCOPE_OWN_JOBS, SCOPES
+from app.permissions import BIRIMLER, SCOPE_ALL, SCOPE_OWN_JOBS, SCOPES
 from app.services import sirketler
 from app.services.statemachine import PARCA_TALEBI, STOK_SAYIM
 from app.services.teknik_servis import gecmis, kancalar, kapsam
@@ -182,17 +182,23 @@ def _kapsam_kodu(user: User) -> str | None:
 def depo_kosulu(user: User) -> ColumnElement[bool]:
     """Kullanıcının görebildiği SERVİS depoları (pasifler dahil).
 
-    - TUMU: bütün servis depoları;
-    - KENDI_BIRIMI / KENDI_MUSTERILERI: ortak (birimsiz) ve kendi birim
-      depoları + kendi araç deposu;
-    - KENDI_ISLERI (teknisyen): ortak ve kendi birim depoları (başka
-      teknisyenlerin araç depoları HARİÇ) + kendi araç deposu;
+    - TUMU: bütün servis depoları (birimi henüz atanmamış eski depolar dahil —
+      yönetici onları görüp birime bağlayabilsin);
+    - KENDI_BIRIMI / KENDI_MUSTERILERI: kendi birim depoları + kendi araç deposu;
+    - KENDI_ISLERI (teknisyen): kendi birim depoları (başka teknisyenlerin
+      araç depoları HARİÇ) + kendi araç deposu;
     - birimsiz birim kapsamlı kullanıcı ya da bilinmeyen kapsam: hiçbiri.
+
+    **Birim ayrımı (kullanıcı isteği 2026-11-09, migration fba000000001):**
+    depolar birimlere tamamen ayrılır; "ortak (birimsiz) depo herkese
+    görünür" kuralı KALDIRILDI. Birimi olmayan eski servis deposu yalnız
+    TUMU kapsamına görünür. Yeni servis deposu birimsiz açılamaz
+    (`ck_warehouse_servis_birim_zorunlu`).
     """
     temel = Warehouse.servis_deposu.is_(True)
     kod = _kapsam_kodu(user)
     if kod == SCOPE_ALL:
-        # Şirket ayrımı: TUMU da etkin şirketin birim depoları + ortak depolar.
+        # Şirket ayrımı: TUMU da etkin şirketin birim depoları + atanmamışlar.
         sirket = sirketler.etkin_birimler(user)
         if sirket is None:
             return temel
@@ -200,7 +206,7 @@ def depo_kosulu(user: User) -> ColumnElement[bool]:
     birimler = kapsam.kullanici_birimleri(user)
     if kod is None or not birimler:
         return false()
-    birim_uygun = or_(Warehouse.birim.is_(None), Warehouse.birim.in_(sorted(birimler)))
+    birim_uygun = Warehouse.birim.in_(sorted(birimler))
     arac_deposu = and_(Warehouse.location_type == "TEKNISYEN", Warehouse.user_id.is_not(None))
     kendi_araci = and_(arac_deposu, Warehouse.user_id == user.id)
     if kod == SCOPE_OWN_JOBS:
@@ -216,6 +222,26 @@ def erisilebilir_depo_sorgusu(user: User) -> Select:
 async def erisilebilir_depolar(db: AsyncSession, user: User) -> list[int]:
     """Teknisyen: birim depoları + kendi araç deposu; birimsiz KENDI_BIRIMI → boş."""
     return list((await db.scalars(erisilebilir_depo_sorgusu(user).order_by(Warehouse.id))).all())
+
+
+def birim_adi(birim: str | None) -> str:
+    return BIRIMLER.get(birim, birim) if birim else "birimsiz"
+
+
+def birim_uyumu_dogrula(depo: Warehouse, birim: str | None, *, ne: str) -> None:
+    """Depo ile işin/öteki deponun birimi aynı mı? Değilse 409 (stok karışmaz).
+
+    Kullanıcı isteği (2026-11-09): Haberleşme ve Güvenlik depoları tamamen
+    ayrı; Güvenlik deposundan Haberleşme işine parça çıkılamaz, birimler arası
+    transfer yapılamaz. Birimi atanmamış eski depo da (yalnız TUMU görür)
+    birimli kayıtla eşleşmez: önce depo birime bağlanmalı.
+    """
+    if birim is None or depo.birim == birim:
+        return
+    raise ParcaHatasi(
+        f"'{depo.name}' {birim_adi(depo.birim)} deposu; {birim_adi(birim)} {ne} "
+        "kullanılamaz. Depolar birimlere ayrıdır."
+    )
 
 
 async def depo_getir(db: AsyncSession, user: User, depo_id: int) -> Warehouse:
@@ -629,6 +655,7 @@ async def cikis_yap(
     so = await _isi_kilitle(db, so)
     if _kapali_mi(so):
         raise ParcaHatasi("Kapalı iş emrine parça yazılamaz.")
+    birim_uyumu_dogrula(depo, so.birim, ne="işine parça çıkışında")
     satirlar = _birlestir(satirlar)
     talepler = await _acik_talepler(db, so.id, (s.product_id for s in satirlar))
     hareketler = await hareket_yaz(
@@ -661,6 +688,7 @@ async def iade_al(
     """İşten depoya iade; adet ≤ net çıkış (E11-03). Kapalı işte de serbest
     (yanlış çıkışın stoğa geri alınması)."""
     so = await _isi_kilitle(db, so)
+    birim_uyumu_dogrula(depo, so.birim, ne="işinden iadede")
     satirlar = _birlestir(satirlar)
     await _urunleri_kilitle(db, (s.product_id for s in satirlar))
     for s in satirlar:
@@ -907,6 +935,11 @@ async def transfer_yap(
     depo → 409, hiçbir satır yazılmaz."""
     if kaynak.id == hedef.id:
         raise ParcaHatasi("Kaynak ve hedef depo aynı olamaz.")
+    if kaynak.birim != hedef.birim:
+        raise ParcaHatasi(
+            f"Birimler arası transfer yapılamaz: '{kaynak.name}' {birim_adi(kaynak.birim)}, "
+            f"'{hedef.name}' {birim_adi(hedef.birim)} deposu. Depolar birimlere ayrıdır."
+        )
     satirlar = _birlestir(satirlar)
     grup = uuid.uuid4()
     cikislar = await hareket_yaz(

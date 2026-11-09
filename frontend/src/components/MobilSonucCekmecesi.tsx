@@ -466,6 +466,7 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
         onKapat={() => setParcaAcik(false)}
         soId={isId}
         soNo={soNo}
+        birim={birim}
       />
       <TalepPenceresi acik={talepAcik} soId={isId} onKapat={() => setTalepAcik(false)} />
     </Drawer>

@@ -98,13 +98,12 @@ async def o(db, birimli_kullanici_ac, servis_isi_ac, giris):
     x.depocu_u = await birimli_kullanici_ac("depo_g", "SERVIS_DEPO", ["GUVENLIK"])
     x.tekn_u = await birimli_kullanici_ac("tekn_g", "SERVIS_TEKNISYEN", ["GUVENLIK"])
     x.tekn2_u = await birimli_kullanici_ac("tekn_g2", "SERVIS_TEKNISYEN", ["GUVENLIK"])
-    x.ortak = await _depo(db, "SRV-ORTAK")
     x.guv = await _depo(db, "SRV-GUV", birim="GUVENLIK")
     x.hab = await _depo(db, "SRV-HAB", birim="HABERLESME")
     x.arac1 = await _depo(db, "ARAC-1", birim="GUVENLIK", user=x.tekn_u)
     x.arac2 = await _depo(db, "ARAC-2", birim="GUVENLIK", user=x.tekn2_u)
     x.urun = await _parca(db, "YP-K", min_stok=5)
-    for depo in (x.ortak, x.guv, x.hab, x.arac1, x.arac2):
+    for depo in (x.guv, x.hab, x.arac1, x.arac2):
         await _yaz(db, x.depocu_u, "GIRIS", depo, x.urun, 3)
     x.is_guv = await servis_isi_ac(birim="GUVENLIK", atananlar=[x.tekn_u])
     x.is_hab = await servis_isi_ac(birim="HABERLESME")
@@ -130,11 +129,10 @@ async def test_depo_kumeleri(o, db, birimli_kullanici_ac, giris) -> None:
         "ARAC-1",
         "ARAC-2",
         "SRV-GUV",
-        "SRV-ORTAK",
     ]
-    # Teknisyen: ortak + birim depoları + KENDİ araç deposu; başkasınınki yok.
+    # Teknisyen: birim depoları + KENDİ araç deposu; başkasınınki yok.
     r = await o.tekn.get(f"{URL}/depolar")
-    assert kodlar(r) == ["ARAC-1", "SRV-GUV", "SRV-ORTAK"]
+    assert kodlar(r) == ["ARAC-1", "SRV-GUV"]
     assert [d["kendi_araci"] for d in r.json() if d["code"] == "ARAC-1"] == [True]
     # Birimsiz birim kapsamlı kullanıcı hiçbir depo görmez (fail-closed).
     await birimli_kullanici_ac("depo_bos", "SERVIS_DEPO", [])
@@ -144,11 +142,11 @@ async def test_depo_kumeleri(o, db, birimli_kullanici_ac, giris) -> None:
 
 
 async def test_stok_toplami_ve_uyari_kapsamli(o) -> None:
-    # Depocu: ortak+guv+arac1+arac2 = 12 (HAB'daki 3 sayılmaz); asgari 5 → YETERLI.
+    # Depocu: guv+arac1+arac2 = 9 (HAB'daki 3 sayılmaz); asgari 5 → YETERLI.
     satir = (await o.depocu.get(f"{URL}/stok")).json()[0]
-    assert satir["toplam"] == 12 and "SRV-HAB" not in [d["depo_kodu"] for d in satir["depolar"]]
-    # Teknisyen: ortak+guv+arac1 = 9.
-    assert (await o.tekn.get(f"{URL}/stok")).json()[0]["toplam"] == 9
+    assert satir["toplam"] == 9 and "SRV-HAB" not in [d["depo_kodu"] for d in satir["depolar"]]
+    # Teknisyen: guv+arac1 = 6.
+    assert (await o.tekn.get(f"{URL}/stok")).json()[0]["toplam"] == 6
 
 
 async def test_kapsam_disi_depodan_cikis_404_veri_degismez(o, db) -> None:
@@ -199,12 +197,12 @@ async def test_atanmadigi_ise_cikis_404(o, db, servis_isi_ac) -> None:
 async def test_kimlikli_uclarda_kapsam_disi_404(o, db, kullanici_ac) -> None:
     """URL'deki hareket/sayım/talep/depo/iş başka birimde → 404 ve hiçbir şey yazılmaz."""
     hab_hareket = (await _yaz(db, o.depocu_u, "ZAYI", o.hab, o.urun, 1, notes="Kırık"))[0]
-    # Ortak depoda AMA başka birimin işine bağlı hareket de görünmez.
+    # Başka birimin işine bağlı çıkış hareketi de görünmez.
     hab_cikis = (
         await svc.cikis_yap(
             db,
             so=o.is_hab,
-            depo=o.ortak,
+            depo=o.hab,
             satirlar=[svc.Satir(o.urun.id, 1)],
             user=o.depocu_u,
             clock=FakeClock(),
@@ -236,7 +234,7 @@ async def test_kimlikli_uclarda_kapsam_disi_404(o, db, kullanici_ac) -> None:
         r = await o.depocu.request(yontem, yol, json=govde)
         assert r.status_code == 404, (yol, r.status_code, r.text)
         assert await _anlik(db) == once, yol
-    # Listelerde de yok: hareket (ortak depodaki HAB işi dahil), sayım, talep.
+    # Listelerde de yok: hareket (HAB işine çıkış dahil), sayım, talep.
     hareketler = (await o.depocu.get(f"{URL}/hareketler")).json()
     assert {h["id"] for h in hareketler}.isdisjoint(gizli)
     assert (await o.depocu.get(f"{URL}/sayimlar")).json() == []
@@ -260,3 +258,5 @@ async def test_depo_tanimi_kapsam(o, db, birimli_kullanici_ac, rol_ac, giris) ->
     assert r.status_code == 201
     yeni = await db.scalar(select(Warehouse).where(Warehouse.code == "SRV-YENI"))
     assert yeni.servis_deposu and not yeni.kiralama_deposu
+    # Birim seçilmedi: tanımlayanın tek birimi (GUVENLIK) yazıldı, ortak depo yok.
+    assert yeni.birim == "GUVENLIK"

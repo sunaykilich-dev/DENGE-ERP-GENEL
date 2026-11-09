@@ -74,6 +74,7 @@ import {
   type Talep,
 } from "../api/yedekParca";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import {
   Aciklama,
   AltNot,
@@ -1070,6 +1071,11 @@ function DepoSekmesi() {
     is_active?: boolean;
   }>();
   const tanimci = yetkili("sistem.ayar");
+  // Depo tek birime bağlıdır (2026-11-09: birimler tamamen ayrı). Seçenekler
+  // kullanıcının görebildiği birimler; tek birim varsa kendiliğinden seçilir.
+  const { menuBirimleri } = useSirket();
+  const birimSecenekleri = BIRIM_KODLARI.filter((b) => !menuBirimleri || menuBirimleri.has(b));
+  const tekBirim = birimSecenekleri.length === 1 ? birimSecenekleri[0] : null;
   const personel = useQuery({
     queryKey: ["parca", "personel"],
     queryFn: () => personelApi.liste({ durum: "CALISIYOR" }, 200, 0),
@@ -1088,7 +1094,8 @@ function DepoSekmesi() {
         return parcaApi.depoOlustur({
           code: d.code!.trim(),
           name: d.name.trim(),
-          birim: d.birim ?? null,
+          // Boş: tek birimde o birim, araç deposunda teknisyenin birimi (sunucu).
+          birim: d.birim ?? tekBirim ?? null,
           location_type: d.arac ? "TEKNISYEN" : "BOLGE_DEPO",
           user_id: d.arac ? (d.user_id ?? null) : null,
         });
@@ -1096,7 +1103,8 @@ function DepoSekmesi() {
       const depo = duzenle as Depo;
       return parcaApi.depoGuncelle(depo.id, {
         name: d.name.trim(),
-        birim: d.birim ?? null,
+        // Birim boşaltılamaz; yalnız seçildiyse/değiştiyse gönderilir.
+        ...(d.birim && d.birim !== depo.birim ? { birim: d.birim } : {}),
         is_active: d.is_active,
         ...(depo.location_type === "TEKNISYEN" ? { user_id: d.user_id ?? null } : {}),
       });
@@ -1114,15 +1122,16 @@ function DepoSekmesi() {
   return (
     <Space orientation="vertical" size={12} style={{ width: "100%" }}>
       <Typography.Text type="secondary">
-        Servis depoları mobilite depolarından ayrıdır: mobilite stok ekranları bu depoları göstermez.
-        Teknisyen yalnız birim depolarını ve kendi araç deposunu görür.
+        Servis depoları birimlere ayrıdır: her depo tek birime (Haberleşme, Güvenlik …) bağlıdır. Teknisyen ve
+        şef yalnız kendi biriminin depolarını ve kendi araç deposunu görür; bir birimin deposundan başka
+        birimin işine parça çıkılamaz. Mobilite stok ekranları bu depoları göstermez.
       </Typography.Text>
       {tanimci && (
         <Button
           onClick={() => {
             setDuzenle("yeni");
             form.resetFields();
-            form.setFieldsValue({ arac: false });
+            form.setFieldsValue({ arac: false, birim: tekBirim });
           }}
         >
           Yeni servis deposu
@@ -1138,7 +1147,12 @@ function DepoSekmesi() {
         columns={[
           { title: "Kod", dataIndex: "code", key: "c" },
           { title: "Ad", dataIndex: "name", key: "n" },
-          { title: "Birim", key: "b", render: (_, d) => (d.birim ? (BIRIM_ETIKETLERI[d.birim] ?? d.birim) : "Ortak") },
+          {
+            title: "Birim",
+            key: "b",
+            render: (_, d) =>
+              d.birim ? (BIRIM_ETIKETLERI[d.birim] ?? d.birim) : <Tag color="orange">Birim seçilmeli</Tag>,
+          },
           {
             title: "Tür",
             key: "t",
@@ -1193,9 +1207,16 @@ function DepoSekmesi() {
           <Form.Item name="name" label="Ad" rules={[{ required: true }, { min: 2 }, { max: 100 }]}>
             <Input maxLength={100} />
           </Form.Item>
-          <Form.Item name="birim" label="Birim (boş = ortak depo)">
-            <Select allowClear options={BIRIM_KODLARI.map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] }))} />
-          </Form.Item>
+          {!(duzenle === "yeni" && tekBirim) && (
+            <Form.Item
+              name="birim"
+              label="Birim"
+              extra={duzenle === "yeni" && aracDeposu ? "Boş bırakılırsa teknisyenin birimi" : undefined}
+              rules={[{ required: !(duzenle === "yeni" && aracDeposu), message: "Birim seçin" }]}
+            >
+              <Select options={birimSecenekleri.map((b) => ({ value: b, label: BIRIM_ETIKETLERI[b] ?? b }))} />
+            </Form.Item>
+          )}
           {duzenle === "yeni" && (
             <Form.Item name="arac" label="Teknisyen araç deposu" valuePropName="checked">
               <Switch />

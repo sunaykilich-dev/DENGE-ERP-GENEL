@@ -327,6 +327,7 @@ export default function ServisParcalari({
         onKapat={() => setPencere(null)}
         soId={soId}
         soNo={veri?.so_no}
+        birim={veri?.is_birimi}
         parcaSecenekleri={iadeSecenekleri}
       />
       <TalepPenceresi acik={talepAcik} soId={soId} onKapat={() => setTalepAcik(false)} />

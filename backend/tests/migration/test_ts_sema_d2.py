@@ -147,8 +147,8 @@ async def _urun_depo(db, *, servis_deposu: bool = True) -> tuple[int, int]:
     depo = (
         await db.execute(
             text(
-                "INSERT INTO warehouses (code, name, servis_deposu) "
-                "VALUES ('SRV-T1', 'Servis deposu', :s) RETURNING id"
+                "INSERT INTO warehouses (code, name, servis_deposu, birim) "
+                "VALUES ('SRV-T1', 'Servis deposu', :s, 'GUVENLIK') RETURNING id"
             ),
             {"s": servis_deposu},
         )
@@ -210,8 +210,8 @@ async def test_depo_hem_servis_hem_kiralama_olamaz(db) -> None:
     with pytest.raises(DBAPIError, match="ck_warehouse_tur_tekil"):
         await db.execute(
             text(
-                "INSERT INTO warehouses (code, name, servis_deposu, kiralama_deposu) "
-                "VALUES ('X1', 'Karışık', true, true)"
+                "INSERT INTO warehouses (code, name, servis_deposu, kiralama_deposu, birim) "
+                "VALUES ('X1', 'Karışık', true, true, 'GUVENLIK')"
             )
         )
     await db.rollback()

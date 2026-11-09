@@ -211,6 +211,8 @@ export interface IsParcaOzeti {
 export interface IsParcalari {
   service_order_id: number;
   so_no: string;
+  /** İşin birimi; parça çıkışı yalnız bu birimin deposundan yapılır. */
+  is_birimi?: string | null;
   acik: boolean;
   hareketler: IsParcaHareketi[];
   ozet: IsParcaOzeti[];

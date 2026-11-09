@@ -12,6 +12,10 @@ Kurallar (plan §2.3, §4.5, E11):
 - **Kapsam:** depo kümesi `parca.depo_kosulu`; servis işi `kapsam.is_erisimi_yok_mu`.
   URL'deki ya da gövdedeki kapsam dışı depo/iş/hareket/sayım/talep → 404 ve
   hiçbir yazma yapılmaz (kontrol yazmadan ÖNCE).
+- **Birim ayrımı (2026-11-09):** her servis deposu tek birime bağlıdır
+  (Haberleşme, Güvenlik ...); birimsiz "ortak depo" yok. Başka birimin
+  deposu birim kapsamlı kullanıcıya görünmez (404); iş ile depo, transferde
+  iki depo aynı birimden olmalı (409). Sınama `test_depo_birim_ayrimi.py`.
 - **Hata kodları:** kural ihlali 409 (makine okunur ek alanlarla), girdi 400,
   şema 422 (`extra="forbid"`: giriş gövdesinde `service_order_id` 422 — E11-03).
 - Statik yollar (`/stok/ozet`, `/stok.xlsx`, `/hareketler.xlsx`) kimlikli
@@ -42,6 +46,7 @@ from app.models import (
     StockCountLine,
     StockMovement,
     User,
+    UserUnit,
     Warehouse,
 )
 from app.models.catalog import OLCU_BIRIMLERI
@@ -458,13 +463,50 @@ def _birim_dogrula(birim: str | None) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Bilinmeyen birim: {birim}")
 
 
-async def _arac_sahibi_dogrula(db: DbDep, user_id: int | None, location_type: str) -> None:
+async def _uye_birimleri(db: DbDep, user_id: int) -> list[UserUnit]:
+    return list((await db.scalars(select(UserUnit).where(UserUnit.user_id == user_id))).all())
+
+
+async def _depo_birimi(db: DbDep, user: User, payload: DepoIn) -> str:
+    """Yeni servis deposunun birimi (zorunlu; kullanıcı isteği 2026-11-09).
+
+    Seçilmediyse tahmin edilir — kullanıcı tek birimi için seçim yapmak
+    zorunda kalmasın (G1.9): araç deposunda teknisyenin birincil (tek)
+    birimi, değilse tanımlayanın görebildiği TEK birim. Birden çok aday
+    varsa 400 ("Birim seçin"); rastgele atanmaz.
+    """
+    if payload.birim is not None:
+        return payload.birim
+    if payload.user_id is not None:
+        uyelik = await _uye_birimleri(db, payload.user_id)
+        birincil = [u.birim for u in uyelik if u.is_primary] or [u.birim for u in uyelik]
+        if len(birincil) == 1:
+            return birincil[0]
+    adaylar = kapsam.gorunur_birimler(user)
+    if len(adaylar) == 1:
+        return adaylar[0]
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Deponun birimi seçilmeli")
+
+
+async def _arac_sahibi_dogrula(
+    db: DbDep, user_id: int | None, location_type: str, birim: str | None
+) -> None:
     if location_type not in KONUM_TIPLERI:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Konum tipi geçersiz: {location_type}")
     if location_type == "TEKNISYEN" and user_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Araç deposunda teknisyen seçilmeli")
-    if user_id is not None and await db.get(User, user_id) is None:
+    if user_id is None:
+        return
+    if await db.get(User, user_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kullanıcı bulunamadı")
+    # Araç deposu teknisyenin kendi biriminde olmalı: aksi hâlde teknisyen
+    # başka birimin stoğunu aracında taşır ve birimler karışır.
+    if birim is not None and birim not in {u.birim for u in await _uye_birimleri(db, user_id)}:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Teknisyen {BIRIMLER.get(birim, birim)} biriminde değil; araç deposu "
+            "teknisyenin biriminde olmalı",
+        )
 
 
 @router.post("/depolar", status_code=status.HTTP_201_CREATED)
@@ -472,14 +514,17 @@ async def depo_olustur(
     payload: DepoIn, request: Request, db: DbDep, user: DepoTanimci
 ) -> dict[str, Any]:
     """Servis deposu tanımı (`sistem.ayar`, K15). Kiralama deposu olamaz
-    (`ck_warehouse_tur_tekil`); mobilite uçları bu depoyu görmez."""
+    (`ck_warehouse_tur_tekil`); mobilite uçları bu depoyu görmez. Birim
+    zorunlu (seçilmezse tek aday kullanılır, `_depo_birimi`)."""
     _birim_dogrula(payload.birim)
-    if kapsam.birim_disinda_mi(user, payload.birim):
+    birim = await _depo_birimi(db, user, payload)
+    if kapsam.birim_disinda_mi(user, birim, birimsiz_gorunur=False):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Birim bulunamadı")
-    await _arac_sahibi_dogrula(db, payload.user_id, payload.location_type)
+    await _arac_sahibi_dogrula(db, payload.user_id, payload.location_type, birim)
     if await db.scalar(select(Warehouse.id).where(Warehouse.code == payload.code)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Bu depo kodu zaten kayıtlı.")
-    depo = Warehouse(**payload.model_dump(), servis_deposu=True, kiralama_deposu=False)
+    veri = {**payload.model_dump(), "birim": birim}
+    depo = Warehouse(**veri, servis_deposu=True, kiralama_deposu=False)
     db.add(depo)
     await db.flush()
     await audit.log(
@@ -487,7 +532,7 @@ async def depo_olustur(
         "warehouses",
         "parca.depo_olustur",
         entity_id=depo.id,
-        new_value=payload.model_dump(),
+        new_value=veri,
         user_id=user.id,
         ip=client_ip(request),
     )
@@ -499,15 +544,39 @@ async def depo_olustur(
 async def depo_guncelle(
     payload: DepoPatch, request: Request, db: DbDep, user: DepoTanimci
 ) -> dict[str, Any]:
-    """Kimlik gövdede (`depo_id`); kapsam dışı depo 404 ve yazma yok."""
+    """Kimlik gövdede (`depo_id`); kapsam dışı depo 404 ve yazma yok. Birim
+    boşaltılamaz (400); başka birime taşıma iki birim de kapsamdaysa olur."""
     depo = await _depo(db, user, payload.depo_id)
     degisen = payload.model_dump(exclude_unset=True, exclude={"depo_id"})
     if "birim" in degisen:
+        if degisen["birim"] is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Deponun birimi boş bırakılamaz")
         _birim_dogrula(degisen["birim"])
         if kapsam.birim_degisimi_yasak_mi(user, depo.birim, degisen["birim"]):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Depo bulunamadı")
-    if "user_id" in degisen:
-        await _arac_sahibi_dogrula(db, degisen["user_id"], depo.location_type)
+        # Hareketi olan depoyu başka birime taşımak geçmişi ve stoğu öteki
+        # birime geçirir (karışıklık). İlk atama (birimsiz eski depo) serbest.
+        if (
+            depo.birim is not None
+            and degisen["birim"] != depo.birim
+            and await db.scalar(
+                select(StockMovement.id).where(StockMovement.warehouse_id == depo.id).limit(1)
+            )
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Hareketi olan deponun birimi değiştirilemez; öteki birim için ayrı depo açın",
+            )
+    elif depo.birim is None:
+        # `ck_warehouse_servis_birim_zorunlu` birimsiz satırın güncellenmesine izin vermez.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Önce deponun birimini seçin")
+    if "user_id" in degisen or "birim" in degisen:
+        await _arac_sahibi_dogrula(
+            db,
+            degisen.get("user_id", depo.user_id),
+            depo.location_type,
+            degisen.get("birim", depo.birim),
+        )
     for alan, deger in degisen.items():
         setattr(depo, alan, deger)
     await audit.log_change(db, depo, "parca.depo_guncelle", user_id=user.id, ip=client_ip(request))
@@ -1258,6 +1327,8 @@ async def is_parcalari(so_id: int, db: DbDep, user: IsOkuyucu) -> dict[str, Any]
     return {
         "service_order_id": so.id,
         "so_no": so.so_no,
+        # İşin birimi: çıkış/iade penceresi yalnız bu birimin depolarını sunar.
+        "is_birimi": so.birim,
         "acik": so.status not in svc.KAPALI_SERVIS_DURUMLARI,
         "hareketler": hareket_listesi,
         "ozet": [o for o in net.values() if o["net"] != 0 or "tutar" in o],

@@ -79,6 +79,9 @@ export interface ParcaHareketPenceresiProps {
   /** Çıkış / iade için servis işi. */
   soId?: number;
   soNo?: string;
+  /** Çıkış / iade: işin birimi. Depo seçeneği yalnız bu birimin depoları
+   *  (birimler ayrı; başka birimin deposu sunucuda 409). */
+  birim?: string | null;
   /** İadede seçilebilecek parçalar (net çıkışı olanlar). */
   parcaSecenekleri?: { value: number; label: string }[];
   /** Kaydedildikten sonra (sorgu tazeleme sonrası). */
@@ -99,6 +102,7 @@ export default function ParcaHareketPenceresi({
   onKapat,
   soId,
   soNo,
+  birim,
   parcaSecenekleri,
   onTamam,
 }: ParcaHareketPenceresiProps) {
@@ -112,24 +116,29 @@ export default function ParcaHareketPenceresi({
     queryFn: () => parcaApi.depolar(),
     enabled: tur !== null,
   });
+  const isTuru = tur === "CIKIS" || tur === "IADE";
+  const uygunDepolar = useMemo(
+    () => (depolar.data ?? []).filter((d: Depo) => !isTuru || !birim || d.birim === birim),
+    [depolar.data, isTuru, birim],
+  );
   const depoSecenekleri = useMemo(
     () =>
-      (depolar.data ?? []).map((d: Depo) => ({
+      uygunDepolar.map((d: Depo) => ({
         value: d.id,
         label: `${d.code} — ${d.name}${d.kendi_araci ? " (aracım)" : ""}`,
       })),
-    [depolar.data],
+    [uygunDepolar],
   );
 
   useEffect(() => {
     if (tur === null) return;
     setHata(null);
     form.resetFields();
-    const arac = depolar.data?.find((d) => d.kendi_araci);
-    const tek = depolar.data?.length === 1 ? depolar.data[0] : undefined;
+    const arac = uygunDepolar.find((d) => d.kendi_araci);
+    const tek = uygunDepolar.length === 1 ? uygunDepolar[0] : undefined;
     const varsayilan = (tur === "CIKIS" || tur === "IADE" ? arac : undefined) ?? tek;
     form.setFieldsValue({ depo_id: varsayilan?.id, satirlar: [{ adet: 1 } as SatirGirdisi] });
-  }, [tur, depolar.data, form]);
+  }, [tur, uygunDepolar, form]);
 
   const kaydet = useMutation({
     mutationFn: async (d: FormDegeri) => {
