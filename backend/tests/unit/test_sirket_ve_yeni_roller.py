@@ -47,7 +47,8 @@ def test_migration_sozlukleri_kodla_ayni() -> None:
 
     goc = _goc()
     assert tuple(goc.YENI_BIRIMLER) == BIRIM_KODLARI
-    assert set(goc.YENI_TURLER) == set(SERVIS_TURLERI)
+    # fcsatis00001 (KARARLAR 2026-11-09 S4.1) TESLIMAT'ı ekledi.
+    assert set(goc.YENI_TURLER) | {"TESLIMAT"} == set(SERVIS_TURLERI)
     assert dict(goc.SIRKETLER) == SIRKETLER
     assert dict(goc.BIRIM_SIRKETLERI) == VARSAYILAN_BIRIM_SIRKETLERI
 

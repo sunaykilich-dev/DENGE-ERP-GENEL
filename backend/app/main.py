@@ -34,6 +34,7 @@ from app.api import purchasing as purchasing_api
 from app.api import quotes as quotes_api
 from app.api import reports as reports_api
 from app.api import rma as rma_api
+from app.api import satis_takip as satis_takip_api
 from app.api import search as search_api
 from app.api import servis_ekipman as servis_ekipman_api
 from app.api import servis_maliyet as servis_maliyet_api
@@ -214,6 +215,7 @@ def create_app() -> FastAPI:
     # Teklif uçları mobilite (birimsiz) ve servis (birimli) teklifinin ORTAK ucu:
     # şirket kuralı yönlendiricide değil `services/quotes._sirket_kosulu`'nda.
     app.include_router(quotes_api.router)
+    app.include_router(satis_takip_api.router)
     app.include_router(orders_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(subscriptions_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(tariffs_api.router, dependencies=MOBILITE_KAPISI)

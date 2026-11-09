@@ -3,6 +3,7 @@ import { Alert, App, Button, Card, Form, Input, InputNumber, Select, Space, Swit
 import { useEffect } from "react";
 
 import { api, type ApiError } from "../api/client";
+import IskontoLimitleri from "../components/IskontoLimitleri";
 
 /** Anahtarları kullanıcıya anlamlı başlıklar altında toplar. */
 const GRUPLAR: { baslik: string; aciklama?: string; anahtarlar: string[] }[] = [
@@ -20,7 +21,8 @@ const GRUPLAR: { baslik: string; aciklama?: string; anahtarlar: string[] }[] = [
   },
   {
     baslik: "Satış ve teklif",
-    anahtarlar: ["iskonto_onay_esigi_yuzde", "teklif_varsayilan_gecerlilik_gun"],
+    aciklama: "İskonto limitleri sayfanın altındaki \"İskonto yetkisi\" kartından ayrıca kaydedilir.",
+    anahtarlar: ["teklif_varsayilan_gecerlilik_gun"],
   },
   { baslik: "Cihaz ve stok", anahtarlar: ["varsayilan_garanti_ay", "bayi_stok_yaslanma_gun"] },
   {
@@ -73,7 +75,6 @@ const ETIKET: Record<string, string> = {
   stopaj_smm_oran: "Serbest meslek makbuzu gelir vergisi stopajı",
   damga_vergisi_oran: "Damga vergisi oranı",
   stopaj_gider_pusulasi_oran: "Gider pusulası stopaj oranı",
-  iskonto_onay_esigi_yuzde: "İskonto onay eşiği (%)",
   teklif_varsayilan_gecerlilik_gun: "Teklif geçerlilik süresi (gün)",
   varsayilan_garanti_ay: "Varsayılan garanti süresi (ay)",
   bayi_stok_yaslanma_gun: "Bayi stok yaşlanma uyarısı (gün)",
@@ -186,6 +187,7 @@ export default function SettingsPage() {
         <Button type="primary" htmlType="submit" loading={kaydet.isPending}>
           Kaydet
         </Button>
+        <IskontoLimitleri />
       </Space>
     </Form>
   );

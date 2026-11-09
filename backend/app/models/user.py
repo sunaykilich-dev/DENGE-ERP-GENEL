@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -8,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
     text,
@@ -69,6 +71,11 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
         CheckConstraint(
             "yonetici_id IS NULL OR yonetici_id <> id", name="ck_users_yonetici_kendisi"
         ),
+        CheckConstraint(
+            "iskonto_limiti_yuzde IS NULL OR "
+            "(iskonto_limiti_yuzde >= 0 AND iskonto_limiti_yuzde <= 100)",
+            name="ck_users_iskonto_limiti",
+        ),
     )
 
     full_name: Mapped[str] = mapped_column(String(100))
@@ -115,6 +122,9 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
     gecici_parola_bitis: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     parola_degisti_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     son_giris_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Kişiye özel iskonto üst limiti (KARARLAR 2026-11-09 S1.2): doluysa rol
+    # limitinin (`iskonto_rol_limitleri` ayarı) yerine geçer. NULL = rol limiti.
+    iskonto_limiti_yuzde: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
 
     role: Mapped[Role] = relationship(lazy="selectin")
     # Birim üyelikleri kullanıcıyla BİRLİKTE yüklenir: kapsam kontrolü her

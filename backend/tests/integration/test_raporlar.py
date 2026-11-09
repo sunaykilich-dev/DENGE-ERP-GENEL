@@ -140,7 +140,8 @@ class TestTeklifDonusumu:
         red = await self._teklif(client, m, u)
         await client.post(f"/api/teklifler/{red}/gonder", json={})
         await client.post(
-            f"/api/teklifler/{red}/karar", json={"kabul": False, "red_nedeni": "Fiyat"}
+            f"/api/teklifler/{red}/karar",
+            json={"kabul": False, "kayip_nedeni_kod": "FIYAT_YUKSEK"},
         )
 
         bekleyen = await self._teklif(client, m, u)
@@ -151,7 +152,8 @@ class TestTeklifDonusumu:
         assert v["kazanilan"] == 1
         assert v["kaybedilen"] == 1
         assert v["donusum_yuzde"] == 50.0
-        assert v["kayip_nedenleri"][0]["neden"] == "Fiyat"
+        assert v["kayip_nedenleri"][0]["kod"] == "FIYAT_YUKSEK"
+        assert v["kayip_nedenleri"][0]["neden"] == "Fiyat yüksek"
 
     async def test_teklif_yoksa_oran_tanimsiz(self, client, kullanici_ac):
         await _giris(client, kullanici_ac)

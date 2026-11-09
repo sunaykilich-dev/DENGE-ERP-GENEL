@@ -51,6 +51,8 @@ import TeklifPublicPage from "./pages/TeklifPublicPage";
 import StokPage from "./pages/StokPage";
 import TahsilatPage from "./pages/TahsilatPage";
 import TekliflerPage from "./pages/TekliflerPage";
+import TekliflerimPage from "./pages/TekliflerimPage";
+import SatislarimPage from "./pages/SatislarimPage";
 import HesaplarPage from "./pages/HesaplarPage";
 import IceAktarmaPage from "./pages/IceAktarmaPage";
 import LoginPage from "./pages/LoginPage";
@@ -145,6 +147,8 @@ function KorumaliUygulama() {
         <Route path="/kvkk" element={<KvkkPage />} />
         <Route path="/stok" element={<StokPage />} />
         <Route path="/teklifler" element={<TekliflerPage />} />
+        <Route path="/tekliflerim" element={<TekliflerimPage />} />
+        <Route path="/satislarim" element={<SatislarimPage />} />
         <Route path="/siparisler" element={<SiparislerPage />} />
         <Route path="/abonelikler" element={<AboneliklerPage />} />
         <Route path="/tahsilat" element={<TahsilatPage />} />

@@ -31,6 +31,7 @@ import { api, type ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import Statistic from "../components/Statistic";
 import { TEKLIF_DURUM_ADLARI } from "../fiori/etiketlerEk";
+import SatisIsleri from "./SatisIsleri";
 import TeklifDonusumu from "./TeklifDonusumu";
 import TeklifFormu from "./TeklifFormu";
 
@@ -95,8 +96,14 @@ interface Teklif {
   status: string;
   title: string | null;
   lost_reason: string | null;
+  lost_reason_kod?: string | null;
+  lost_reason_adi?: string | null;
   version: number;
   onay_gerekiyor: boolean;
+  iskonto_orani?: number | null;
+  iskonto_limiti?: number | null;
+  iskonto_onay_kademesi?: string | null;
+  iskonto_onay_kademesi_adi?: string | null;
   guncel: Versiyon | null;
   versiyon_sayisi: number;
   birim?: string | null;
@@ -137,6 +144,15 @@ interface GecmisSatiri {
   kanal: string | null;
   versiyon: number | null;
 }
+
+interface KayipNedeni {
+  kod: string;
+  ad: string;
+  aciklama_zorunlu: boolean;
+}
+
+/** Keşif istenebilen teklif durumları (sunucu `KESIF_ISTENEBILIR`). */
+const KESIF_ACIK = ["TASLAK", "ONAY_BEKLIYOR", "ONAYLANDI", "GONDERILDI", "GORUNTULENDI", "REVIZE_EDILDI"];
 
 interface Kpi {
   kod: string;
@@ -317,10 +333,14 @@ export default function TekliflerPage() {
 
   const [durum, setDurum] = useState<string | undefined>();
   const [tur, setTur] = useState<"SATIS" | "SERVIS" | undefined>(
-    (kullanici?.birimler ?? []).length > 0 && !yetkili("siparis.gor") ? "SERVIS" : undefined,
+    (params.get("tur") as "SATIS" | "SERVIS" | null) ??
+      ((kullanici?.birimler ?? []).length > 0 && !yetkili("siparis.gor") ? "SERVIS" : undefined),
   );
   const [birim, setBirim] = useState<string | undefined>();
-  const [kpi, setKpi] = useState<string | undefined>();
+  // Uyarı bağlantıları (`/teklifler?kpi=…&benim=1&kesif=…`) süzgeci URL'den açar.
+  const [kpi, setKpi] = useState<string | undefined>(params.get("kpi") ?? undefined);
+  const [benim, setBenim] = useState(params.get("benim") === "1");
+  const [kesif, setKesif] = useState<string | undefined>(params.get("kesif") ?? undefined);
   const [donusumAcik, setDonusumAcik] = useState(false);
   const [arama, setArama] = useState("");
   const [sayfa, setSayfa] = useState(1);
@@ -343,6 +363,8 @@ export default function TekliflerPage() {
   if (tur) suzgec.set("tur", tur);
   if (birim) suzgec.set("birim", birim);
   if (kpi) suzgec.set("kpi", kpi);
+  if (benim && kullanici) suzgec.set("hazirlayan_id", String(kullanici.id));
+  if (kesif) suzgec.set("kesif", kesif);
   if (arama.trim()) suzgec.set("q", arama.trim());
 
   const teklifler = useQuery({
@@ -375,6 +397,12 @@ export default function TekliflerPage() {
     queryKey: ["teklif", secili, "gecmis"],
     queryFn: () => api.get<GecmisSatiri[]>(`/api/teklifler/${secili}/gecmis`),
     enabled: secili != null,
+  });
+
+  const kayipNedenleri = useQuery({
+    queryKey: ["kayip-nedenleri"],
+    queryFn: () => api.get<KayipNedeni[]>("/api/satis-takip/kayip-nedenleri"),
+    staleTime: Infinity,
   });
 
   const urunler = useQuery({
@@ -493,10 +521,47 @@ export default function TekliflerPage() {
     });
   }
 
+  /** S2.1: kaybedilme nedeni listeden seçilir; "Diğer"de açıklama zorunlu. */
   function redSor(id: number) {
-    nedenSor("Teklif reddedildi", "Reddedildi olarak kaydet", (neden) =>
-      karar.mutateAsync({ id, kabul: false, red_nedeni: neden }),
-    );
+    let kod: string | undefined;
+    let aciklama = "";
+    modal.confirm({
+      title: "Teklif kaybedildi",
+      content: (
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          <Select
+            style={{ width: "100%" }}
+            placeholder="Kaybedilme nedeni"
+            options={(kayipNedenleri.data ?? []).map((k) => ({ value: k.kod, label: k.ad }))}
+            onChange={(x: string) => (kod = x)}
+          />
+          <Input.TextArea
+            rows={3}
+            maxLength={300}
+            placeholder="Açıklama (Diğer seçildiyse zorunlu)"
+            onChange={(e) => (aciklama = e.target.value)}
+          />
+        </Space>
+      ),
+      okText: "Kaybedildi olarak kaydet",
+      cancelText: "Vazgeç",
+      onOk: () => {
+        if (!kod) {
+          message.error("Kaybedilme nedenini seçin");
+          return Promise.reject();
+        }
+        if (kod === "DIGER" && aciklama.trim().length < 3) {
+          message.error("'Diğer' seçildiğinde açıklama zorunlu");
+          return Promise.reject();
+        }
+        return karar.mutateAsync({
+          id,
+          kabul: false,
+          kayip_nedeni_kod: kod,
+          red_nedeni: aciklama.trim() || null,
+        });
+      },
+    });
   }
 
   function formuAc(mod: "revize" | "duzenle") {
@@ -637,6 +702,16 @@ export default function TekliflerPage() {
                 {ozet.data?.kpi.find((k) => k.kod === kpi)?.baslik ?? kpi}
               </Tag>
             )}
+            {benim && (
+              <Tag closable onClose={() => setBenim(false)} color="orange">
+                Hazırladığım teklifler
+              </Tag>
+            )}
+            {kesif && (
+              <Tag closable onClose={() => setKesif(undefined)} color="orange">
+                {kesif === "TAMAMLANDI" ? "Keşfi tamamlanan" : "Keşfi süren"}
+              </Tag>
+            )}
             {disaAktarabilir && (
               <Button href={`/api/teklifler/disa-aktar.xlsx?${suzgec.toString()}`}>Excel</Button>
             )}
@@ -708,7 +783,9 @@ export default function TekliflerPage() {
                     {durumAdi(r.etkin_durum ?? r.status)}
                   </Tag>
                   {r.onay_gerekiyor && (
-                    <Tooltip title="İskonto eşiği aşıldı; satış müdürü onayı olmadan gönderilemez">
+                    <Tooltip
+                      title={`İskonto limiti aşıldı; ${r.iskonto_onay_kademesi_adi ?? "yönetici"} onayı olmadan gönderilemez`}
+                    >
                       <Tag color="orange">onay</Tag>
                     </Tooltip>
                   )}
@@ -755,10 +832,12 @@ export default function TekliflerPage() {
               <Alert
                 type="warning"
                 showIcon
-                title={`%${v.max_discount_pct} iskonto onay eşiğini aşıyor`}
-                description="Satış müdürü onaylamadan teklif gönderilemez."
+                title={`%${t.iskonto_orani ?? v.max_discount_pct} iskonto, hazırlayanın limitini (%${
+                  t.iskonto_limiti ?? "—"
+                }) aşıyor`}
+                description={`${t.iskonto_onay_kademesi_adi ?? "Yönetici"} onaylamadan teklif gönderilemez. Fiyat ya da iskonto değişirse onay düşer.`}
                 action={
-                  yetkili("teklif.iskonto_onayla") ? (
+                  yetkili("teklif.iskonto_onayla", "teklif.iskonto_ust_onay") ? (
                     <Button
                       size="small"
                       type="primary"
@@ -845,9 +924,10 @@ export default function TekliflerPage() {
                     : "—"}
                 {v.decision_channel ? ` (${v.decision_channel.toLowerCase()})` : ""}
               </Descriptions.Item>
-              {v.reject_reason && (
-                <Descriptions.Item label="Red nedeni" span={2}>
-                  {v.reject_reason}
+              {(t.lost_reason_adi || v.reject_reason) && (
+                <Descriptions.Item label="Kaybedilme nedeni" span={2}>
+                  {t.lost_reason_adi ? <Tag>{t.lost_reason_adi}</Tag> : null}
+                  {t.lost_reason ?? (t.lost_reason_adi ? "" : v.reject_reason)}
                 </Descriptions.Item>
               )}
             </Descriptions>
@@ -939,6 +1019,19 @@ export default function TekliflerPage() {
                       dataSource={v.kalemler}
                       pagination={false}
                       columns={kalemKolonlari}
+                    />
+                  ),
+                },
+                {
+                  key: "servis-isleri",
+                  label: "Keşif ve servis işleri",
+                  children: (
+                    <SatisIsleri
+                      kaynak="teklif"
+                      id={t.id}
+                      birim={t.birim}
+                      kesifAcik={KESIF_ACIK.includes(t.status)}
+                      isAcilabilir={["KABUL", "SIPARISE_DONUSTU"].includes(t.status)}
                     />
                   ),
                 },

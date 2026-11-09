@@ -187,6 +187,7 @@ async def karar(
         "quotes",
         "karar",
         entity_id=t.id,
+        # Müşterinin yazdığı neden serbest metindir → DIGER + açıklama (S2.1).
         new_value={"kabul": payload.kabul, "kanal": "LINK", "neden": payload.red_nedeni},
         ip=client_ip(request),
     )

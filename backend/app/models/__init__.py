@@ -59,6 +59,7 @@ from app.models.rbac import (
     UserPermission,
     UserUnit,
 )
+from app.models.satis_takip import SatisIsBagi
 from app.models.service import RmaCase
 from app.models.servis_atolye import WorkshopAccessory, WorkshopRecord
 from app.models.servis_bakim import (
@@ -160,6 +161,7 @@ __all__ = [
     "QuoteVersion",
     "QuoteLine",
     "Quote",
+    "SatisIsBagi",
     "Warehouse",
     "TransferItem",
     "Transfer",
