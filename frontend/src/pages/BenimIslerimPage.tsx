@@ -14,7 +14,8 @@
  */
 import { CalendarOutlined, EditOutlined, RightOutlined, ToolOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Empty, List, Space, Spin, Tabs, Tag, Timeline, Typography } from "antd";
+import { Alert, Button, DatePicker, Empty, Grid, List, Space, Spin, Table, Tabs, Tag, Timeline, Typography } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -108,7 +109,167 @@ function ZiyaretKarti({ z, isler }: { z: Ziyaret; isler: MobilIs[] }) {
   );
 }
 
+/** Tablo satırı: iş + bağlı olduğu ziyaret ve zaman grubu (geniş ekran görünümü). */
+interface TabloSatiri {
+  is: MobilIs;
+  z: Ziyaret;
+  grupKod: string;
+  grupAd: string;
+}
+
+/**
+ * Geniş ekranda (≥ 992 px) Servis İşleri listesiyle aynı tablo görünümü
+ * (2026-11-09 kullanıcı isteği). Telefonda kart görünümü kalır (dar ekranda
+ * tablo okunmaz). Satır → iş detayı (/benim-islerim/:id).
+ */
+function IslerTablosu({ satirlar }: { satirlar: TabloSatiri[] }) {
+  const git = useNavigate();
+  const ac = (id: number) => git(`/benim-islerim/${id}`);
+  const sutunlar: ColumnsType<TabloSatiri> = [
+    {
+      title: "Durum",
+      key: "durum",
+      width: 150,
+      align: "center",
+      render: (_, { is }) => {
+        const kapali = ["TAMAMLANDI", "KAPATILDI", "IPTAL"].includes(is.durum);
+        return (
+          <button
+            type="button"
+            className={`fl-durum${is.durum === "IPTAL" ? " olumsuz" : kapali ? " kapali" : ""}`}
+            onClick={() => ac(is.id)}
+          >
+            {servisDurumEtiketi(is.durum)}
+          </button>
+        );
+      },
+    },
+    {
+      title: "İş No",
+      key: "no",
+      width: 170,
+      align: "center",
+      render: (_, { is }) => (
+        <>
+          <span className="fl-no-rozet" role="link" tabIndex={0} onClick={() => ac(is.id)}>
+            {is.so_no}
+          </span>
+          {ONCELIK_ETIKETLERI[is.oncelik] && (
+            <span className={`fl-alt-not ${is.oncelik === "KRITIK" ? "kritik" : "uyari"}`}>
+              {ONCELIK_ETIKETLERI[is.oncelik]}
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      title: "Zaman",
+      key: "grup",
+      width: 110,
+      align: "center",
+      render: (_, r) => (
+        <span className={`fl-kucuk${GRUP_KATEGORI_RENGI[r.grupKod] === "kirmizi" ? " fl-kirmizi" : ""}`}>
+          {r.grupAd}
+        </span>
+      ),
+    },
+    {
+      title: "Plan Tarihi",
+      key: "tarih",
+      width: 100,
+      align: "center",
+      render: (_, { is, z }) => {
+        const t = is.plan_baslangic ?? z.plan_tarihi;
+        return t ? gunu(t) : "—";
+      },
+    },
+    {
+      title: "Plan Saati",
+      key: "saat",
+      width: 80,
+      align: "center",
+      render: (_, { is }) => (is.plan_baslangic ? dayjs(is.plan_baslangic).format("HH:mm") : "—"),
+    },
+    {
+      title: "Açıklama",
+      key: "konu",
+      width: 320,
+      render: (_, { is }) => (
+        <button type="button" className="fl-aciklama" title={is.konu} onClick={() => ac(is.id)}>
+          {is.konu}
+        </button>
+      ),
+    },
+    {
+      title: "Müşteri",
+      key: "musteri",
+      width: 200,
+      render: (_, { z }) => (
+        <span className="fl-kucuk" style={{ fontWeight: 600 }}>
+          {z.musteri ?? "—"}
+        </span>
+      ),
+    },
+    {
+      title: "Mahal",
+      key: "mahal",
+      width: 180,
+      render: (_, { z }) => (
+        <span className="fl-kucuk">
+          {[z.lokasyon, [z.ilce, z.il].filter(Boolean).join(" / ")].filter(Boolean).join(" · ") || "—"}
+        </span>
+      ),
+    },
+    {
+      title: "Süre",
+      key: "sure",
+      width: 120,
+      align: "center",
+      render: (_, { is }) => (
+        <span className="fl-kucuk">
+          {is.sure_durumu === "EKSIK"
+            ? "Süre kaydı eksik"
+            : (sureMetni(is.kisi_saat_dk) ?? SURE_DURUMU_ADLARI[is.sure_durumu ?? ""] ?? "—")}
+        </span>
+      ),
+    },
+    {
+      title: "",
+      key: "rozet",
+      width: 120,
+      align: "center",
+      render: (_, { is }) => (
+        <Space size={4} wrap>
+          {!is.bana_atanmis && <Tag color="purple">ekip</Tag>}
+          <SlaEtiketi sla={is.sla} />
+        </Space>
+      ),
+    },
+  ];
+  return (
+    <Table<TabloSatiri>
+      className="fl-tablo"
+      rowKey={(r) => r.is.id}
+      size="small"
+      columns={sutunlar}
+      dataSource={satirlar}
+      scroll={{ x: 1550 }}
+      sticky={{ offsetHeader: 52 }}
+      pagination={false}
+      onRow={(r) => ({
+        onClick: (e) => {
+          const hedef = e.target as HTMLElement;
+          if (hedef.closest("button, a, [role=link]")) return;
+          ac(r.is.id);
+        },
+        style: { cursor: "pointer" },
+      })}
+    />
+  );
+}
+
 function Islerim() {
+  const genis = Grid.useBreakpoint().lg ?? false;
   const { yetkili } = useAuth();
   const [gorunum, setGorunum] = useState<"benim" | "tumu">("benim");
   const [kategori, setKategori] = useState<string>(TUMU_KATEGORISI.kod);
@@ -172,6 +333,13 @@ function Islerim() {
         ) : sayi === 0 ? (
           <Empty description={gruplar.length && (durumGrubu || kategori !== TUMU_KATEGORISI.kod) ? "Seçili süzgeçte iş yok" : "Açık işiniz yok"} />
         ) : (
+          genis ? (
+          <IslerTablosu
+            satirlar={gorunen.flatMap((g) =>
+              g.ziyaretler.flatMap((x) => x.isler.map((is) => ({ is, z: x.z, grupKod: g.kod, grupAd: g.baslik }))),
+            )}
+          />
+        ) : (
           <div className="fm-liste">
             {gorunen.map((g) => (
               <div key={g.kod} className="fm-liste">
@@ -187,6 +355,7 @@ function Islerim() {
               </div>
             ))}
           </div>
+        )
         )}
       </div>
     </div>
@@ -310,8 +479,11 @@ function Bugunum() {
 export default function BenimIslerimPage() {
   const [params, setParams] = useSearchParams();
   const sekme = params.get("sekme") === "bugunum" ? "bugunum" : "islerim";
+  // Geniş ekranda İşlerim tablo görünümü sayfayı tam kullanır; telefon/kart
+  // görünümü ve Bugünüm okunabilir genişlikte (760 px) kalır.
+  const genis = Grid.useBreakpoint().lg ?? false;
   return (
-    <div className="fm-sayfa" style={{ maxWidth: 760 }}>
+    <div className="fm-sayfa" style={{ maxWidth: genis && sekme === "islerim" ? undefined : 760 }}>
       <Tabs
         activeKey={sekme}
         onChange={(k) => setParams(k === "bugunum" ? { sekme: "bugunum" } : {})}

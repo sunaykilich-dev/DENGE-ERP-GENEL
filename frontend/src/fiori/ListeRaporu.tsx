@@ -127,6 +127,10 @@ export default function ListeRaporu<T extends object>({
         dataSource={veri}
         loading={yukleniyor}
         scroll={{ x: scrollX }}
+        // Yatay kaydırma çubuğu ekranın altında sabit (2026-11-09 kullanıcı
+        // isteği): geniş tabloda sağa geçmek için sayfa sonuna inmek gerekmez.
+        // Başlık üst kabuğun (52 px) altında, çubuk alt eylem çubuğunun üstünde.
+        sticky={{ offsetHeader: 52, offsetScroll: eylemler?.length || sagEylemler?.length ? 53 : 0 }}
         pagination={false}
         locale={{ emptyText: bosMetin }}
         rowSelection={

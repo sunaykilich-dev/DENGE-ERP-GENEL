@@ -426,3 +426,12 @@
   .fl-ust { padding: 10px 8px 6px; }
   .fl-durum-cubugu-sarici { padding: 0 8px 8px; }
 }
+
+/* Tablonun altta sabit yatay kaydırma çubuğu (ListeRaporu `sticky`): fareyle
+   rahat tutulsun diye varsayılan 8 px'ten kalın ve belirgin. */
+.fl-tablo .ant-table-sticky-scroll { height: 12px; opacity: 1; background: #eef1f4; }
+.fl-tablo .ant-table-sticky-scroll-bar { height: 10px; background: rgba(0, 0, 0, 0.35); border-radius: 5px; }
+.fl-tablo .ant-table-sticky-scroll-bar:hover,
+.fl-tablo .ant-table-sticky-scroll-bar-active { background: rgba(0, 0, 0, 0.55); }
+
+.fl-kucuk.fl-kirmizi { color: var(--fl-kirmizi); font-weight: 700; }
