@@ -991,11 +991,7 @@ class ServiceTimeEntry(
             name="ck_ste_iptal_gerekce",
         ),
         CheckConstraint("ended_at IS NULL OR ended_at > started_at", name="ck_ste_aralik"),
-        # 18 saatlik bölüm sınırı kod sabitidir, ayar değil (plan §1.9).
-        CheckConstraint(
-            "ended_at IS NULL OR ended_at <= started_at + interval '18 hours'",
-            name="ck_ste_azami_sure",
-        ),
+        # ck_ste_azami_sure (18 saat) 2026-11-10'da şimdilik kaldırıldı (fcg000000001).
         CheckConstraint(
             "ended_at IS NOT NULL OR kaynak = 'CANLI'", name="ck_ste_acik_yalniz_canli"
         ),

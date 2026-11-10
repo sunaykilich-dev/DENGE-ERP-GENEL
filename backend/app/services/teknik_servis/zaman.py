@@ -88,9 +88,12 @@ class ZamanKapsamDisi(LookupError):
 
 # --- Sabitler ------------------------------------------------------------------------
 
-# 18 saatlik bölüm sınırı kod sabitidir ve `ck_ste_azami_sure` ile aynıdır
-# (plan §1.9: şemaya bağlı sınır ayardan değiştirilemez).
-AZAMI_BOLUM = timedelta(hours=18)
+# Bölüm üst sınırı. 2026-11-10 kullanıcı kararı: ŞİMDİLİK KALDIRILDI — uzun açık
+# kalmış sayaç "Bitir" ile kapanabilsin. Eski kural 18 saatti ve şemada
+# `ck_ste_azami_sure` ile korunuyordu (fcg000000001 kaldırır). Geri getirmek için:
+# burayı `timedelta(hours=18)` yap ve kısıtı yeni bir migration ile ekle.
+# Uzun sayaç uyarısı (`zaman_uzun_sayac_uyari_saat`) yerinde durur.
+AZAMI_BOLUM: timedelta | None = None
 
 # Hiç çalışılmamış ya da çalışmanın durumdan anlaşılamadığı durumlar: kayıt
 # yoksa "eksik" DEĞİL, "beklenmiyor". Telefonla çözülen ya da planda bekleyen
@@ -372,14 +375,14 @@ async def _cakisma_yok(
 
 
 async def _sure_sinirlari(db: AsyncSession, bas: datetime, bit: datetime) -> None:
-    """Asgari bölüm (ayar) ve azami 18 saat (kod sabiti)."""
+    """Asgari bölüm (ayar); azami süre `AZAMI_BOLUM` (şimdilik yok)."""
     asgari = timedelta(minutes=int(await _ayar(db, "zaman_asgari_bolum_dk")))
     if bit - bas < asgari:
         raise ZamanGirdiHatasi(
             f"Bölüm en az {int(asgari.total_seconds() // 60)} dakika olmalı; yanlış "
             "başlattıysanız ilk dakikalarda 'Yanlış başlattım' ile geri alın."
         )
-    if bit - bas > AZAMI_BOLUM:
+    if AZAMI_BOLUM is not None and bit - bas > AZAMI_BOLUM:
         raise ZamanGirdiHatasi(
             "Bölüm 18 saati aşamaz. Sayacı unuttuysanız 'Unuttum' ile gerçek bitiş saatini girin."
         )
@@ -842,7 +845,7 @@ async def yonetici_kapat(
             raise ZamanGirdiHatasi("Gerçek bitiş, sayacın başlangıcından sonra olmalı")
         if gercek_bitis > an:
             raise ZamanGirdiHatasi("Gerçek bitiş ileri bir saat olamaz")
-        if gercek_bitis - bolum.started_at > AZAMI_BOLUM:
+        if AZAMI_BOLUM is not None and gercek_bitis - bolum.started_at > AZAMI_BOLUM:
             raise ZamanGirdiHatasi("Bölüm 18 saati aşamaz")
         bolum.ended_at = gercek_bitis
         bolum.kaynak = "YONETICI_DUZELTMESI"
@@ -896,7 +899,7 @@ async def manuel_kaydet(
         raise ZamanGirdiHatasi("Bitiş saati ileri bir zaman olamaz")
     if bit <= bas:
         raise ZamanGirdiHatasi("Bitiş, başlangıçtan sonra olmalı")
-    if bit - bas > AZAMI_BOLUM:
+    if AZAMI_BOLUM is not None and bit - bas > AZAMI_BOLUM:
         raise ZamanGirdiHatasi("Bir kayıt 18 saati aşamaz; birden fazla kayıt girin")
     esik = timedelta(minutes=int(await _ayar(db, "zaman_manuel_gerekce_esik_dk")))
     gerekce = (girdi.gerekce or "").strip() or None

@@ -167,10 +167,12 @@ async def test_asgari_ve_azami_bolum(client, db, o, servis_isi_ac) -> None:
     assert (
         await client.post(_yol(so.id, saha["id"], "bitir"), json={"version": saha["version"]})
     ).status_code == 400
-    client.clock.advance(hours=19)
+    # 2026-11-10: 18 saat üst sınırı şimdilik yok — unutulmuş sayaç da Bitir'le kapanır.
+    client.clock.advance(hours=21)
     await giris(client, "tek1")  # oturum süresi doldu; sayaç açık kalır
     r = await client.post(_yol(so.id, saha["id"], "bitir"), json={"version": saha["version"]})
-    assert r.status_code == 400 and "Unuttum" in r.json()["detail"]
+    assert r.status_code == 200, r.text
+    assert r.json()["bolum"]["ended_at"] is not None
 
 
 async def test_unuttum_gercek_bitisle_kapatir(client, db, o, servis_isi_ac) -> None:
@@ -186,15 +188,6 @@ async def test_unuttum_gercek_bitisle_kapatir(client, db, o, servis_isi_ac) -> N
         yol, json={"version": acik.version, "gercek_bitis": iso(SABAH + dk(5)), "gerekce": "x"}
     )
     assert r.status_code == 400  # ileri bitiş
-    r = await client.post(
-        yol,
-        json={
-            "version": acik.version,
-            "gercek_bitis": iso(SABAH - timedelta(hours=1)),
-            "gerekce": "x",
-        },
-    )
-    assert r.status_code == 400  # 18 saati aşar
     r = await client.post(
         yol,
         json={"version": acik.version, "gercek_bitis": iso(gercek), "gerekce": "Akşam unuttum"},
