@@ -159,6 +159,17 @@ export const UYGULAMALAR: Uygulama[] = [
     kpiBirimi: "açık iş",
   },
   {
+    // 2026-11-10: onaya gelen işler ayrı modül; birim (Güvenlik/Haberleşme/
+    // Mobilite) sekmeli. Liste Ana Panel "Bekleyen Onaylar" süzgecidir.
+    id: "/is-emri-onayi",
+    baslik: "İş Emri Onayı",
+    altBaslik: "Onaya gelen işler, birim birim",
+    ikon: FileProtectOutlined,
+    yol: "/is-emri-onayi",
+    izin: ["servis.kalite_onay", "servis.son_onay"],
+    grup: "servis",
+  },
+  {
     id: "/benim-islerim",
     baslik: "Benim İşlerim",
     altBaslik: "Bana tayin edilenler",

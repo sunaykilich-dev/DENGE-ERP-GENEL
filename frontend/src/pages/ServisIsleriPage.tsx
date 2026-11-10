@@ -1692,8 +1692,11 @@ function IsDetayCekmecesi({
 
 /** Kategori şeridi öğesi: hangi süzgeç alanlarını (tur / kpi) koyduğu ile. */
 export interface ServisKategorisi extends FioriKategori {
-  suzgec: Pick<IsSuzgeci, "tur" | "kpi">;
+  suzgec: Pick<IsSuzgeci, "tur" | "kpi" | "birim">;
 }
+
+/** Kategori şeridinin URL'de eşlediği alanlar (İş Emri Onayı birimle de eşler). */
+export type KategoriAlani = "tur" | "kpi" | "birim";
 
 const TUMU_KATEGORISI: ServisKategorisi = {
   kod: "TUMU",
@@ -1714,7 +1717,7 @@ export const SERVIS_KATEGORILERI: ServisKategorisi[] = [
   })),
 ];
 
-const KATEGORI_ALANLARI = ["tur", "kpi"] as const;
+const KATEGORI_ALANLARI: readonly KategoriAlani[] = ["tur", "kpi"];
 
 const gunu = (d?: string | null) => (d ? dayjs(d).format("DD/MM/YYYY") : "—");
 const saati = (d?: string | null) => (d ? dayjs(d).format("HH:mm:ss") : "—");
@@ -1810,6 +1813,13 @@ export interface ServisIsListesiProps {
    * kullanıcı başına bu adla hatırlanır (KARARLAR 2026-11-04 §5).
    */
   hatirlaAnahtari?: string;
+  /** Kategori eşleme alanları (varsayılan tür + kpi). */
+  kategoriAlanlari?: readonly KategoriAlani[];
+  /**
+   * Kategori seçimini sayfa üstlenmek isterse (ör. başka şirketin birimi →
+   * şirket geçişi) `true` döner; liste kendi süzgecini değiştirmez.
+   */
+  kategoriSecimi?: (kod: string) => boolean;
 }
 
 /**
@@ -1878,6 +1888,8 @@ export function ServisIsListesi({
   noRozeti = true,
   yeniKayit = true,
   hatirlaAnahtari,
+  kategoriAlanlari = KATEGORI_ALANLARI,
+  kategoriSecimi,
 }: ServisIsListesiProps) {
   const { yetkili, kullanici } = useAuth();
   const { message } = App.useApp();
@@ -1933,10 +1945,10 @@ export function ServisIsListesi({
 
   // Kategori: URL'deki tur/kpi'ye birebir uyan öğe; yoksa varsayılan uygulanır.
   const kategoriUyar = (k: ServisKategorisi, s: IsSuzgeci) =>
-    KATEGORI_ALANLARI.every((a) => (k.suzgec[a] ?? undefined) === (s[a] ?? undefined));
+    kategoriAlanlari.every((a) => (k.suzgec[a] ?? undefined) === (s[a] ?? undefined));
   const uyanKategori = kategoriler.find((k) => kategoriUyar(k, urlSuzgeci));
   const varsayilan =
-    !uyanKategori && varsayilanKategori && !urlSuzgeci.tur && !urlSuzgeci.kpi
+    !uyanKategori && varsayilanKategori && !kategoriAlanlari.some((a) => urlSuzgeci[a])
       ? kategoriler.find((k) => k.kod === varsayilanKategori)
       : undefined;
   const suzgec = useMemo<IsSuzgeci>(
@@ -2012,10 +2024,11 @@ export function ServisIsListesi({
   };
 
   const kategoriSec = (kod: string) => {
+    if (kategoriSecimi?.(kod)) return;
     const k = kategoriler.find((x) => x.kod === kod);
     if (!k) return;
     const yeni: IsSuzgeci = { ...urlSuzgeci };
-    for (const a of KATEGORI_ALANLARI) delete yeni[a];
+    for (const a of kategoriAlanlari) delete yeni[a];
     if (urlSuzgeci.kpi && !k.suzgec.kpi) delete yeni.donem;
     suzgecDegistir({ ...yeni, ...k.suzgec });
   };

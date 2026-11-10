@@ -123,6 +123,8 @@ export const MENU_AGACI: MenuOgesi[] = [
   // Anahtar eski favori/son açılan kayıtları bozulmasın diye "ana-panel".
   sayfa(ANA_PANEL_YOLU, undefined, "ana-panel"),
   { ...sayfa("/benim-islerim"), ikon: FieldTimeOutlined },
+  // 2026-11-10: onaya gelen işler Servis İşleri'nden ayrı modül (birim sekmeli).
+  sayfa("/is-emri-onayi"),
 
   grup(
     "servis",
@@ -138,12 +140,8 @@ export const MENU_AGACI: MenuOgesi[] = [
       sayfa("/atolye", "Atölye / Laboratuvar"),
       sayfa("/servis-paneli"),
       sayfa("kpi:atanmamis"),
-      sayfa("kpi:kapanis_bekleyen"),
       sayfa("kpi:beklemede"),
-      {
-        ...suzgecli("kalite:bekleyen", "Kalite Onayı Bekleyen", "/servis-isleri?kalite=BEKLEYEN", "/servis-isleri"),
-        izin: ["servis.kalite_onay"],
-      },
+      // Kapanış Onayı ve Kalite Onayı Bekleyen → İş Emri Onayı modülü (2026-11-10).
     ],
     { ikon: SafetyOutlined },
   ),

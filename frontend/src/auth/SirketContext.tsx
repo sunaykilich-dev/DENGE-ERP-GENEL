@@ -57,7 +57,8 @@ interface SirketDurumu {
   menuBirimleri: ReadonlySet<string> | null;
   /** Şirket bilgisi henüz gelmedi (menü/kırıntı iskelet çizer). */
   yukleniyor: boolean;
-  degistir: (kod: string) => void;
+  /** `hedef` verilirse geçişten sonra oraya gidilir (varsayılan açılış sayfası). */
+  degistir: (kod: string, hedef?: string) => void;
   degisiyor: boolean;
 }
 
@@ -123,10 +124,12 @@ export function SirketProvider({ children }: { children: React.ReactNode }) {
   });
 
   const degisim = useMutation({
-    mutationFn: (kod: string) => api.put<SirketYaniti>("/api/oturum/aktif-sirket", { kod }),
-    onSuccess: async (veri) => {
-      // Açılış sayfası yeni şirketin menüsüne göre seçilir (B-01).
-      navigate("/");
+    mutationFn: ({ kod }: { kod: string; hedef?: string }) =>
+      api.put<SirketYaniti>("/api/oturum/aktif-sirket", { kod }),
+    onSuccess: async (veri, { hedef }) => {
+      // Açılış sayfası yeni şirketin menüsüne göre seçilir (B-01); İş Emri
+      // Onayı gibi şirketler arası sekmeli ekran kendi yerinde kalır.
+      navigate(hedef ?? "/");
       // Önceki şirketin bütün önbelleği silinir; açık sorgular yeniden çekilir.
       await qc.resetQueries({ predicate: (q) => q.queryKey[0] !== SORGU_ANAHTARI });
       qc.setQueryData(anahtar, veri);
@@ -141,8 +144,8 @@ export function SirketProvider({ children }: { children: React.ReactNode }) {
 
   const { mutate } = degisim;
   const degistir = useCallback(
-    (kod: string) => {
-      if (kod !== sorgu.data?.aktif) mutate(kod);
+    (kod: string, hedef?: string) => {
+      if (kod !== sorgu.data?.aktif) mutate({ kod, hedef });
     },
     [mutate, sorgu.data?.aktif],
   );
