@@ -1,0 +1,232 @@
+# Denge Mobilite ERP — GitLab CI/CD (kurulum ve kararlar: deploy/GITLAB.md)
+#
+# denetim → test → paket → dagitim
+#
+# - denetim/test/paket GitLab'ın paylaşımlı (ya da kendi) Docker runner'ında
+#   koşar; canlı veriye, canlı sunucuya DOKUNMAZ.
+# - dagitim işleri sunucunun ÜZERİNDEKİ shell runner'da koşar (etiket:
+#   denge-erp-<ortam>). Sunucuya dışarıdan SSH açılmaz, GitLab'a SSH anahtarı
+#   konmaz; runner GitLab'a kendisi bağlanır (iç ağdaki sunucuda da çalışır).
+# - Dağıtım her zaman ELLE başlatılır (when: manual) ve yalnız korumalı
+#   daldan/etiketten yapılabilir. Sıra: önce yedek → kur.sh --veri yok → denetim.
+
+stages:
+  - denetim
+  - test
+  - paket
+  - dagitim
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  UV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/uv"
+  npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  PYTHONUTF8: "1"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+default:
+  interruptible: true
+
+.python:
+  image: python:3.13-slim
+  cache:
+    key:
+      files: [backend/uv.lock]
+    paths: [.cache/uv]
+  before_script:
+    - pip install --quiet uv
+    - cd backend
+    - uv sync --frozen
+
+.node:
+  image: node:24-bookworm
+  cache:
+    key:
+      files: [frontend/package-lock.json]
+    paths: [.cache/npm]
+  before_script:
+    - cd frontend
+    - npm ci --no-audit --no-fund
+
+# ------------------------------------------------------------------ denetim
+
+backend:ruff:
+  extends: .python
+  stage: denetim
+  script:
+    - uv run ruff check .
+    - uv run ruff format --check .
+
+frontend:lint:
+  extends: .node
+  stage: denetim
+  script:
+    - npx oxlint src
+
+# Paketin ve sunucunun on kontrolu ile ayni kurallar: tek migration head, NUL
+# baytli / macOS yan dosyasi yok. Ayrica depoya sir ya da canli veri girmesin.
+depo:guvenlik:
+  image: python:3.13-slim
+  stage: denetim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git >/dev/null
+  script:
+    - |
+      set -e
+      HATA=0
+      # .env ve veritabani dokumu depoda OLMAMALI (KVKK; sirlar sunucuda uretilir).
+      # (backend/app/migration/.../*.sql disa aktarma sorgularidir, dokum degil.)
+      if git ls-files | grep -E '(^|/)\.env$|\.sql\.gz$|\.dump$|\.bak$|denge-veritabani|(^|/)kaynak/|(^|/)\.yerel_gizli/'; then
+        echo "HATA: yukaridaki dosyalar depoya girmemeli"; HATA=1
+      fi
+      # 5 MB'tan buyuk izlenen dosya: buyuk olasilikla dokum ya da veri disa aktarimi.
+      if git ls-files -z | xargs -0 -r du -k 2>/dev/null | awk '$1 > 5120 {print; f=1} END {exit !f}'; then
+        echo "HATA: 5 MB'tan buyuk dosya depoda"; HATA=1
+      fi
+      if git ls-files | grep -E '(^|/)\._|\.DS_Store$'; then
+        echo "HATA: macOS yan dosyasi"; HATA=1
+      fi
+      python3 - <<'PY' || HATA=1
+      import pathlib, re, sys
+      rev, onceki = set(), set()
+      for f in pathlib.Path("backend/alembic/versions").glob("*.py"):
+          m = f.read_text(encoding="utf-8")
+          r = re.search(r'^revision(?:: str)?\s*=\s*["\']([^"\']+)', m, re.M)
+          d = re.search(r'^down_revision[^=]*=\s*(.+)$', m, re.M)
+          if r:
+              rev.add(r.group(1))
+          if d:
+              onceki.update(re.findall(r'["\']([^"\']+)["\']', d.group(1)))
+      head = sorted(rev - onceki)
+      print("migration head:", head)
+      sys.exit(0 if len(head) == 1 else "HATA: migration head sayisi 1 olmali")
+      PY
+      exit $HATA
+
+# ------------------------------------------------------------------ test
+
+backend:pytest:
+  extends: .python
+  stage: test
+  needs: [backend:ruff, depo:guvenlik]
+  services:
+    # Canlidaki ile ayni surum (docker-compose.yml). btree_gist contrib'de var.
+    - name: postgres:17-alpine
+      alias: db
+  variables:
+    POSTGRES_DB: dengeerp
+    POSTGRES_USER: dengeerp
+    POSTGRES_PASSWORD: ci-yalniz-test
+    POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    DATABASE_URL: postgresql+psycopg://dengeerp:ci-yalniz-test@db:5432/dengeerp
+    TEST_DATABASE_URL: postgresql+psycopg://dengeerp:ci-yalniz-test@db:5432/dengeerp_test
+  before_script:
+    # WeasyPrint (PDF testleri) sistem kutuphaneleri — backend/Dockerfile ile ayni.
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0
+      libharfbuzz0b libfribidi0 libcairo2 libffi8 fonts-dejavu-core >/dev/null
+    - pip install --quiet uv
+    - cd backend
+    - uv sync --frozen
+    # conftest veritabanina ulasamazsa testleri SKIP eder; CI'da bu sessiz bir
+    # "yesil" olurdu. Once baglantiyi zorunlu kil.
+    - |
+      uv run python - <<'PY'
+      import time, psycopg
+      for i in range(60):
+          try:
+              psycopg.connect("postgresql://dengeerp:ci-yalniz-test@db:5432/postgres").close()
+              break
+          except psycopg.OperationalError:
+              time.sleep(1)
+      else:
+          raise SystemExit("HATA: test veritabanina baglanilamadi")
+      PY
+  script:
+    - uv run pytest -q -p no:cacheprovider -m "not slow" --junitxml=../rapor-pytest.xml
+  artifacts:
+    when: always
+    reports:
+      junit: rapor-pytest.xml
+    expire_in: 2 weeks
+
+frontend:build:
+  extends: .node
+  stage: test
+  needs: [frontend:lint]
+  script:
+    # menu-kontrol + tsc -b + vite build
+    - npm run build
+
+# ------------------------------------------------------------------ paket
+
+# Yalniz kod paketi: dokum ve yuklenen belgeler GIRMEZ. kur.sh --veri yok ile
+# var olan sunucuyu yukseltir. Ilk kurulum paketi (dokumlu) elle uretilir.
+paket:
+  image: node:24-bookworm
+  stage: paket
+  needs: [backend:pytest, frontend:build]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+  cache:
+    key:
+      files: [frontend/package-lock.json]
+    paths: [.cache/npm]
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - (cd frontend && npm ci --no-audit --no-fund)
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - deploy/paket-uret.sh --yalniz-kod "$CI_PROJECT_DIR/paket"
+    - test ! -e paket/denge-veritabani.sql.gz
+    - test ! -e paket/denge-dosyalar.tar.gz
+  artifacts:
+    name: "denge-erp-$CI_COMMIT_SHORT_SHA"
+    paths: [paket/]
+    expire_in: 90 days
+
+# ------------------------------------------------------------------ dagitim
+
+.dagitim:
+  stage: dagitim
+  needs: [paket]
+  interruptible: false
+  # Ayni ortama iki dagitim ayni anda kosmaz.
+  resource_group: $CI_ENVIRONMENT_NAME
+  variables:
+    GIT_STRATEGY: none
+    DAGITIM_ORTAMI: $CI_ENVIRONMENT_NAME
+  script:
+    - bash paket/ci-dagit.sh paket
+
+# Prova sunucusu: main'e giren her surum ELLE prova edilir (KURULUM.md G.7).
+dagit:prova:
+  extends: .dagitim
+  tags: [denge-erp-prova]
+  environment:
+    name: prova
+    url: $PROVA_URL
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+    - if: $CI_COMMIT_TAG =~ /^v\d+/
+      when: manual
+
+# Canli: yalniz surum etiketinden (v1.2.3), elle ve korumali ortamdan.
+# Ortam GitLab'da "Protected environment" yapilir; yalniz yetkili kisi basar.
+dagit:canli:
+  extends: .dagitim
+  tags: [denge-erp-canli]
+  environment:
+    name: canli
+    url: $CANLI_URL
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+/
+      when: manual

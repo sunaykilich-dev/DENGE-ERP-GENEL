@@ -64,11 +64,17 @@ if [ ! -d "$HEDEF" ] && [ ! -w "$(dirname "$HEDEF")" ]; then
   tamam "yönetici yetkisi alındı"
 fi
 
-for d in denge-erp-kaynak.tar.gz denge-veritabani.sql.gz on-kontrol.sh; do
+# Yalnız kod paketi (GitLab CI, deploy/GITLAB.md) döküm taşımaz; o paketle
+# kur.sh --veri yok çalışır ve var olan veritabanı yalnız ileri yükseltilir.
+GEREKLI=(denge-erp-kaynak.tar.gz on-kontrol.sh)
+[ "$VERI" = "yok" ] || GEREKLI+=(denge-veritabani.sql.gz)
+for d in "${GEREKLI[@]}"; do
   [ -f "$PAKET/$d" ] || dur "pakette $d yok — arşivi eksik açmış olabilirsiniz."
 done
 gzip -t "$PAKET/denge-erp-kaynak.tar.gz" || dur "denge-erp-kaynak.tar.gz bozuk gelmiş, yeniden yükleyin."
-gzip -t "$PAKET/denge-veritabani.sql.gz" || dur "denge-veritabani.sql.gz bozuk gelmiş, yeniden yükleyin."
+if [ "$VERI" != "yok" ]; then
+  gzip -t "$PAKET/denge-veritabani.sql.gz" || dur "denge-veritabani.sql.gz bozuk gelmiş, yeniden yükleyin."
+fi
 tamam "paket dosyaları sağlam (gzip doğrulandı)"
 [ -f "$PAKET/SURUM.txt" ] && sed 's/^/   | /' "$PAKET/SURUM.txt"
 
@@ -102,7 +108,7 @@ find "$HEDEF" -name '._*' -delete 2>/dev/null || true
 find "$HEDEF" -name '.DS_Store' -delete 2>/dev/null || true
 # Betikler kaynak arsivinde de var; paketteki surum daha yeni olabilir diye
 # uzerine yazariz (eski bir arsivle yeni bir paket karistirilirsa diye).
-for b in kur.sh on-kontrol.sh dogrula.sh yedekle.sh geri-yukle.sh cikis-provasi.sh; do
+for b in kur.sh on-kontrol.sh dogrula.sh yedekle.sh geri-yukle.sh cikis-provasi.sh ci-dagit.sh; do
   [ -f "$PAKET/$b" ] && cp "$PAKET/$b" "$HEDEF/deploy/$b"
 done
 chmod +x "$HEDEF/deploy/"*.sh 2>/dev/null || true
@@ -198,7 +204,10 @@ fi
 
 # ---------------------------------------------------------------- 8
 basla "8/9  Uygulama başlatılıyor"
-dc up -d --force-recreate api worker
+# --build ŞART: imaj bir kez yapıldıktan sonra `up` onu yeniden YAPMAZ ve
+# yükseltmede yeni kod yerleşse de api/worker eski imajla açılırdı
+# (dogrula.sh "worker imajı eski" uyarısı bu yüzden vardı).
+dc up -d --build --force-recreate api worker
 for i in $(seq 1 90); do
   if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then break; fi
   if [ "$i" = 90 ]; then

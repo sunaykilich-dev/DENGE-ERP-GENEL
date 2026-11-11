@@ -2,6 +2,11 @@
 # Canlıya çıkış paketini üretir.
 #
 #   deploy/paket-uret.sh [çıktı-dizini]
+#   deploy/paket-uret.sh --yalniz-kod [çıktı-dizini]   # GitLab CI (deploy/GITLAB.md)
+#
+# --yalniz-kod: veritabanı dökümü ve yüklenen belgeler pakete GİRMEZ; docker
+# gerekmez. Var olan sunucuyu yükseltmek içindir (kur.sh --veri yok). CI'da
+# canlı veriye hiç dokunulmaz; döküm yalnız ilk kurulum paketinde, elle üretilir.
 #
 # Neden betik: paket elle üretilirken bir adım atlanınca SESSİZCE eski sürüm
 # çıkıyor. Bir kez gerçekten oldu — `npm run build` çıktıyı `frontend/dist`e
@@ -19,6 +24,11 @@
 set -euo pipefail
 
 PROJE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+YALNIZ_KOD=0
+if [ "${1:-}" = "--yalniz-kod" ]; then
+  YALNIZ_KOD=1
+  shift
+fi
 CIKTI=${1:-$HOME/Downloads/denge-canli}
 HAZIRLIK=$(mktemp -d)
 trap 'rm -rf "$HAZIRLIK"' EXIT
@@ -34,7 +44,9 @@ if tar --help 2>&1 | grep -q -- '--no-mac-metadata'; then
   TAR_EK=(--no-mac-metadata --no-xattrs)
 fi
 
-for k in git docker npm python3; do
+GEREKLI=(git npm python3)
+[ "$YALNIZ_KOD" = 1 ] || GEREKLI+=(docker)
+for k in "${GEREKLI[@]}"; do
   command -v "$k" >/dev/null || { echo "HATA: '$k' yok (KURULUM.md EK G.8)"; exit 1; }
 done
 
@@ -87,7 +99,12 @@ mkdir -p "$HAZIRLIK/denge-erp"
   echo "paket tarihi : $(date '+%Y-%m-%d %H:%M')"
   echo "commit       : $(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
   echo "commit tarihi: $(git log -1 --date=short --pretty=%ad)"
-  echo "goc surumu   : $(docker compose exec -T db psql -U dengeerp -d dengeerp -tA -c 'select version_num from alembic_version' | tr -d '\r')"
+  if [ "$YALNIZ_KOD" = 1 ]; then
+    echo "goc surumu   : - (yalniz kod paketi; sunucudaki veritabani yukseltilir)"
+    echo "kaynak       : ${CI_PROJECT_PATH:-yerel}${CI_PIPELINE_ID:+ boru hatti $CI_PIPELINE_ID}"
+  else
+    echo "goc surumu   : $(docker compose exec -T db psql -U dengeerp -d dengeerp -tA -c 'select version_num from alembic_version' | tr -d '\r')"
+  fi
   echo "hedef head   : $HEDEF_HEAD"
   echo "teknik servis: $SERVIS_SURUMU"
 } > "$HAZIRLIK/SURUM.txt"
@@ -103,12 +120,17 @@ find "$HAZIRLIK/denge-erp" \( -name '._*' -o -name '.DS_Store' \) -delete
 tar ${TAR_EK[@]+"${TAR_EK[@]}"} -czf "$CIKTI/denge-erp-kaynak.tar.gz" -C "$HAZIRLIK" denge-erp
 cp "$HAZIRLIK/SURUM.txt" "$CIKTI/SURUM.txt"
 
-echo "3/5 Veritabanı dökümü…"
-docker compose exec -T db pg_dump -U dengeerp -d dengeerp --clean --if-exists \
-  | gzip -9 > "$CIKTI/denge-veritabani.sql.gz"
+if [ "$YALNIZ_KOD" = 1 ]; then
+  echo "3/5 Veritabanı dökümü — atlandı (--yalniz-kod)"
+  echo "4/5 Yüklenen belgeler — atlandı (--yalniz-kod)"
+else
+  echo "3/5 Veritabanı dökümü…"
+  docker compose exec -T db pg_dump -U dengeerp -d dengeerp --clean --if-exists \
+    | gzip -9 > "$CIKTI/denge-veritabani.sql.gz"
 
-echo "4/5 Yüklenen belgeler…"
-docker compose exec -T api tar -C /app/var/files -c . | gzip -9 > "$CIKTI/denge-dosyalar.tar.gz"
+  echo "4/5 Yüklenen belgeler…"
+  docker compose exec -T api tar -C /app/var/files -c . | gzip -9 > "$CIKTI/denge-dosyalar.tar.gz"
+fi
 
 echo "5/5 Belgeler…"
 cp deploy/KURULUM.md deploy/Caddyfile deploy/db-least-privilege.sql \
@@ -118,7 +140,7 @@ cp deploy/KURULUM.md deploy/Caddyfile deploy/db-least-privilege.sql \
 # yedekle.sh ve geri-yukle.sh da pakette: yükseltmeden ÖNCE yedek ve geri
 # dönüş (önce geri-yukle.sh, sonra önceki paket) paketten yapılabilsin;
 # cikis-provasi.sh canlı döküm kopyasında zaman damgalı tutanak üretir.
-PAKET_BETIKLERI=(kur.sh on-kontrol.sh dogrula.sh yedekle.sh geri-yukle.sh cikis-provasi.sh)
+PAKET_BETIKLERI=(kur.sh on-kontrol.sh dogrula.sh yedekle.sh geri-yukle.sh cikis-provasi.sh ci-dagit.sh)
 for b in "${PAKET_BETIKLERI[@]}"; do
   cp "deploy/$b" "$CIKTI/"
   chmod +x "$CIKTI/$b"
