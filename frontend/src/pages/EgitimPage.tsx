@@ -382,6 +382,7 @@ function PlanSekmesi() {
   return (
     <>
       <ListeRaporu<Plan>
+        kategoriBasligi="Yıl"
         kategoriler={yilSecenekleri.map((y) => ({ kod: String(y.value), ad: y.label, renk: y.value === dayjs().year() ? "yesil" : "mavi" }))}
         seciliKategori={String(suzgec.yil)}
         onKategori={(k) => {
@@ -845,6 +846,7 @@ function GozlemSekmesi() {
   return (
     <>
       <ListeRaporu<Gozlem>
+        kategoriBasligi="Aşama"
         kategoriler={[
           TUMU_KATEGORISI,
           ...[0, 30, 60, 90].map((a) => ({

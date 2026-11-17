@@ -484,6 +484,7 @@ export default function ServisEkipmanPage() {
       )}
 
       <ListeRaporu<EkipmanSatiri>
+        kategoriBasligi="Tip"
         kategoriler={kategoriler}
         seciliKategori={suzgec.tip ?? TUMU_KATEGORISI.kod}
         onKategori={(k) => suzgecDegistir({ ...suzgec, tip: k === TUMU_KATEGORISI.kod ? undefined : k })}

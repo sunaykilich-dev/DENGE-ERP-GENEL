@@ -10,8 +10,11 @@
  * - Şirket ayrımı (KARARLAR 2026-11-04 §1) korunur: sunucu yalnız etkin
  *   şirketin işlerini verir. Başka şirketin birimi seçilince etkin şirket ona
  *   geçer ve kullanıcı bu ekranda, o birimin sekmesinde kalır.
- * - Onay düğmeleri (tekli/toplu kalite onayı, son onay) ortak liste ve
- *   ayrıntı ekranındakiyle aynıdır; izinleri sunucuda denetlenir.
+ * - Birim seçimi 2026-11-17'den beri ikon şeridi değil, "Kayıt Sayısı"
+ *   satırındaki açılır listedir (şerit tüm ekranlardan kaldırıldı).
+ * - Toplu onay (2026-11-17): çoklu seçim hep açık; "Seçilenleri onayla"
+ *   her işe onaylayanın sıradaki adımını verir: ekip lideri/şef kalite
+ *   onayı, müdür son onayı (kapatma). Kurallar sunucuda (`/isler/toplu-onay`).
  */
 import { ApiOutlined, CarOutlined, SafetyOutlined, ToolOutlined } from "@ant-design/icons";
 import { useMemo } from "react";
@@ -89,6 +92,8 @@ export default function IsEmriOnayiPage() {
       kategoriSecimi={kategoriSecimi}
       varsayilanKategori={varsayilan}
       yeniKayit={false}
+      kategoriBasligi="Birim"
+      onayEkrani
       hatirlaAnahtari="is-emri-onayi"
       detayId={id ? Number(id) : null}
       detayAc={(x) => git(x ? `${YOL}/${x}${yolEki}` : `${YOL}${yolEki}`)}

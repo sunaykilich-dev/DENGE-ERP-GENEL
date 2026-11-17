@@ -762,6 +762,7 @@ export default function PersonelPage() {
       )}
 
       <ListeRaporu<Personel>
+        kategoriBasligi="Birim"
         kategoriler={kategoriler}
         seciliKategori={suzgec.birimsiz ? "__YOK" : (suzgec.birim ?? TUMU_KATEGORISI.kod)}
         onKategori={(k) =>

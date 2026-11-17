@@ -94,6 +94,11 @@ Tamamlayici = Annotated[User, Depends(require_permission("servis.tamamla"))]
 Kapatici = Annotated[User, Depends(require_permission("servis.kapat"))]
 Planlayici = Annotated[User, Depends(require_permission("servis.planla"))]
 KaliteOnaylayici = Annotated[User, Depends(require_permission("servis.gor", "servis.kalite_onay"))]
+# Toplu onay (2026-11-17): ekip lideri (kalite) ya da müdür (son onay/kapatma).
+# Hangi adımın verilebileceği her işte ayrıca sınanır.
+TopluOnaylayici = Annotated[
+    User, Depends(require_any_permission("servis.kalite_onay", "servis.kapat"))
+]
 UzaktanCozucu = Annotated[User, Depends(require_permission("servis.yaz", "servis.uzaktan_coz"))]
 Aktarici = Annotated[User, Depends(require_permission("servis.gor", "servis_rapor.disaaktar"))]
 Tanimci = Annotated[User, Depends(require_permission("servis.tanim"))]
@@ -1543,6 +1548,77 @@ async def toplu_atama(
         "isler": [{"id": s.id, "so_no": s.so_no} for s in isler],
         "uyarilar": uyarilar,
     }
+
+
+@router.post("/isler/toplu-onay", response_model=None)
+async def toplu_onay(
+    payload: KaliteTopluIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: TopluOnaylayici,
+) -> dict[str, Any]:
+    """İş Emri Onayı ekranının toplu onayı (2026-11-17, kullanıcı isteği):
+    çoklu seçilen işlere onaylayanın SIRADAKİ adımı verilir.
+
+    - Kalite onayı bekleyen iş ve onaylayanda `servis.kalite_onay` varsa →
+      ekip lideri (kalite) onayı.
+    - Aksi halde TAMAMLANDI iş → son onay: iş KAPATILDI'ya geçer
+      (`servis.kapat`; iki aşamalı zincir açıksa lider onayı ve
+      `servis.son_onay` şart — tekli kapatmanın kuralı).
+
+    Bir tıklama tek adım verir: müdür kalite onayı da verebiliyorsa iş ikinci
+    tıklamada kapanır (lider onayı ile son onay ayrı kalır). Her iş tekli
+    uçların kuralıyla (iyimser kilit, görevler ayrılığı, kapanış denetimleri)
+    ayrı ayrı sınanır; uymayan iş nedeniyle `atlanan`da döner. Her adım ayrı
+    denetim satırıdır."""
+    onaylanan: list[dict[str, Any]] = []
+    atlanan: list[dict[str, Any]] = []
+    for satir in {s.id: s for s in payload.isler}.values():
+        so = await db.get(ServiceOrder, satir.id)
+        if so is None or so.is_deleted or await kapsam.is_erisimi_yok_mu(db, user, so):
+            atlanan.append({"id": satir.id, "so_no": None, "neden": "Servis işi bulunamadı"})
+            continue
+        kalite_bekliyor = so.status in is_emirleri.KALITE_DURUMLARI and so.kalite_onay_at is None
+        adim = "kalite" if kalite_bekliyor and user.has(is_emirleri.KALITE_IZNI) else "kapanis"
+        try:
+            if satir.version != so.version:
+                raise is_emirleri.IsEmriHatasi(
+                    "Kayıt başka biri tarafından değiştirildi; sayfayı yenileyin"
+                )
+            if adim == "kapanis" and so.status != "TAMAMLANDI":
+                raise is_emirleri.IsEmriHatasi("İş onay beklemiyor")
+            async with db.begin_nested():
+                if adim == "kalite":
+                    await is_emirleri.kalite_onayla(
+                        db, so, user=user, clock=clock, version=satir.version,
+                        notu=payload.not_,
+                    )  # fmt: skip
+                else:
+                    await is_emirleri.durum_degistir(
+                        db, so, "KAPATILDI", kaynak="kapat", user=user, clock=clock,
+                        gerekce=payload.not_,
+                    )  # fmt: skip
+        except _HATALAR as exc:
+            await db.refresh(so)
+            atlanan.append({"id": so.id, "so_no": so.so_no, "neden": str(exc)})
+            continue
+        await audit.log(
+            db,
+            "service_orders",
+            "kalite_onayi" if adim == "kalite" else "durum.kapat",
+            entity_id=so.id,
+            new_value=(
+                {"kalite_onay_at": so.kalite_onay_at.isoformat(), "toplu": True}
+                if adim == "kalite"
+                else {"status": "KAPATILDI", "gerekce": payload.not_, "toplu": True}
+            ),
+            user_id=user.id,
+            ip=client_ip(request),
+        )
+        onaylanan.append({"id": so.id, "so_no": so.so_no, "adim": adim})
+    await db.commit()
+    return {"onaylanan": onaylanan, "atlanan": atlanan}
 
 
 @router.post("/isler/toplu-kalite-onayi", response_model=None)

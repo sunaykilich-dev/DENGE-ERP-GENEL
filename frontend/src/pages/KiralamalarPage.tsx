@@ -359,6 +359,7 @@ export default function KiralamalarPage() {
       )}
 
       <ListeRaporu<KiralamaSatiri>
+        kategoriBasligi="Birim"
         kategoriler={kategoriler}
         seciliKategori={suzgec.birim ?? TUMU_KATEGORISI.kod}
         onKategori={(k) => suzgecDegistir({ ...suzgec, birim: k === TUMU_KATEGORISI.kod ? undefined : k })}

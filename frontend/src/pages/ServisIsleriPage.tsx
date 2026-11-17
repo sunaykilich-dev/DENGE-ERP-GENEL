@@ -1820,6 +1820,14 @@ export interface ServisIsListesiProps {
    * şirket geçişi) `true` döner; liste kendi süzgecini değiştirmez.
    */
   kategoriSecimi?: (kod: string) => boolean;
+  /** Kategori açılır listesinin yer tutucusu (ör. "Birim"). */
+  kategoriBasligi?: string;
+  /**
+   * İş Emri Onayı ekranı (2026-11-17): çoklu seçim hep açık; "Seçilenleri
+   * onayla" her işe onaylayanın sıradaki adımını verir (ekip lideri onayı
+   * ya da müdür son onayı/kapatma; `POST /isler/toplu-onay`).
+   */
+  onayEkrani?: boolean;
 }
 
 /**
@@ -1879,7 +1887,8 @@ function BosListeMesaji({
 }
 
 export function ServisIsListesi({
-  kategoriler = SERVIS_KATEGORILERI,
+  // 2026-11-17: Servis İşleri'nde tür şeridi yok (tür sol menüde).
+  kategoriler = [],
   varsayilanKategori,
   durumGruplari = SERVIS_DURUM_GRUPLARI,
   detayId,
@@ -1890,6 +1899,8 @@ export function ServisIsListesi({
   hatirlaAnahtari,
   kategoriAlanlari = KATEGORI_ALANLARI,
   kategoriSecimi,
+  kategoriBasligi,
+  onayEkrani = false,
 }: ServisIsListesiProps) {
   const { yetkili, kullanici } = useAuth();
   const { message } = App.useApp();
@@ -2058,11 +2069,14 @@ export function ServisIsListesi({
   const tekKaliteBekliyor = !!tek && kaliteBekliyor(tek);
   // Toplu kalite onayı (§7.3): kalite bekleyen listede çoklu seçim kendiliğinden açık.
   const kaliteListesi = kaliteYetkili && suzgec.kalite === "BEKLEYEN";
-  const cokluEtkin = cokluSecim || kaliteListesi;
-  const topluKaliteSatirlari = seciliSatirlar.filter(kaliteBekliyor);
+  // İş Emri Onayı: lider (kalite) ya da müdür (son onay = kapatma) onaylar.
+  const onaylayabilir = kaliteYetkili || (onayEkrani && yetkili("servis.kapat"));
+  const cokluEtkin = cokluSecim || kaliteListesi || (onayEkrani && onaylayabilir);
+  const onayBekliyor = (r: IsSatiri) => (onayEkrani ? r.status === "TAMAMLANDI" || kaliteBekliyor(r) : kaliteBekliyor(r));
+  const topluKaliteSatirlari = seciliSatirlar.filter(onayBekliyor);
   const topluKalite = useMutation({
     mutationFn: () =>
-      teknikServisApi.topluKaliteOnayi(
+      (onayEkrani ? teknikServisApi.topluOnay : teknikServisApi.topluKaliteOnayi)(
         topluKaliteSatirlari.map((r) => ({ id: r.id, version: r.version })),
         topluKaliteNotu.trim() || undefined,
       ),
@@ -2073,7 +2087,15 @@ export function ServisIsListesi({
       void qc.invalidateQueries({ queryKey: ["servis-isleri"] });
       void qc.invalidateQueries({ queryKey: ["servis-is"] });
       if (r.atlanan.length) setTopluKaliteSonucu(r);
-      else message.success(`${r.onaylanan.length} işe kalite onayı verildi`);
+      else if (onayEkrani) {
+        const kapanan = r.onaylanan.filter((o) => o.adim === "kapanis").length;
+        const lider = r.onaylanan.length - kapanan;
+        message.success(
+          [lider && `${lider} işe ekip lideri onayı verildi`, kapanan && `${kapanan} iş son onayla kapatıldı`]
+            .filter(Boolean)
+            .join(", "),
+        );
+      } else message.success(`${r.onaylanan.length} işe kalite onayı verildi`);
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -2317,15 +2339,19 @@ export function ServisIsListesi({
         ac(tek.id);
       },
     },
-    secili.length > 1
+    onayEkrani || secili.length > 1
       ? {
           anahtar: "kalite",
           ad: `Seçilenleri onayla (${topluKaliteSatirlari.length})`,
           ikon: <SafetyCertificateOutlined />,
-          gizli: !kaliteYetkili,
+          gizli: !onaylayabilir,
           ipucu: topluKaliteSatirlari.length
-            ? "Seçilen tamamlanmış işlere toplu kalite onayı"
-            : "Seçimde kalite onayı bekleyen iş yok",
+            ? onayEkrani
+              ? "Seçilen işlere sıradaki onay: ekip lideri onayı ya da son onay (kapatma)"
+              : "Seçilen tamamlanmış işlere toplu kalite onayı"
+            : onayEkrani
+              ? "Onaylanacak işleri soldaki kutulardan seçin"
+              : "Seçimde kalite onayı bekleyen iş yok",
           devreDisi: !topluKaliteSatirlari.length,
           yukleniyor: topluKalite.isPending,
           onClick: () => setTopluKaliteAcik(true),
@@ -2570,6 +2596,7 @@ export function ServisIsListesi({
         kategoriler={kategoriler}
         seciliKategori={seciliKategori}
         onKategori={kategoriSec}
+        kategoriBasligi={kategoriBasligi}
         kayitSayisi={liste.data?.toplam}
         ustSag={
           <Input.Search
@@ -2711,7 +2738,11 @@ export function ServisIsListesi({
         />
       )}
       <Modal
-        title={`Toplu kalite onayı (${topluKaliteSatirlari.length} iş)`}
+        title={
+          onayEkrani
+            ? `Seçilen işleri onayla (${topluKaliteSatirlari.length} iş)`
+            : `Toplu kalite onayı (${topluKaliteSatirlari.length} iş)`
+        }
         open={topluKaliteAcik}
         onCancel={() => setTopluKaliteAcik(false)}
         onOk={() => topluKalite.mutate()}
@@ -2722,22 +2753,24 @@ export function ServisIsListesi({
       >
         <Space orientation="vertical" style={{ width: "100%" }}>
           <Typography.Text type="secondary">
+            {onayEkrani &&
+              "Her işe sıradaki onay verilir: ekip lideri onayı bekleyen işe lider onayı, lider onayı verilmiş işe son onay (iş kapanır). "}
             Her iş ayrı sınanır: işte çalışmış olduğunuz ya da başkasının değiştirdiği iş atlanır ve nedeniyle
             listelenir; diğerleri onaylanır.
             {secili.length > topluKaliteSatirlari.length &&
-              ` Seçimdeki ${secili.length - topluKaliteSatirlari.length} iş kalite onayı beklemediği için gönderilmez.`}
+              ` Seçimdeki ${secili.length - topluKaliteSatirlari.length} iş onay beklemediği için gönderilmez.`}
           </Typography.Text>
           <Input.TextArea
             rows={2}
             maxLength={500}
-            placeholder="Kalite notu (isteğe bağlı, tüm işlere yazılır)"
+            placeholder={onayEkrani ? "Onay notu (isteğe bağlı, tüm işlere yazılır)" : "Kalite notu (isteğe bağlı, tüm işlere yazılır)"}
             value={topluKaliteNotu}
             onChange={(e) => setTopluKaliteNotu(e.target.value)}
           />
         </Space>
       </Modal>
       <Modal
-        title="Toplu kalite onayı sonucu"
+        title={onayEkrani ? "Toplu onay sonucu" : "Toplu kalite onayı sonucu"}
         open={!!topluKaliteSonucu}
         onCancel={() => setTopluKaliteSonucu(null)}
         onOk={() => setTopluKaliteSonucu(null)}

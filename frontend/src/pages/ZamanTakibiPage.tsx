@@ -422,6 +422,7 @@ export default function ZamanTakibiPage() {
         />
       ) : (
         <ListeRaporu<ZamanKaydi>
+          kategoriBasligi="Faaliyet"
           kategoriler={faaliyetKategorileri}
           seciliKategori={faaliyet ?? TUMU_KATEGORISI.kod}
           onKategori={(k) => {

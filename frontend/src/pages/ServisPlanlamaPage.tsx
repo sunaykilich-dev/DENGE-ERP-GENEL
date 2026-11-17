@@ -680,16 +680,17 @@ export default function ServisPlanlamaPage() {
         </div>
       )}
       <div className="fl-rapor" style={{ marginBottom: 12 }}>
-        <KategoriSeridi
-          kategoriler={[
-            { kod: "TUMU", ad: "TÜMÜ", renk: "mavi", ikon: <CalendarOutlined /> },
-            { kod: "SERVIS", ad: "SERVİS", renk: "kirmizi", ipucu: "Servis işleri (arıza, kurulum…)" },
-            { kod: "BAKIM", ad: "PLANLI BAKIM", renk: "yesil", ipucu: "Planlı bakım işleri" },
-          ]}
-          secili={tur}
-          onSec={setTur}
-        />
         <div className="fm-arac-cubugu" style={{ border: 0, borderRadius: 0 }}>
+          <KategoriSeridi
+            kategoriler={[
+              { kod: "TUMU", ad: "TÜMÜ", renk: "mavi" },
+              { kod: "SERVIS", ad: "SERVİS", renk: "kirmizi", ipucu: "Servis işleri (arıza, kurulum…)" },
+              { kod: "BAKIM", ad: "PLANLI BAKIM", renk: "yesil", ipucu: "Planlı bakım işleri" },
+            ]}
+            secili={tur}
+            onSec={setTur}
+            baslik="İş"
+          />
           <Button icon={<LeftOutlined />} onClick={() => kaydirma(-1)} aria-label="Önceki" />
           <Button onClick={() => setGun(dayjs().startOf("day"))}>Bugün</Button>
           <Button icon={<RightOutlined />} onClick={() => kaydirma(1)} aria-label="Sonraki" />

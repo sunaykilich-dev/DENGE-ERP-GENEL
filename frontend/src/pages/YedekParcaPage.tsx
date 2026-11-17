@@ -259,6 +259,7 @@ function StokSekmesi() {
     <>
       {liste.isError && <Alert type="error" showIcon message={parcaHatasi(liste.error).mesaj} />}
       <ListeRaporu<StokSatiri>
+        kategoriBasligi="Depo"
         kategoriler={kategoriler}
         seciliKategori={s.depo_id ? String(s.depo_id) : TUMU_KATEGORISI.kod}
         onKategori={(k) => guncelle("depo_id", k === TUMU_KATEGORISI.kod ? undefined : k)}
@@ -480,6 +481,7 @@ function HareketSekmesi() {
 
   return (
     <ListeRaporu<Hareket>
+      kategoriBasligi="Tür"
       kategoriler={kategoriler}
       seciliKategori={s.tur ?? TUMU_KATEGORISI.kod}
       onKategori={(k) => guncelle({ tur: k === TUMU_KATEGORISI.kod ? undefined : k })}

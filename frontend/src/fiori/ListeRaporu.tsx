@@ -1,7 +1,7 @@
 /**
  * Fiori liste raporu (List Report) — rehber §3, fotoğraf 0–6 ve 9.
  *
- * Genel bileşen: kategori ikon şeridi → "Kayıt Sayısı: N" → durum filtre
+ * Genel bileşen: "Kayıt Sayısı: N" (+ varsa kategori açılır listesi) → durum filtre
  * çubuğu (+ gelişmiş süzgeç paneli) → radyo (ya da çoklu) seçimli tablo →
  * altta yapışık eylem çubuğu. Veri, süzgeç ve eylemler çağırandadır; bileşen
  * yalnız düzeni çizer, böylece her liste ekranı aynı görünümü kullanır.
@@ -30,6 +30,8 @@ export interface ListeRaporuProps<T extends object> {
   /** Kullanıcının görünecek sekmeleri seçmesi (dişli). */
   kategoriAyari?: KategoriAyari;
   onKategori?: (kod: string) => void;
+  /** Kategori açılır listesinin yer tutucusu (ör. "Depo", "Birim"). */
+  kategoriBasligi?: string;
   /** Sunucunun `X-Toplam-Kayit` değeri. */
   kayitSayisi?: number;
   /** "Kayıt Sayısı" satırının sağı (ör. arama kutusu). */
@@ -65,6 +67,7 @@ export default function ListeRaporu<T extends object>({
   seciliKategori,
   kategoriAyari,
   onKategori,
+  kategoriBasligi,
   kayitSayisi,
   ustSag,
   ustBilgi,
@@ -102,18 +105,20 @@ export default function ListeRaporu<T extends object>({
 
   return (
     <div className="fl-rapor">
-      {kategoriler && kategoriler.length > 0 && onKategori && (
-        <KategoriSeridi
-          kategoriler={kategoriler}
-          secili={seciliKategori}
-          onSec={onKategori}
-          ayar={kategoriAyari}
-        />
-      )}
       <div className="fl-ust">
         <span className="fl-kayit-sayisi">
           Kayıt Sayısı: {kayitSayisi === undefined ? "…" : kayitSayisi.toLocaleString("tr-TR")}
         </span>
+        {/* Eski ikon şeridi yerine küçük açılır seçici (2026-11-17). */}
+        {kategoriler && kategoriler.length > 0 && onKategori && (
+          <KategoriSeridi
+            kategoriler={kategoriler}
+            secili={seciliKategori}
+            onSec={onKategori}
+            ayar={kategoriAyari}
+            baslik={kategoriBasligi}
+          />
+        )}
         {ustSag && <div className="fl-ust-sag">{ustSag}</div>}
       </div>
       {durumCubugu && <DurumCubugu {...durumCubugu} />}

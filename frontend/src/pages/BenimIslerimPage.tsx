@@ -307,9 +307,9 @@ function Islerim() {
 
   return (
     <div className="fl-rapor">
-      <KategoriSeridi kategoriler={kategoriler} secili={kategori} onSec={setKategori} />
       <div className="fl-ust">
         <span className="fl-kayit-sayisi">Kayıt Sayısı: {liste.isLoading ? "…" : sayi}</span>
+        <KategoriSeridi kategoriler={kategoriler} secili={kategori} onSec={setKategori} baslik="Zaman" />
       </div>
       <DurumCubugu
         gruplar={SERVIS_DURUM_GRUPLARI}

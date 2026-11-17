@@ -118,6 +118,7 @@ function BakimBildirimleri() {
   const [detay, setDetay] = useState<number | null>(null);
   return (
     <ServisIsListesi
+      kategoriBasligi="Bakım"
       kategoriler={BAKIM_KATEGORILERI}
       varsayilanKategori="PLANLI"
       durumGruplari={BAKIM_DURUM_GRUPLARI}

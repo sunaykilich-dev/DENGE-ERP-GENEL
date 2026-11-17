@@ -310,6 +310,7 @@ function IsListesi({
   return (
     <>
       <ListeRaporu<OperasyonSatiri>
+        kategoriBasligi="Birim"
         kategoriler={kategorilerOlustur(
           Object.entries(BIRIM_ETIKETLERI).map(([kod, ad]) => ({ kod, ad })),
           () => "kirmizi",

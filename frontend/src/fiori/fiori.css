@@ -129,6 +129,8 @@
   padding: 12px 12px 6px;
 }
 .fl-kayit-sayisi { font-size: 14px; font-weight: 700; }
+/* Kategori açılır listesi sayının yanında, arama sağda kalsın (2026-11-17). */
+.fl-ust .fl-kategori-secici { margin-right: auto; }
 .fl-ust-sag { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 
 .fl-durum-cubugu-sarici { padding: 0 12px 8px; overflow-x: auto; }
