@@ -98,6 +98,57 @@ export interface PersonelYuku {
   bugun_calisilan_dk?: number | null;
 }
 
+/** Operasyon panosu (2026-11-18): dispeçerin "şu an neye müdahale etmeliyim" ekranı. */
+export type PanoSatiri = Omit<OperasyonSatiri, "sla">;
+
+export interface TayinBekleyen extends PanoSatiri {
+  /** Açılıştan bu yana geçen MESAİ dakikası. */
+  bekleme_dk: number;
+  esik_dk: number;
+  gecikti: boolean;
+}
+
+export type SapmaTuru = "PLAN_SAATI" | "BEKLEME" | "BAKIM_VADESI";
+
+export interface Sapma extends PanoSatiri {
+  sapma: SapmaTuru;
+  /** Bugünkü planın başlangıcı (saat girilmişse). */
+  plan_baslangic: string | null;
+}
+
+export type EkipDurumu = "BOSTA" | "YOLDA" | "SAHADA";
+
+export interface EkipUyesi {
+  user_id: number;
+  ad: string;
+  saha_rolu: string | null;
+  birimler: string[];
+  durum: EkipDurumu;
+  acik_sayac: PersonelYuku["acik_sayac"];
+  bugun_planli: number;
+  acik_atanmis: number;
+}
+
+export interface OperasyonPanosu {
+  sunucu_zamani: string;
+  birim: string | null;
+  esikler: { kritik_dk: number; diger_dk: number };
+  ozet: {
+    bugun_planli: number;
+    bugun_tamamlanan: number;
+    yolda: number;
+    sahada: number;
+    bosta: number;
+    tayin_bekleyen: number;
+    tayin_geciken: number;
+    sapma: number;
+  };
+  tayin_bekleyenler: TayinBekleyen[];
+  sapmalar: Sapma[];
+  sapma_toplamlari: Record<SapmaTuru, number>;
+  ekip: EkipUyesi[];
+}
+
 export interface PersonelYukuYaniti {
   sunucu_zamani: string;
   kisi_saat_gorunur: boolean;
@@ -248,6 +299,9 @@ export const operasyonApi = {
     p.set("offset", String(offset));
     return api.getSayfa<OperasyonSatiri>(`${OPERASYON_ONEK}/isler?${p}`);
   },
+  pano: (birim?: string) =>
+    api.get<OperasyonPanosu>(`${OPERASYON_ONEK}/pano${birim ? `?birim=${encodeURIComponent(birim)}` : ""}`),
+  tayinSayilari: () => api.get<{ bekleyen: number; geciken: number }>(`${OPERASYON_ONEK}/tayin-sayilari`),
   personel: (birim?: string) =>
     api.get<PersonelYukuYaniti>(
       `${OPERASYON_ONEK}/personel${birim ? `?birim=${encodeURIComponent(birim)}` : ""}`,

@@ -35,7 +35,7 @@ from app.api.deps import (
 from app.config import get_config
 from app.models import Account, Quote, QuoteLine, QuoteSend, QuoteVersion, ServiceOrder, User
 from app.models.quote import KAYIP_NEDENLERI
-from app.services import audit, belgeler, iskonto, mail
+from app.services import audit, belgeler, iskonto, mail, sirketler
 from app.services import export as export_svc
 from app.services import quotes as svc
 from app.services import settings as ayar_svc
@@ -360,15 +360,24 @@ def _filtre(
 
 
 @router.get("/belge-basligi")
-async def belge_basligi(db: DbDep, _: Okuyucu) -> dict:
+async def belge_basligi(db: DbDep, user: Okuyucu, birim: str | None = None) -> dict:
     """Teklif formundaki CANLI A4 önizlemesinin başlık bilgileri.
 
     Önizleme ile basılan PDF aynı kaynaktan beslenir; ayrı yerlerden
     okunsaydı ekranda görünen teklifle müşteriye giden teklif ayrışırdı.
+    Künye PDF'teki kuralla seçilir: birim seçiliyse birimin şirketi; birimsiz
+    (satış) teklif MOBİLİTE'dir — MOBİLİTE dışındaki etkin şirkette birimsiz
+    teklif açılamadığı için önizleme etkin şirketin künyesini gösterir.
     """
     ayarlar = await belgeler.ayar_haritasi(db)
+    if birim is not None:
+        sirket = await belgeler.birim_sirketi(db, birim)
+    elif sirketler.etkin_birimler(user) is None or sirketler.mobilite_acik_mi(user):
+        sirket = None
+    else:
+        sirket = sirketler.aktif_sirket(user)
     return {
-        "firma": belgeler.firma_bilgisi(ayarlar),
+        "firma": belgeler.firma_bilgisi(ayarlar, sirket),
         "sartlar": ayarlar.get("teklif_ticari_sartlar") or belgeler.VARSAYILAN_SARTLAR,
         "kdv_varsayilan": float(ayarlar.get("kdv_oran_varsayilan") or 0.20),
         "birimli_kdv_oranlari": [float(o) for o in svc.BIRIMLI_KDV_ORANLARI],

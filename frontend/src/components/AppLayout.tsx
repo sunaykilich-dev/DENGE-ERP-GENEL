@@ -6,7 +6,7 @@
  * Etkin şirket (`SirketProvider`) kabuğun ve bütün sayfaların üstündedir;
  * menü ve sayfalar `useSirket()` ile okur.
  *
- * `MENU` ve `acilisYolu` geriye uyumluluk için buradan da dışa verilir.
+ * `MENU` geriye uyumluluk için buradan da dışa verilir.
  */
 import type { ReactNode } from "react";
 import { createElement } from "react";
@@ -14,8 +14,6 @@ import { createElement } from "react";
 import { SirketProvider } from "../auth/SirketContext";
 import Kabuk from "../fiori/Kabuk";
 import { SAYFALAR } from "../fiori/uygulamalar";
-
-export { acilisGrubu, acilisYolu } from "../fiori/uygulamalar";
 
 export interface MenuKalemi {
   key: string;

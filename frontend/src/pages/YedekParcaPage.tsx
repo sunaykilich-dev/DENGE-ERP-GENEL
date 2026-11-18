@@ -1,6 +1,6 @@
 /**
- * Yedek Parça — servis stoğu, hareket geçmişi, parça talepleri, sayım, iş
- * emri parçaları ve servis depoları (TS-130…138).
+ * Yedek Parça — servis stoğu, hareket geçmişi, parça talepleri, sayım ve
+ * servis depoları (TS-130…138).
  *
  * - Üstte tıklanabilir Fiori KPI kutucukları (`KpiKutucugu`): sayı sunucudan
  *   (`/stok/ozet`), tıklama aynı süzgeçle sekmeyi açar ("sayı = liste").
@@ -10,7 +10,10 @@
  *   sunucu sayfalaması; Excel `parca.gor + servis_rapor.disaaktar`.
  *   Maliyet sütunu yalnız sunucu `unit_cost` anahtarını gönderdiyse.
  * - Giriş (belge no), zayi, transfer `parca.yonet`; işe çıkış/iade/talep
- *   `parca.kullan` — "İş emri parçaları" sekmesinde `ServisParcalari`.
+ *   `parca.kullan` — servis işi, planlı bakım formu ve atölye kaydındaki
+ *   `ServisParcalari` bölümünde. Eski "İş Emri Parçaları" sekmesi (iş arama +
+ *   aynı bölüm) kaldırıldı (UI/UX denetimi T10); eski `?sekme=isler&so=<id>`
+ *   bağlantısı işin kartına, `so`suz olanı varsayılan sekmeye yönlenir.
  * - Sayım: açılış anı görüntüsü, sayılan adet girişi, gerekçeli onay; sayım
  *   açıkken stok değiştiyse sunucu sapmaları döndürür, kullanıcı değişimi
  *   kabul ederek yeniden onaylar. Onaysız sayım hiçbir bakiyeyi değiştirmez.
@@ -52,10 +55,9 @@ import {
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI, personelApi } from "../api/personel";
-import { teknikServisApi } from "../api/teknikServis";
 import {
   type Depo,
   HAREKET_TURU_ADLARI,
@@ -94,7 +96,6 @@ import {
 import ListeRaporu from "../fiori/ListeRaporu";
 import ParcaHareketPenceresi, { type ParcaHareketTuru } from "../components/ParcaHareketPenceresi";
 import ParcaTuketimRaporu from "../components/ParcaTuketimRaporu";
-import ServisParcalari from "../components/ServisParcalari";
 
 const SAYFA = 25;
 const zaman = (v: string | null | undefined) => (v ? dayjs(v).format("DD.MM.YYYY HH:mm") : "—");
@@ -110,6 +111,14 @@ export default function YedekParcaPage() {
   const [kartAcik, setKartAcik] = useState(false);
 
   const sekmeDegistir = (k: string) => setParams(new URLSearchParams({ sekme: k }));
+
+  // Kaldırılan "İş Emri Parçaları" sekmesinin eski bağlantıları.
+  if (sekme === "isler") {
+    const so = Number(params.get("so"));
+    return (
+      <Navigate replace to={Number.isInteger(so) && so > 0 ? `/servis-isleri/${so}` : "/yedek-parca"} />
+    );
+  }
 
   return (
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
@@ -137,9 +146,6 @@ export default function YedekParcaPage() {
             { key: "talepler", label: "Parça Talepleri", children: <TalepSekmesi /> },
             { key: "kullanim", label: "Sahada Kullanım", children: <KullanimSekmesi /> },
             { key: "sayimlar", label: "Sayım", children: <SayimSekmesi /> },
-            ...(yetkili("servis.gor")
-              ? [{ key: "isler", label: "İş Emri Parçaları", children: <IsSekmesi /> }]
-              : []),
             { key: "depolar", label: "Depolar", children: <DepoSekmesi /> },
             ...(yetkili("servis_rapor.gor")
               ? [{ key: "tuketim", label: "Tüketim raporu", children: <ParcaTuketimRaporu /> }]
@@ -259,6 +265,7 @@ function StokSekmesi() {
     <>
       {liste.isError && <Alert type="error" showIcon message={parcaHatasi(liste.error).mesaj} />}
       <ListeRaporu<StokSatiri>
+        kategoriBasligi="Depo"
         kategoriler={kategoriler}
         seciliKategori={s.depo_id ? String(s.depo_id) : TUMU_KATEGORISI.kod}
         onKategori={(k) => guncelle("depo_id", k === TUMU_KATEGORISI.kod ? undefined : k)}
@@ -480,6 +487,7 @@ function HareketSekmesi() {
 
   return (
     <ListeRaporu<Hareket>
+      kategoriBasligi="Tür"
       kategoriler={kategoriler}
       seciliKategori={s.tur ?? TUMU_KATEGORISI.kod}
       onKategori={(k) => guncelle({ tur: k === TUMU_KATEGORISI.kod ? undefined : k })}
@@ -669,9 +677,7 @@ function TalepSekmesi() {
         t.ikmal ? (
           <Tag color="purple">İkmal → {t.hedef_depo_adi}</Tag>
         ) : (
-          <Link to={`/yedek-parca?sekme=isler&so=${t.service_order_id}`} className="fl-no-rozet">
-            {t.so_no}
-          </Link>
+          <IsNoBaglantisi soId={t.service_order_id} soNo={t.so_no} />
         ),
     },
     { title: "Talep\nTarihi", key: "t", width: 100, align: "center", render: (_, t) => gunu(t.created_at) },
@@ -951,9 +957,7 @@ function KullanimSekmesi() {
       width: 160,
       align: "center",
       render: (_, k) => (
-        <Link to={`/yedek-parca?sekme=isler&so=${k.service_order_id}`} className="fl-no-rozet">
-          {k.so_no}
-        </Link>
+        <IsNoBaglantisi soId={k.service_order_id} soNo={k.so_no} />
       ),
     },
     { title: "Tarih", key: "t", width: 140, align: "center", render: (_, k) => zaman(k.created_at) },
@@ -1359,43 +1363,17 @@ function SayimCekmecesi({ sayimId, onKapat }: { sayimId: number | null; onKapat:
   );
 }
 
-// --- İş emri parçaları ----------------------------------------------------------
+// --- İş no bağlantısı ------------------------------------------------------------
 
-function IsSekmesi() {
-  const [params, setParams] = useSearchParams();
-  const soId = params.get("so") ? Number(params.get("so")) : null;
-  const [q, setQ] = useState("");
-  const isler = useQuery({
-    queryKey: ["parca", "is-arama", q],
-    queryFn: () => teknikServisApi.liste({ q, kapali_dahil: true }, 10, 0),
-    enabled: q.length >= 2,
-  });
+/** İş no → servis işinin kartı (parça çıkışı/iade/talep orada); `servis.gor`
+ *  yoksa düz metin (kart açılamaz). */
+function IsNoBaglantisi({ soId, soNo }: { soId: number | null | undefined; soNo: string | null | undefined }) {
+  const { yetkili } = useAuth();
+  if (soId == null || !yetkili("servis.gor")) return <span className="fl-no-rozet">{soNo ?? "—"}</span>;
   return (
-    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-      <Select
-        showSearch
-        filterOption={false}
-        placeholder="İş no, müşteri veya konu ile servis işi arayın"
-        onSearch={(v) => setQ(v.trim())}
-        value={soId ?? undefined}
-        onChange={(v) => setParams(new URLSearchParams({ sekme: "isler", so: String(v) }))}
-        loading={isler.isFetching}
-        options={(isler.data?.kayitlar ?? []).map((i) => ({
-          value: i.id,
-          label: `${i.so_no} — ${i.musteri?.title ?? i.customer_name_raw ?? ""} — ${i.konu}`,
-        }))}
-        notFoundContent={q.length < 2 ? "En az 2 karakter yazın" : "İş bulunamadı"}
-        style={{ width: "100%", maxWidth: 560 }}
-      />
-      {soId !== null ? (
-        <ServisParcalari soId={soId} />
-      ) : (
-        <Typography.Text type="secondary">
-          Servis işine parça çıkışı, iade ve parça talebi için işi seçin. Aynı bölüm servis işi, planlı
-          bakım formu ve atölye kaydında da görünür.
-        </Typography.Text>
-      )}
-    </Space>
+    <Link to={`/servis-isleri/${soId}`} className="fl-no-rozet">
+      {soNo}
+    </Link>
   );
 }
 

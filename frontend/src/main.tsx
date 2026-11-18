@@ -11,7 +11,6 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { useSirket } from "./auth/SirketContext";
 import { MENU_AGACI, acilisYolu, gorunurMenu } from "./fiori/menu";
 import AppLayout from "./components/AppLayout";
-import BaslangicPage from "./pages/BaslangicPage";
 import AtolyePage from "./pages/AtolyePage";
 import BakimPage from "./pages/BakimPage";
 import BenimIslerimPage from "./pages/BenimIslerimPage";
@@ -22,6 +21,7 @@ import IkBelgelerPage from "./pages/IkBelgelerPage";
 import KiralamalarPage from "./pages/KiralamalarPage";
 import KiralikEnvanterPage from "./pages/KiralikEnvanterPage";
 import OperasyonMerkeziPage from "./pages/OperasyonMerkeziPage";
+import EpostaKutusuPage from "./pages/EpostaKutusuPage";
 import PersonelPage from "./pages/PersonelPage";
 import ServisAnaVeriPage from "./pages/ServisAnaVeriPage";
 import ServisMaliyetPage from "./pages/ServisMaliyetPage";
@@ -30,7 +30,6 @@ import ServisEkipmanPage from "./pages/ServisEkipmanPage";
 import ServisIsKartiMobil from "./pages/ServisIsKartiMobil";
 import IsEmriOnayiPage from "./pages/IsEmriOnayiPage";
 import ServisIsleriPage from "./pages/ServisIsleriPage";
-import ServisPaneli from "./pages/ServisPaneli";
 import ServisPlanlamaPage from "./pages/ServisPlanlamaPage";
 import ServisRaporlariPage from "./pages/ServisRaporlariPage";
 import ServisTanimlarPage from "./pages/ServisTanimlarPage";
@@ -99,16 +98,16 @@ function PanelKapisi() {
 }
 
 /**
- * Açılış (`/`, `/baslangic`; rol testi B-01): Ana Panel izni (`servis.gor`)
- * olana Ana Panel, olmayana (satış, finans uzmanı, mobilite depo…) etkin
- * şirketin menüsündeki ilk yetkili sayfa. Kabuk bunu şirket bilgisi
+ * Açılış (`/`, `/baslangic`; rol testi B-01): servis çalışanına Ana Panel,
+ * diğer rollere kendi ana ekranı (satış → Teklifler, finans → Fatura Devri…;
+ * bkz. `acilisYolu`). Kabuk bunu şirket bilgisi
  * yüklendikten sonra çizer; menüyle aynı süzgeç kullanılır.
  */
 function Acilis() {
   const { yetkili } = useAuth();
   const { menuBirimleri } = useSirket();
   const hedef = useMemo(
-    () => acilisYolu(gorunurMenu(MENU_AGACI, { yetkili, aktifBirimler: menuBirimleri })),
+    () => acilisYolu(gorunurMenu(MENU_AGACI, { yetkili, aktifBirimler: menuBirimleri }), yetkili),
     [yetkili, menuBirimleri],
   );
   return <Navigate to={hedef} replace />;
@@ -136,12 +135,12 @@ function KorumaliUygulama() {
     <Routes>
       <Route element={<AppLayout />}>
         {/* KARARLAR 2026-11-04 §2/§4: açılış Ana Panel (izni olana; yoksa
-            menüdeki ilk yetkili sayfa — B-01); launchpad "Sistem ›
-            Uygulamalar (kutucuklar)" altında `/uygulamalar` yolunda kalır. */}
+            rolün ana ekranı — B-01). Kutucuk ekranı (launchpad) ve Servis
+            Paneli 2026-11-18'de kaldırıldı; eski yer imleri yönlenir. */}
         <Route path="/" element={<Acilis />} />
         <Route path="/ana-panel" element={<AnaPanel />} />
         <Route path="/baslangic" element={<Acilis />} />
-        <Route path="/uygulamalar" element={<BaslangicPage />} />
+        <Route path="/uygulamalar" element={<Navigate to="/" replace />} />
         <Route path="/panel" element={<PanelKapisi />} />
         <Route path="/gorevler" element={<GorevlerPage />} />
         <Route path="/raporlar" element={<RaporlarPage />} />
@@ -171,8 +170,9 @@ function KorumaliUygulama() {
         <Route path="/kullanicilar" element={<UsersPage />} />
         <Route path="/ayarlar" element={<SettingsPage />} />
         <Route path="/denetim" element={<AuditPage />} />
+        <Route path="/eposta-kutusu" element={<EpostaKutusuPage />} />
         {/* --- Teknik servis (Dalga 0/1, plan §1.10) --- */}
-        <Route path="/servis-paneli" element={<ServisPaneli />} />
+        <Route path="/servis-paneli" element={<Navigate to="/ana-panel" replace />} />
         <Route path="/servis-isleri" element={<ServisIsleriPage />} />
         <Route path="/servis-isleri/:id" element={<ServisIsleriPage />} />
         <Route path="/is-emri-onayi" element={<IsEmriOnayiPage />} />

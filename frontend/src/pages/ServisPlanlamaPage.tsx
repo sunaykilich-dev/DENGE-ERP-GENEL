@@ -71,8 +71,11 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import KategoriSeridi from "../fiori/KategoriSeridi";
 import { KpiKutucugu } from "../fiori/ListeRaporu";
+import KutucukPano from "../fiori/KutucukPano";
 import PlanPenceresi, { type PlanModu, type PlanPenceresiProps } from "../components/PlanPenceresi";
 import { KaynakSekmesi, PlanUyumuSekmesi } from "./ServisPlanlamaP3";
+import { IsDetayCekmecesi } from "./ServisIsleriPage";
+import { teknikServisApi } from "../api/teknikServis";
 
 type Gorunum = "gun" | "hafta" | "ay";
 const GUN_ADLARI = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
@@ -203,6 +206,8 @@ export default function ServisPlanlamaPage() {
   const [havuzSecili, setHavuzSecili] = useState<number[]>([]);
   const [havuzAcik, setHavuzAcik] = useState(false);
   const [kart, setKart] = useState<Kart | null>(null);
+  // KPI listesinden / takvim kartından açılan iş ayrıntısı (tüm işlemleriyle).
+  const [isDetayId, setIsDetayId] = useState<number | null>(null);
   const [kartSecili, setKartSecili] = useState<number[]>([]);
   const [pencere, setPencere] = useState<PencereDurumu | null>(null);
   const [geriAl, setGeriAl] = useState<TakvimSatiri | null>(null);
@@ -242,6 +247,13 @@ export default function ServisPlanlamaPage() {
     queryKey: ["servis-plan-gecmisi", gecmisIs?.is_id],
     queryFn: () => planlamaApi.gecmis(gecmisIs!.is_id),
     enabled: gecmisIs != null,
+  });
+
+  const isSozlugu = useQuery({
+    queryKey: ["servis-form-verileri"],
+    queryFn: teknikServisApi.formVerileri,
+    staleTime: 5 * 60_000,
+    enabled: isDetayId != null,
   });
 
   const tazele = () => {
@@ -566,7 +578,9 @@ export default function ServisPlanlamaPage() {
                   }
                 />
               )}
-              <span>{s.so_no}</span>
+              <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setIsDetayId(s.is_id)}>
+                {s.so_no}
+              </Button>
               <Tag>{DURUM_ETIKETLERI[s.durum] ?? s.durum}</Tag>
               {s.cakisma && <Tag color="red">Çakışma{s.cakisma_gecildi ? " (gerekçeli)" : ""}</Tag>}
             </Space>
@@ -634,9 +648,19 @@ export default function ServisPlanlamaPage() {
         loading={kpiListe.isLoading}
         dataSource={kpiListe.data?.kayitlar ?? []}
         pagination={{ pageSize: 50 }}
+        // Satıra tıklayınca işin ayrıntısı açılır: durum, düzenle, tayin, planla… (2026-11-18).
+        onRow={(r) => ({ onClick: () => setIsDetayId(r.is_id), style: { cursor: "pointer" } })}
         scroll={{ x: 560 }}
         columns={[
-          { title: "İş No", dataIndex: "so_no" },
+          {
+            title: "İş No",
+            dataIndex: "so_no",
+            render: (v: string, r) => (
+              <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setIsDetayId(r.is_id)}>
+                {v}
+              </Button>
+            ),
+          },
           { title: "Müşteri", dataIndex: "musteri", ellipsis: true },
           { title: "Lokasyon", dataIndex: "lokasyon", ellipsis: true },
           {
@@ -664,7 +688,7 @@ export default function ServisPlanlamaPage() {
   const takvimSekmesi = (
     <>
       {(kpi.data ?? []).length > 0 && (
-        <div className="fl-kutucuklar" style={{ marginBottom: 12 }}>
+        <KutucukPano ekran="servis-planlama" className="fl-pano-bosluk-12">
           {(kpi.data ?? []).map((k) => (
             <KpiKutucugu
               key={k.kod}
@@ -677,19 +701,20 @@ export default function ServisPlanlamaPage() {
               yol={`/servis-planlama?kpi=${k.kod}&gun=${gun.format(ISO)}`}
             />
           ))}
-        </div>
+        </KutucukPano>
       )}
       <div className="fl-rapor" style={{ marginBottom: 12 }}>
-        <KategoriSeridi
-          kategoriler={[
-            { kod: "TUMU", ad: "TÜMÜ", renk: "mavi", ikon: <CalendarOutlined /> },
-            { kod: "SERVIS", ad: "SERVİS", renk: "kirmizi", ipucu: "Servis işleri (arıza, kurulum…)" },
-            { kod: "BAKIM", ad: "PLANLI BAKIM", renk: "yesil", ipucu: "Planlı bakım işleri" },
-          ]}
-          secili={tur}
-          onSec={setTur}
-        />
         <div className="fm-arac-cubugu" style={{ border: 0, borderRadius: 0 }}>
+          <KategoriSeridi
+            kategoriler={[
+              { kod: "TUMU", ad: "TÜMÜ", renk: "mavi" },
+              { kod: "SERVIS", ad: "SERVİS", renk: "kirmizi", ipucu: "Servis işleri (arıza, kurulum…)" },
+              { kod: "BAKIM", ad: "PLANLI BAKIM", renk: "yesil", ipucu: "Planlı bakım işleri" },
+            ]}
+            secili={tur}
+            onSec={setTur}
+            baslik="İş"
+          />
           <Button icon={<LeftOutlined />} onClick={() => kaydirma(-1)} aria-label="Önceki" />
           <Button onClick={() => setGun(dayjs().startOf("day"))}>Bugün</Button>
           <Button icon={<RightOutlined />} onClick={() => kaydirma(1)} aria-label="Sonraki" />
@@ -771,6 +796,18 @@ export default function ServisPlanlamaPage() {
       />
       {kartCekmecesi}
       {kpiCekmecesi}
+      {isDetayId != null && (
+        <IsDetayCekmecesi
+          key={isDetayId}
+          id={isDetayId}
+          sozluk={isSozlugu.data}
+          isAc={(x) => setIsDetayId(x)}
+          kapat={() => {
+            setIsDetayId(null);
+            tazele();
+          }}
+        />
+      )}
       <Drawer
         open={bolgeIs !== null}
         onClose={() => setBolgeIs(null)}

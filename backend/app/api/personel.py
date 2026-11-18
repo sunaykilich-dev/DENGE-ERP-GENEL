@@ -25,6 +25,7 @@ from sqlalchemy import select
 
 from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala
 from app.models import User
+from app.permissions import SAHA_ROLU_BEKLENEN_ROLLER
 from app.services import audit, kvkk, yetki
 from app.services import export as export_svc
 from app.services.teknik_servis import kapsam
@@ -74,6 +75,8 @@ class PersonelOut(BaseModel):
     birimler: list[BirimOut] = []
     birincil_birim: str | None = None
     rol: RolOzet
+    # Rolü saha rolü gerektiriyor mu (`permissions.SAHA_ROLU_BEKLENEN_ROLLER`).
+    saha_rolu_bekleniyor: bool = False
     version: int
     # TS-199: doğrudan yönetici; kapsam dışıysa `{"id": null, "ad": "Kapsam dışı kişi"}`.
     yonetici: dict[str, Any] | None = None
@@ -253,6 +256,7 @@ def _cikti(kisi: User, *, tam: bool, yonetici: dict[str, Any] | None = None) -> 
         birimler=[BirimOut(birim=u.birim, birincil=u.is_primary) for u in kisi.birimler],
         birincil_birim=kisi.birincil_birim,
         rol=RolOzet(code=kisi.role.code, name=kisi.role.name),
+        saha_rolu_bekleniyor=kisi.role.code in SAHA_ROLU_BEKLENEN_ROLLER,
         version=kisi.version,
         yonetici=yonetici,
         email=kisi.email,

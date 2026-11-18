@@ -40,6 +40,8 @@ export interface Personel {
   sicil_no: string | null;
   unvan: string | null;
   saha_rolu: string | null;
+  /** Rolü saha rolü gerektiriyor mu (sunucudaki tek liste). */
+  saha_rolu_bekleniyor: boolean;
   ise_giris_tarihi: string | null;
   ayrilis_tarihi: string | null;
   is_active: boolean;

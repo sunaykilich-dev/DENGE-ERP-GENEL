@@ -366,6 +366,10 @@ BIRIM_KAPSAMLARI = (SCOPE_OWN_UNITS, SCOPE_OWN_JOBS)
 # --- Personel sözlükleri (models.user ile aynı; tutarlılık unit testte) -------
 SAHA_ROLLERI = ("SEF", "TEKNISYEN", "STAJYER", "OFIS", "YOK")
 ATANABILIR_SAHA_ROLLERI = ("SEF", "TEKNISYEN", "STAJYER")
+# Saha rolünün BEKLENDİĞİ sistem rolleri (UI/UX I2, 2026-11-18): "Saha rolü
+# girilmemiş" KPI'sı ve satır uyarısı yalnız bu rollerdeki personeli sayar;
+# ofis rollerinde boş saha rolü eksik değildir. Atanabilirliği etkilemez.
+SAHA_ROLU_BEKLENEN_ROLLER = ("SERVIS_SEF", "SERVIS_TEKNISYEN", "ATOLYE", "SAHA_SORUMLUSU")
 AYRILIS_NEDENLERI = ("ISTIFA", "FESIH", "EMEKLILIK", "SOZLESME_BITIMI", "DIGER")
 
 # --- Yetki yükseltme önlemi (E13-01, TS-006) ----------------------------------

@@ -232,9 +232,12 @@ export default function ServisIsKartiMobil() {
               ) : (
                 <>
                   {sureMetni(ozet.kisi_saat_dk)}{" "}
-                  <Tag color={ozet.sure_durumu === "TAM" ? "green" : "orange"}>
-                    {SURE_DURUMU_ADLARI[ozet.sure_durumu]}
-                  </Tag>
+                  {/* "Beklenmiyor" etiketlenmez: "müşteri beklemiyor" diye okunuyordu (S13). */}
+                  {ozet.sure_durumu !== "BEKLENMIYOR" && (
+                    <Tag color={ozet.sure_durumu === "TAM" ? "green" : "orange"}>
+                      {SURE_DURUMU_ADLARI[ozet.sure_durumu]}
+                    </Tag>
+                  )}
                 </>
               )}
               {ozet.mola_dk !== null && (
