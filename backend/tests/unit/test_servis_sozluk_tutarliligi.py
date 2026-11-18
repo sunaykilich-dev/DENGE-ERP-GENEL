@@ -148,6 +148,8 @@ _ONAY_ZINCIRI_EKLERI = {"servis_kapanis_onay_zinciri"}
 _SATIS_EKLERI = {"iskonto_rol_limitleri"}
 # KARARLAR 2026-11-20: saha ulaşım/km, atölye teslim seri okutma, izin onay süresi.
 _SAHA_IK_EKLERI = {"servis_saha_ulasim_zorunlu", "atolye_teslim_seri_okutma", "izin_onay_sure_saat"}
+# 2026-11-18 Operasyon Merkezi panosu: tayinsiz iş eşiği (mesai dakikası).
+_OPERASYON_EKLERI = {"servis_tayin_suresi_kritik_dk", "servis_tayin_suresi_dk"}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
@@ -159,6 +161,7 @@ def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
         | _ONAY_ZINCIRI_EKLERI
         | _SATIS_EKLERI
         | _SAHA_IK_EKLERI
+        | _OPERASYON_EKLERI
     )
     assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.

@@ -239,3 +239,36 @@ async def test_teklif_donusumu_yuzde_60_kapsam_ve_excel(client, db, ortam):
 
     await giris(client, "adm_f")
     assert (await client.get("/api/raporlar/teklif-donusumu")).json() == satis_once
+
+
+async def test_fatura_devri_disaaktarim_finans_uzmani_ve_izin_kapisi(
+    client, db, ortam, rol_ac, kullanici_ac, servis_isi_ac
+):
+    """Dışa aktarım: `tahsilat.gor` VE (`rapor.disaaktar` VEYA `servis_rapor.disaaktar`).
+
+    Finans Uzmanı (MUHASEBE_DESTEK) `rapor.disaaktar` taşır, `servis_rapor.
+    disaaktar` taşımaz; ekranı açtığı halde Excel/CSV alamıyordu (UI/UX denetimi T7).
+    """
+    so = await _gelirli_is(db, servis_isi_ac)
+
+    await giris(client, "muh_f")
+    r = await client.get(f"{ONEK}/fatura-devri.xlsx")
+    assert r.status_code == 200, r.text
+    ws = load_workbook(BytesIO(r.content)).active
+    assert ws.max_row == 2 and ws.cell(2, 1).value == so.so_no
+    r = await client.get(f"{ONEK}/fatura-devri.xlsx", params={"bicim": "csv"})
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/csv")
+
+    # tahsilat.gor var, hiçbir dışa aktarım izni yok → 403.
+    await rol_ac("T_DEVIR_OKU", ["tahsilat.gor"], "TUMU")
+    await kullanici_ac("devir_oku", "T_DEVIR_OKU")
+    await giris(client, "devir_oku")
+    assert (await client.get(f"{ONEK}/fatura-devri")).status_code == 200
+    assert (await client.get(f"{ONEK}/fatura-devri.xlsx")).status_code == 403
+
+    # Dışa aktarım izni var ama tahsilat.gor yok → 403.
+    await rol_ac("T_AKTAR", ["rapor.disaaktar", "servis_rapor.disaaktar"], "TUMU")
+    await kullanici_ac("aktar_x", "T_AKTAR")
+    await giris(client, "aktar_x")
+    assert (await client.get(f"{ONEK}/fatura-devri.xlsx")).status_code == 403

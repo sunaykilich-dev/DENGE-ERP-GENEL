@@ -48,6 +48,7 @@ import { useAuth } from "../auth/AuthContext";
 import RaporFiltresi from "../components/RaporFiltresi";
 import { FioriBolum } from "../fiori/ListeOgeleri";
 import { KpiKutucugu } from "../fiori/ListeRaporu";
+import KutucukPano from "../fiori/KutucukPano";
 import Statistic from "../components/Statistic";
 
 /**
@@ -108,7 +109,7 @@ function farkYazisi(k: { fark: number | null; fark_yuzde: number | null; onceki:
 
 function KpiIzgarasi({ kpiler, listeYolu }: { kpiler: (RaporKpi | BasitKpi)[]; listeYolu: (kod: string) => string }) {
   return (
-    <div className="fl-kutucuklar">
+    <KutucukPano ekran="servis-raporlari">
       {kpiler.map((k) => (
         <KpiKutucugu
           key={k.kod}
@@ -122,7 +123,7 @@ function KpiIzgarasi({ kpiler, listeYolu }: { kpiler: (RaporKpi | BasitKpi)[]; l
           vurgu={"vurgu" in k ? k.vurgu : "normal"}
         />
       ))}
-    </div>
+    </KutucukPano>
   );
 }
 

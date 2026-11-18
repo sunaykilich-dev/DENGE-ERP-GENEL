@@ -41,7 +41,11 @@ if TYPE_CHECKING:
     from app.clock import Clock
     from app.models import User
 
+TAYIN_GECIKTI = "tayin_gecikti"
+
 # Bildirim kodu → (KPI kodu, önem, başlık kalıbı). KPI süzgeci koşulun TEK tanımıdır.
+# TAYIN_GECIKTI mesai dakikasına bağlı olduğundan SQL KPI'sı değildir; koşulu
+# Operasyon panosuyla aynı hesaptan gelir (`operasyon_pano.tayin_gecikenler`).
 KOSULLAR: dict[str, tuple[str, str, str]] = {
     "SLA_ASILDI": ("sla_asildi", "KRITIK", "{so_no}: SLA çözüm hedefi aşıldı"),
     "SLA_RISK": ("sla_riskte", "UYARI", "{so_no}: SLA çözüm hedefi riskte"),
@@ -52,6 +56,7 @@ KOSULLAR: dict[str, tuple[str, str, str]] = {
         "{so_no}: beklemenin beklenen bitişi geçti",
     ),
     "PB_VADE_GECTI": ("vadesi_gecen_bakim", "UYARI", "{so_no}: bakım vadesi geçti"),
+    "TAYIN_GECIKTI": (TAYIN_GECIKTI, "UYARI", "{so_no}: tayin süresi aşıldı"),
 }
 
 # Zil satırları (anlık): (KPI kodu, onem, açıklama). Sıra sabittir.
@@ -65,6 +70,10 @@ _ROZET = (
 
 async def _kosul_isleri(db: AsyncSession, kpi: str, clock: Clock) -> dict[int, str]:
     """KPI koşulunu sağlayan işler → iş no (kapsamsız; bildirim kaydı ortaktır)."""
+    if kpi == TAYIN_GECIKTI:
+        from app.services.teknik_servis.operasyon_pano import tayin_gecikenler
+
+        return await tayin_gecikenler(db, clock)
     tanim = panel.kpi_suzgeci(kpi)
     stmt = tanim.suzgec(select(ServiceOrder.id, ServiceOrder.so_no), None, clock, None)
     return {i: n for i, n in (await db.execute(stmt)).all()}

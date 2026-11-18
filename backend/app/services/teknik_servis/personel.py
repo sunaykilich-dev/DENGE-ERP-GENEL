@@ -67,7 +67,13 @@ from app.models import (
 from app.models.rbac import BIRIM_KODLARI
 from app.models.teknik_servis import DURUM_GRUPLARI
 from app.models.user import AYRILIS_NEDENLERI, SAHA_ROLLERI
-from app.permissions import ATANABILIR_SAHA_ROLLERI, SCOPE_ALL, SCOPE_OWN_JOBS
+from app.permissions import (
+    ATANABILIR_SAHA_ROLLERI,
+    BIRIMLER,
+    SAHA_ROLU_BEKLENEN_ROLLER,
+    SCOPE_ALL,
+    SCOPE_OWN_JOBS,
+)
 from app.services import audit, sirketler, yetki
 from app.services import auth as auth_service
 from app.services.normalize import tr_normkey
@@ -723,7 +729,10 @@ def personel_sorgusu(
         if saha_rolu == "ATANABILIR":
             stmt = stmt.where(User.saha_rolu.in_(ATANABILIR_SAHA_ROLLERI))
         elif saha_rolu == "EKSIK":
-            stmt = stmt.where(User.saha_rolu.is_(None))
+            stmt = stmt.where(
+                User.saha_rolu.is_(None),
+                User.role_id.in_(select(Role.id).where(Role.code.in_(SAHA_ROLU_BEKLENEN_ROLLER))),
+            )
         else:
             stmt = stmt.where(User.saha_rolu == saha_rolu)
     if durum:
@@ -745,19 +754,25 @@ class KpiTanimi:
     suzgec: dict[str, Any]
 
 
-def kpi_tanimlari() -> list[KpiTanimi]:
+def kpi_tanimlari(birimler: Iterable[str] | None = None) -> list[KpiTanimi]:
     """Personel sayfası üst kutuları; her biri listenin bir süzgecidir.
 
     Kutu sayısı `personel_sorgusu(**suzgec)` ile hesaplanır, tıklanınca aynı
     süzgeç listeye uygulanır: sayı ile liste ayrışamaz.
+
+    `birimler`: birim kutusu açılacak birimler (etkin şirketin birimleri);
+    None = bütün birimler. Başlık `permissions.BIRIMLER` Türkçe adıdır.
     """
+    secili = (
+        BIRIM_KODLARI if birimler is None else tuple(b for b in BIRIM_KODLARI if b in set(birimler))
+    )
     tanimlar = [
         KpiTanimi(
             f"SAHA_{b}",
-            f"{b.replace('_', ' ').title()}: aktif saha personeli",
+            f"{BIRIMLER.get(b, b)}: aktif saha personeli",
             {"birim": b, "saha_rolu": "ATANABILIR", "durum": "CALISIYOR"},
         )
-        for b in BIRIM_KODLARI
+        for b in secili
     ]
     tanimlar += [
         KpiTanimi("BIRIMSIZ", "Birimsiz personel", {"birimsiz": True, "durum": "CALISIYOR"}),
@@ -771,7 +786,9 @@ def kpi_tanimlari() -> list[KpiTanimi]:
 
 async def kpi_ozeti(db: AsyncSession, user: User) -> list[dict[str, Any]]:
     sonuc = []
-    for t in kpi_tanimlari():
+    # Birim kutuları yalnız ETKİN şirketin birimleri (ELEKTRONİK'te Haberleşme
+    # kutusu görünmez); süzgeçsiz sahte kullanıcıda (None) hepsi.
+    for t in kpi_tanimlari(sirketler.etkin_birimler(user)):
         stmt = personel_sorgusu(user, **t.suzgec)
         adet = await db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
         sonuc.append({"kod": t.kod, "baslik": t.baslik, "adet": int(adet or 0), "suzgec": t.suzgec})

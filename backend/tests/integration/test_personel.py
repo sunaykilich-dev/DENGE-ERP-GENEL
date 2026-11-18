@@ -532,6 +532,33 @@ class TestKpiVeExcel:
         assert adet["SAHA_ROLU_EKSIK"] >= 1
         assert adet["BIRIMSIZ"] >= 1
 
+    async def test_saha_rolu_eksik_yalniz_saha_rollerini_sayar(
+        self, client, db, kullanici_ac, ortam
+    ):
+        """UI/UX I2: ofis rolündeki (finans, satış, İK ...) personelin saha rolü
+        boş olması eksik sayılmaz; servis/saha rolündeki sayılır."""
+        await kullanici_ac("finansci", "FINANS_YONETICI")  # saha_rolu boş
+        rolsuz = await _personel(db, "Rolsuz Teknisyen", "GUVENLIK", saha_rolu=None)
+        await _giris(client, "ik_uzmani")
+        adet = {k["kod"]: k["adet"] for k in (await client.get("/api/personel/ozet")).json()}
+        liste = await client.get(
+            "/api/personel", params={"saha_rolu": "EKSIK", "durum": "CALISIYOR"}
+        )
+        adlar = {k["full_name"] for k in liste.json()}
+        # Şef (SERVIS_SEF) saha rolü boş → eksik; İK ve finans ofis rolü → değil.
+        assert adlar == {rolsuz.full_name, ortam["sef"].full_name}
+        assert adet["SAHA_ROLU_EKSIK"] == 2
+        # Satır uyarısı da aynı listeden: ön yüz `saha_rolu_bekleniyor`'u okur.
+        assert all(k["saha_rolu_bekleniyor"] for k in liste.json())
+        tum = (await client.get("/api/personel", params={"durum": "CALISIYOR"})).json()
+        assert {k["full_name"]: k["saha_rolu_bekleniyor"] for k in tum}["Finansci"] is False
+
+    async def test_kpi_birim_basligi_turkce(self, client, ortam):
+        await _giris(client, "ik_uzmani")
+        baslik = {k["kod"]: k["baslik"] for k in (await client.get("/api/personel/ozet")).json()}
+        assert baslik["SAHA_GUVENLIK"] == "Güvenlik Sistemleri: aktif saha personeli"
+        assert baslik["SAHA_ARAC_TAKIP"] == "Araç Takip: aktif saha personeli"
+
     async def test_kapsamli_kullanicinin_kpi_sayisi_kapsamli(self, client, ortam):
         await _giris(client, "guv_sef")
         adet = {k["kod"]: k["adet"] for k in (await client.get("/api/personel/ozet")).json()}

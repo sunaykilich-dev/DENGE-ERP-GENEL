@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import { UYGULAMALAR, uygulamaYetkili } from "../fiori/uygulamalar";
 
 interface Sonuc {
@@ -58,6 +59,9 @@ export default function GlobalSearch({
   menuOgeleri?: AranabilirMenuOgesi[];
 }) {
   const { yetkili } = useAuth();
+  // IMEI/plaka/ICCID arayıcıları yalnız DENGE MOBİLİTE'de sonuç verir
+  // (`_yalniz_mobilite`); diğer şirketlerde kutu bunları vaat etmesin.
+  const mobilite = useSirket().aktif?.kod === "MOBILITE";
   const [secenekler, setSecenekler] = useState<Secenek[]>([]);
   const [deger, setDeger] = useState("");
   const sonIstek = useRef(0);
@@ -151,9 +155,9 @@ export default function GlobalSearch({
         id={kimlik}
         autoFocus={otomatikOdak}
         suffix={<SearchOutlined style={{ color: "#0a6ed1" }} />}
-        placeholder="Menü, IMEI, plaka, firma ara… (Ctrl+K)"
-        aria-label="Uygulama, IMEI, plaka, ICCID, şase, firma ara"
-        title="Uygulama adı, IMEI, plaka, ICCID, şase ya da firma"
+        placeholder={mobilite ? "Menü, IMEI, plaka, firma ara… (Ctrl+K)" : "Menü, iş no, ekipman, firma ara… (Ctrl+K)"}
+        aria-label={mobilite ? "Uygulama, IMEI, plaka, ICCID, şase, firma ara" : "Uygulama, servis işi, ekipman, firma ara"}
+        title={mobilite ? "Uygulama adı, IMEI, plaka, ICCID, şase ya da firma" : "Uygulama adı, servis iş no, ekipman ya da firma"}
       />
     </AutoComplete>
   );

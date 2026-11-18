@@ -6,13 +6,13 @@
  * - Seçili yaprak vurgulu; etkin bölüm adres değişince kendiliğinden açılır.
  * - Daraltılmış hâlde yalnız ikonlar; ikona tıklamak menüyü açar ve o bölümü
  *   genişletir (ipucunda bölüm adı).
- * - Tepede "Favoriler" (yaprağın yanındaki yıldız) ve "Son açılanlar" (son 5).
+ * - Tepede "Favoriler" (yaprağın yanındaki yıldız). "Son açılanlar" bloğu
+ *   2026-11-18'de kaldırıldı: hep bulunulan sayfanın kopyasını gösteriyordu.
  * - Klavye: ↑/↓ öğeler arası, → bölümü aç, ← kapat/üst bölüme dön,
  *   Home/End, Enter/Boşluk etkinleştir. Dokunma hedefleri ≥ 40 px.
- * Açık bölümler, favoriler ve son açılanlar kullanıcı başına yerelde tutulur.
+ * Açık bölümler ve favoriler kullanıcı başına yerelde tutulur.
  */
 import {
-  ClockCircleOutlined,
   DownOutlined,
   RightOutlined,
   StarFilled,
@@ -24,6 +24,7 @@ import { useRef } from "react";
 import { Link } from "react-router-dom";
 
 import type { MenuGrubu, MenuOgesi, MenuYapragi } from "./menu";
+import { useTayinSayilari } from "./tayinRozeti";
 
 export interface YanMenuProps {
   agac: MenuOgesi[];
@@ -34,7 +35,6 @@ export interface YanMenuProps {
   /** Daraltılmış menüde bölüm ikonuna tıklanınca: menüyü aç + bölümü genişlet. */
   genislet: (bolum: string) => void;
   favoriler: MenuYapragi[];
-  sonAcilanlar: MenuYapragi[];
   favoriMi: (anahtar: string) => boolean;
   favoriDegistir: (anahtar: string) => void;
   /** Yaprağa tıklanınca (mobil çekmeceyi kapatmak için). */
@@ -42,6 +42,20 @@ export interface YanMenuProps {
 }
 
 const ODAK = "[data-menu-odak]";
+
+/** Operasyon Merkezi yaprağında tayin bekleyen iş rozeti (süresi geçen varsa kırmızı). */
+function TayinRozeti() {
+  const s = useTayinSayilari().data;
+  if (!s?.bekleyen) return null;
+  return (
+    <span
+      className={`dk-menu-rozet${s.geciken ? " kirmizi" : ""}`}
+      title={`${s.bekleyen} iş tayin bekliyor${s.geciken ? `, ${s.geciken} işin süresi geçti` : ""}`}
+    >
+      {s.bekleyen}
+    </span>
+  );
+}
 
 function Yaprak({
   y,
@@ -73,6 +87,7 @@ function Yaprak({
       >
         {derinlik === 0 && Ikon && <Ikon className="dk-menu-ikon" />}
         <span className="dk-menu-metin">{y.baslik}</span>
+        {y.yol === "/operasyon" && <TayinRozeti />}
       </Link>
       <button
         type="button"
@@ -97,7 +112,6 @@ export default function YanMenu({
   daraltilmis,
   genislet,
   favoriler,
-  sonAcilanlar,
   favoriMi,
   favoriDegistir,
   secildi,
@@ -262,7 +276,6 @@ export default function YanMenu({
       onKeyDown={tusla}
     >
       {hizliListe("favori", "Favoriler", <StarFilled className="dk-menu-hizli-ikon" />, favoriler)}
-      {hizliListe("son", "Son açılanlar", <ClockCircleOutlined className="dk-menu-hizli-ikon" />, sonAcilanlar)}
       <ul className="dk-menu-liste dk-menu-kok">
         {agac.map((o) =>
           o.tur === "yaprak" ? (

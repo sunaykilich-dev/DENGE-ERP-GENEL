@@ -14,6 +14,7 @@
  * - TS-195: "Depo sayımı" (onaysız fark hiçbir şeyi değiştirmez) ve
  *   "Raporlar" (`servis_rapor.gor`) sekmeleri.
  */
+import { DownOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -24,6 +25,7 @@ import {
   Col,
   Descriptions,
   Drawer,
+  Dropdown,
   Empty,
   Form,
   Input,
@@ -69,6 +71,19 @@ import KiralikSayim from "../components/KiralikSayim";
 import Statistic from "../components/Statistic";
 
 const SAYFA_BOYU = 50;
+/**
+ * Envanter işlemlerinin TEK adı: başlıktaki "Diğer işlemler" menüsü (seri
+ * takipsiz ürün, adetle) ile tablo seçim çubuğu (seçili seri takipli cihazlar)
+ * aynı pencereyi açar; iki yerde farklı adla görünmesi aynı işi iki ayrı iş
+ * gibi gösteriyordu (UI/UX denetimi T9).
+ */
+const ISLEM_ADLARI = {
+  toplu: "Excel'den toplu giriş",
+  transfer: "Ürün transferi",
+  kontrol: "Dönüş kontrolü",
+  bulundu: "Bulundu",
+  hurda: "Hurdaya ayır",
+} as const;
 const KIRALAMA_BIRIMLERI = BIRIM_KODLARI.filter((b) => !KIRALAMA_DISI_BIRIMLER.includes(b));
 const zaman = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY HH:mm") : "—");
 const hataMesaji = (e: unknown) => (e as Error).message;
@@ -269,17 +284,17 @@ function CihazSekmesi({ onDegisti }: { onDegisti: () => void }) {
         {envanterci && secili.length > 0 && (
           <>
             <Typography.Text>{secili.length} cihaz seçili</Typography.Text>
-            <Button size="small" onClick={() => setPencere("kontrol")}>
-              Dönüş kontrolü
-            </Button>
             <Button size="small" onClick={() => setPencere("transfer")}>
-              Transfer
+              {ISLEM_ADLARI.transfer}
+            </Button>
+            <Button size="small" onClick={() => setPencere("kontrol")}>
+              {ISLEM_ADLARI.kontrol}
             </Button>
             <Button size="small" disabled={secili.length !== 1} onClick={() => setPencere("bulundu")}>
-              Bulundu
+              {ISLEM_ADLARI.bulundu}
             </Button>
             <Button size="small" danger disabled={secili.length !== 1} onClick={() => setPencere("hurda")}>
-              Hurdaya ayır
+              {ISLEM_ADLARI.hurda}
             </Button>
             <Button size="small" type="link" onClick={() => setSecili([])}>
               Seçimi kaldır
@@ -752,13 +767,26 @@ function EnvanterIslemleri({ onBitti }: { onBitti: () => void }) {
       <Button type="primary" onClick={() => setPencere("giris")}>
         Envanter girişi
       </Button>
-      <Button onClick={() => setPencere("toplu")}>Excel'den toplu giriş</Button>
-      <Button onClick={() => setPencere("transfer")}>Toplu ürün transferi</Button>
-      <Button onClick={() => setPencere("kontrol")}>Toplu ürün kontrolü</Button>
-      <Button onClick={() => setPencere("bulundu")}>Toplu bulundu</Button>
-      <Button danger onClick={() => setPencere("hurda")}>
-        Toplu hurda
-      </Button>
+      {/* Seri takipsiz (adetli) ürün işlemleri; seri takipli cihazda aynı adlar
+          tablo seçim çubuğundadır. */}
+      <Dropdown
+        trigger={["click"]}
+        menu={{
+          items: [
+            { key: "toplu", label: ISLEM_ADLARI.toplu },
+            { type: "divider" },
+            { key: "transfer", label: ISLEM_ADLARI.transfer },
+            { key: "kontrol", label: ISLEM_ADLARI.kontrol },
+            { key: "bulundu", label: ISLEM_ADLARI.bulundu },
+            { key: "hurda", label: ISLEM_ADLARI.hurda, danger: true },
+          ],
+          onClick: ({ key }) => setPencere(key as keyof typeof ISLEM_ADLARI),
+        }}
+      >
+        <Button>
+          Diğer işlemler <DownOutlined />
+        </Button>
+      </Dropdown>
       {pencere === "giris" && <GirisPenceresi onKapat={kapat} onBitti={bitti} />}
       {pencere === "toplu" && <TopluGirisPenceresi onKapat={kapat} onBitti={bitti} />}
       {pencere === "transfer" && <TransferPenceresi cihazlar={[]} onKapat={kapat} onBitti={bitti} />}

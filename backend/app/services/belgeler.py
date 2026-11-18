@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import (
     Account,
     Address,
+    BirimSirketi,
     InstallationPartner,
     PartnerSettlement,
     Quote,
@@ -17,6 +18,7 @@ from app.models import (
     User,
     WorkOrder,
 )
+from app.permissions import MOBILITE_SIRKETI, SIRKETLER, VARSAYILAN_BIRIM_SIRKETLERI
 from app.services import settings as ayar_svc
 from app.services.pdf import pdf_uret_async, tl
 
@@ -116,25 +118,65 @@ def _sade(deger) -> str:
     return f"{d:f}" if d == d.to_integral_value() else format(d, "f").rstrip("0").rstrip(".")
 
 
-def firma_bilgisi(ayarlar: dict) -> dict:
+def firma_bilgisi(ayarlar: dict, sirket_kod: str | None = None) -> dict:
     """Belge başlığındaki şirket künyesi.
 
     Resmî bilgiler henüz toplanmadı (plan §8 madde 5). Eksikse belge yine
     üretilir ve BİLİNEN adres/telefon basılır — sessizce yanlış bilgi
     basmaktansa doğru bildiğimizi basmak doğrudur. Parametreler ekranından
     girilince bu varsayılanların yerini alır.
+
+    **Şirket ayrımı (KARARLAR 2026-11-04 §1):** `firma_*` ayarları ve marka
+    logosu canlı şirketin (DENGE MOBİLİTE) künyesidir. `sirket_kod` verilmezse
+    ya da MOBİLİTE ise bugünkü çıktı AYNEN sürer. Başka bir grup şirketinin
+    belgesine Mobilite logosu, unvanı ve e-postası BASILMAZ: unvan şirket
+    adıdır, logo yerine unvan yazı olarak basılır (`logo` False). Adres ve
+    telefon grup merkezinin (Denge Plaza) ortak bilgisidir; tüzel kişiye özgü
+    alanlar (e-posta, VKN, vergi dairesi, MERSİS, KEP) şirket başına künye
+    gelene dek boş kalır.
     """
+    adres = (
+        ayarlar.get("firma_adres")
+        or "Küçükbakkalköy Mah. Derebey Sok. No:6 Denge Plaza, Ataşehir / İstanbul"
+    )
+    telefon = ayarlar.get("firma_telefon") or "+90 216 573 40 40"
+    if sirket_kod is not None and sirket_kod != MOBILITE_SIRKETI:
+        return {
+            "sirket": sirket_kod,
+            "logo": False,
+            "unvan": SIRKETLER.get(sirket_kod, sirket_kod),
+            "adres": adres,
+            "telefon": telefon,
+            "eposta": "",
+            "vkn": "",
+            "vergi_dairesi": "",
+            "mersis": "",
+            "kep": "",
+        }
     return {
+        "sirket": MOBILITE_SIRKETI,
+        "logo": True,
         "unvan": ayarlar.get("firma_unvan") or "Denge Mobilite",
-        "adres": ayarlar.get("firma_adres")
-        or "Küçükbakkalköy Mah. Derebey Sok. No:6 Denge Plaza, Ataşehir / İstanbul",
-        "telefon": ayarlar.get("firma_telefon") or "+90 216 573 40 40",
+        "adres": adres,
+        "telefon": telefon,
         "eposta": ayarlar.get("firma_eposta") or "bilgi@dengemobil.com.tr",
         "vkn": ayarlar.get("firma_vkn") or "",
         "vergi_dairesi": ayarlar.get("firma_vergi_dairesi") or "",
         "mersis": ayarlar.get("firma_mersis") or "",
         "kep": ayarlar.get("firma_kep") or "",
     }
+
+
+async def birim_sirketi(db: AsyncSession, birim: str | None) -> str:
+    """Birimin şirketi (tek kaynak `birim_sirketleri`); birimsiz = MOBİLİTE.
+
+    Birimsiz (satış) teklif canlı mobilite satış teklifidir (karar §1).
+    Tabloda satırı olmayan birim için ilk dolum eşlemesine düşülür.
+    """
+    if birim is None:
+        return MOBILITE_SIRKETI
+    kod = await db.scalar(select(BirimSirketi.sirket_kod).where(BirimSirketi.birim == birim))
+    return kod or VARSAYILAN_BIRIM_SIRKETLERI.get(birim, MOBILITE_SIRKETI)
 
 
 VARSAYILAN_SARTLAR = (
@@ -216,7 +258,8 @@ async def teklif_baglami(db: AsyncSession, teklif: Quote, versiyon: QuoteVersion
         # Standart ticari şartlar metni henüz hazır değil (plan §8 madde 6);
         # ayarlardan doldurulabilir, boşsa makul bir varsayılan basılır.
         "sartlar": ayarlar.get("teklif_ticari_sartlar") or VARSAYILAN_SARTLAR,
-        "firma": firma_bilgisi(ayarlar),
+        # Künye teklifin şirketinden (birimsiz = MOBİLİTE, birimli = birimin şirketi).
+        "firma": firma_bilgisi(ayarlar, await birim_sirketi(db, teklif.birim)),
     }
 
 

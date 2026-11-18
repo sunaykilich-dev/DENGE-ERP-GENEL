@@ -13,7 +13,6 @@
  * menüde bulunduğunu derlemeden önce denetler.
  */
 import {
-  AppstoreOutlined,
   BarChartOutlined,
   CalendarOutlined,
   ShopOutlined,
@@ -139,10 +138,10 @@ export const MENU_AGACI: MenuOgesi[] = [
       tur("TOPLAMA", "Toplama", ["BARIYER"]),
       tur("TASIMA", "Taşıma", ["BARIYER"]),
       sayfa("/atolye", "Atölye / Laboratuvar"),
-      sayfa("/servis-paneli"),
-      sayfa("kpi:atanmamis"),
-      sayfa("kpi:beklemede"),
       // Kapanış Onayı ve Kalite Onayı Bekleyen → İş Emri Onayı modülü (2026-11-10).
+      // 2026-11-18 UI/UX: Servis Paneli (Ana Panel'in kopyası) ve yalnız süzgeç
+      // olan "Tayin Edilmemiş / Askıdaki İşler" yaprakları kaldırıldı; aynı
+      // süzgeçler listedeki durum düğmeleri ve Ana Panel kutucuklarıyla açılır.
     ],
     { ikon: SafetyOutlined },
   ),
@@ -153,11 +152,9 @@ export const MENU_AGACI: MenuOgesi[] = [
       sayfa("/servis-planlama"),
       sayfa("/operasyon"),
       sayfa("/zaman-takibi"),
-      sayfa("/bakim", "Planlı Bakım Bildirimleri"),
-      suzgecli("bakim:sozlesmeler", "Bakım Sözleşmeleri", "/bakim?sekme=sozlesmeler", "/bakim"),
-      suzgecli("bakim:donemler", "Bakım Dönemleri", "/bakim?sekme=donemler", "/bakim"),
-      sayfa("kpi:bakim_acik"),
-      sayfa("kpi:bakim_geciken"),
+      // 2026-11-18 UI/UX: bakımın tek yaprağı; sözleşme/dönem/açık/geciken
+      // görünümleri sayfanın sekmeleri ve Ana Panel kutucuklarıdır.
+      sayfa("/bakim"),
       sayfa("/gorevler"),
     ],
     { ikon: CalendarOutlined },
@@ -180,7 +177,7 @@ export const MENU_AGACI: MenuOgesi[] = [
         "/servis-isleri?sonuc=TEKLIF_SUNULACAK",
         "/servis-isleri",
       ),
-      suzgecli("satis:kurulum", "Kurulum İşleri", "/servis-isleri?tur=KURULUM", "/servis-isleri"),
+      // "Kurulum İşleri" kaldırıldı (2026-11-18): Servis İşleri › Kurulum ile aynı adres.
       suzgecli(
         "satis:kurulum-bekleyen",
         "Kurulum Bekleyen Ekipman",
@@ -204,7 +201,9 @@ export const MENU_AGACI: MenuOgesi[] = [
   grup(
     "ik",
     "İnsan Kaynakları",
-    [sayfa("/personel"), sayfa("/egitim"), sayfa("/ik-belgeler"), sayfa("/gelisim-kartim"), sayfa("/belgelerim"), sayfa("/izin-talepleri")],
+    // Belgelerim ve Gelişim Kartım kişisel sayfalar: kullanıcı menüsünde
+    // (avatar), İK yöneticisinin ekranlarıyla aynı bölümde değil (2026-11-18).
+    [sayfa("/personel"), sayfa("/egitim"), sayfa("/ik-belgeler"), sayfa("/izin-talepleri")],
     { ikon: TeamOutlined },
   ),
   // Mobilite modülü (DENGE MOBİLİTE etkinken). Modülün kendisine dokunulmadı.
@@ -219,15 +218,9 @@ export const MENU_AGACI: MenuOgesi[] = [
       sayfa("/ice-aktarma"),
       sayfa("/kvkk"),
       sayfa("/denetim"),
-      {
-        tur: "yaprak",
-        anahtar: "uygulamalar",
-        baslik: "Uygulamalar (kutucuklar)",
-        yol: "/uygulamalar",
-        // Launchpad yalnız kullanıcının yetkili olduğu kutucukları çizer; kendisi herkese açık.
-        uygulama: null,
-        ikon: AppstoreOutlined,
-      },
+      sayfa("/eposta-kutusu"),
+      // "Uygulamalar (kutucuklar)" kaldırıldı (2026-11-18): menünün tutarsız
+      // bir kopyasıydı; çoğu rolde Yönetim bölümünün tek yaprağıydı.
     ],
     { ikon: SettingOutlined },
   ),
@@ -260,7 +253,10 @@ export function gorunurMenu(agac: MenuOgesi[], s: MenuSuzgeci): MenuOgesi[] {
     if (o.birimler && s.aktifBirimler && !o.birimler.some((b) => s.aktifBirimler!.has(b))) continue;
     if (o.izin && !o.izin.some((i) => s.yetkili(i))) continue;
     const altlar = gorunurMenu(o.altlar, s);
-    if (altlar.length) sonuc.push({ ...o, altlar });
+    // Tek yaprağı kalan bölüm açılır-kapanır başlık olmasın, yaprak olarak
+    // çizilsin (ör. teknisyende Planlama › Görevler; UI/UX 2026-11-18).
+    if (altlar.length === 1 && altlar[0].tur === "yaprak") sonuc.push({ ...altlar[0], ikon: altlar[0].ikon ?? o.ikon });
+    else if (altlar.length) sonuc.push({ ...o, altlar });
   }
   return sonuc;
 }
@@ -313,14 +309,51 @@ export function aktifYaprak(
   return en;
 }
 
+/** Servis işinde çalışan (yazan, planlayan, onaylayan, operasyonu izleyen): açılışı Ana Panel. */
+const SERVIS_CALISANI_IZINLERI = ["servis.yaz", "servis.planla", "servis.kalite_onay", "operasyon.gor"];
+
 /**
- * Açılış sayfası (B-01): görünür menüdeki ilk yaprak — Ana Panel izni olana
- * Ana Panel, olmayana (satış, finans uzmanı, mobilite depo…) izni ve şirketi
- * tutan ilk anlamlı ekran. Kutucuk ekranı (`/uygulamalar`) son çaredir.
+ * Servis çalışanı olmayan rollerin ana ekranı (ilk uyan, menüde görünürse).
+ * Sıra önemli: finans yöneticisinde kiralama.gor da var, ana işi fatura devri.
  */
-export function acilisYolu(gorunur: MenuOgesi[]): string {
-  const ilk = yapraklar(gorunur).find(({ yaprak }) => yaprak.yol !== "/uygulamalar");
-  return ilk?.yaprak.yol ?? "/uygulamalar";
+const ROL_ANA_EKRANLARI: [izin: string, yol: string][] = [
+  ["teklif.yaz", "/teklifler"],
+  ["tahsilat.gor", "/fatura-devri"],
+  ["parca.gor", "/yedek-parca"],
+  ["kiralama.gor", "/kiralamalar"],
+  ["personel.gor", "/personel"],
+];
+
+/**
+ * İşi dağıtan (tayin eden) servis rolü: Operasyon Merkezi'ni görür ve planlar
+ * (şef, müdür; yetki verilen yedek kişi). 2026-11-18 kullanıcı kararı: bu
+ * kişiler girişte doğrudan Operasyon Merkezi panosuna düşer.
+ */
+const DISPECER_IZINLERI = ["operasyon.gor", "servis.planla"];
+const OPERASYON_YOLU = "/operasyon";
+
+/**
+ * Açılış sayfası (B-01). İşi dağıtan servis rolüne Operasyon Merkezi; diğer
+ * servis çalışanına menüdeki ilk yaprak (Ana Panel);
+ * diğer rollere kendi ana ekranı — satışçı boş servis panosuna, kiralama
+ * deposu Zaman Takibi'ne, İK yetkisiz sayfaya düşmesin (UI/UX 2026-11-18).
+ * Hiçbiri yoksa menüdeki ilk yaprak; menü boşsa Ana Panel.
+ */
+export function acilisYolu(gorunur: MenuOgesi[], yetkili?: Yetkili): string {
+  const tumu = yapraklar(gorunur);
+  if (
+    yetkili &&
+    DISPECER_IZINLERI.every((i) => yetkili(i)) &&
+    tumu.some(({ yaprak }) => yolKismi(yaprak.yol) === OPERASYON_YOLU)
+  ) {
+    return OPERASYON_YOLU;
+  }
+  if (yetkili && !SERVIS_CALISANI_IZINLERI.some((i) => yetkili(i))) {
+    for (const [izin, yol] of ROL_ANA_EKRANLARI) {
+      if (yetkili(izin) && tumu.some(({ yaprak }) => yolKismi(yaprak.yol) === yol)) return yol;
+    }
+  }
+  return tumu[0]?.yaprak.yol ?? ANA_PANEL_YOLU;
 }
 
 /**
@@ -329,6 +362,10 @@ export function acilisYolu(gorunur: MenuOgesi[]): string {
  */
 export const KPI_ADLARI: Record<string, string> = {
   acik: "Açık İş Emirleri",
+  atanmamis: "Tayin Edilmemiş İşler",
+  beklemede: "Askıdaki İşler",
+  bakim_acik: "Açık Bakım İşleri",
+  bakim_geciken: "Geciken Bakım",
   kritik_acik: "Kritik Açık İşler",
   sla_riskli: "SLA Riski Olan İşler",
   bakim_bu_ay_planli: "Bu Ay Planlı Bakım",

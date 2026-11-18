@@ -67,6 +67,7 @@ from app.services.teknik_servis import (
     is_emirleri,
     kapsam,
     operasyon,
+    operasyon_pano,
     panel,
     sla,
 )
@@ -99,6 +100,7 @@ UYARI_KODU_ADLARI: dict[str, str] = {
     "MUDAHALE_ASILDI": "Müdahale gecikti",
     "BEKLEME_BITIS_GECTI": "Beklenen bitişi geçmiş bekleme",
     "PB_VADE_GECTI": "Bakım vadesi geçti",
+    "TAYIN_GECIKTI": "Tayin gecikti",
 }
 # Sözlük eşitliği (ad tabloları ↔ model tuple'ları) `tests/unit/test_sla_hesap.py`'de kilitli.
 
@@ -262,6 +264,24 @@ async def ozet(
         "risk_yuzde": await sla.risk_yuzdesi(db),
         "sayaclar": sayaclar,
     }
+
+
+@router.get("/operasyon/pano", response_model=None)
+async def pano(
+    db: DbDep, clock: ClockDep, user: Operasyoncu, birim: str | None = None
+) -> dict[str, Any]:
+    """Dispeçer panosu: tayin bekleyenler, plandan sapanlar, ekip durumu (2026-11-18)."""
+    try:
+        veri = await operasyon_pano.pano(db, user, clock, birim=birim)
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    return {"sunucu_zamani": clock.now(), "birim": birim or None, **veri}
+
+
+@router.get("/operasyon/tayin-sayilari", response_model=None)
+async def tayin_sayilari(db: DbDep, clock: ClockDep, user: Operasyoncu) -> dict[str, int]:
+    """Menü rozeti / sekme başlığı: tayin bekleyen ve süresi geçen iş sayısı."""
+    return await operasyon_pano.tayin_sayilari(db, user, clock)
 
 
 @router.get("/operasyon/isler", response_model=None)

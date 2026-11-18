@@ -63,6 +63,17 @@ export const SURE_DURUMU_ADLARI: Record<string, string> = {
   BEKLENMIYOR: "Beklenmiyor",
 };
 
+/**
+ * Teknisyen kartındaki süre notu (UI/UX revize S13): yalnız eksik ya da
+ * kısmi süre kaydı uyarılır. "Beklenmiyor" (süre kaydı beklenmeyen iş) ve
+ * "Tam" kartta yazılmaz; "Beklenmiyor" "müşteri beklemiyor" diye okunuyordu.
+ */
+export function kartSureNotu(durum: string | null | undefined): string | null {
+  if (durum === "EKSIK") return "Süre eksik";
+  if (durum === "KISMI") return "Süre kısmi";
+  return null;
+}
+
 export type Dugme =
   | "YOLA_CIKTIM"
   | "SAHAYA_VARDIM"

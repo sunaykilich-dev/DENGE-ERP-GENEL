@@ -271,21 +271,28 @@ export function FioriBolum({
   sag,
   children,
   dolgusuz,
+  bos,
 }: {
   baslik?: ReactNode;
   sag?: ReactNode;
   children: ReactNode;
   dolgusuz?: boolean;
+  /**
+   * Doluysa bölüm KATLANIR (2026-11-18): yalnız başlık satırı ve bu kısa metin
+   * çizilir; boş tablo, çerçevesi ve eylem çubuğu yer kaplamaz.
+   */
+  bos?: ReactNode;
 }) {
   return (
-    <section className="fm-bolum">
-      {(baslik || sag) && (
+    <section className={`fm-bolum${bos ? " bos" : ""}`}>
+      {(baslik || sag || bos) && (
         <div className="fm-bolum-ust">
           <span className="fm-bolum-baslik">{baslik}</span>
+          {bos && <span className="fm-bolum-bos">{bos}</span>}
           {sag && <span className="fm-bolum-sag">{sag}</span>}
         </div>
       )}
-      <div className={dolgusuz ? undefined : "fm-bolum-govde"}>{children}</div>
+      {!bos && <div className={dolgusuz ? undefined : "fm-bolum-govde"}>{children}</div>}
     </section>
   );
 }

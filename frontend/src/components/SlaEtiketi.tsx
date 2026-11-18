@@ -14,7 +14,19 @@ import { useAuth } from "../auth/AuthContext";
  * burada yalnız metne çevrilir: "Kalan 3 sa 20 dk" / "Gecikti 1 sa" /
  * "Durduruldu" / "Vade: Ekim 2026". Öncelikten saat türetilmez (grep testi).
  * Servis işi detayı, Operasyon Merkezi ve Benim İşlerim aynı bileşeni kullanır.
+ * SLA yürürlükte değilken (`useSlaYururlukte`) etiket çizilmez.
  */
+/**
+ * SLA yürürlükte mi (UI/UX revize S4)? Tek kaynak: sunucu sözlüğündeki
+ * `sla_yururlukte` (`GET /sla-tanimlari/sozluk`, sorgu anahtarı paylaşılır).
+ * Yürürlükte değilken ekranlar SLA etiketi/sütunu/kutucuğu çizmez — hepsi
+ * "Ölçülemedi" yazıyordu. Sözlük gelene kadar `false` döner (yanıp sönme yok).
+ */
+export function useSlaYururlukte(): boolean {
+  const sozluk = useQuery({ queryKey: ["sla-sozluk"], queryFn: operasyonApi.sozluk, staleTime: 300_000 });
+  return sozluk.data?.sla_yururlukte === true;
+}
+
 export interface SlaEtiketiProps {
   sla: SlaBlogu | null | undefined;
   /** Kısa: yalnız etiket (liste satırı); uzun: hedef zamanı da yazılır. */
@@ -30,7 +42,9 @@ function etiketMetni(sla: SlaBlogu): string {
 }
 
 export default function SlaEtiketi({ sla, kisa = true }: SlaEtiketiProps) {
-  if (!sla) return null;
+  const yururlukte = useSlaYururlukte();
+  // PB vadesi SLA yürürlüğünden bağımsızdır (planlı bakım ayı); o yine görünür.
+  if (!sla || (!yururlukte && sla.durum !== "SLA_DISI_PB")) return null;
   const metin = etiketMetni(sla);
   const ipucu = [
     `SLA: ${sla.ad}`,

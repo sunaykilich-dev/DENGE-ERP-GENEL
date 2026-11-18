@@ -94,7 +94,6 @@ export default function IsEmriOnayiPage() {
       yeniKayit={false}
       kategoriBasligi="Birim"
       onayEkrani
-      hatirlaAnahtari="is-emri-onayi"
       detayId={id ? Number(id) : null}
       detayAc={(x) => git(x ? `${YOL}/${x}${yolEki}` : `${YOL}${yolEki}`)}
     />

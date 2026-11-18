@@ -101,6 +101,8 @@ export interface IsSatiri {
   /** Faz A kalite onayı anı (null = verilmedi). */
   kalite_onay_at: string | null;
   version: number;
+  /** Kullanıcının yetkili olduğu durum geçişleri (listedeki sağ tık / ⋯ menüsü). */
+  gecisler?: Gecis[];
 }
 
 /** Bağlı iş satırı; kapsam dışı işin numarası maskelidir (`id` null). */
@@ -371,6 +373,11 @@ export const BAGLI_IS_ILISKILERI: { kod: BagliIsIliskisi; ad: string; ipucu: str
 export interface TopluKaliteSonucu {
   /** `adim` yalnız toplu onayda: "kalite" (lider onayı) ya da "kapanis" (son onay). */
   onaylanan: { id: number; so_no: string; adim?: "kalite" | "kapanis" }[];
+  atlanan: { id: number; so_no: string | null; neden: string }[];
+}
+
+export interface TopluDurumSonucu {
+  tasinan: { id: number; so_no: string }[];
   atlanan: { id: number; so_no: string | null; neden: string }[];
 }
 
@@ -671,6 +678,9 @@ export const teknikServisApi = {
   /** İş Emri Onayı toplu onayı: her işe onaylayanın sıradaki adımı (lider onayı ya da son onay/kapatma). */
   topluOnay: (isler: { id: number; version: number }[], not?: string) =>
     api.post<TopluKaliteSonucu>(`${TS}/isler/toplu-onay`, { isler, not }),
+  /** Listeden toplu durum (yalnız genel saha durumları; her iş ayrı sınanır). */
+  topluDurum: (isler: { id: number; version: number }[], hedef: string) =>
+    api.post<TopluDurumSonucu>(`${TS}/isler/toplu-durum`, { isler, hedef }),
   /** Yönetici/şef yanlış "Yola çıktım"ı geri alır (§7.4): YOLA_CIKILDI → PLANLANDI. */
   yolaCikisGeriAl: (id: number, version: number, gerekce: string) =>
     api.post<IsDetayi>(`${isYolu(id)}/yola-cikis-geri-al`, { version, gerekce }),

@@ -24,6 +24,13 @@ const GRUPLAR: { baslik: string; aciklama?: string; anahtarlar: string[] }[] = [
     aciklama: "İskonto limitleri sayfanın altındaki \"İskonto yetkisi\" kartından ayrıca kaydedilir.",
     anahtarlar: ["teklif_varsayilan_gecerlilik_gun"],
   },
+  {
+    baslik: "Servis operasyonu",
+    aciklama:
+      "Tayinsiz servis işi bu kadar mesai dakikası bekleyince Operasyon Merkezi'nde \"gecikti\" olur ve " +
+      "anlık e-posta seçen kullanıcılara bildirim gider. Süre yalnız mesai saatinde sayılır.",
+    anahtarlar: ["servis_tayin_suresi_kritik_dk", "servis_tayin_suresi_dk"],
+  },
   { baslik: "Cihaz ve stok", anahtarlar: ["varsayilan_garanti_ay", "bayi_stok_yaslanma_gun"] },
   {
     baslik: "Hat",
@@ -98,6 +105,8 @@ const ETIKET: Record<string, string> = {
   muhasebe_sablonu: "Muhasebe dışa aktarım şablonu",
   kvkk_saklama_yili: "Kişisel veri saklama süresi (yıl)",
   ofis_ag_listesi: "Ofis ağları (CIDR)",
+  servis_tayin_suresi_kritik_dk: "Tayin süresi, kritik iş (dk)",
+  servis_tayin_suresi_dk: "Tayin süresi, diğer işler (dk)",
 };
 
 const GIZLI = new Set([
