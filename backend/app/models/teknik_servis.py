@@ -265,6 +265,9 @@ SLA_UYARI_KODLARI = (
     "MUDAHALE_ASILDI",
     "BEKLEME_BITIS_GECTI",
     "PB_VADE_GECTI",
+    # Tayin süresi aşıldı (Operasyon Merkezi panosu, 2026-11-18): SLA'ya bağlı
+    # DEĞİL, mesai dakikasıyla `servis_tayin_suresi_*` eşiği.
+    "TAYIN_GECIKTI",
 )
 SLA_UYARI_ONEMLERI = ("BILGI", "UYARI", "KRITIK")
 # Tohum (migration `bulk_insert`): (oncelik, cozum_saat). Müdahale hedefi
@@ -278,7 +281,7 @@ EPOSTA_DURUMLARI = ("BEKLIYOR", "GONDERILDI", "BASARISIZ")
 # Şema tavanı; işletme sınırı ayar `servis_eposta_deneme` (1–10).
 EPOSTA_AZAMI_DENEME = 10
 # Anlık e-posta üreten kalıcı bildirim kodları (E10-06 kuyruga_al).
-EPOSTA_ANLIK_KODLAR = ("SLA_ASILDI", "MUDAHALE_ASILDI")
+EPOSTA_ANLIK_KODLAR = ("SLA_ASILDI", "MUDAHALE_ASILDI", "TAYIN_GECIKTI")
 
 _SURE_ARALIGI = literal_column("tstzrange(started_at, ended_at, '[)')")
 _ACIK_IS = "status NOT IN ('TAMAMLANDI', 'KAPATILDI', 'IPTAL') AND NOT is_deleted"

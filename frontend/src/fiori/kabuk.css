@@ -223,6 +223,20 @@
 .dk-menu-ikon { font-size: 16px; flex: 0 0 auto; width: 20px; display: inline-flex; justify-content: center; }
 .dk-menu-metin { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dk-menu-ok { font-size: 10px; color: var(--dk-yan-soluk); flex: 0 0 auto; }
+/* Operasyon Merkezi: tayin bekleyen iş rozeti (2026-11-18). */
+.dk-menu-rozet {
+  flex: 0 0 auto;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #e9730c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.dk-menu-rozet.kirmizi { background: #bb0000; }
 
 .dk-menu-yaprak { position: relative; display: flex; align-items: center; }
 .dk-menu-yaprak .dk-menu-baglanti { padding-inline-end: 40px; }

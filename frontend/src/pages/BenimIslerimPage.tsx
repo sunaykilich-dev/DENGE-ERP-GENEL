@@ -44,7 +44,7 @@ import Statistic from "../components/Statistic";
 import {
   FAALIYET_ADLARI,
   KAYNAK_ADLARI,
-  SURE_DURUMU_ADLARI,
+  kartSureNotu,
   servisZaman,
   sureMetni,
   type MobilIs,
@@ -79,10 +79,13 @@ function IsSatiri({ is }: { is: MobilIs }) {
       }
       baslik={is.konu}
       altSatirlar={[
-        (is.plan_baslangic ? dayjs(is.plan_baslangic).format("HH:mm") + " · " : "") +
-          (is.sure_durumu === "EKSIK"
-            ? "Süre kaydı eksik"
-            : (sureMetni(is.kisi_saat_dk) ?? SURE_DURUMU_ADLARI[is.sure_durumu ?? ""] ?? "")),
+        [
+          is.plan_baslangic ? dayjs(is.plan_baslangic).format("HH:mm") : null,
+          sureMetni(is.kisi_saat_dk),
+          kartSureNotu(is.sure_durumu),
+        ]
+          .filter(Boolean)
+          .join(" · "),
       ]}
       sag={<RightOutlined />}
       onClick={() => git(`/benim-islerim/${is.id}`)}
@@ -227,9 +230,7 @@ function IslerTablosu({ satirlar }: { satirlar: TabloSatiri[] }) {
       align: "center",
       render: (_, { is }) => (
         <span className="fl-kucuk">
-          {is.sure_durumu === "EKSIK"
-            ? "Süre kaydı eksik"
-            : (sureMetni(is.kisi_saat_dk) ?? SURE_DURUMU_ADLARI[is.sure_durumu ?? ""] ?? "—")}
+          {[sureMetni(is.kisi_saat_dk), kartSureNotu(is.sure_durumu)].filter(Boolean).join(" · ") || "—"}
         </span>
       ),
     },

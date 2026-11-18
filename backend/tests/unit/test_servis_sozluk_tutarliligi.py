@@ -146,6 +146,8 @@ _FAZ_A_EKLERI = {"ofis_ag_listesi", "servis_mesai_baslangic", "servis_mesai_biti
 _ONAY_ZINCIRI_EKLERI = {"servis_kapanis_onay_zinciri"}
 # KARARLAR 2026-11-09 S1.1: rol bazlı iskonto limitleri (tek genel eşiğin yerine).
 _SATIS_EKLERI = {"iskonto_rol_limitleri"}
+# 2026-11-18 Operasyon Merkezi panosu: tayinsiz iş eşiği (mesai dakikası).
+_OPERASYON_EKLERI = {"servis_tayin_suresi_kritik_dk", "servis_tayin_suresi_dk"}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
@@ -156,6 +158,7 @@ def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
         | _FAZ_A_EKLERI
         | _ONAY_ZINCIRI_EKLERI
         | _SATIS_EKLERI
+        | _OPERASYON_EKLERI
     )
     assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.

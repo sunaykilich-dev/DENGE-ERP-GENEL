@@ -29,6 +29,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api, type ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import Statistic from "../components/Statistic";
 import { TEKLIF_DURUM_ADLARI } from "../fiori/etiketlerEk";
 import SatisIsleri from "./SatisIsleri";
@@ -219,17 +220,28 @@ const KANAL_ADLARI: Record<string, string> = {
 const durumAdi = (d: string | null | undefined) => (d ? (DURUM_ADLARI[d] ?? d) : "—");
 
 /** Kalem satırları — revizyon ve taslak düzenleme formunda ortak. */
-function KalemAlanlari({ urunler, birimli }: { urunler: Urun[]; birimli: boolean }) {
+function KalemAlanlari({
+  urunler,
+  birimli,
+  mobilite,
+}: {
+  urunler: Urun[];
+  birimli: boolean;
+  /** Abonelik / SIM paketi mobilite kalemidir; yalnız DENGE MOBİLİTE etkinken. */
+  mobilite: boolean;
+}) {
   const form = Form.useFormInstance();
   const tipler = [
     { value: "URUN", label: "Ürün" },
     { value: "HIZMET", label: "Hizmet" },
     ...(birimli
       ? [{ value: "ISCILIK", label: "İşçilik" }]
-      : [
-          { value: "ABONELIK", label: "Abonelik" },
-          { value: "SIM_PAKETI", label: "SIM paketi" },
-        ]),
+      : mobilite
+        ? [
+            { value: "ABONELIK", label: "Abonelik" },
+            { value: "SIM_PAKETI", label: "SIM paketi" },
+          ]
+        : []),
     { value: "SERBEST", label: "Serbest" },
   ];
   return (
@@ -327,6 +339,10 @@ export default function TekliflerPage() {
   const qc = useQueryClient();
   const { message, modal } = App.useApp();
   const { yetkili, kullanici } = useAuth();
+  // Sipariş ekranı ve abonelik/SIM kalemleri yalnız DENGE MOBİLİTE'de (şirket
+  // ucu yoksa süzgeç yok → canlı davranış).
+  const { aktif: aktifSirket, destekleniyor: sirketDestekli } = useSirket();
+  const mobilite = !sirketDestekli || aktifSirket?.kod === "MOBILITE";
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const servisIsiParam = params.get("servis_isi");
@@ -814,7 +830,7 @@ export default function TekliflerPage() {
                   <Button onClick={() => setElleAcik(true)}>Elle gönderildi</Button>
                 </>
               )}
-              {!birimli && yetkili("siparis.yaz") && t.status === "KABUL" && (
+              {!birimli && mobilite && yetkili("siparis.yaz") && t.status === "KABUL" && (
                 <Button type="primary" loading={siparise.isPending} onClick={() => siparise.mutate(t.id)}>
                   Siparişe dönüştür
                 </Button>
@@ -1239,7 +1255,7 @@ export default function TekliflerPage() {
             )}
           </Space>
           <Form.Item label="Kalemler">
-            <KalemAlanlari urunler={urunler.data ?? []} birimli={birimli} />
+            <KalemAlanlari urunler={urunler.data ?? []} birimli={birimli} mobilite={mobilite} />
           </Form.Item>
         </Form>
       </Modal>

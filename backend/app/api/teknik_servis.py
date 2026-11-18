@@ -290,6 +290,15 @@ class KaliteTopluIn(BaseModel):
     }
 
 
+class TopluDurumIn(BaseModel):
+    """Listeden toplu durum değişikliği: yalnız genel saha durumları
+    (PLANLAMADA/YOLA_CIKILDI/SAHADA/ISLEMDE/ATOLYEDE). Bilgi isteyen geçişler
+    (planla, bekleme, sonuç, iptal) tek tek kendi pencerelerinden yapılır."""
+
+    isler: list[KaliteTopluSatir] = Field(min_length=1, max_length=200)
+    hedef: Literal["PLANLAMADA", "YOLA_CIKILDI", "SAHADA", "ISLEMDE", "ATOLYEDE"]
+
+
 class YolaCikisGeriAlIn(BaseModel):
     """Yönetici yola çıkışı geri alır (YOLA_CIKILDI → PLANLANDI); gerekçe ≥10."""
 
@@ -588,6 +597,9 @@ async def _satirlar(db, sos: list[ServiceOrder], user: User) -> list[dict[str, A
                 "onceki_is_id": s.onceki_is_id,
                 "kalite_onay_at": s.kalite_onay_at,
                 "version": s.version,
+                # Listedeki hızlı durum menüsü (sağ tık / ⋯, 2026-11-18): yalnız
+                # kullanıcının yetkili olduğu geçişler; kurallar detaydakiyle aynı.
+                "gecisler": [g for g in is_emirleri.gecis_secenekleri(s, user) if g["yetkili"]],
             }
         )
     return satirlar
@@ -1619,6 +1631,55 @@ async def toplu_onay(
         onaylanan.append({"id": so.id, "so_no": so.so_no, "adim": adim})
     await db.commit()
     return {"onaylanan": onaylanan, "atlanan": atlanan}
+
+
+@router.post("/isler/toplu-durum", response_model=None)
+async def toplu_durum(
+    payload: TopluDurumIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yazici,
+) -> dict[str, Any]:
+    """Servis İşleri listesinde çoklu seçimle durum değişikliği (2026-11-18,
+    kullanıcı isteği: "kayıtları hızlıca planlamada/işlemde/atölyede… çekmek").
+
+    Her iş tekli `/durum` ucunun kuralıyla (kapsam, iyimser kilit, durum
+    makinesi, kancalar) ayrı ayrı sınanır; uymayan iş nedeniyle `atlanan`da
+    döner, diğerleri taşınır (toplu onaydaki kısmi sonuç gibi). Durum olayı
+    her işin geçmişine yazılır."""
+    tasinan: list[dict[str, Any]] = []
+    atlanan: list[dict[str, Any]] = []
+    for satir in {s.id: s for s in payload.isler}.values():
+        so = await db.get(ServiceOrder, satir.id)
+        if so is None or so.is_deleted or await kapsam.is_erisimi_yok_mu(db, user, so):
+            atlanan.append({"id": satir.id, "so_no": None, "neden": "Servis işi bulunamadı"})
+            continue
+        try:
+            if satir.version != so.version:
+                raise is_emirleri.IsEmriHatasi(
+                    "Kayıt başka biri tarafından değiştirildi; sayfayı yenileyin"
+                )
+            async with db.begin_nested():
+                await is_emirleri.durum_degistir(
+                    db, so, payload.hedef, kaynak="genel", user=user, clock=clock
+                )
+        except _HATALAR as exc:
+            await db.refresh(so)
+            atlanan.append({"id": so.id, "so_no": so.so_no, "neden": str(exc)})
+            continue
+        tasinan.append({"id": so.id, "so_no": so.so_no})
+    if tasinan:
+        await audit.log(
+            db,
+            "service_orders",
+            "toplu_durum",
+            new_value={"hedef": payload.hedef, "is_idler": [x["id"] for x in tasinan]},
+            user_id=user.id,
+            ip=client_ip(request),
+        )
+    await db.commit()
+    return {"tasinan": tasinan, "atlanan": atlanan}
 
 
 @router.post("/isler/toplu-kalite-onayi", response_model=None)

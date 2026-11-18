@@ -16,7 +16,6 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   BarChartOutlined,
-  BellOutlined,
   BuildOutlined,
   CalendarOutlined,
   CarOutlined,
@@ -36,6 +35,7 @@ import {
   IdcardOutlined,
   ImportOutlined,
   InboxOutlined,
+  MailOutlined,
   PieChartOutlined,
   ProfileOutlined,
   ReadOutlined,
@@ -81,6 +81,13 @@ export interface Uygulama {
   yol: string;
   /** Tek izin ya da "bunlardan herhangi biri" listesi (eski MENU ile aynı). */
   izin: string | string[];
+  /** `izin`e EK olarak bunların HEPSİ gerekir (sayfanın kendi kapısı birden
+   *  çok izin istiyorsa menü de aynısını istesin; aksi hâlde yaprak "yetkiniz
+   *  yok" ekranına açılır — İK rol testi, 2026-11-18). */
+  izinHepsi?: string[];
+  /** Kişisel sayfa (Belgelerim, Gelişim Kartım): sol menüde değil kullanıcı
+   *  menüsünde (avatar) durur. */
+  kisisel?: boolean;
   /** Launchpad grubu (sekme). */
   grup: GrupKodu;
   kpi?: KpiKaynagi;
@@ -181,19 +188,9 @@ export const UYGULAMALAR: Uygulama[] = [
     kpiBirimi: "iş",
   },
   {
-    id: "/servis-paneli",
-    baslik: "Servis Paneli",
-    altBaslik: "Kritik açık işler",
-    ikon: DashboardOutlined,
-    yol: "/servis-paneli",
-    izin: "takip.gor",
-    grup: "servis",
-    kpi: { tur: "panel", kod: "kritik_acik" },
-    kpiBirimi: "kritik",
-  },
-  {
     id: "/servis-planlama",
-    baslik: "Planlama",
+    // Bölüm adı da "Planlama"; kırıntı "Planlama › Planlama" olmasın.
+    baslik: "Servis Planlama",
     altBaslik: "Plan bekleyen işler",
     ikon: CalendarOutlined,
     yol: "/servis-planlama",
@@ -232,18 +229,6 @@ export const UYGULAMALAR: Uygulama[] = [
     ek: true,
   },
   {
-    id: "kpi:kapanis_bekleyen",
-    baslik: "Kapanış Onayı",
-    altBaslik: "Şef kapanışı bekleyen",
-    ikon: FileProtectOutlined,
-    yol: "/servis-isleri?kpi=kapanis_bekleyen",
-    izin: "takip.gor",
-    grup: "takip",
-    kpi: { tur: "panel", kod: "kapanis_bekleyen" },
-    kpiBirimi: "iş",
-    ek: true,
-  },
-  {
     id: "kpi:beklemede",
     baslik: "Askıdaki İşler",
     altBaslik: "Beklemeye alınmış",
@@ -253,19 +238,6 @@ export const UYGULAMALAR: Uygulama[] = [
     grup: "takip",
     kpi: { tur: "panel", kod: "beklemede" },
     kpiBirimi: "iş",
-    ek: true,
-  },
-  {
-    id: "uyarilar",
-    baslik: "Uyarılar",
-    altBaslik: "Bekleyen uyarılar",
-    ikon: BellOutlined,
-    yol: "#uyarilar",
-    // Uyarı ucu her oturuma açık; sayılar sunucuda izne göre süzülür.
-    izin: [],
-    grup: "takip",
-    kpi: { tur: "uyari" },
-    kpiBirimi: "uyarı",
     ek: true,
   },
   {
@@ -336,6 +308,8 @@ export const UYGULAMALAR: Uygulama[] = [
     ikon: ClockCircleOutlined,
     yol: "/zaman-takibi",
     izin: "servis_rapor.gor",
+    // Sayfa `servis.gor` + `servis_rapor.gor` ister (ZamanTakibi/ServisRaporlari).
+    izinHepsi: ["servis.gor"],
     grup: "operasyon",
   },
   // --- Depo ve Kiralama ----------------------------------------------------
@@ -370,6 +344,8 @@ export const UYGULAMALAR: Uygulama[] = [
     ikon: FundOutlined,
     yol: "/servis-raporlari",
     izin: "servis_rapor.gor",
+    // Sayfa `servis.gor` + `servis_rapor.gor` ister (ZamanTakibi/ServisRaporlari).
+    izinHepsi: ["servis.gor"],
     grup: "raporlar",
   },
   {
@@ -441,11 +417,13 @@ export const UYGULAMALAR: Uygulama[] = [
     yol: "/gelisim-kartim",
     izin: "egitim.kendim",
     grup: "ik",
+    kisisel: true,
   },
   {
     id: "/ik-belgeler",
-    baslik: "Bordro ve Belgeler",
-    altBaslik: "Gönder, imzayı takip et",
+    // "Belgelerim" (gelen kutusu) ile karışmasın: bu ekran İK'nın gönderim tarafı.
+    baslik: "Belge Gönderimi",
+    altBaslik: "Bordro ve form gönder, imzayı takip et",
     ikon: SolutionOutlined,
     yol: "/ik-belgeler",
     izin: ["bordro.yonet", "ik_belge.yonet"],
@@ -455,11 +433,12 @@ export const UYGULAMALAR: Uygulama[] = [
     // Herkese açık: kişi kendi bordrosunu/belgesini görür (izin değil kimlik, §11).
     id: "/belgelerim",
     baslik: "Belgelerim",
-    altBaslik: "Bordro ve imzalanacak belgeler",
+    altBaslik: "Bana gönderilen bordro ve belgeler",
     ikon: FileDoneOutlined,
     yol: "/belgelerim",
     izin: [],
     grup: "ik",
+    kisisel: true,
   },  // --- Mobilite (canlı ekranlar; adlar değişmez) ---------------------------
   { id: "/panel", baslik: "Panel", altBaslik: "Mobilite özeti", ikon: PieChartOutlined, yol: "/panel", izin: "rapor.gor", grup: "mobilite", yalnizMobilite: true },
   { id: "/hesaplar", baslik: "Hesaplar", ikon: TeamOutlined, yol: "/hesaplar", izin: "hesap.gor", grup: "mobilite" },
@@ -490,10 +469,20 @@ export const UYGULAMALAR: Uygulama[] = [
   { id: "/kullanicilar", baslik: "Kullanıcılar", ikon: UserOutlined, yol: "/kullanicilar", izin: "sistem.kullanici", grup: "sistem" },
   { id: "/ayarlar", baslik: "Parametreler", ikon: SettingOutlined, yol: "/ayarlar", izin: "sistem.ayar", grup: "sistem" },
   { id: "/denetim", baslik: "Denetim İzi", ikon: AuditOutlined, yol: "/denetim", izin: "sistem.denetim", grup: "sistem" },
+  {
+    id: "/eposta-kutusu",
+    baslik: "E-posta Kutusu",
+    altBaslik: "Servis bildirim e-postaları",
+    ikon: MailOutlined,
+    yol: "/eposta-kutusu",
+    izin: "operasyon.yonet",
+    grup: "sistem",
+  },
 ];
 
 /** Uygulamanın izni: dizi = "herhangi biri"; boş dizi = herkese açık. */
-export function uygulamaYetkili(u: Pick<Uygulama, "izin">, yetkili: Yetkili): boolean {
+export function uygulamaYetkili(u: Pick<Uygulama, "izin" | "izinHepsi">, yetkili: Yetkili): boolean {
+  if (u.izinHepsi && !u.izinHepsi.every((i) => yetkili(i))) return false;
   if (Array.isArray(u.izin)) return u.izin.length === 0 || u.izin.some((i) => yetkili(i));
   return yetkili(u.izin);
 }
@@ -506,43 +495,4 @@ export function yoldanUygulama(yol: string): Uygulama | undefined {
   return SAYFALAR.filter((u) => yol === u.yol || yol.startsWith(`${u.yol}/`)).sort(
     (a, b) => b.yol.length - a.yol.length,
   )[0];
-}
-
-/**
- * Girişte öne çıkacak sayfa (plan §1.10, KD-30) — eski açılış kuralı aynen.
- * Açılış artık launchpad; bu yol yalnız hangi SEKMEYE kaydırılacağını
- * belirler (bkz. `acilisGrubu`).
- *
- * Sıra: `rapor.gor` → `/panel` · `zaman.yaz` ∧ ¬`servis.planla` →
- * `/benim-islerim` · `takip.gor` → `/servis-paneli` · `egitim.kendim` →
- * `/gelisim-kartim` · değilse ilk yetkili sayfa. Hiçbiri yoksa null.
- */
-export function acilisYolu(yetkili: Yetkili): string | null {
-  if (yetkili("rapor.gor")) return "/panel";
-  const yetkiliSayfa = (yol: string) =>
-    SAYFALAR.some((u) => u.yol === yol && uygulamaYetkili(u, yetkili));
-  const kurallar: [boolean, string][] = [
-    [yetkili("zaman.yaz") && !yetkili("servis.planla"), "/benim-islerim"],
-    [yetkili("takip.gor"), "/servis-paneli"],
-    [yetkili("egitim.kendim"), "/gelisim-kartim"],
-  ];
-  for (const [uygun, yol] of kurallar) {
-    if (uygun && yetkiliSayfa(yol)) return yol;
-  }
-  return SAYFALAR.find((u) => uygulamaYetkili(u, yetkili))?.yol ?? null;
-}
-
-/** Rol bazlı açılış kuralının launchpad karşılığı: kaydırılacak grup. */
-export function acilisGrubu(yetkili: Yetkili): GrupKodu | null {
-  const yol = acilisYolu(yetkili);
-  if (!yol) return null;
-  return SAYFALAR.find((u) => u.yol === yol)?.grup ?? null;
-}
-
-/** Kullanıcının görebildiği gruplar ve kutucukları (boş grup çizilmez). */
-export function gorunurGruplar(yetkili: Yetkili): { grup: Grup; uygulamalar: Uygulama[] }[] {
-  return GRUPLAR.map((grup) => ({
-    grup,
-    uygulamalar: UYGULAMALAR.filter((u) => u.grup === grup.kod && uygulamaYetkili(u, yetkili)),
-  })).filter((g) => g.uygulamalar.length > 0);
 }

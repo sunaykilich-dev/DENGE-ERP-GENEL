@@ -7,8 +7,12 @@
  *   (kırmızı) / PLANLI (yeşil) mantığıyla tür ve bakım KPI'larını süzer.
  *   Parametresiz `/bakim` bu sekmeyi açar; eski bağlantılar (`?durum=…`,
  *   `?suresi_doluyor=1`) sözleşmelere gitmeye devam eder.
- * - Üstte tıklanabilir Fiori KPI kutucukları (`KpiKutucugu`): sayı sunucudan,
- *   tıklama aynı süzgeçle sekmeye gider ("sayı = liste").
+ * - Fiori KPI kutucukları (`KpiKutucugu`) Raporlar sekmesinin başında: sayı
+ *   sunucudan, tıklama aynı süzgeçle sekmeye gider ("sayı = liste").
+ * - Sekmeler (2026-11-18, UI/UX revize S2/S9): Bakım Bildirimleri, Sözleşmeler
+ *   (+ Bakım dönemleri), Bakım Takvimi, Bakım İş Emirleri (+ gece otomatiği),
+ *   Uygunsuzluk / Kapsam dışı, Raporlar (+ göstergeler). Eski `?sekme=`
+ *   anahtarları `ESKI_SEKMELER` / `ALT_SEKMELER` ile çalışır.
  * - Sözleşme: tek pencere hem yeni hem düzenleme; kapsam tür+adet; ücret
  *   alanları yalnız `maliyet.gor` sahibine görünür ve ayrı uçtan yazılır.
  *   Tesis çakışması 409'da onay + gerekçe sorulur.
@@ -23,7 +27,6 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Alert,
   App,
   Button,
   Card,
@@ -38,6 +41,7 @@ import {
   Popconfirm,
   Progress,
   Row,
+  Segmented,
   Select,
   Space,
   Switch,
@@ -47,7 +51,7 @@ import {
   Typography,
 } from "antd";
 import dayjs from "dayjs";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
@@ -60,12 +64,10 @@ import {
   hataMetni,
   KAPSAM_DISI_NEDENLERI,
   type KapsamDisiTalebi,
-  type Onizleme,
   SOZLESME_DURUMLARI,
   type Sozlesme,
   type SozlesmeGirdisi,
   type Uygunsuzluk,
-  type UretimKaydi,
 } from "../api/bakim";
 import { CalendarOutlined, FieldTimeOutlined, ToolOutlined, WarningOutlined } from "@ant-design/icons";
 
@@ -79,6 +81,7 @@ import PlanPenceresi from "../components/PlanPenceresi";
 import { BAKIM_DURUM_GRUPLARI, TAYIN } from "../fiori/etiketler";
 import { KpiKutucugu } from "../fiori/ListeRaporu";
 import { useYeniParametresi } from "../fiori/useYeniParametresi";
+import KutucukPano from "../fiori/KutucukPano";
 import BakimFormu from "./BakimFormu";
 import BakimIsEmirleriSekmesi from "./BakimIsEmirleri";
 import BakimRaporlari from "./BakimRaporlari";
@@ -149,15 +152,87 @@ const KAPANIS: Record<string, string> = {
   GOC_BASLANGIC: "Göç başlangıcı",
 };
 
+/**
+ * Sekme sadeleştirme (UI/UX revize S2/S9, 2026-11-18): 10 sekme 6'ya indi.
+ * Eski `?sekme=` değerleri (menü, e-posta, KPI `yol` bağlantıları) çalışmaya
+ * devam eder:
+ * - `donemler` → Sözleşmeler sekmesinin "Bakım dönemleri" alt görünümü,
+ * - `uygunsuzluklar` / `kapsam-disi` → "Uygunsuzluk / Kapsam dışı" sekmesinin
+ *   alt görünümleri (adres aynen kalır, `durum` vb. süzgeçler korunur),
+ * - `gostergeler` → `raporlar` (göstergeler raporların başında),
+ * - `uretim` → `is-emirleri` (PB Üretimi kaldırıldı: aynı iş "Bakım İş
+ *   Emirleri"nde; gece otomatiği ve üretim kayıtları o sekmenin başında).
+ */
+export const ESKI_SEKMELER: Record<string, string> = {
+  gostergeler: "raporlar",
+  uretim: "is-emirleri",
+};
+/** Alt görünümü olan sekmeler: alt görünüm anahtarı → üst sekme. */
+const ALT_SEKMELER: Record<string, string> = {
+  donemler: "sozlesmeler",
+  uygunsuzluklar: "uygunsuzluk",
+  "kapsam-disi": "uygunsuzluk",
+};
+
+/** Sekme içi alt görünüm seçici (Segmented); tıklama `?sekme=`'yi değiştirir. */
+function AltGorunum({
+  secili,
+  secenekler,
+  onSec,
+}: {
+  secili: string;
+  secenekler: { value: string; label: string }[];
+  onSec: (k: string) => void;
+}) {
+  return (
+    <Segmented
+      style={{ marginBottom: 12 }}
+      value={secili}
+      onChange={(v) => onSec(String(v))}
+      options={secenekler}
+    />
+  );
+}
+
+function Gostergeler() {
+  const ozet = useQuery({ queryKey: ["bakim", "ozet"], queryFn: bakimApi.ozet });
+  return (
+    <KutucukPano ekran="planli-bakim" className="fl-pano-bosluk-16">
+      {ozet.isLoading
+        ? Array.from({ length: 4 }, (_, i) => <KpiKutucugu key={i} baslik="" yukleniyor />)
+        : (ozet.data?.kutular ?? []).map((k) => (
+            <KpiKutucugu
+              key={k.kod}
+              kod={k.kod}
+              baslik={k.baslik}
+              tanim={k.birim === "yuzde" && k.payda !== undefined ? `${k.tanim} — ${k.pay ?? 0}/${k.payda}` : k.tanim}
+              deger={k.deger}
+              birim={k.birim === "yuzde" ? "%" : undefined}
+              ikon={KUTUCUK_IKONU(k.kod)}
+              yol={k.yol}
+            />
+          ))}
+    </KutucukPano>
+  );
+}
+
 export default function BakimPage() {
-  const { yetkili } = useAuth();
   const [params, setParams] = useSearchParams();
   // Parametresiz giriş Fiori liste raporunu açar; parametreli eski bağlantılar
   // (sekmesiz `?durum=…`) sözleşmelere gider.
-  const sekme = params.get("sekme") ?? (params.toString() ? "sozlesmeler" : "bildirimler");
+  const ham = params.get("sekme") ?? (params.toString() ? "sozlesmeler" : "bildirimler");
+  const sekme = ESKI_SEKMELER[ham] ?? ham;
+  const ust = ALT_SEKMELER[sekme] ?? sekme;
   const [formSo, setFormSo] = useState<number | null>(null);
 
-  const ozet = useQuery({ queryKey: ["bakim", "ozet"], queryFn: bakimApi.ozet });
+  // Kaldırılan sekmenin adresi yenisine çevrilir (diğer parametreler korunur).
+  useEffect(() => {
+    if (ESKI_SEKMELER[ham] && params.get("sekme") === ham) {
+      const yeni = new URLSearchParams(params);
+      yeni.set("sekme", ESKI_SEKMELER[ham]);
+      setParams(yeni, { replace: true });
+    }
+  }, [ham, params, setParams]);
 
   const sekmeDegistir = (k: string) => {
     const yeni = new URLSearchParams();
@@ -169,65 +244,60 @@ export default function BakimPage() {
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
       <Card styles={{ body: { paddingTop: 4 } }}>
         <Tabs
-          activeKey={sekme}
+          activeKey={ust}
           onChange={sekmeDegistir}
           items={[
             { key: "bildirimler", label: "Bakım Bildirimleri", children: <BakimBildirimleri /> },
             {
-              // Fiori'de liste raporu açılışta en üsttedir (foto 9); göstergeler
-              // ayrı sekmede durur, launchpad'de de özet kutucukları vardır.
-              key: "gostergeler",
-              label: "Göstergeler",
+              key: "sozlesmeler",
+              label: "Sözleşmeler",
               children: (
-                <div className="fl-kutucuklar">
-                  {ozet.isLoading
-                    ? Array.from({ length: 4 }, (_, i) => (
-                        <KpiKutucugu key={i} baslik="" yukleniyor />
-                      ))
-                    : (ozet.data?.kutular ?? []).map((k) => (
-                        <KpiKutucugu
-                          key={k.kod}
-                          kod={k.kod}
-                          baslik={k.baslik}
-                          tanim={
-                            k.birim === "yuzde" && k.payda !== undefined
-                              ? `${k.tanim} — ${k.pay ?? 0}/${k.payda}`
-                              : k.tanim
-                          }
-                          deger={k.deger}
-                          birim={k.birim === "yuzde" ? "%" : undefined}
-                          ikon={KUTUCUK_IKONU(k.kod)}
-                          yol={k.yol}
-                        />
-                      ))}
-                </div>
+                <>
+                  <AltGorunum
+                    secili={sekme === "donemler" ? "donemler" : "sozlesmeler"}
+                    onSec={sekmeDegistir}
+                    secenekler={[
+                      { value: "sozlesmeler", label: "Sözleşmeler" },
+                      { value: "donemler", label: "Bakım dönemleri" },
+                    ]}
+                  />
+                  {sekme === "donemler" ? <DonemlerSekmesi onFormAc={setFormSo} /> : <SozlesmelerSekmesi />}
+                </>
               ),
             },
-            { key: "sozlesmeler", label: "Sözleşmeler", children: <SozlesmelerSekmesi /> },
             { key: "takvim", label: "Bakım Takvimi", children: <BakimTakvimiSekmesi /> },
             { key: "is-emirleri", label: "Bakım İş Emirleri", children: <BakimIsEmirleriSekmesi /> },
             {
-              key: "donemler",
-              label: "Bakım Dönemleri",
-              children: <DonemlerSekmesi onFormAc={setFormSo} />,
+              key: "uygunsuzluk",
+              label: "Uygunsuzluk / Kapsam dışı",
+              children: (
+                <>
+                  <AltGorunum
+                    secili={sekme === "kapsam-disi" ? "kapsam-disi" : "uygunsuzluklar"}
+                    onSec={sekmeDegistir}
+                    secenekler={[
+                      { value: "uygunsuzluklar", label: "Uygunsuzluklar" },
+                      { value: "kapsam-disi", label: "Kapsam dışı talepleri" },
+                    ]}
+                  />
+                  {sekme === "kapsam-disi" ? (
+                    <KapsamDisiSekmesi onFormAc={setFormSo} />
+                  ) : (
+                    <UygunsuzluklarSekmesi onFormAc={setFormSo} />
+                  )}
+                </>
+              ),
             },
-            {
-              key: "uygunsuzluklar",
-              label: "Uygunsuzluklar",
-              children: <UygunsuzluklarSekmesi onFormAc={setFormSo} />,
-            },
-            {
-              key: "kapsam-disi",
-              label: "Kapsam Dışı Talepleri",
-              children: <KapsamDisiSekmesi onFormAc={setFormSo} />,
-            },
-            ...(yetkili("bakim.yaz") || yetkili("bakim.gor")
-              ? [{ key: "uretim", label: "PB Üretimi", children: <UretimSekmesi /> }]
-              : []),
             {
               key: "raporlar",
               label: "Raporlar",
-              children: <BakimRaporlari onFormAc={setFormSo} />,
+              children: (
+                <>
+                  {/* Göstergeler ayrı sekme değil, raporların başında (S9). */}
+                  <Gostergeler />
+                  <BakimRaporlari onFormAc={setFormSo} />
+                </>
+              ),
             },
           ]}
         />
@@ -1323,131 +1393,5 @@ function KapsamDisiSekmesi({ onFormAc }: { onFormAc: (soId: number) => void }) {
         ]}
       />
     </>
-  );
-}
-
-// =============================================================================
-// PB üretimi
-// =============================================================================
-
-function UretimSekmesi() {
-  const { yetkili } = useAuth();
-  const { message } = App.useApp();
-  const qc = useQueryClient();
-  const [onizleme, setOnizleme] = useState<Onizleme | null>(null);
-  const otomatik = useQuery({ queryKey: ["bakim", "otomatik-uretim"], queryFn: bakimApi.otomatikUretim });
-  const kayitlar = useQuery({ queryKey: ["bakim", "uretim-kayitlari"], queryFn: () => bakimApi.uretimKayitlari() });
-  const onizle = useMutation({
-    mutationFn: bakimApi.onizle,
-    onSuccess: setOnizleme,
-    onError: (e) => message.error(hataMetni(e)),
-  });
-  const uret = useMutation({
-    mutationFn: bakimApi.uret,
-    onSuccess: (v) => {
-      message.success(`${v.generated} PB üretildi`);
-      setOnizleme(null);
-      qc.invalidateQueries({ queryKey: ["bakim"] });
-    },
-    onError: (e) => message.error(hataMetni(e)),
-  });
-  const ayarla = useMutation({
-    mutationFn: bakimApi.otomatikUretimAyarla,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bakim", "otomatik-uretim"] }),
-    onError: (e) => message.error(hataMetni(e)),
-  });
-  const o = otomatik.data;
-  return (
-    <Space orientation="vertical" style={{ width: "100%" }} size={16}>
-      <Card size="small" title="Otomatik PB üretimi (gece)">
-        {o && (
-          <Space wrap>
-            <Switch
-              checked={o.acik}
-              disabled={!o.degistirebilir}
-              loading={ayarla.isPending}
-              onChange={(v) => ayarla.mutate(v)}
-            />
-            <Typography.Text>
-              Eşleştirme %{o.oran.yuzde} ({o.oran.eslesen}/{o.oran.toplam})
-            </Typography.Text>
-            {o.oran.yuzde < 100 && (
-              <Typography.Text type="warning">%100 olmadan otomatik üretim açılamaz.</Typography.Text>
-            )}
-          </Space>
-        )}
-      </Card>
-      {yetkili("bakim.yaz") && (
-        <Space wrap>
-          <Button onClick={() => onizle.mutate()} loading={onizle.isPending}>
-            Vadesi Gelenleri Önizle
-          </Button>
-          <Popconfirm title="Vadesi gelen PB işleri üretilsin mi?" onConfirm={() => uret.mutate()} okText="Üret" cancelText="Vazgeç">
-            <Button type="primary" loading={uret.isPending}>
-              Üret
-            </Button>
-          </Popconfirm>
-        </Space>
-      )}
-      {onizleme && (
-        <>
-          <Table
-            size="small"
-            rowKey={(r) => `${r.contract_id}-${r.donem_id}`}
-            pagination={false}
-            dataSource={onizleme.uretilecek}
-            scroll={{ x: 560 }}
-            title={() => "Üretilecek"}
-            columns={[
-              { title: "Sözleşme", dataIndex: "contract_no", className: "mono" },
-              { title: "Müşteri", dataIndex: "musteri" },
-              { title: "Hedef", dataIndex: "hedef", render: (v) => tarih(v) },
-              { title: "PB", dataIndex: "pb_sayisi" },
-            ]}
-          />
-          {onizleme.atlanacak.length > 0 && (
-            <Alert
-              type="error"
-              title={`${onizleme.atlanacak.length} sözleşme atlanacak`}
-              description={
-                <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  {onizleme.atlanacak.map((a, i) => (
-                    <li key={i}>
-                      <span className="mono">{a.contract_no}</span> {a.musteri ? `· ${a.musteri}` : ""} — {a.neden}
-                      {a.source_ref ? ` (${a.source_ref})` : ""}
-                    </li>
-                  ))}
-                </ul>
-              }
-            />
-          )}
-        </>
-      )}
-      <Table<UretimKaydi>
-        rowKey="id"
-        size="small"
-        title={() => "Üretim kayıtları"}
-        loading={kayitlar.isLoading}
-        dataSource={kayitlar.data?.kayitlar}
-        pagination={false}
-        scroll={{ x: 560 }}
-        columns={[
-          { title: "Tarih", dataIndex: "created_at", render: (v) => dayjs(v).format("DD.MM.YYYY HH:mm") },
-          { title: "Tetik", dataIndex: "tetik" },
-          { title: "Üretilen", dataIndex: "generated_count", render: (v) => v ?? "—" },
-          {
-            title: "Atlanan",
-            render: (_, r) =>
-              r.skipped.length ? (
-                <Typography.Text type="danger">
-                  {r.skipped.map((a) => `${a.contract_no}: ${a.neden_kodu}`).join(", ")}
-                </Typography.Text>
-              ) : (
-                "—"
-              ),
-          },
-        ]}
-      />
-    </Space>
   );
 }

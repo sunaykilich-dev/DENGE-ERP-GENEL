@@ -358,6 +358,8 @@ button.fiori-kabuk-dugme:focus-visible,
 }
 .teklif-sayfa .s-top { display: flex; justify-content: space-between; align-items: flex-start; }
 .teklif-sayfa .s-logo { width: 44mm; margin-bottom: 3mm; }
+/* Mobilite dışı şirket: logo yerine unvan (PDF `.s-unvan` ile aynı). */
+.teklif-sayfa .s-unvan { font-size: 13pt; font-weight: 700; letter-spacing: .02em; margin-bottom: 3mm; }
 .teklif-sayfa .s-addr { font-size: 8.5pt; line-height: 1.45; }
 .teklif-sayfa .s-meta {
   font-size: 8.5pt; margin-top: 14mm; border-collapse: collapse;

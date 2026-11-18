@@ -9,10 +9,11 @@
  * Ayrıca launchpad tarzı `KpiKutucugu` (176×176 kutucuk; "sayı = liste":
  * değer sunucudan, tıklama aynı süzgeçli listeye gider).
  */
-import { InfoCircleOutlined } from "@ant-design/icons";
-import { Pagination, Skeleton, Table, Tooltip } from "antd";
+import { InfoCircleOutlined, MoreOutlined } from "@ant-design/icons";
+import { Button, Dropdown, Pagination, Skeleton, Table, Tooltip } from "antd";
+import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import type { Key, ReactNode } from "react";
+import { useState, type Key, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import AltEylemCubugu, { type FioriEylem } from "./AltEylemCubugu";
@@ -36,6 +37,9 @@ export interface ListeRaporuProps<T extends object> {
   kayitSayisi?: number;
   /** "Kayıt Sayısı" satırının sağı (ör. arama kutusu). */
   ustSag?: ReactNode;
+  /** Durum çubuğu satırının sağında, aramanın hemen altında birincil eylem
+   *  (ör. "Yeni Kayıt"; 2026-11-18 kullanıcı isteği: alt çubuk yerine üstte). */
+  ustEylem?: ReactNode;
   /** Durum çubuğunun altında bilgi satırı (ör. panel süzgeci etiketi). */
   ustBilgi?: ReactNode;
   durumCubugu?: DurumCubuguProps;
@@ -55,6 +59,11 @@ export interface ListeRaporuProps<T extends object> {
   onSecim?: (anahtarlar: Key[], satirlar: T[]) => void;
   /** Satır seçimi dışında ayrıntı açma (çift tıklama). */
   onSatirAc?: (satir: T) => void;
+  /**
+   * Satır menüsü (2026-11-18): satıra sağ tıklayınca ve satır sonundaki ⋯
+   * düğmesinden açılır (dokunmatikte sağ tık yok). null = bu satırda menü yok.
+   */
+  satirMenusu?: (satir: T) => MenuProps | null;
   sayfalama?: { sayfa: number; boyut: number; toplam: number; onChange: (s: number) => void };
 
   eylemler?: FioriEylem[];
@@ -70,6 +79,7 @@ export default function ListeRaporu<T extends object>({
   kategoriBasligi,
   kayitSayisi,
   ustSag,
+  ustEylem,
   ustBilgi,
   durumCubugu,
   suzgecPaneli,
@@ -83,6 +93,7 @@ export default function ListeRaporu<T extends object>({
   secili = [],
   onSecim,
   onSatirAc,
+  satirMenusu,
   sayfalama,
   eylemler,
   sagEylemler,
@@ -103,6 +114,44 @@ export default function ListeRaporu<T extends object>({
     );
   };
 
+  // Sağ tık menüsü fare konumunda açılır (görünmez çapa + kontrollü Dropdown).
+  const [sagTik, setSagTik] = useState<{ x: number; y: number; menu: MenuProps } | null>(null);
+  const menuKapat = () => setSagTik(null);
+  const menuSarili = (m: MenuProps): MenuProps => ({
+    ...m,
+    onClick: (e) => {
+      menuKapat();
+      m.onClick?.(e);
+    },
+  });
+  const tumSutunlar: ColumnsType<T> = satirMenusu
+    ? [
+        ...sutunlar,
+        {
+          key: "__menu",
+          title: "",
+          width: 44,
+          fixed: "right",
+          align: "center",
+          render: (_: unknown, r: T) => {
+            const m = satirMenusu(r);
+            if (!m?.items?.length) return null;
+            return (
+              <Dropdown menu={m} trigger={["click"]} placement="bottomRight">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<MoreOutlined />}
+                  aria-label="Satır işlemleri"
+                  title="İşlemler (sağ tık da açar)"
+                />
+              </Dropdown>
+            );
+          },
+        },
+      ]
+    : sutunlar;
+
   return (
     <div className="fl-rapor">
       <div className="fl-ust">
@@ -121,14 +170,21 @@ export default function ListeRaporu<T extends object>({
         )}
         {ustSag && <div className="fl-ust-sag">{ustSag}</div>}
       </div>
-      {durumCubugu && <DurumCubugu {...durumCubugu} />}
+      {ustEylem ? (
+        <div className="fl-durum-satiri">
+          <div className="fl-durum-satiri-sol">{durumCubugu && <DurumCubugu {...durumCubugu} />}</div>
+          <div className="fl-ust-eylem">{ustEylem}</div>
+        </div>
+      ) : (
+        durumCubugu && <DurumCubugu {...durumCubugu} />
+      )}
       {durumCubugu?.suzgecAcik && suzgecPaneli && <div className="fl-suzgec-paneli">{suzgecPaneli}</div>}
       {ustBilgi && <div className="fl-ust-bilgi">{ustBilgi}</div>}
       <Table<T>
         className="fl-tablo"
         rowKey={satirAnahtari}
         size="small"
-        columns={sutunlar}
+        columns={tumSutunlar}
         dataSource={veri}
         loading={yukleniyor}
         scroll={{ x: scrollX }}
@@ -156,9 +212,30 @@ export default function ListeRaporu<T extends object>({
             sec(r);
           },
           onDoubleClick: () => onSatirAc?.(r),
+          onContextMenu: satirMenusu
+            ? (e) => {
+                const m = satirMenusu(r);
+                if (!m?.items?.length) return;
+                e.preventDefault();
+                setSagTik({ x: e.clientX, y: e.clientY, menu: menuSarili(m) });
+              }
+            : undefined,
           style: { cursor: "pointer" },
         })}
       />
+      {sagTik && (
+        <Dropdown
+          open
+          menu={sagTik.menu}
+          onOpenChange={(acik) => !acik && menuKapat()}
+          trigger={["contextMenu"]}
+        >
+          <span
+            aria-hidden
+            style={{ position: "fixed", left: sagTik.x, top: sagTik.y, width: 1, height: 1 }}
+          />
+        </Dropdown>
+      )}
       {sayfalama && sayfalama.toplam > sayfalama.boyut && (
         <div className="fl-sayfalama">
           <Pagination

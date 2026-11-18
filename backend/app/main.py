@@ -19,6 +19,7 @@ from app.api import bakim as bakim_api
 from app.api import catalog as catalog_api
 from app.api import devices as devices_api
 from app.api import egitim as egitim_api
+from app.api import ekran_duzeni as ekran_duzeni_api
 from app.api import gorevler as gorevler_api
 from app.api import ik_belgeler as ik_belgeler_api
 from app.api import imports as imports_api
@@ -262,6 +263,7 @@ def create_app() -> FastAPI:
     # Ana Panel (2026-11-04 §4; Launchpad yerine ana sayfa).
     app.include_router(ana_panel_api.router)
     app.include_router(ana_panel_duzeni_api.router)
+    app.include_router(ekran_duzeni_api.router)
     # Genel `/api/teknik-servis/{...}` yolları alt önekli routerlardan SONRA:
     # `/isler/{id}` gibi bir kalıp `/planlama/...` yolunu yutmasın.
     app.include_router(teknik_servis_api.router)

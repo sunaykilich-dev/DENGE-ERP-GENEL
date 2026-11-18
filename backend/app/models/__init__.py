@@ -28,6 +28,7 @@ from app.models.egitim import (
     TrainingPlan,
     TrainingSession,
 )
+from app.models.ekran_duzeni import EkranDuzeni
 from app.models.gorev import (
     Board,
     BoardColumn,
@@ -298,4 +299,6 @@ __all__ = [
     "IkGonderim",
     # --- Ana Panel düzeni (KARARLAR 2026-11-09 S8) ---
     "AnaPanelDuzeni",
+    # --- Ekran kutucuk düzeni (2026-11-18) ---
+    "EkranDuzeni",
 ]

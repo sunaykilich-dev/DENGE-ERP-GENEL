@@ -8,14 +8,17 @@
  * bandı, sayfa. Fiori liste ekranlarının iç düzeni değişmez; yalnız çerçeve.
  *
  * Eski Fiori kabuğu (başlık ▾ menüsü + launchpad açılışı) kaldırıldı: ana
- * sayfa Ana Panel'dir, launchpad "Sistem › Uygulamalar (kutucuklar)" altında.
+ * sayfa Ana Panel'dir. Kutucuk ekranı ve "Son açılanlar" 2026-11-18'de
+ * kaldırıldı (menünün kopyasıydılar). Kişisel sayfalar (Belgelerim, Gelişim
+ * Kartım) kullanıcı menüsündedir.
  */
 import {
   BellOutlined,
   CheckOutlined,
   CloseOutlined,
   DownOutlined,
-  FileProtectOutlined,
+  FileDoneOutlined,
+  IdcardOutlined,
   InboxOutlined,
   KeyOutlined,
   LogoutOutlined,
@@ -41,13 +44,13 @@ import RotaKapisi from "../components/RotaKapisi";
 import UyariZili from "../components/UyariZili";
 import ParolaDegistirPage from "../pages/ParolaDegistirPage";
 import { KPI_ADLARI, MENU_AGACI, aktifYaprak, gorunurMenu, yapraklar, type MenuYapragi } from "./menu";
+import { SAYFALAR, uygulamaYetkili, yoldanUygulama } from "./uygulamalar";
+import { useTayinSayilari } from "./tayinRozeti";
 import YanMenu from "./YanMenu";
 import { yerelOku, yerelYaz } from "./yerelDepo";
 import "./kabuk.css";
 
-const LAUNCHPAD_YOLU = "/uygulamalar";
 const ARAMA_KIMLIGI = "dk-genel-arama";
-const SON_ACILAN_SAYISI = 5;
 
 /** Ad ve soyadın baş harfleri, Türkçe büyük harfle (ör. "ışık öz" → "IÖ"). */
 function basHarfler(ad: string | undefined): string {
@@ -73,19 +76,17 @@ function useMobil(): boolean {
   );
 }
 
-/** Menü durumu: açık bölümler, daraltma, favoriler, son açılanlar (kullanıcı başına). */
+/** Menü durumu: açık bölümler, daraltma, favoriler (kullanıcı başına). */
 function useMenuDurumu(kullaniciId: number | undefined) {
   const [daraltilmis, setDaraltilmis] = useState(() => yerelOku(kullaniciId, "menu.daraltilmis", false));
   const [acik, setAcik] = useState<Set<string>>(
     () => new Set(yerelOku<string[]>(kullaniciId, "menu.acik", [])),
   );
   const [favoriler, setFavoriler] = useState<string[]>(() => yerelOku(kullaniciId, "menu.favoriler", []));
-  const [son, setSon] = useState<string[]>(() => yerelOku(kullaniciId, "menu.son", []));
 
   useEffect(() => yerelYaz(kullaniciId, "menu.daraltilmis", daraltilmis), [kullaniciId, daraltilmis]);
   useEffect(() => yerelYaz(kullaniciId, "menu.acik", [...acik]), [kullaniciId, acik]);
   useEffect(() => yerelYaz(kullaniciId, "menu.favoriler", favoriler), [kullaniciId, favoriler]);
-  useEffect(() => yerelYaz(kullaniciId, "menu.son", son), [kullaniciId, son]);
 
   const bolumDegistir = useCallback((anahtar: string, istenen?: boolean) => {
     setAcik((eski) => {
@@ -102,11 +103,7 @@ function useMenuDurumu(kullaniciId: number | undefined) {
     setFavoriler((f) => (f.includes(anahtar) ? f.filter((x) => x !== anahtar) : [...f, anahtar]));
   }, []);
 
-  const sonaEkle = useCallback((anahtar: string) => {
-    setSon((s) => (s[0] === anahtar ? s : [anahtar, ...s.filter((x) => x !== anahtar)].slice(0, SON_ACILAN_SAYISI)));
-  }, []);
-
-  return { daraltilmis, setDaraltilmis, acik, bolumDegistir, favoriler, favoriDegistir, son, sonaEkle };
+  return { daraltilmis, setDaraltilmis, acik, bolumDegistir, favoriler, favoriDegistir };
 }
 
 /** "DENGE MOBİLİTE" → "MOBİLİTE" (dar ekran etiketi). */
@@ -203,12 +200,7 @@ function HizliOlustur({ mobil }: { mobil: boolean }) {
         label: "Yeni kurulum işi",
         yol: () => servisYolu({ tur: "KURULUM" }),
       },
-    yetkili("servis.yaz") && {
-      key: "bakim-isi",
-      icon: <FileProtectOutlined />,
-      label: "Yeni bakım işi",
-      yol: () => servisYolu({ tur: "PLANSIZ_BAKIM" }),
-    },
+    // "Yeni bakım işi" kaldırıldı (2026-11-18): aynı formu açıyordu; tür formda seçilir.
     yetkili("bakim.yaz") && {
       key: "sozlesme",
       icon: <ScheduleOutlined />,
@@ -257,7 +249,7 @@ export default function Kabuk() {
   const bildirimTercihi = BILDIRIM_TERCIHLERI_ETKIN && yetkili("servis.gor");
 
   const menu = useMenuDurumu(kullanici?.id);
-  const { sonaEkle, bolumDegistir, setDaraltilmis } = menu;
+  const { bolumDegistir, setDaraltilmis } = menu;
 
   const gorunur = useMemo(
     () => gorunurMenu(MENU_AGACI, { yetkili, aktifBirimler: menuBirimleri }),
@@ -273,15 +265,18 @@ export default function Kabuk() {
     [gorunurYapraklar],
   );
   const favoriListesi = menu.favoriler.map(yaprakBul).filter((y): y is MenuYapragi => !!y);
-  const sonListesi = menu.son.map(yaprakBul).filter((y): y is MenuYapragi => !!y);
+  // Kişisel sayfalar (Belgelerim, Gelişim Kartım): kullanıcı menüsünde ve aramada.
+  const kisiselSayfalar = useMemo(() => SAYFALAR.filter((u) => u.kisisel && uygulamaYetkili(u, yetkili)), [yetkili]);
   const aranabilir = useMemo<AranabilirMenuOgesi[]>(
-    () =>
-      gorunurYapraklar.map(({ yaprak, atalar }) => ({
+    () => [
+      ...gorunurYapraklar.map(({ yaprak, atalar }) => ({
         baslik: yaprak.baslik,
         yol: yaprak.yol,
         ust: atalar.map((a) => a.baslik).join(" › "),
       })),
-    [gorunurYapraklar],
+      ...kisiselSayfalar.map((u) => ({ baslik: u.baslik, yol: u.yol, ust: "Kullanıcı menüsü" })),
+    ],
+    [gorunurYapraklar, kisiselSayfalar],
   );
 
   const aktifAnahtar = aktif?.yaprak.anahtar;
@@ -289,15 +284,15 @@ export default function Kabuk() {
   // B-11: Ana Panel KPI bağlantısı (`?kpi=acik`) menüde yaprak değilse kırıntıya KPI adı eklenir.
   const kpi = new URLSearchParams(konum.search).get("kpi");
   const kpiAdi = kpi && !aktif?.yaprak.yol.includes(`kpi=${kpi}`) ? KPI_ADLARI[kpi] : undefined;
-  const sayfaBasligi = kpiAdi ?? aktif?.yaprak.baslik ?? "Denge ERP";
+  // Menüde yaprağı olmayan sayfa (kişisel sayfalar) başlığını katalogdan alır.
+  const sayfaBasligi = kpiAdi ?? aktif?.yaprak.baslik ?? yoldanUygulama(konum.pathname)?.baslik ?? "Denge ERP";
 
-  // Etkin sayfa: başlık, son açılanlar ve bölümünün açık olması.
+  // Etkin sayfa: başlık ve bölümünün açık olması.
+  // Tayin bekleyen iş varsa sekme başlığı sayıyla başlar: "(3) … – Denge ERP".
+  const tayinBekleyen = useTayinSayilari().data?.bekleyen ?? 0;
   useEffect(() => {
-    document.title = `${sayfaBasligi} – Denge ERP`;
-  }, [sayfaBasligi]);
-  useEffect(() => {
-    if (aktifAnahtar) sonaEkle(aktifAnahtar);
-  }, [aktifAnahtar, sonaEkle]);
+    document.title = `${tayinBekleyen ? `(${tayinBekleyen}) ` : ""}${sayfaBasligi} – Denge ERP`;
+  }, [sayfaBasligi, tayinBekleyen]);
   useEffect(() => {
     if (aktifBolum) bolumDegistir(aktifBolum, true);
   }, [aktifBolum, bolumDegistir]);
@@ -346,6 +341,12 @@ export default function Kabuk() {
       ),
     },
     { type: "divider" },
+    ...kisiselSayfalar.map((u) => ({
+      key: u.yol,
+      icon: u.yol === "/belgelerim" ? <FileDoneOutlined /> : <IdcardOutlined />,
+      label: <Link to={u.yol}>{u.baslik}</Link>,
+    })),
+    ...(kisiselSayfalar.length ? [{ type: "divider" as const }] : []),
     ...(bildirimTercihi
       ? [
           {
@@ -381,14 +382,11 @@ export default function Kabuk() {
       daraltilmis={!mobil && menu.daraltilmis}
       genislet={genislet}
       favoriler={favoriListesi}
-      sonAcilanlar={sonListesi}
       favoriMi={(a) => menu.favoriler.includes(a)}
       favoriDegistir={menu.favoriDegistir}
       secildi={mobil ? () => setCekmeceAcik(false) : undefined}
     />
   );
-
-  const launchpadda = konum.pathname === LAUNCHPAD_YOLU;
 
   return (
     <div className="dk-uygulama">
@@ -466,8 +464,8 @@ export default function Kabuk() {
           </Drawer>
         )}
 
-        <main className={launchpadda ? "fiori-icerik fiori-icerik-lp dk-icerik" : "fiori-icerik dk-icerik"}>
-          <nav className={`dk-kirinti${launchpadda ? " lp" : ""}`} aria-label="Bulunduğunuz yer">
+        <main className="fiori-icerik dk-icerik">
+          <nav className="dk-kirinti" aria-label="Bulunduğunuz yer">
             <ol>
               {aktifSirket && (
                 <li>

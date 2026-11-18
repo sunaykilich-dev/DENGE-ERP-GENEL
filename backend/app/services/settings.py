@@ -149,6 +149,10 @@ DEFAULTS: dict[str, Any] = {
     # saat, hafta içi; tatiller fark etmez). Bitiş başlangıçtan sonra olmalı.
     "servis_mesai_baslangic": "08:30",
     "servis_mesai_bitis": "18:00",
+    # Operasyon Merkezi (2026-11-18): tayinsiz iş bu kadar MESAİ dakikası
+    # bekleyince "gecikti" olur ve TAYIN_GECIKTI bildirimi/e-postası üretilir.
+    "servis_tayin_suresi_kritik_dk": 10,
+    "servis_tayin_suresi_dk": 30,
     # --- Atölye / kiralama ----------------------------------------------------
     "atolye_tekrar_gelis_gun": 90,
     "atolye_teslim_alinmayan_uyari_gun": 30,
@@ -244,6 +248,8 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "servis_gunluk_ozet_saati": ("saat", None, None),
     "servis_mesai_baslangic": ("saat", None, None),
     "servis_mesai_bitis": ("saat", None, None),
+    "servis_tayin_suresi_kritik_dk": ("tam", 1, 480),
+    "servis_tayin_suresi_dk": ("tam", 1, 480),
     "atolye_tekrar_gelis_gun": ("tam", 1, 730),
     "atolye_teslim_alinmayan_uyari_gun": ("tam", 1, 365),
     "kiralama_kontrol_uyari_gun": ("tam", 1, 365),

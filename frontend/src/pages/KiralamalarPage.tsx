@@ -80,6 +80,7 @@ import {
 } from "../fiori/ListeOgeleri";
 import ListeRaporu, { KpiKutucugu, type FioriEylem } from "../fiori/ListeRaporu";
 import { useYeniParametresi } from "../fiori/useYeniParametresi";
+import KutucukPano from "../fiori/KutucukPano";
 import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "../components/MusteriLokasyonSecici";
 
 const SAYFA_BOYU = 50;
@@ -336,7 +337,7 @@ export default function KiralamalarPage() {
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       {(ozet.data ?? []).length > 0 && (
-        <div className="fl-kutucuklar">
+        <KutucukPano ekran="kiralamalar">
           {(ozet.data ?? []).map((k) => (
             <KpiKutucugu
               key={k.kod}
@@ -355,7 +356,7 @@ export default function KiralamalarPage() {
               }
             />
           ))}
-        </div>
+        </KutucukPano>
       )}
 
       <ListeRaporu<KiralamaSatiri>
