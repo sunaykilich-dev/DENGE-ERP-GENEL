@@ -210,4 +210,40 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
 
     ozet.uyarilar += [u for u in await satis_takip.uyarilar(db, clock, user) if u.adet > 0]
 
+    # KARARLAR 2026-11-20 §7 ve §5–6: onayımı bekleyen izin, müdüre düşen yönlendirme.
+    from app.services import izin
+
+    izin_bekleyen = await izin.bekleyen_sayisi(db, user)
+    if izin_bekleyen:
+        ozet.uyarilar.append(
+            Uyari(
+                kod="izin.onay",
+                baslik="Onayımı bekleyen izin talebi",
+                adet=izin_bekleyen,
+                yol="/izin-talepleri?sekme=onay",
+                onem="uyari",
+                aciklama="24 saat içinde karar verilmezse talep bir üst yöneticiye geçer.",
+            )
+        )
+    if user.has("servis.yonlendir") or user.has("servis.planla"):
+        from app.services.teknik_servis import yonlendirme
+
+        bekleyen = [
+            y
+            for y in await yonlendirme.liste(db, user, yonlendirme.Suzgec(acik=True))
+            if (y["durum"] == "MUDURDE") == user.has("servis.yonlendir")
+        ]
+        if bekleyen:
+            ozet.uyarilar.append(
+                Uyari(
+                    kod="servis.yonlendirme",
+                    baslik="Yönlendirme bekleyen satış/kiralama talebi"
+                    if user.has("servis.yonlendir")
+                    else "Bana yönlendirilen satış/kiralama işi",
+                    adet=len(bekleyen),
+                    yol="/yonlendirmeler",
+                    onem="uyari",
+                )
+            )
+
     return ozet

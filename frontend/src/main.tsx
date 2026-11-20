@@ -51,6 +51,8 @@ import GorevlerPage from "./pages/GorevlerPage";
 import RaporlarPage from "./pages/RaporlarPage";
 import SiparislerPage from "./pages/SiparislerPage";
 import TeklifPublicPage from "./pages/TeklifPublicPage";
+import IzinKararPage from "./pages/IzinKararPage";
+import IzinTalepleriPage from "./pages/IzinTalepleriPage";
 import StokPage from "./pages/StokPage";
 import TahsilatPage from "./pages/TahsilatPage";
 import TekliflerPage from "./pages/TekliflerPage";
@@ -84,6 +86,8 @@ function Yonlendirici() {
       {/* Müşterinin teklif bağlantısı OTURUMSUZ açılır; kimlik kapısının
           önünde durur, yoksa müşteri giriş ekranına düşerdi. */}
       <Route path="/teklif/:jeton" element={<TeklifPublicPage />} />
+      {/* KARARLAR 2026-11-20 §7: izin onayı e-posta bağlantısı (oturumsuz, tek kullanımlık). */}
+      <Route path="/izin-karar/:token" element={<IzinKararPage />} />
       <Route path="*" element={<KorumaliUygulama />} />
     </Routes>
   );
@@ -179,6 +183,7 @@ function KorumaliUygulama() {
         <Route path="/servis-isleri/:id" element={<ServisIsleriPage />} />
         <Route path="/is-emri-onayi" element={<IsEmriOnayiPage />} />
         <Route path="/yonlendirmeler" element={<YonlendirmelerPage />} />
+        <Route path="/izin-talepleri" element={<IzinTalepleriPage />} />
         <Route path="/is-emri-onayi/:id" element={<IsEmriOnayiPage />} />
         <Route path="/servis-planlama" element={<ServisPlanlamaPage />} />
         <Route path="/benim-islerim" element={<BenimIslerimPage />} />

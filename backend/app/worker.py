@@ -185,6 +185,13 @@ async def vekalet_sona_erme(db: AsyncSession, clock: Clock) -> str:
     return await yetki.suresi_dolan_vekaletleri_kaydet(db, clock)
 
 
+async def izin_yukseltme(db: AsyncSession, clock: Clock) -> str:
+    """İzin onayında süresi dolan basamağı sonraki yöneticiye geçirir (KARARLAR 2026-11-20 §7)."""
+    from app.services import izin
+
+    return await izin.yukselt(db, clock)
+
+
 GOREVLER: tuple[Gorev, ...] = (
     Gorev("cihaz-uzlastirma", timedelta(hours=24), cihaz_uzlastirma),
     Gorev("oturum-temizligi", timedelta(hours=6), oturum_temizligi),
@@ -196,6 +203,7 @@ GOREVLER: tuple[Gorev, ...] = (
     Gorev("servis-uyari-temizligi", timedelta(hours=24), servis_uyari_temizligi),
     Gorev("servis-eposta", timedelta(minutes=5), servis_eposta),
     Gorev("vekalet-sona-erme", timedelta(hours=24), vekalet_sona_erme),
+    Gorev("izin-yukseltme", timedelta(minutes=15), izin_yukseltme),
 )
 
 

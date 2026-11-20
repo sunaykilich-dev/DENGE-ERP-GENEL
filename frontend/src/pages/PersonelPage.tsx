@@ -71,6 +71,7 @@ import {
   TUMU_KATEGORISI,
   buyuk,
 } from "../fiori/ListeOgeleri";
+import SicilNumaralaPenceresi from "../components/SicilNumaralaPenceresi";
 import ListeRaporu from "../fiori/ListeRaporu";
 
 const SAYFA_BOYU = 25;
@@ -432,6 +433,7 @@ export default function PersonelPage() {
   const [sayfa, setSayfa] = useState(1);
   const [seciliId, setSeciliId] = useState<number | null>(null);
   const [isaretli, setIsaretli] = useState<number[]>([]);
+  const [sicilAcik, setSicilAcik] = useState(false);
   const [suzgecAcik, setSuzgecAcik] = useState(false);
   const [yeniAcik, setYeniAcik] = useState(false);
   const [kartForm] = Form.useForm<KartFormu>();
@@ -602,7 +604,12 @@ export default function PersonelPage() {
       </Form.Item>
       <Row gutter={12}>
         <Col xs={24} sm={12}>
-          <Form.Item name="sicil_no" label="Sicil no" rules={[{ max: 30 }]}>
+          <Form.Item
+            name="sicil_no"
+            label="Sicil no"
+            rules={[{ max: 30 }]}
+            extra="Boş bırakılırsa sıradaki numara verilir."
+          >
             <Input className="mono" />
           </Form.Item>
         </Col>
@@ -761,6 +768,7 @@ export default function PersonelPage() {
         </div>
       )}
 
+      <SicilNumaralaPenceresi acik={sicilAcik} onKapat={() => setSicilAcik(false)} />
       <ListeRaporu<Personel>
         kategoriBasligi="Birim"
         kategoriler={kategoriler}
@@ -838,9 +846,15 @@ export default function PersonelPage() {
             menu: [
               ...(yetkili("servis_rapor.disaaktar") ? [{ key: "excel", label: "Excel'e aktar" }] : []),
               { key: "yenile", label: "Listeyi yenile" },
+              // KARARLAR 2026-11-20 §8: şirket geçmişine göre sicil numarası.
+              ...(yetkili("personel.yaz") ? [{ key: "sicil", label: "Sicil numarala" }] : []),
             ],
             onMenu: (k) =>
-              k === "excel" ? window.open(personelApi.excelYolu(suzgec), "_blank") : void liste.refetch(),
+              k === "excel"
+                ? window.open(personelApi.excelYolu(suzgec), "_blank")
+                : k === "sicil"
+                  ? setSicilAcik(true)
+                  : void liste.refetch(),
           },
           {
             anahtar: "kart",

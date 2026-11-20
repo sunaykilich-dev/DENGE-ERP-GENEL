@@ -464,6 +464,16 @@ export const UYGULAMALAR: Uygulama[] = [
   },
   {
     // Herkese açık: kişi kendi bordrosunu/belgesini görür (izin değil kimlik, §11).
+    // KARARLAR 2026-11-20 §7: herkes kendi iznini girer; onaycı "Onayımda" sekmesinde.
+    id: "/izin-talepleri",
+    baslik: "İzin Talepleri",
+    altBaslik: "İzin iste, onayla",
+    ikon: CalendarOutlined,
+    yol: "/izin-talepleri",
+    izin: [],
+    grup: "ik",
+  },
+  {
     id: "/belgelerim",
     baslik: "Belgelerim",
     altBaslik: "Bordro ve imzalanacak belgeler",

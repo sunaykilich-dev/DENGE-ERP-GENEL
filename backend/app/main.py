@@ -32,6 +32,7 @@ from app.api import payments as payments_api
 from app.api import personel as personel_api
 from app.api import pricing as pricing_api
 from app.api import public_quotes as public_quotes_api
+from app.api import izin as izin_api
 from app.api import purchasing as purchasing_api
 from app.api import quotes as quotes_api
 from app.api import reports as reports_api
@@ -234,6 +235,9 @@ def create_app() -> FastAPI:
     app.include_router(kvkk_api.router)
     # Oturumsuz: erişim yalnız jetona dayanır (bkz. public_quotes.py).
     app.include_router(public_quotes_api.router)
+    # KARARLAR 2026-11-20 §7: izin talebi; e-posta düğmesi için tek kullanımlık anahtarlı uç.
+    app.include_router(izin_api.router)
+    app.include_router(izin_api.public_router)
     app.include_router(search_api.router)
     app.include_router(settings_api.router)
     app.include_router(audit_api.router)

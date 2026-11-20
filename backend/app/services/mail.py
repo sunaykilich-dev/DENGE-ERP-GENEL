@@ -125,7 +125,10 @@ async def gonder(
     govde: str,
     ekler: list[tuple[str, bytes, str]] | None = None,
     cc: list[str] | None = None,
+    html: str | None = None,
 ) -> None:
+    """`html` verilirse düz metnin yanına HTML seçeneği eklenir (ör. düğmeli
+    izin onay e-postası, KARARLAR 2026-11-20 §7); düz metin her zaman vardır."""
     ayarlar = await ayar_svc.get_all(db)
     sunucu = ayarlar.get("smtp_host")
     gonderen = ayarlar.get("smtp_from") or ayarlar.get("smtp_user")
@@ -143,6 +146,8 @@ async def gonder(
         mesaj["Cc"] = ", ".join(cc)
     mesaj["Subject"] = konu
     mesaj.set_content(govde)
+    if html:
+        mesaj.add_alternative(html, subtype="html")
     for ad, veri, mime in ekler or []:
         ana, _, alt = mime.partition("/")
         mesaj.add_attachment(veri, maintype=ana, subtype=alt, filename=ad)

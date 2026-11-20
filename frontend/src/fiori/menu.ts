@@ -204,7 +204,7 @@ export const MENU_AGACI: MenuOgesi[] = [
   grup(
     "ik",
     "İnsan Kaynakları",
-    [sayfa("/personel"), sayfa("/egitim"), sayfa("/ik-belgeler"), sayfa("/gelisim-kartim"), sayfa("/belgelerim")],
+    [sayfa("/personel"), sayfa("/egitim"), sayfa("/ik-belgeler"), sayfa("/gelisim-kartim"), sayfa("/belgelerim"), sayfa("/izin-talepleri")],
     { ikon: TeamOutlined },
   ),
   // Mobilite modülü (DENGE MOBİLİTE etkinken). Modülün kendisine dokunulmadı.
