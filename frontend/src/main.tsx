@@ -21,6 +21,7 @@ import GelisimKartimPage from "./pages/GelisimKartimPage";
 import IkBelgelerPage from "./pages/IkBelgelerPage";
 import KiralamalarPage from "./pages/KiralamalarPage";
 import KiralikEnvanterPage from "./pages/KiralikEnvanterPage";
+import EtiketTeslimPage from "./pages/EtiketTeslimPage";
 import OperasyonMerkeziPage from "./pages/OperasyonMerkeziPage";
 import PersonelPage from "./pages/PersonelPage";
 import ServisAnaVeriPage from "./pages/ServisAnaVeriPage";
@@ -193,6 +194,8 @@ function KorumaliUygulama() {
         <Route path="/kiralamalar" element={<KiralamalarPage />} />
         <Route path="/kiralamalar/:id" element={<KiralamalarPage />} />
         <Route path="/kiralik-envanter" element={<KiralikEnvanterPage />} />
+        {/* KARARLAR 2026-11-20 §3: cihaz karekodu bu sayfayı açar. */}
+        <Route path="/etiket/:kod" element={<EtiketTeslimPage />} />
         <Route path="/yedek-parca" element={<YedekParcaPage />} />
         <Route path="/servis-maliyet" element={<ServisMaliyetPage />} />
         <Route path="/servis-ana-veri" element={<ServisAnaVeriPage />} />

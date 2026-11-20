@@ -47,11 +47,29 @@ def upgrade() -> None:
         "bitis_km IS NULL OR baslangic_km IS NULL OR bitis_km >= baslangic_km",
     )
     op.add_column("service_vehicles", sa.Column("son_km", sa.Integer))
+    # §3 kiralık cihaz etiketi ve teslim okutma
+    op.add_column("rental_assets", sa.Column("etiket_kodu", sa.String(24)))
+    op.create_unique_constraint("rental_assets_etiket_kodu_key", "rental_assets", ["etiket_kodu"])
+    for yon in ("gidis", "donus"):
+        op.add_column("rental_allocations", sa.Column(f"{yon}_teslim_at", sa.DateTime(timezone=True)))
+        op.add_column(
+            "rental_allocations",
+            sa.Column(
+                f"{yon}_teslim_by",
+                sa.BigInteger,
+                sa.ForeignKey("users.id", ondelete="SET NULL", name=f"fk_ralloc_{yon}_teslim_by"),
+            ),
+        )
     # @@DEVAM@@
 
 
 def downgrade() -> None:
     # @@GERI@@
+    for yon in ("gidis", "donus"):
+        op.drop_column("rental_allocations", f"{yon}_teslim_by")
+        op.drop_column("rental_allocations", f"{yon}_teslim_at")
+    op.drop_constraint("rental_assets_etiket_kodu_key", "rental_assets", type_="unique")
+    op.drop_column("rental_assets", "etiket_kodu")
     op.drop_column("service_vehicles", "son_km")
     op.drop_constraint("ck_so_km_sirasi", "service_orders", type_="check")
     op.drop_constraint("ck_so_ulasim_turu", "service_orders", type_="check")

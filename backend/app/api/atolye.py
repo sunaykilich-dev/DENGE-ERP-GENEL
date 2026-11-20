@@ -257,6 +257,9 @@ class TeslimIn(BaseModel):
     takip_no: str | None = Field(default=None, max_length=60)
     aksesuar_iade: list[AksesuarIadeIn] = Field(default_factory=list, max_length=50)
     aciklama: str | None = Field(default=None, max_length=2000)
+    # KARARLAR 2026-11-20 §4: telsizde kargo/teslim öncesi okutulan seriler.
+    okutulan_seriler: list[str] | None = Field(default=None, max_length=50)
+    seri_aciklama: str | None = Field(default=None, max_length=500)
 
 
 class DurumIn(BaseModel):
@@ -1047,6 +1050,8 @@ async def durum(
                 for a in payload.teslim.aksesuar_iade
             ],
             aciklama=payload.teslim.aciklama,
+            okutulan_seriler=payload.teslim.okutulan_seriler,
+            seri_aciklama=payload.teslim.seri_aciklama,
         )
     try:
         uyarilar = await atolye.durum_degistir(

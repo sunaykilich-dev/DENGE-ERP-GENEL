@@ -25,6 +25,10 @@ import {
   type FormVerileri,
   type SonrakiDurum,
 } from "../api/atolye";
+import SeriOkutucu, { seriFarki } from "./SeriOkutucu";
+
+/** Telsiz birimleri: kargo/teslim öncesi seri yeniden okutulur (KARARLAR 2026-11-20 §4). */
+const TELSIZ_BIRIMLERI = new Set(["HABERLESME", "POC"]);
 
 interface FormDegeri {
   gerekce?: string;
@@ -34,6 +38,8 @@ interface FormDegeri {
   teslim_tipi?: string;
   aciklama?: string;
   sure_eksik_onay?: boolean;
+  okutulan_seriler?: string[];
+  seri_aciklama?: string;
   iade: Record<string, { returned: boolean; not?: string }>;
 }
 
@@ -53,6 +59,15 @@ export default function AtolyeDurumPenceresi({
   const { message, modal } = App.useApp();
   const [form] = Form.useForm<FormDegeri>();
   const iade = Form.useWatch("iade", form);
+  const okunan = Form.useWatch("okutulan_seriler", form) ?? [];
+  const beklenenSeri = detay.ekipman.seri ? [detay.ekipman.seri] : [];
+  const seriOkutulur =
+    !!hedef &&
+    (hedef.hedef === "KARGOYA_VERILDI" || hedef.hedef === "TESLIM_EDILDI") &&
+    TELSIZ_BIRIMLERI.has(detay.birim) &&
+    beklenenSeri.length > 0;
+  const fark = seriFarki(beklenenSeri, okunan);
+  const seriFarkiVar = seriOkutulur && okunan.length > 0 && (fark.eksik.length > 0 || fark.fazla.length > 0);
 
   useEffect(() => {
     if (hedef) {
@@ -67,11 +82,15 @@ export default function AtolyeDurumPenceresi({
   const gonder = useMutation({
     mutationFn: (v: FormDegeri) => {
       const h = hedef!.hedef;
+      const okutma = seriOkutulur
+        ? { okutulan_seriler: v.okutulan_seriler ?? [], seri_aciklama: v.seri_aciklama || null }
+        : {};
       const teslim =
         h === "KARGOYA_VERILDI"
-          ? { teslim_tipi: "KARGO", kargo_firmasi: v.kargo_firmasi, takip_no: v.takip_no }
+          ? { teslim_tipi: "KARGO", kargo_firmasi: v.kargo_firmasi, takip_no: v.takip_no, ...okutma }
           : h === "TESLIM_EDILDI"
             ? {
+                ...okutma,
                 teslim_alan: v.teslim_alan,
                 teslim_tipi: v.teslim_tipi,
                 aciklama: v.aciklama || null,
@@ -153,6 +172,26 @@ export default function AtolyeDurumPenceresi({
                 </Form.Item>
               </Col>
             </Row>
+          )}
+          {seriOkutulur && (
+            <>
+              <Form.Item
+                name="okutulan_seriler"
+                label="Cihaz seri numarasını okutun"
+                rules={[{ required: true, type: "array", min: 1, message: "Seri numarası okutulmalı" }]}
+              >
+                <SeriOkutucu beklenen={beklenenSeri} />
+              </Form.Item>
+              {seriFarkiVar && (
+                <Form.Item
+                  name="seri_aciklama"
+                  label="Seri tutmuyor: açıklama"
+                  rules={[{ required: true, whitespace: true, message: "Yanlış/eksik cihaz için açıklama zorunlu" }]}
+                >
+                  <Input.TextArea rows={2} maxLength={500} />
+                </Form.Item>
+              )}
+            </>
           )}
           {h === "TESLIM_EDILDI" && (
             <>

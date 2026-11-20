@@ -371,6 +371,9 @@ export interface TeslimGirdisi {
   takip_no?: string | null;
   aksesuar_iade?: { id: number; returned: boolean; not?: string | null }[];
   aciklama?: string | null;
+  /** KARARLAR 2026-11-20 §4: telsizde kargo/teslim öncesi okutulan seriler. */
+  okutulan_seriler?: string[] | null;
+  seri_aciklama?: string | null;
 }
 
 export interface DurumGirdisi {

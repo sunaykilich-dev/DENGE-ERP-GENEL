@@ -23,7 +23,7 @@
  * öneri olarak gelir). Ekipman tipi zorunlu değil: boşsa sunucu birimin
  * varsayılan tipini kullanır.
  */
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { BarcodeOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Alert,
@@ -248,7 +248,16 @@ function CihazAlanlari({
           label={kompakt ? undefined : "Seri no"}
           rules={[{ required: true, whitespace: true, message: "Seri numarası zorunlu" }]}
         >
-          <Input maxLength={200} placeholder="Seri no" className="mono" />
+          {/* KARARLAR 2026-11-20 §4: barkod okuyucu seriyi yazıp Enter'a basar;
+              Enter formu göndermez, okunan seri alanda kalır. */}
+          <Input
+            maxLength={200}
+            placeholder="Seri no (barkod okutun)"
+            className="mono"
+            prefix={<BarcodeOutlined />}
+            autoComplete="off"
+            onPressEnter={(e) => e.preventDefault()}
+          />
         </Form.Item>
       </Col>
     </Row>

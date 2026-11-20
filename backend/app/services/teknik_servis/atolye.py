@@ -310,6 +310,9 @@ class TeslimGirdisi:
     takip_no: str | None = None
     aksesuar_iade: list[AksesuarIadesi] = field(default_factory=list)
     aciklama: str | None = None
+    # KARARLAR 2026-11-20 §4: telsiz biriminde kargo/teslim öncesi seri okutma.
+    okutulan_seriler: list[str] | None = None
+    seri_aciklama: str | None = None
 
 
 def _bos(deger: Any) -> Any:
@@ -1313,6 +1316,9 @@ async def _teslim_uygula(
     simdi = clock.now()
     yeni: dict[str, Any] = {}
     uyarilar: list[str] = []
+    seri_notu = await _seri_okutma_dogrula(db, so, teslim)
+    if seri_notu:
+        uyarilar.append(seri_notu)
     if hedef == "KARGOYA_VERILDI":
         firma, takip = _bos(teslim.kargo_firmasi), _bos(teslim.takip_no)
         if (tip or "KARGO") != "KARGO":
@@ -1321,7 +1327,11 @@ async def _teslim_uygula(
             raise ServisGirdiHatasi("Kargo firması ve takip numarası zorunlu")
         kayit.delivery_type, kayit.cargo_company, kayit.cargo_tracking_no = "KARGO", firma, takip
         kayit.cargo_sent_at = simdi
+        if seri_notu:
+            kayit.delivery_note = seri_notu
         yeni = {"delivery_type": "KARGO", "cargo_company": firma, "cargo_tracking_no": takip}
+        if seri_notu:
+            yeni["seri_farki"] = True
         return yeni, uyarilar
     # TESLIM_EDILDI
     alan = _bos(teslim.teslim_alan)
@@ -1356,9 +1366,56 @@ async def _teslim_uygula(
     kayit.delivered_to_name = alan
     kayit.delivery_type = tip
     kayit.delivered_at = simdi
-    kayit.delivery_note = aciklama
+    notlar = [n for n in (aciklama, seri_notu) if n]
+    kayit.delivery_note = " / ".join(notlar) if notlar else None
     yeni = {"delivered_to_name": alan, "delivery_type": tip, "eksik_aksesuar": len(eksikler)}
+    if seri_notu:
+        yeni["seri_farki"] = True
     return yeni, uyarilar
+
+
+TELSIZ_BIRIMLERI = frozenset({"HABERLESME", "POC"})
+
+
+async def _seri_okutma_dogrula(
+    db: AsyncSession, so: ServiceOrder, teslim: TeslimGirdisi
+) -> str | None:
+    """Telsiz biriminde kargoya verirken/teslim ederken seriler yeniden okutulur.
+
+    Okutulan seri kayıttakinden farklı ya da eksikse açıklama zorunlu (400);
+    açıklamalı fark teslim notuna ve uyarıya yazılır (KARARLAR 2026-11-20 §4).
+    Kayıtta seri yoksa okutma istenmez.
+    """
+    from app.services import settings as ayar_svc
+
+    if so.birim not in TELSIZ_BIRIMLERI:
+        return None
+    if not await ayar_svc.get(db, "atolye_teslim_seri_okutma"):
+        return None
+    beklenen = {
+        normalize_seri(s.seri_no): s.seri_no for s in so.seriler if s.removed_at is None
+    }
+    if not beklenen:
+        return None
+    okutulan = {
+        normalize_seri(x): x.strip() for x in (teslim.okutulan_seriler or []) if x and x.strip()
+    }
+    if not okutulan:
+        raise ServisGirdiHatasi("Cihazın seri numarası okutulmalı")
+    eksik = [v for k, v in beklenen.items() if k not in okutulan]
+    yanlis = [v for k, v in okutulan.items() if k not in beklenen]
+    if not eksik and not yanlis:
+        return None
+    parcalar = []
+    if eksik:
+        parcalar.append("okutulmayan: " + ", ".join(eksik))
+    if yanlis:
+        parcalar.append("kayıtta olmayan: " + ", ".join(yanlis))
+    fark = "; ".join(parcalar)
+    aciklama = _bos(teslim.seri_aciklama)
+    if not aciklama:
+        raise ServisGirdiHatasi(f"Seri numarası tutmuyor ({fark}); açıklama zorunlu")
+    return f"Seri okutma farkı ({fark}): {aciklama}"
 
 
 async def durum_degistir(

@@ -154,6 +154,8 @@ def _saha_ulasim_varsayilan(request, monkeypatch):
     from app.services import settings as ayarlar
 
     monkeypatch.setitem(ayarlar.DEFAULTS, "servis_saha_ulasim_zorunlu", False)
+    # Telsiz atölyesinde teslim öncesi seri okutma (§4) aynı işaretle açılır.
+    monkeypatch.setitem(ayarlar.DEFAULTS, "atolye_teslim_seri_okutma", False)
 
 
 @pytest.fixture(autouse=True)

@@ -628,8 +628,8 @@ export default function ServisIsFormu({
         label={tekCihaz ? "Cihaz seri numarası" : "Seri numaraları"}
         extra={
           tekCihaz
-            ? "Bu iş türünde tek cihaz olur; her cihaz için ayrı iş açın. Seri metin olarak saklanır."
-            : "Enter ile ekleyin. Seri metin olarak saklanır (baştaki sıfır korunur)."
+            ? "Barkod okutabilirsiniz. Bu iş türünde tek cihaz olur; her cihaz için ayrı iş açın."
+            : "Barkod okutun ya da yazıp Enter ile ekleyin. Seri metin olarak saklanır (baştaki sıfır korunur)."
         }
         rules={[
           {

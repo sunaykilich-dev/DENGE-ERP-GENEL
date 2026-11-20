@@ -63,6 +63,8 @@ import { useAuth } from "../auth/AuthContext";
 import { useSirket } from "../auth/SirketContext";
 import { CakismaVazgecildi, useCakismaOnayi } from "../components/KiralamaCakismaOnayi";
 import KiralamaDegisimPenceresi from "../components/KiralamaDegisimPenceresi";
+import IadeOkutmaBolumu from "../components/IadeOkutmaBolumu";
+import SeriOkutucu, { seriAnahtari } from "../components/SeriOkutucu";
 import {
   KIRALAMA_DURUM_ETIKETLERI,
   KIRALAMA_DURUM_KISA,
@@ -1183,11 +1185,40 @@ function CihazSecici({
   value: number[];
   onChange: (v: number[]) => void;
 }) {
+  const { message } = App.useApp();
   const cihazlar = useQuery({
     queryKey: ["kiralik-hazir", productId, depoId],
     queryFn: () => kiralamaApi.envanter({ product_id: productId, depo_id: depoId, durum: "HAZIR" }, 200, 0),
   });
+  const kayitlar = cihazlar.data?.kayitlar ?? [];
+  const seriyle = (s: string) => kayitlar.find((c) => seriAnahtari(c.serial_no) === seriAnahtari(s));
+  // KARARLAR 2026-11-20 §2: hazırlıkta barkod okuyucuyla cihaz eklenir,
+  // okunan adet kiralama adediyle karşılaştırılır.
   return (
+    <Space orientation="vertical" style={{ width: "100%" }} size={6}>
+    <SeriOkutucu
+      hedefAdet={sinir}
+      placeholder="Barkod okutun: cihaz seçime eklenir"
+      value={value.map((id) => kayitlar.find((c) => c.id === id)?.serial_no).filter((x): x is string => !!x)}
+      onChange={(liste) =>
+        onChange(liste.map((x) => seriyle(x)?.id).filter((x): x is number => x != null))
+      }
+      onOkundu={(seri) => {
+        const c = seriyle(seri);
+        if (!c) {
+          message.warning(`${seri}: bu kalem için hazır cihaz değil (depo seçimini de kontrol edin)`);
+          return false;
+        }
+        if (c.kiralama_id != null) {
+          message.warning(`${seri}: başka bir kiralamada tahsisli`);
+          return false;
+        }
+        if (value.length >= sinir) {
+          message.warning(`Kalem adedi doldu (${sinir})`);
+          return false;
+        }
+      }}
+    />
     <Select
       mode="multiple"
       style={{ width: "100%" }}
@@ -1203,6 +1234,7 @@ function CihazSecici({
         disabled: c.kiralama_id != null,
       }))}
     />
+    </Space>
   );
 }
 
@@ -1280,6 +1312,7 @@ function IadePenceresi({ k, onKapat, onBitti }: { k: KiralamaKarti; onKapat: () 
           Depoya iade edilen cihaz "Kontrolde" olur. Kurulum yapılmış kiralamada son iadeden önce "Toplandı" aşaması
           girilmelidir. Bütün cihazlar dönünce kiralama "Depoya alındı" olur.
         </Typography.Text>
+        <IadeOkutmaBolumu k={k} onDoldur={(dolu) => setSatirlar((s) => ({ ...s, ...dolu }))} />
         <DatePicker showTime format="DD.MM.YYYY HH:mm" value={an} onChange={setAn} style={{ width: 240 }} />
         <Table<TahsisOut>
           size="small"

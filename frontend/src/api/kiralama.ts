@@ -503,6 +503,36 @@ async function dosyaGonder<T>(yol: string, dosya: File, alanlar: Record<string, 
 
 // --- Çağrılar ---------------------------------------------------------------------
 
+export interface IadeKontrolSonucu {
+  satirlar: {
+    tahsis_id: number;
+    urun: string;
+    seri: string | null;
+    beklenen: number;
+    gelen: number;
+    oneri_sonuc: string;
+  }[];
+  eksik_seri: number;
+  eksik_adet: number;
+  fazla: string[];
+  tam: boolean;
+  kaydedildi: boolean;
+}
+
+export interface EtiketOzeti {
+  kiralik_id: number;
+  etiket_kodu: string | null;
+  seri: string;
+  urun: string;
+  urun_kodu: string;
+  birim: string;
+  durum: string;
+  kiralama: { id: number; rental_no: string; status: string } | null;
+  tahsis_id: number | null;
+  gidis_teslim_at: string | null;
+  donus_teslim_at: string | null;
+}
+
 export const kiralamaApi = {
   liste: (s: KiralamaSuzgeci, limit: number, offset: number): Promise<Sayfa<KiralamaSatiri>> =>
     api.getSayfa<KiralamaSatiri>(`${URL_}${sorgu(s, { limit, offset })}`),
@@ -523,6 +553,21 @@ export const kiralamaApi = {
     api.post<KiralamaKarti>(`${URL_}/${id}/asama`, g),
   iade: (id: number, g: { at?: string | null; satirlar: IadeSatiri[] }) =>
     api.post<KiralamaKarti>(`${URL_}/${id}/iade`, g),
+  /** KARARLAR 2026-11-20 §2: dönen cihazları okutarak karşılaştırma. */
+  iadeKontrol: (
+    id: number,
+    g: {
+      okutulan_seriler: string[];
+      adetler: { tahsis_id: number; gelen: number }[];
+      aciklama?: string | null;
+      kaydet: boolean;
+    },
+  ) => api.post<IadeKontrolSonucu>(`${URL_}/${id}/iade-kontrol`, g),
+  /** KARARLAR 2026-11-20 §3: cihaz karekod etiketi ve teslim okutma. */
+  etiketUret: (kiralikId: number) => api.post<EtiketOzeti>(`${URL_}/envanter/${kiralikId}/etiket`, {}),
+  etiket: (kod: string) => api.get<EtiketOzeti>(`${URL_}/etiket/${encodeURIComponent(kod)}`),
+  etiketTeslim: (kod: string, yon: "GIDIS" | "DONUS", not?: string) =>
+    api.post<EtiketOzeti>(`${URL_}/etiket/${encodeURIComponent(kod)}/teslim`, { yon, not }),
   geriAl: (id: number, g: { gerekce: string; olay_id?: number | null }) =>
     api.post<KiralamaKarti>(`${URL_}/${id}/geri-al`, g),
   iptal: (id: number, gerekce: string) => api.post<KiralamaKarti>(`${URL_}/${id}/iptal`, { gerekce }),

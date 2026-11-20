@@ -63,6 +63,7 @@ import {
 } from "../api/kiralama";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
+import KarekodEtiketiDugmesi from "../components/KarekodEtiketi";
 import KiralamaRaporlari from "../components/KiralamaRaporlari";
 import KiralikSayim from "../components/KiralikSayim";
 import Statistic from "../components/Statistic";
@@ -446,6 +447,7 @@ function CihazCekmecesi({ id, onKapat, onDegisti }: { id: number; onKapat: () =>
               </Descriptions.Item>
             )}
           </Descriptions>
+          {yetkili("kiralama.envanter") && <KarekodEtiketiDugmesi kiralikId={c.id} />}
           {yetkili("kiralama.envanter") && (
             <Card size="small" title="Bilgileri düzenle">
               <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>

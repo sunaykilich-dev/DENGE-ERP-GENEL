@@ -17,7 +17,7 @@ planla/iptal/kapat, `kiralama.envanter` envanter/tahsis/kontrol/katalog,
 """
 
 from datetime import date, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import (
     APIRouter,
@@ -2060,6 +2060,147 @@ async def iade(
         clock,
         lambda: tahsis_svc.iade_al(db, k, satirlar, at=payload.at, user=user, clock=clock),
     )
+
+
+# --- Barkod/karekod okutma (KARARLAR 2026-11-20 §2–3) ----------------------------------
+
+
+class IadeAdetIn(BaseModel):
+    tahsis_id: int
+    gelen: int = Field(ge=0)
+
+
+class IadeKontrolIn(BaseModel):
+    okutulan_seriler: list[str] = Field(default_factory=list, max_length=2000)
+    adetler: list[IadeAdetIn] = Field(default_factory=list, max_length=500)
+    aciklama: str | None = Field(default=None, max_length=500)
+    kaydet: bool = False
+
+
+@router.post("/{kiralama_id}/iade-kontrol")
+async def iade_kontrol(
+    kiralama_id: int,
+    payload: IadeKontrolIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Asamaci,
+) -> dict[str, Any]:
+    """Dönen cihazlar okutulur ve müşteride kalanlarla karşılaştırılır.
+
+    `kaydet=false` yalnız karşılaştırır; `kaydet=true` sonucu geçmişe yazar.
+    Eksik/fazla varken açıklamasız kayıt 400.
+    """
+    from app.services.teknik_servis import kiralama_okutma as okutma
+
+    k = await _kiralama(db, user, kiralama_id)
+    try:
+        sonuc = await okutma.iade_kontrol(
+            db,
+            k,
+            okutma.IadeKontrolGirdisi(
+                okutulan_seriler=payload.okutulan_seriler,
+                adetler={a.tahsis_id: a.gelen for a in payload.adetler},
+                aciklama=payload.aciklama,
+                kaydet=payload.kaydet,
+            ),
+            user=user,
+            clock=clock,
+            ip=client_ip(request),
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    if payload.kaydet:
+        await db.commit()
+    return sonuc
+
+
+class TeslimOkutIn(BaseModel):
+    yon: Literal["GIDIS", "DONUS"]
+    not_: str | None = Field(default=None, max_length=300, alias="not")
+
+    model_config = {"populate_by_name": True}
+
+
+async def _etiket_ozeti(db: AsyncSession, user: User, c: RentalAsset) -> dict[str, Any]:
+    from app.services.teknik_servis import kiralama_okutma as okutma
+
+    urun = await db.get(Product, c.product_id)
+    t = await okutma.son_tahsis(db, c)
+    kiralama = None
+    if t is not None:
+        try:
+            k = await svc.kapsamli_kiralama(db, user, t.rental_id)
+            kiralama = {"id": k.id, "rental_no": k.rental_no, "status": k.status}
+        except KiralamaHatasi:
+            kiralama = None
+    return {
+        "kiralik_id": c.id,
+        "etiket_kodu": c.etiket_kodu,
+        "seri": c.serial_no,
+        "urun": urun.name if urun is not None else "",
+        "urun_kodu": urun.code if urun is not None else "",
+        "birim": c.birim,
+        "durum": c.durum,
+        "kiralama": kiralama,
+        "tahsis_id": t.id if t is not None and kiralama else None,
+        "gidis_teslim_at": t.gidis_teslim_at if t is not None and kiralama else None,
+        "donus_teslim_at": t.donus_teslim_at if t is not None and kiralama else None,
+    }
+
+
+@router.post("/envanter/{kiralik_id}/etiket")
+async def etiket_uret(
+    kiralik_id: int, db: DbDep, user: Envanterci
+) -> dict[str, Any]:
+    """Cihazın değişmez etiket kodunu verir (yoksa üretir); karekod bunu taşır."""
+    from app.services.teknik_servis import kiralama_okutma as okutma
+
+    c = await _cihaz(db, user, kiralik_id)
+    await okutma.etiket_kodu_ver(db, c, user=user)
+    await db.commit()
+    return await _etiket_ozeti(db, user, c)
+
+
+@router.get("/etiket/{kod}")
+async def etiket_getir(kod: str, db: DbDep, user: Okuyucu) -> dict[str, Any]:
+    """Karekod okutulunca açılan sayfa: cihaz, bulunduğu kiralama, teslim durumu."""
+    from app.services.teknik_servis import kiralama_okutma as okutma
+
+    try:
+        c = await okutma.etiketten_cihaz(db, kod)
+        c = await envanter_svc.kapsamli_kiralik(db, user, c.id)
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    return await _etiket_ozeti(db, user, c)
+
+
+@router.post("/etiket/{kod}/teslim")
+async def etiket_teslim(
+    kod: str,
+    payload: TeslimOkutIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Asamaci,
+) -> dict[str, Any]:
+    """Gidişte (müşteri) ya da dönüşte (depo) teslim alındı damgası."""
+    from app.services.teknik_servis import kiralama_okutma as okutma
+
+    try:
+        c = await okutma.etiketten_cihaz(db, kod)
+        c = await envanter_svc.kapsamli_kiralik(db, user, c.id)
+        t = await okutma.son_tahsis(db, c)
+        if t is None:
+            raise KiralamaHatasi("Bu cihaz sevk edilmiş bir kiralamada değil")
+        k = await svc.kapsamli_kiralama(db, user, t.rental_id, kilit=True)
+        await okutma.teslim_okut(
+            db, k, t, payload.yon, user=user, clock=clock, not_=payload.not_, ip=client_ip(request)
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await db.commit()
+    return await _etiket_ozeti(db, user, c)
 
 
 @router.post("/{kiralama_id}/geri-al", response_model=KiralamaKarti)

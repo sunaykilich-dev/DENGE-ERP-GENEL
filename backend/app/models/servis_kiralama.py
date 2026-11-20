@@ -210,6 +210,9 @@ class RentalAsset(
     durum: Mapped[str] = mapped_column(String(16), server_default=text("'HAZIR'"), default="HAZIR")
     eksik_notu: Mapped[str | None] = mapped_column(String(300))
     notes: Mapped[str | None] = mapped_column(Text)
+    # Cihaza yapıştırılan karekodun değişmez kodu (KARARLAR 2026-11-20 §3);
+    # ilk etiket basımında üretilir. Karekod ERP'deki etiket sayfasını açar.
+    etiket_kodu: Mapped[str | None] = mapped_column(String(24), unique=True)
 
 
 class Rental(
@@ -355,6 +358,16 @@ class RentalAllocation(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin
     # Sahada cihaz değişimi izi (E06-20).
     replaced_allocation_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("rental_allocations.id", ondelete="SET NULL")
+    )
+    # Karekodla teslim okutma (KARARLAR 2026-11-20 §3): gidişte müşteriye,
+    # dönüşte depoya teslim alındığı telefondan okutulup kapatılır.
+    gidis_teslim_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    gidis_teslim_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    donus_teslim_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    donus_teslim_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
 
 
