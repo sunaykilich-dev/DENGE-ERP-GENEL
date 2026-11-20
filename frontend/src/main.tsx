@@ -30,6 +30,7 @@ import YedekParcaPage from "./pages/YedekParcaPage";
 import ServisEkipmanPage from "./pages/ServisEkipmanPage";
 import ServisIsKartiMobil from "./pages/ServisIsKartiMobil";
 import IsEmriOnayiPage from "./pages/IsEmriOnayiPage";
+import YonlendirmelerPage from "./pages/YonlendirmelerPage";
 import ServisIsleriPage from "./pages/ServisIsleriPage";
 import ServisPaneli from "./pages/ServisPaneli";
 import ServisPlanlamaPage from "./pages/ServisPlanlamaPage";
@@ -177,6 +178,7 @@ function KorumaliUygulama() {
         <Route path="/servis-isleri" element={<ServisIsleriPage />} />
         <Route path="/servis-isleri/:id" element={<ServisIsleriPage />} />
         <Route path="/is-emri-onayi" element={<IsEmriOnayiPage />} />
+        <Route path="/yonlendirmeler" element={<YonlendirmelerPage />} />
         <Route path="/is-emri-onayi/:id" element={<IsEmriOnayiPage />} />
         <Route path="/servis-planlama" element={<ServisPlanlamaPage />} />
         <Route path="/benim-islerim" element={<BenimIslerimPage />} />

@@ -62,6 +62,8 @@ from app.models.rbac import (
     UserUnit,
 )
 from app.models.satis_takip import SatisIsBagi
+from app.models.servis_yonlendirme import ServisYonlendirme
+from app.models.izin import IzinOnayi, IzinTalebi
 from app.models.service import RmaCase
 from app.models.servis_atolye import WorkshopAccessory, WorkshopRecord
 from app.models.servis_bakim import (
@@ -298,4 +300,8 @@ __all__ = [
     "IkGonderim",
     # --- Ana Panel düzeni (KARARLAR 2026-11-09 S8) ---
     "AnaPanelDuzeni",
+    # --- KARARLAR 2026-11-20 ---
+    "ServisYonlendirme",
+    "IzinTalebi",
+    "IzinOnayi",
 ]

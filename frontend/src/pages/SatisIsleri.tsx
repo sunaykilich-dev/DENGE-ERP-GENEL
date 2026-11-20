@@ -178,7 +178,11 @@ export default function SatisIsleri({ kaynak, id, birim, kesifAcik, isAcilabilir
         govde,
       ),
     onSuccess: (r) => {
-      message.success(`${r.so_no} açıldı; birim şefinin planlamasına düştü`);
+      message.success(
+        mod === "is"
+          ? `${r.so_no} açıldı; teknik servis müdürüne yönlendirildi`
+          : `${r.so_no} açıldı; birim şefinin planlamasına düştü`,
+      );
       setMod(null);
       form.resetFields();
       void qc.invalidateQueries({ queryKey: anahtar });
@@ -257,6 +261,7 @@ export default function SatisIsleri({ kaynak, id, birim, kesifAcik, isAcilabilir
               oncelik: v.oncelik,
               hedef_tarih: v.hedef_tarih ? dayjs(v.hedef_tarih).format("YYYY-MM-DD") : null,
               aciklama: v.aciklama || null,
+              ...(mod === "is" ? { sozlesme_detay: v.sozlesme_detay || null } : {}),
             })
           }
         >
@@ -295,6 +300,16 @@ export default function SatisIsleri({ kaynak, id, birim, kesifAcik, isAcilabilir
           <Form.Item name="aciklama" label="Açıklama">
             <Input.TextArea rows={3} maxLength={1000} />
           </Form.Item>
+          {mod === "is" && (
+            // KARARLAR 2026-11-20 §5: iş teknik servis müdürüne bu ayrıntılarla düşer.
+            <Form.Item
+              name="sozlesme_detay"
+              label="Sözleşme / taahhüt ayrıntıları"
+              extra="Sevkiyat, kurulum, garanti ve bakım taahhüdü gibi teknik servisin bilmesi gerekenler."
+            >
+              <Input.TextArea rows={3} maxLength={4000} />
+            </Form.Item>
+          )}
         </Form>
       </Modal>
     </Space>

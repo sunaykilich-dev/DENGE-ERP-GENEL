@@ -1021,6 +1021,10 @@ async def kabulde_is_ac(
     )
     t.service_order_id = so.id
     await db.flush()
+    # KARARLAR 2026-11-20 §5: satıştan doğan iş teknik servis müdürüne düşer.
+    from app.services.teknik_servis import yonlendirme
+
+    await yonlendirme.is_icin_olustur(db, so, sozlesme_detay=None, talep_notu=None, user=user)
     await audit.log(
         db,
         "quotes",

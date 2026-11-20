@@ -64,6 +64,7 @@ import { useSirket } from "../auth/SirketContext";
 import { CakismaVazgecildi, useCakismaOnayi } from "../components/KiralamaCakismaOnayi";
 import KiralamaDegisimPenceresi from "../components/KiralamaDegisimPenceresi";
 import IadeOkutmaBolumu from "../components/IadeOkutmaBolumu";
+import KiralamaTalepOnayi from "../components/KiralamaTalepOnayi";
 import SeriOkutucu, { seriAnahtari } from "../components/SeriOkutucu";
 import {
   KIRALAMA_DURUM_ETIKETLERI,
@@ -792,6 +793,7 @@ function KiralamaCekmecesi({
           Düzenle
         </Button>
       )}
+      {yaz && k.status === "TALEP" && <KiralamaTalepOnayi kiralamaId={k.id} onBitti={onDegisti} />}
       {yaz && k.status === "TALEP" && (
         <Button type="primary" loading={basit.isPending} onClick={() => basit.mutate(() => kiralamaApi.planla(k.id))}>
           Planla

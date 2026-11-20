@@ -106,6 +106,8 @@ class KesifIn(BaseModel):
 
 class SatisIsiIn(KesifIn):
     tur: Literal["KURULUM", "TESLIMAT"] = "KURULUM"
+    # KARARLAR 2026-11-20 §5: sözleşme / taahhüt ayrıntıları.
+    sozlesme_detay: str | None = Field(default=None, max_length=4000)
 
 
 class AcilanIsOut(BaseModel):
@@ -121,6 +123,7 @@ def _istek(p: KesifIn) -> svc.IsIstegi:
         hedef_tarih=p.hedef_tarih,
         aciklama=p.aciklama,
         address_id=p.address_id,
+        sozlesme_detay=getattr(p, "sozlesme_detay", None),
     )
 
 

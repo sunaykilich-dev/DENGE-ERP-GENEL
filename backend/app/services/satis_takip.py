@@ -281,6 +281,8 @@ class IsIstegi:
     hedef_tarih: date | None = None
     aciklama: str | None = None
     address_id: int | None = None
+    # KARARLAR 2026-11-20 §5: sözleşme / taahhüt ayrıntıları (yönlendirmede görünür).
+    sozlesme_detay: str | None = None
 
 
 async def _is_ac(
@@ -320,6 +322,15 @@ async def _is_ac(
         )
     except ServisGirdiHatasi as exc:
         raise TeklifGirdiHatasi(str(exc)) from exc
+
+
+async def _yonlendir(db: AsyncSession, so: ServiceOrder, istek: IsIstegi, user: User) -> None:
+    """Satıştan açılan iş teknik servis müdürüne düşer (KARARLAR 2026-11-20 §5)."""
+    from app.services.teknik_servis import yonlendirme
+
+    await yonlendirme.is_icin_olustur(
+        db, so, sozlesme_detay=istek.sozlesme_detay, talep_notu=istek.aciklama, user=user
+    )
 
 
 def _aciklama(kaynak: str, hedef: date | None, ek: str | None) -> str:
@@ -493,6 +504,7 @@ async def tekliften_is_ac(
         clock=clock,
     )
     await _bag_yaz(db, so=so, bag_turu=tur, hedef=hedef, user=user, quote_id=t.id)
+    await _yonlendir(db, so, istek, user)
     await _olay(db, so, f"{ad} işi teklif {t.quote_no} için açıldı", user, clock, t.id, t.quote_no)
     await audit.log(
         db,
@@ -538,6 +550,7 @@ async def siparisten_is_ac(
     await _bag_yaz(
         db, so=so, bag_turu=tur, hedef=hedef, user=user, quote_id=s.quote_id, order_id=s.id
     )
+    await _yonlendir(db, so, istek, user)
     await _olay(
         db, so, f"{ad} işi sipariş {s.order_no} için açıldı", user, clock, s.quote_id,
         s.order_no, s.id,

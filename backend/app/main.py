@@ -51,6 +51,7 @@ from app.api import tariffs as tariffs_api
 from app.api import teknik_servis as teknik_servis_api
 from app.api import teknik_servis_ana_veri as teknik_servis_ana_veri_api
 from app.api import teknik_servis_planlama as teknik_servis_planlama_api
+from app.api import servis_yonlendirme as servis_yonlendirme_api
 from app.api import users as users_api
 from app.api import vehicles as vehicles_api
 from app.api import workorders as workorders_api
@@ -247,6 +248,7 @@ def create_app() -> FastAPI:
     app.include_router(lokasyonlar_api.router)
     app.include_router(teknik_servis_ana_veri_api.router)
     app.include_router(teknik_servis_planlama_api.router)
+    app.include_router(servis_yonlendirme_api.router)
     app.include_router(servis_ekipman_api.router)
     app.include_router(bakim_api.router)
     app.include_router(servis_zaman_api.router)

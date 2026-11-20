@@ -131,6 +131,7 @@ export const MENU_AGACI: MenuOgesi[] = [
     "Servis İşleri",
     [
       sayfa("/servis-isleri", "Tüm Servis İşleri"),
+      sayfa("/yonlendirmeler"),
       tur("ARIZA", "Arıza"),
       tur("KURULUM", "Kurulum"),
       tur("PLANSIZ_BAKIM", "Bakım"),

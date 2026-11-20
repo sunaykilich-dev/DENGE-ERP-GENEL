@@ -41,6 +41,7 @@ import {
   ReadOutlined,
   SafetyCertificateOutlined,
   ScheduleOutlined,
+  SendOutlined,
   SettingOutlined,
   ShoppingCartOutlined,
   ShoppingOutlined,
@@ -157,6 +158,16 @@ export const UYGULAMALAR: Uygulama[] = [
     grup: "servis",
     kpi: { tur: "panel", kod: "acik" },
     kpiBirimi: "açık iş",
+  },
+  {
+    // KARARLAR 2026-11-20 §5–6: satış/kiralama talebi müdüre, müdürden birime.
+    id: "/yonlendirmeler",
+    baslik: "Yönlendirmeler",
+    altBaslik: "Satış ve kiralama talepleri",
+    ikon: SendOutlined,
+    yol: "/yonlendirmeler",
+    izin: ["servis.yonlendir", "servis.planla"],
+    grup: "servis",
   },
   {
     // 2026-11-10: onaya gelen işler ayrı modül; birim (Güvenlik/Haberleşme/

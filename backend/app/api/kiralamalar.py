@@ -1927,6 +1927,46 @@ async def planla(kiralama_id: int, db: DbDep, clock: ClockDep, user: Yazici) -> 
     return await _islem(db, k, user, clock, lambda: svc.planla(db, k, user=user, clock=clock))
 
 
+class TalepOnayIn(BaseModel):
+    sozlesme_detay: str | None = Field(default=None, max_length=4000)
+    not_: str | None = Field(default=None, max_length=1000, alias="not")
+
+    model_config = {"populate_by_name": True}
+
+
+@router.post("/{kiralama_id}/talep-onay")
+async def talep_onay(
+    kiralama_id: int,
+    payload: TalepOnayIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yazici,
+) -> dict[str, Any]:
+    """Müşteri talebi onaylandı: teknik servis müdürüne yönlendirilir (KARARLAR
+    2026-11-20 §6). Bir kez yapılır (409); kiralama durumu değişmez."""
+    from app.services.teknik_servis import yonlendirme
+
+    k = await _kiralama(db, user, kiralama_id, kilit=True)
+    try:
+        kayit = await yonlendirme.kiralama_icin_olustur(
+            db,
+            k,
+            sozlesme_detay=payload.sozlesme_detay,
+            talep_notu=payload.not_,
+            user=user,
+            ip=client_ip(request),
+        )
+        await tahsis_svc.olay_yaz(
+            db, k, "NOT", user=user, clock=clock, alan="TALEP_ONAY",
+            yeni={"yonlendirme_id": kayit.id},
+        )  # fmt: skip
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await db.commit()
+    return {"yonlendirme_id": kayit.id, "durum": kayit.durum}
+
+
 @router.post("/{kiralama_id}/tahsis", response_model=KiralamaKarti)
 async def tahsis(
     kiralama_id: int,
