@@ -194,9 +194,10 @@ async def _sapmalar(
     return {"satirlar": satirlar, "toplamlar": toplamlar}
 
 
-def _ekip_durumu(acik_sayac: dict[str, Any] | None) -> str:
+def _ekip_durumu(acik_sayac: dict[str, Any] | None, musait_degil: dict | None = None) -> str:
     if acik_sayac is None or acik_sayac["faaliyet"] == "MOLA":
-        return "BOSTA"
+        # İzin/eğitim/ofis bloğundaki kişi boşta sayılmaz (tayine uygun değil).
+        return "MUSAIT_DEGIL" if musait_degil else "BOSTA"
     return "YOLDA" if acik_sayac["faaliyet"] == "YOL" else "SAHADA"
 
 
@@ -214,8 +215,9 @@ async def pano(
                 "ad": kisi["ad"],
                 "saha_rolu": kisi["saha_rolu"],
                 "birimler": kisi["birimler"],
-                "durum": _ekip_durumu(kisi["acik_sayac"]),
+                "durum": _ekip_durumu(kisi["acik_sayac"], kisi["musait_degil"]),
                 "acik_sayac": kisi["acik_sayac"],
+                "musait_degil": kisi["musait_degil"],
                 "bugun_planli": kisi["bugun_planli"],
                 "acik_atanmis": kisi["acik_atanmis"],
             }
@@ -241,6 +243,7 @@ async def pano(
             "yolda": sum(1 for k in ekip if k["durum"] == "YOLDA"),
             "sahada": sum(1 for k in ekip if k["durum"] == "SAHADA"),
             "bosta": sum(1 for k in ekip if k["durum"] == "BOSTA"),
+            "musait_degil": sum(1 for k in ekip if k["durum"] == "MUSAIT_DEGIL"),
             "tayin_bekleyen": len(tayin),
             "tayin_geciken": sum(1 for s in tayin if s["gecikti"]),
             "sapma": sum(sapma["toplamlar"].values()),

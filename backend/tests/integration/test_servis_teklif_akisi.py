@@ -275,6 +275,9 @@ class TestPublicLink:
         assert bak.status_code == 200
         assert bak.json()["karar_verilebilir"] is False
         assert "güncel" in bak.json()["uyari"]
+        # Güvenlik birimi teklifi Elektronik'indir: müşteri sayfasında Mobilite künyesi yok.
+        assert bak.json()["mobilite_logosu"] is False
+        assert "mobilite" not in bak.json()["sirket_unvan"].lower()
         karar = await client.post(f"/api/public/teklif/{r0_jeton}/karar", json={"kabul": True})
         assert karar.status_code == 409
         assert (await _yenile(db, Quote, t["id"])).status == "TASLAK"

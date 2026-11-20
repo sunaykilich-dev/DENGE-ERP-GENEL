@@ -402,7 +402,8 @@ async def test_ilk_mudahale_durum_ve_sayac(client, db, mudur, birimli_kullanici_
     assert r.status_code == 201, r.text
     bolum = r.json()["bolum"]
     k = await kayit(db, so["id"])
-    assert k.ilk_mudahale_at is None and k.status == "MUSTERI_TALEBI"
+    # BEKLEME sayacı işi BEKLEMEDE yapmaz; tayinle geçtiği PLANLANDI'da kalır (2026-11-20).
+    assert k.ilk_mudahale_at is None and k.status == "PLANLANDI"
 
     async def gecis(bolum: dict, faaliyet: str) -> dict:
         r = await client.post(

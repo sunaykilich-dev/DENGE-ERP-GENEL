@@ -835,7 +835,7 @@ function UcretKarti({ sozlesme }: { sozlesme: Sozlesme }) {
       message.success("Ücret kaydedildi");
       qc.invalidateQueries({ queryKey: ["bakim"] });
     },
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
   const yazabilir = yetkili("bakim.yaz", "maliyet.gor");
   return (
@@ -886,7 +886,7 @@ function EslestirmeKarti({ sozlesmeId }: { sozlesmeId: number }) {
       setSecim({});
       qc.invalidateQueries({ queryKey: ["bakim"] });
     },
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
   const onerileriAl = () => {
     const yeni: Record<number, number | null> = { ...secim };
@@ -1140,7 +1140,7 @@ function DonemCekmecesi({
       v.skipped.forEach((a) => message.warning(`${a.contract_no}: ${a.neden}`));
       yenile();
     },
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
   const hedef = useMutation({
     mutationFn: (v: { hedef_tarih: dayjs.Dayjs; gerekce: string }) =>
@@ -1150,7 +1150,7 @@ function DonemCekmecesi({
       setHedefAcik(false);
       yenile();
     },
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
   const veriler = cihazlar.data ?? [];
   const seciliAdres = veriler.find((c) => secilen.includes(c.so_id))?.address_id;

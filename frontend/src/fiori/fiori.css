@@ -347,6 +347,9 @@
 .fl-pano.duzenleniyor .fl-pano-oge { cursor: grab; outline: 1px dashed #89b8e8; outline-offset: 2px; border-radius: 8px; }
 .fl-pano.duzenleniyor .fl-pano-oge.suruklenen { opacity: 0.35; }
 .fl-pano.duzenleniyor .fl-kutucuk { cursor: grab; }
+/* Düzenlerken araç çubuğu kutucuğun altında kendi satırında: değerin üstüne binmez. */
+.fl-pano.duzenleniyor .fl-pano-oge { flex-direction: column; gap: 2px; }
+.fl-pano.duzenleniyor .fl-pano-arac { position: static; align-self: flex-end; box-shadow: none; background: transparent; }
 .fl-pano-arac {
   position: absolute; right: 4px; bottom: 4px; display: flex; gap: 0;
   background: rgba(255, 255, 255, 0.95); border-radius: 6px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);

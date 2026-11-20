@@ -441,7 +441,7 @@ function CihazCekmecesi({ id, onKapat, onDegisti }: { id: number; onKapat: () =>
       qc.setQueryData(["kiralik-kart", id], k);
       onDegisti();
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) => void message.error(hataMesaji(e)),
   });
   const c = kart.data;
   return (
@@ -631,7 +631,7 @@ function KatalogSekmesi({ onDegisti }: { onDegisti: () => void }) {
       void qc.invalidateQueries({ queryKey: ["kiralama-katalog-liste"] });
       onDegisti();
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) => void message.error(hataMesaji(e)),
   });
 
   return (
@@ -714,7 +714,7 @@ function KatalogEklePenceresi({ onKapat, onBitti }: { onKapat: () => void; onBit
       message.success("Ürün kataloğa eklendi");
       onBitti();
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) => void message.error(hataMesaji(e)),
   });
   return (
     <Modal open title="Kiralama kataloğuna ürün ekle" onCancel={onKapat} onOk={() => form.submit()} okText="Ekle" cancelText="Vazgeç" confirmLoading={ekle.isPending} destroyOnHidden>
@@ -805,7 +805,7 @@ function useIslem(onBitti: () => void, mesaj = "Kaydedildi") {
       message.success(mesaj);
       onBitti();
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) => void message.error(hataMesaji(e)),
   });
 }
 
@@ -900,7 +900,7 @@ function TopluGirisPenceresi({ onKapat, onBitti }: { onKapat: () => void; onBitt
   const onizle = useMutation({
     mutationFn: (f: File) => kiralamaApi.topluOnizleme(f),
     onSuccess: setOnizleme,
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) => void message.error(hataMesaji(e)),
   });
   const onayla = useMutation({
     mutationFn: () => kiralamaApi.topluOnayla(dosya!, onizleme!.sha256),
@@ -908,7 +908,7 @@ function TopluGirisPenceresi({ onKapat, onBitti }: { onKapat: () => void; onBitt
       message.success(`${r.yazilan_satir} satır yazıldı (${r.toplam_adet} adet); ${r.atlanan_satir} satır atlandı`);
       onBitti();
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) => void message.error(hataMesaji(e)),
   });
   return (
     <Modal

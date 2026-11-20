@@ -99,7 +99,7 @@ function SayimDetayi({ sayimId, kapat, onDegisti }: { sayimId: number; kapat: ()
       message.success("Sayım satırları kaydedildi");
       tazele();
     },
-    onError: (e) => message.error((e as Error).message),
+    onError: (e) => void message.error((e as Error).message),
   });
 
   const onayla = useMutation({
@@ -134,7 +134,7 @@ function SayimDetayi({ sayimId, kapat, onDegisti }: { sayimId: number; kapat: ()
       tazele();
       kapat();
     },
-    onError: (e) => message.error((e as Error).message),
+    onError: (e) => void message.error((e as Error).message),
   });
 
   const ekle = () => {
@@ -348,7 +348,7 @@ export default function KiralikSayim({ onDegisti }: { onDegisti: () => void }) {
       setSecili(s.id);
       void qc.invalidateQueries({ queryKey: ["kiralik-sayimlar"] });
     },
-    onError: (e) => message.error((e as Error).message),
+    onError: (e) => void message.error((e as Error).message),
   });
 
   return (

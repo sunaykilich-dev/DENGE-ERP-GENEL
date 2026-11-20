@@ -220,6 +220,8 @@
 .op-durum.bosta { background: #e7f4ec; color: var(--fl-yesil); }
 .op-durum.yolda { background: #e5f0fa; color: var(--fl-mavi-koyu); }
 .op-durum.sahada { background: #fff3e6; color: #a35200; }
+.op-durum.musait_degil { background: #f0f0f0; color: var(--fl-gri); }
+.op-kisi.musait_degil { opacity: 0.75; }
 .op-aday-listesi { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--fl-kenar); }
 .op-aday {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 4px; border: 0;
@@ -228,3 +230,28 @@
 .op-aday:hover:not(:disabled) { background: #f2f7fd; }
 .op-aday:disabled { cursor: wait; opacity: .6; }
 .op-guncel { color: var(--fl-gri); font-size: 12px; }
+
+/* --- Personel özlük dosyası (2026-11-20) --------------------------------- */
+.ozluk { display: flex; flex-direction: column; gap: 10px; }
+.ozluk-bas { display: flex; align-items: center; justify-content: space-between; color: var(--fl-gri); font-size: 12px; }
+.ozluk-klasorler { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.ozluk-klasor {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; text-align: start; cursor: pointer;
+  border: 1px solid var(--fl-kenar); border-radius: 6px; background: #fff; font-size: 13px; color: var(--fl-yazi);
+}
+.ozluk-klasor:hover { border-color: var(--fl-mavi); }
+.ozluk-klasor.acik { border-color: var(--fl-mavi); background: #f2f7fd; }
+.ozluk-ikon { font-size: 20px; color: #1d2d6b; flex: 0 0 auto; }
+.ozluk-klasor.bos .ozluk-ikon { color: #b8c2cc; }
+.ozluk-klasor-ad { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ozluk-klasor-sayi { flex: 0 0 auto; color: var(--fl-gri); font-size: 12px; }
+.ozluk-icerik { border: 1px solid var(--fl-kenar); border-radius: 6px; padding: 8px; }
+.ozluk-icerik-bas { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ozluk-icerik-bas button { margin-inline-start: auto; }
+.ozluk-aciklama { color: var(--fl-gri); font-size: 12px; }
+.ozluk-form-satir { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.ozluk-form-satir > span { color: var(--fl-gri); font-size: 13px; }
+.ozluk-tur-pasif td { opacity: .55; }
+.ozluk-ekip { display: flex; flex-direction: column; gap: 8px; }
+.ozluk-ekip-kisi ul { margin: 4px 0 0; padding-inline-start: 18px; }
+.ozluk-ekip-kisi li { margin-bottom: 4px; }

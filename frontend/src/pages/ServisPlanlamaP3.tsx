@@ -107,7 +107,7 @@ export function KaynakSekmesi({ birim }: { birim?: string }) {
       setBlokAcik(false);
       tazele();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const sil = useMutation({
@@ -116,7 +116,7 @@ export function KaynakSekmesi({ birim }: { birim?: string }) {
       message.success("Blok silindi");
       tazele();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const hucre = (satir: KaynakSatiri, h: KaynakHucresi) => (

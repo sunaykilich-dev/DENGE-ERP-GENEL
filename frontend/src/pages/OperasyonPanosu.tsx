@@ -38,8 +38,28 @@ import { IsDetayCekmecesi } from "./ServisIsleriPage";
 
 const YENILEME_MS = 60_000;
 
-const DURUM_ADI: Record<EkipDurumu, string> = { BOSTA: "Boşta", YOLDA: "Yolda", SAHADA: "Sahada" };
-const DURUM_SIRASI: Record<EkipDurumu, number> = { BOSTA: 0, YOLDA: 1, SAHADA: 2 };
+const DURUM_ADI: Record<EkipDurumu, string> = {
+  BOSTA: "Boşta",
+  YOLDA: "Yolda",
+  SAHADA: "Sahada",
+  MUSAIT_DEGIL: "Müsait değil",
+};
+// İzinli/eğitimdeki kişi tayin penceresinde en sona (rol testi 2026-11-20).
+const DURUM_SIRASI: Record<EkipDurumu, number> = { BOSTA: 0, YOLDA: 1, SAHADA: 2, MUSAIT_DEGIL: 3 };
+const MUSAITLIK_ADI: Record<string, string> = { IZIN: "İzinli", EGITIM: "Eğitimde", OFIS: "Ofiste" };
+
+function durumAdi(k: EkipUyesi): string {
+  return k.musait_degil && k.durum === "MUSAIT_DEGIL"
+    ? (MUSAITLIK_ADI[k.musait_degil.tur] ?? DURUM_ADI.MUSAIT_DEGIL)
+    : DURUM_ADI[k.durum];
+}
+
+/** "İzinli · 21.11 18:00'e kadar" — izin bloğu varsa alt satır. */
+function musaitlikNotu(k: EkipUyesi): string | null {
+  if (!k.musait_degil) return null;
+  const ad = MUSAITLIK_ADI[k.musait_degil.tur] ?? DURUM_ADI.MUSAIT_DEGIL;
+  return `${ad} · ${dayjs(k.musait_degil.ends_at).format("DD.MM HH:mm")}'e kadar`;
+}
 const FAALIYET_ADI: Record<string, string> = {
   YOL: "yolda",
   SAHA: "sahada",
@@ -120,12 +140,13 @@ function HizliTayin({
         [{ user_id: k.user_id, rol: k.saha_rolu === "SEF" ? "SEF" : "TEKNISYEN", is_lead: true }],
         "EKLE",
       ),
-    onSuccess: (_, k) => {
-      message.success(`${is.so_no} → ${k.ad}`);
+    onSuccess: (yanit, k) => {
+      if (yanit.uyarilar?.length) message.warning(`${is.so_no} → ${k.ad}. Dikkat: ${yanit.uyarilar.join("; ")}`, 8);
+      else message.success(`${is.so_no} → ${k.ad}`);
       void qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("operasyon") });
       kapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   return (
     <Modal
@@ -157,10 +178,10 @@ function HizliTayin({
                 <span className="op-aday-ad">
                   <b>{k.ad}</b>
                   <span>
-                    Bugün {k.bugun_planli} planlı · {k.acik_atanmis} açık iş
+                    {musaitlikNotu(k) ?? `Bugün ${k.bugun_planli} planlı · ${k.acik_atanmis} açık iş`}
                   </span>
                 </span>
-                <span className={`op-durum ${k.durum.toLowerCase()}`}>{DURUM_ADI[k.durum]}</span>
+                <span className={`op-durum ${k.durum.toLowerCase()}`}>{durumAdi(k)}</span>
               </button>
             </li>
           ))}
@@ -402,7 +423,11 @@ export default function OperasyonPanosu({
         </Bolum>
       </div>
 
-      <Bolum baslik="Ekip durumu" not={`${o.bosta} boşta · ${o.yolda} yolda · ${o.sahada} sahada`}>
+      <Bolum baslik="Ekip durumu" not={
+          `${o.bosta} boşta · ${o.yolda} yolda · ${o.sahada} sahada` +
+          (o.musait_degil ? ` · ${o.musait_degil} izinli/müsait değil` : "")
+        }
+      >
         {ekip.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Tayin edilebilir saha personeli yok" />
         ) : (
@@ -415,10 +440,10 @@ export default function OperasyonPanosu({
                   <span>
                     {k.acik_sayac
                       ? `${k.acik_sayac.so_no} · ${FAALIYET_ADI[k.acik_sayac.faaliyet] ?? ""}`
-                      : `Bugün ${k.bugun_planli} planlı iş`}
+                      : (musaitlikNotu(k) ?? `Bugün ${k.bugun_planli} planlı iş`)}
                   </span>
                 </div>
-                <span className={`op-durum ${k.durum.toLowerCase()}`}>{DURUM_ADI[k.durum]}</span>
+                <span className={`op-durum ${k.durum.toLowerCase()}`}>{durumAdi(k)}</span>
               </div>
             ))}
           </div>

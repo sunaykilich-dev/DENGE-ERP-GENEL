@@ -61,7 +61,7 @@ export default function IzinIstisnalari({
       void qc.invalidateQueries({ queryKey: ["kullanici-yetkileri", userId] });
       void qc.invalidateQueries({ queryKey: ["kullanicilar"] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   if (kendisiMi) {

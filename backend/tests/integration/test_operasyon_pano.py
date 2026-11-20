@@ -15,7 +15,7 @@ from servis_yardimci import giris
 from sqlalchemy import select
 
 from app.clock import FakeClock
-from app.models import ServiceAlert, ServiceOrderAssignment, ServicePlan
+from app.models import ServiceAlert, ServiceOrderAssignment, ServicePlan, ServiceUnavailability
 from app.models.teknik_servis import EPOSTA_ANLIK_KODLAR
 from app.services import settings as ayarlar
 from app.services.teknik_servis import uyari_uretimi
@@ -106,6 +106,49 @@ async def test_plani_kayan_is_ve_ekip(client, veri) -> None:
     # Açık sayacı olmayan teknisyen boşta.
     ekip = {k["ad"]: k for k in d["ekip"]}
     assert ekip["Op_Tek"]["durum"] == "BOSTA"
+
+
+async def test_tayin_isi_verildi_sayar_ve_izinliyi_gosterir(client, db, veri) -> None:
+    """Rol testi 2026-11-20: panodan tayin edilen iş TAYİN EDİLDİ olur; ekip
+    boşalınca tayin bekleyene döner. İzinli kişi boşta görünmez, tayinde uyarı."""
+    tek_id = await db.scalar(
+        select(ServiceOrderAssignment.user_id).where(
+            ServiceOrderAssignment.service_order_id == veri["tayinli"].id
+        )
+    )
+    db.add(
+        ServiceUnavailability(
+            user_id=tek_id,
+            tur="IZIN",
+            starts_at=AN - timedelta(hours=2),
+            ends_at=AN + timedelta(days=1),
+        )
+    )
+    await db.commit()
+    await giris(client, "op_sef")
+    d = (await client.get(PANO)).json()
+    kisi = {k["ad"]: k for k in d["ekip"]}["Op_Tek"]
+    assert kisi["durum"] == "MUSAIT_DEGIL" and kisi["musait_degil"]["tur"] == "IZIN"
+    assert d["ozet"]["musait_degil"] == 1  # şef boşta, teknisyen izinli
+
+    so_id = veri["yeni"].id
+    r = await client.put(
+        "/api/teknik-servis/isler/toplu-atama",
+        json={
+            "is_idler": [so_id],
+            "atamalar": [{"user_id": tek_id, "rol": "TEKNISYEN", "is_lead": True}],
+            "mod": "EKLE",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert any("izinli" in u for u in r.json()["uyarilar"])
+    assert (await client.get(f"/api/teknik-servis/isler/{so_id}")).json()["status"] == "PLANLANDI"
+    assert so_id not in {s["id"] for s in (await client.get(PANO)).json()["tayin_bekleyenler"]}
+
+    # Ekip boşalınca (aktif plan yok) iş yeniden tayin bekler.
+    r = await client.put(f"/api/teknik-servis/isler/{so_id}/atama", json={"atamalar": []})
+    assert r.status_code == 200, r.text
+    assert (await client.get(f"/api/teknik-servis/isler/{so_id}")).json()["status"] == "PLANLAMADA"
 
 
 async def test_tayin_gecikti_bildirimi_ve_kapanisi(db, veri) -> None:

@@ -598,7 +598,7 @@ function TarifeSekmesi() {
       form.resetFields();
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
   const kapat = useMutation({
     mutationFn: servisMaliyetApi.tarifeKapat,
@@ -606,7 +606,7 @@ function TarifeSekmesi() {
       message.success("Tarife geri alındı");
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   function kapatSor(t: Tarife) {

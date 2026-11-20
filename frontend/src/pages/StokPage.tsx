@@ -190,7 +190,7 @@ export default function StokPage() {
       form.resetFields();
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const teslim = useMutation({
@@ -199,7 +199,7 @@ export default function StokPage() {
       message.success("Teslim kaydedildi, cihazların konumu güncellendi");
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const hareketYaz = useMutation({
@@ -211,7 +211,7 @@ export default function StokPage() {
       void qc.invalidateQueries({ queryKey: ["stok-ozet"] });
       void qc.invalidateQueries({ queryKey: ["stok-hareketler"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const satirlar = useMemo(() => {

@@ -104,7 +104,7 @@ export default function RolDuzenle({
       tazele();
       onKapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const varsayilan = useMutation({
     mutationFn: () => api.post(`/api/roller/${rolKodu}/varsayilan`, { version: mevcut.data?.version }),
@@ -113,7 +113,7 @@ export default function RolDuzenle({
       tazele();
       onKapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const izinSayfalari = new Map((katalog.data ?? []).map((i) => [i.kod, i.sayfalar ?? []]));
   const acilanSayfalar = [...new Set(secili.flatMap((k) => izinSayfalari.get(k) ?? []))].sort((a, b) =>
