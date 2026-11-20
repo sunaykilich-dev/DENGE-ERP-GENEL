@@ -58,7 +58,9 @@ async def test_zorunlu_alanlar_ve_zincir(ortam, db, client) -> None:
     p = ortam["i_per"]
     vekil = ortam["id"]["vekil"]
     assert (await p.post("/api/izin", json=GOVDE)).status_code == 400  # vekil yok
-    assert (await p.post("/api/izin", json={**GOVDE, "vekil_id": ortam["id"]["per"]})).status_code == 400
+    assert (
+        await p.post("/api/izin", json={**GOVDE, "vekil_id": ortam["id"]["per"]})
+    ).status_code == 400
     assert (
         await p.post("/api/izin", json={**GOVDE, "vekil_id": vekil, "izin_ili": " "})
     ).status_code == 400
@@ -97,12 +99,16 @@ async def test_zorunlu_alanlar_ve_zincir(ortam, db, client) -> None:
     assert r.status_code == 200 and r.json()["personel"] and "iletisim_tel" not in r.json()
     r = await client.post(f"/api/public/izin/{token}/karar", json={"karar": "ONAY"})
     assert r.status_code == 200, r.text
-    assert (await client.post(f"/api/public/izin/{token}/karar", json={"karar": "ONAY"})).status_code == 404
+    assert (
+        await client.post(f"/api/public/izin/{token}/karar", json={"karar": "ONAY"})
+    ).status_code == 404
 
     # GMY red gerekçesiz olmaz; onaylayınca talep biter ve planlamaya izin düşer.
     ucuncu = t["onaylar"][2]["id"]
     g = ortam["i_gmy"]
-    assert (await g.post(f"/api/izin/onay/{ucuncu}/karar", json={"karar": "RED"})).status_code == 400
+    assert (
+        await g.post(f"/api/izin/onay/{ucuncu}/karar", json={"karar": "RED"})
+    ).status_code == 400
     r = await g.post(f"/api/izin/onay/{ucuncu}/karar", json={"karar": "ONAY"})
     assert r.status_code == 200 and r.json()["durum"] == "ONAYLANDI", r.text
     blok = await db.scalar(

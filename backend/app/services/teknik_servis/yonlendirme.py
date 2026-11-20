@@ -136,12 +136,20 @@ async def liste(db: AsyncSession, user: User, s: Suzgec) -> list[dict[str, Any]]
     hesap_idler = {x.customer_id for _, so, k in satirlar for x in (so, k) if x is not None}
     kisi_idler = {y.hedef_user_id for y, _, _ in satirlar if y.hedef_user_id}
     hesaplar = (
-        dict((await db.execute(select(Account.id, Account.title).where(Account.id.in_(hesap_idler)))).all())
+        dict(
+            (
+                await db.execute(
+                    select(Account.id, Account.title).where(Account.id.in_(hesap_idler))
+                )
+            ).all()
+        )
         if hesap_idler
         else {}
     )
     kisiler = (
-        dict((await db.execute(select(User.id, User.full_name).where(User.id.in_(kisi_idler)))).all())
+        dict(
+            (await db.execute(select(User.id, User.full_name).where(User.id.in_(kisi_idler)))).all()
+        )
         if kisi_idler
         else {}
     )
@@ -179,13 +187,17 @@ async def liste(db: AsyncSession, user: User, s: Suzgec) -> list[dict[str, Any]]
 async def adaylar(db: AsyncSession, birim: str) -> list[dict[str, Any]]:
     """Birimin üyesi ve planlama yetkili aktif kişiler (şef / birim yöneticisi)."""
     kisiler = (
-        await db.scalars(
-            select(User)
-            .join(UserUnit, UserUnit.user_id == User.id)
-            .where(UserUnit.birim == birim, User.is_active.is_(True), User.giris_acik.is_(True))
-            .order_by(User.full_name)
+        (
+            await db.scalars(
+                select(User)
+                .join(UserUnit, UserUnit.user_id == User.id)
+                .where(UserUnit.birim == birim, User.is_active.is_(True), User.giris_acik.is_(True))
+                .order_by(User.full_name)
+            )
         )
-    ).unique().all()
+        .unique()
+        .all()
+    )
     sonuc = []
     for u in kisiler:
         await db.refresh(u, ["role", "izin_istisnalari"])
@@ -209,7 +221,8 @@ async def yonlendir(
         raise ServisHatasi("Kayıt başka biri tarafından değiştirildi; sayfayı yenileyin")
     if hedef_user_id not in {a["id"] for a in await adaylar(db, kayit.birim)}:
         raise ServisGirdiHatasi(
-            "Seçilen kişi bu birimin yöneticisi/şefi değil (birim üyeliği ve planlama yetkisi gerekir)"
+            "Seçilen kişi bu birimin yöneticisi/şefi değil "
+            "(birim üyeliği ve planlama yetkisi gerekir)"
         )
     kayit.hedef_user_id = hedef_user_id
     kayit.durum = "BIRIMDE"

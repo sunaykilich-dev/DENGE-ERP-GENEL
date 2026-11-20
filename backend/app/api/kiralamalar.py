@@ -2190,9 +2190,7 @@ async def _etiket_ozeti(db: AsyncSession, user: User, c: RentalAsset) -> dict[st
 
 
 @router.post("/envanter/{kiralik_id}/etiket")
-async def etiket_uret(
-    kiralik_id: int, db: DbDep, user: Envanterci
-) -> dict[str, Any]:
+async def etiket_uret(kiralik_id: int, db: DbDep, user: Envanterci) -> dict[str, Any]:
     """Cihazın değişmez etiket kodunu verir (yoksa üretir); karekod bunu taşır."""
     from app.services.teknik_servis import kiralama_okutma as okutma
 

@@ -288,7 +288,7 @@ def _sicil_sayisi(sicil: str | None, onek: str) -> int | None:
     """Önekten sonrası yalnız rakamsa sayısı; değilse None (elle verilmiş sicil)."""
     if not sicil or not sicil.startswith(onek):
         return None
-    govde = sicil[len(onek):]
+    govde = sicil[len(onek) :]
     return int(govde) if govde.isdigit() else None
 
 
@@ -312,7 +312,7 @@ async def sicil_numarala(
     olan sicil değişmez. `uygula=False` yalnız önizleme döner.
     """
     onek = await _sicil_onek(db)
-    sonraki = int((await sicil_sonraki(db))[len(onek):])
+    sonraki = int((await sicil_sonraki(db))[len(onek) :])
     kisiler = (
         await db.scalars(
             select(User)
@@ -340,7 +340,11 @@ async def sicil_numarala(
             db,
             "users",
             "personel.sicil_numarala",
-            new_value={"adet": len(sonuc), "ilk": sonuc[0]["sicil_no"], "son": sonuc[-1]["sicil_no"]},
+            new_value={
+                "adet": len(sonuc),
+                "ilk": sonuc[0]["sicil_no"],
+                "son": sonuc[-1]["sicil_no"],
+            },
             user_id=aktor.id,
             ip=ip,
         )

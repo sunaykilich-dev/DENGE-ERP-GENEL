@@ -1392,9 +1392,7 @@ async def _seri_okutma_dogrula(
         return None
     if not await ayar_svc.get(db, "atolye_teslim_seri_okutma"):
         return None
-    beklenen = {
-        normalize_seri(s.seri_no): s.seri_no for s in so.seriler if s.removed_at is None
-    }
+    beklenen = {normalize_seri(s.seri_no): s.seri_no for s in so.seriler if s.removed_at is None}
     if not beklenen:
         return None
     okutulan = {

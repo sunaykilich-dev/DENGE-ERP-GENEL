@@ -38,8 +38,13 @@ async def test_satistan_mudure_mudurden_sefe(ortam, db) -> None:
         json={
             "customer_id": ortam["musteri"].id,
             "kalemler": [
-                {"item_type": "SERBEST", "description": "Kamera", "qty": 1,
-                 "unit_price": "1000", "vat_rate": 0.20}  # fmt: skip
+                {
+                    "item_type": "SERBEST",
+                    "description": "Kamera",
+                    "qty": 1,
+                    "unit_price": "1000",
+                    "vat_rate": 0.20,
+                }  # fmt: skip
             ],
         },
     )

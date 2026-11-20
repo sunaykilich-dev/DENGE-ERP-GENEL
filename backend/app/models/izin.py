@@ -70,7 +70,7 @@ class IzinTalebi(Base, PkMixin, TimestampMixin, ActorMixin, VersionedMixin):
     )
     sonuc_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    onaylar: Mapped[list["IzinOnayi"]] = relationship(
+    onaylar: Mapped[list[IzinOnayi]] = relationship(
         lazy="selectin", order_by="IzinOnayi.sira", cascade="all, delete-orphan"
     )
 
@@ -90,7 +90,9 @@ class IzinOnayi(Base, PkMixin, TimestampMixin):
     onaylayici_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="RESTRICT")
     )
-    durum: Mapped[str] = mapped_column(String(12), server_default=text("'SIRADA'"), default="SIRADA")
+    durum: Mapped[str] = mapped_column(
+        String(12), server_default=text("'SIRADA'"), default="SIRADA"
+    )
     # Basamağın sırası geldiği an (24 saat buradan sayılır).
     aktif_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     karar_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

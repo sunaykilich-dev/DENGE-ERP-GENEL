@@ -105,18 +105,14 @@ async def test_toplu_ulasimda_km_istenmez(client, db, kullanici_ac, servis_isi_a
     so = await servis_isi_ac(birim="HABERLESME", durum="SAHADA", seri=None,
                              frekans={"frekans": "150.000"})  # fmt: skip
     await giris(client, "ulasim_m2")
-    r = await client.put(
-        f"{ONEK}/{so.id}/ulasim", json={"ulasim_turu": "UCAK", "baslangic_km": 5}
-    )
+    r = await client.put(f"{ONEK}/{so.id}/ulasim", json={"ulasim_turu": "UCAK", "baslangic_km": 5})
     assert r.status_code == 200, r.text
     assert r.json()["baslangic_km"] is None  # toplu ulaşımda km tutulmaz
     r = await client.post(f"{ONEK}/{so.id}/durum", json={"hedef": "ISLEMDE"})
     assert r.status_code == 200, r.text
 
 
-async def test_kapsam_disi_birim_ve_uzaktan_cozum(
-    client, db, kullanici_ac, servis_isi_ac
-) -> None:
+async def test_kapsam_disi_birim_ve_uzaktan_cozum(client, db, kullanici_ac, servis_isi_ac) -> None:
     await kullanici_ac("ulasim_m3", "SERVIS_YONETICI")
     mob = await servis_isi_ac(birim="BARIYER", durum="SAHADA")
     guv = await servis_isi_ac(birim="GUVENLIK", durum="SAHADA")
@@ -124,7 +120,5 @@ async def test_kapsam_disi_birim_ve_uzaktan_cozum(
     r = await client.post(f"{ONEK}/{mob.id}/durum", json={"hedef": "ISLEMDE"})
     assert r.status_code == 200, r.text
     # Uzaktan çözüm: ulaşım girilmeden tamamlanır.
-    r = await client.post(
-        f"{ONEK}/{guv.id}/sonuc", json={**SONUC, "cozum_kanali": "UZAKTAN"}
-    )
+    r = await client.post(f"{ONEK}/{guv.id}/sonuc", json={**SONUC, "cozum_kanali": "UZAKTAN"})
     assert r.status_code == 200, r.text

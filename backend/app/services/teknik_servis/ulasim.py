@@ -147,7 +147,9 @@ async def islem_dogrula(db: AsyncSession, so: ServiceOrder) -> None:
     if not await zorunlu_mu(db, so):
         return
     if so.ulasim_turu is None:
-        raise ServisGirdiHatasi("İşleme almadan önce ulaşım bilgisi girilmeli (araç ya da toplu ulaşım)")
+        raise ServisGirdiHatasi(
+            "İşleme almadan önce ulaşım bilgisi girilmeli (araç ya da toplu ulaşım)"
+        )
     if so.ulasim_turu == "SIRKET_ARACI" and (so.servis_arac_id is None or so.baslangic_km is None):
         raise ServisGirdiHatasi("Şirket aracıyla gidilen işte plaka ve araç km zorunlu")
 

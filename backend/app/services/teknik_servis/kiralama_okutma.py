@@ -4,7 +4,8 @@
   cihazlarla karşılaştırılır. Seri numarasız ek ekipman için gelen adet
   girilir. Eksik/fazla varsa açıklama zorunlu; sonuç kiralama geçmişine
   (KONTROL olayı) ve denetim izine sayılarla yazılır. İade penceresi bu
-  sonuçla doldurulur (okunan "iade alındı", okunmayan "müşteride" önerisi; kayıp kararı kullanıcının).
+  sonuçla doldurulur (okunan "iade alındı", okunmayan "müşteride" önerisi;
+  kayıp kararı kullanıcının).
 - Etiket: her kiralık cihaza değişmez bir etiket kodu; karekod ERP'deki
   etiket sayfasını açar.
 - Teslim okutma: etiket sayfasından "gidişte / dönüşte teslim alındı"
@@ -25,7 +26,7 @@ from app.models import Product, Rental, RentalAllocation, RentalAsset, User
 from app.services import audit
 from app.services.normalize import normalize_seri
 from app.services.teknik_servis import kiralama_tahsis as tahsis_svc
-from app.services.teknik_servis.kiralik_envanter import bulunamadi, girdi, KiralamaHatasi
+from app.services.teknik_servis.kiralik_envanter import KiralamaHatasi, bulunamadi, girdi
 
 
 @dataclass
@@ -54,7 +55,9 @@ async def iade_kontrol(
     clock: Clock,
     ip: str | None = None,
 ) -> dict[str, Any]:
-    tahsisler = [t for t in await tahsis_svc.tahsisler(db, kiralama.id) if tahsis_svc.disarida(t) > 0]
+    tahsisler = [
+        t for t in await tahsis_svc.tahsisler(db, kiralama.id) if tahsis_svc.disarida(t) > 0
+    ]
     if not tahsisler:
         raise KiralamaHatasi("Müşteride iadesi beklenen cihaz yok")
     seri_tahsis = {t.asset_id: t for t in tahsisler if t.asset_id is not None}

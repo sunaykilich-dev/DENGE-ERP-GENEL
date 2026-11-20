@@ -23,6 +23,7 @@ from app.api import gorevler as gorevler_api
 from app.api import ik_belgeler as ik_belgeler_api
 from app.api import imports as imports_api
 from app.api import irsaliyeler as irsaliyeler_api
+from app.api import izin as izin_api
 from app.api import kiralamalar as kiralamalar_api
 from app.api import kvkk as kvkk_api
 from app.api import lokasyonlar as lokasyonlar_api
@@ -32,7 +33,6 @@ from app.api import payments as payments_api
 from app.api import personel as personel_api
 from app.api import pricing as pricing_api
 from app.api import public_quotes as public_quotes_api
-from app.api import izin as izin_api
 from app.api import purchasing as purchasing_api
 from app.api import quotes as quotes_api
 from app.api import reports as reports_api
@@ -43,6 +43,7 @@ from app.api import servis_ekipman as servis_ekipman_api
 from app.api import servis_maliyet as servis_maliyet_api
 from app.api import servis_operasyon as servis_operasyon_api
 from app.api import servis_raporlari as servis_raporlari_api
+from app.api import servis_yonlendirme as servis_yonlendirme_api
 from app.api import servis_zaman as servis_zaman_api
 from app.api import settlements as settlements_api
 from app.api import sims as sims_api
@@ -52,7 +53,6 @@ from app.api import tariffs as tariffs_api
 from app.api import teknik_servis as teknik_servis_api
 from app.api import teknik_servis_ana_veri as teknik_servis_ana_veri_api
 from app.api import teknik_servis_planlama as teknik_servis_planlama_api
-from app.api import servis_yonlendirme as servis_yonlendirme_api
 from app.api import users as users_api
 from app.api import vehicles as vehicles_api
 from app.api import workorders as workorders_api

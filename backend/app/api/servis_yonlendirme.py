@@ -35,9 +35,7 @@ def _hata(exc: Exception) -> HTTPException:
 
 
 @router.get("")
-async def liste(
-    db: DbDep, user: Okuyucu, acik: bool = Query(default=True)
-) -> list[dict[str, Any]]:
+async def liste(db: DbDep, user: Okuyucu, acik: bool = Query(default=True)) -> list[dict[str, Any]]:
     return await svc.liste(db, user, svc.Suzgec(acik=acik))
 
 

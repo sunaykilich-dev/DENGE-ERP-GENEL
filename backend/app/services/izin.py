@@ -115,7 +115,9 @@ def karar_adresi(token: str) -> str:
     return get_config().public_base_url.rstrip("/") + f"/izin-karar/{token}"
 
 
-async def _gonder(db: AsyncSession, alici: str | None, konu: str, govde: str, html: str | None = None) -> bool:
+async def _gonder(
+    db: AsyncSession, alici: str | None, konu: str, govde: str, html: str | None = None
+) -> bool:
     """E-posta yapılandırılmamışsa ya da gönderilemezse sessizce geçer (ERP'de uyarı var)."""
     from app.services import mail
 
@@ -155,8 +157,11 @@ async def _onayciya_bildir(db: AsyncSession, t: IzinTalebi, o: IzinOnayi) -> Non
         "ERP'de İnsan Kaynakları › İzin Talepleri › Onayımda ekranından da karar verebilirsiniz.\n"
     )
     e = html_lib.escape
-    satirlar = "".join(f"<tr><td style='padding:2px 8px;color:#555'>{e(a)}</td><td>{e(b)}</td></tr>"
-                       for a, _, b in (s.partition(": ") for s in ozet.strip().splitlines()))  # fmt: skip
+    parcalar = (s.partition(": ") for s in ozet.strip().splitlines())
+    satirlar = "".join(
+        f"<tr><td style='padding:2px 8px;color:#555'>{e(a)}</td><td>{e(b)}</td></tr>"
+        for a, _, b in parcalar
+    )
     dugme = (
         "display:inline-block;padding:10px 18px;margin-right:8px;border-radius:6px;"
         "text-decoration:none;color:#fff;font-weight:600;"
@@ -180,15 +185,16 @@ async def _sonuc_bildir(db: AsyncSession, t: IzinTalebi) -> None:
         return
     ozet = _ozet(t, personel, vekil)
     durum = DURUM_ADLARI.get(t.durum, t.durum)
-    await _gonder(db, personel.email, f"İzin talebiniz: {durum}", f"İzin talebiniz {durum.lower()}.\n\n{ozet}")
+    await _gonder(
+        db, personel.email, f"İzin talebiniz: {durum}", f"İzin talebiniz {durum.lower()}.\n\n{ozet}"
+    )
     if t.durum == "ONAYLANDI":
         ik = _bos(str(await ayar_svc.get(db, "ik_eposta") or ""))
         await _gonder(
             db,
             ik,
             f"Onaylanan izin: {personel.full_name}",
-            f"Aşağıdaki izin talebi bütün onaylardan geçti.\n\n{ozet}"
-            f"İletişim: {t.iletisim_tel}\n",
+            f"Aşağıdaki izin talebi bütün onaylardan geçti.\n\n{ozet}İletişim: {t.iletisim_tel}\n",
         )
 
 
@@ -237,7 +243,8 @@ async def olustur(
     onaycilar = await zincir(db, personel)
     if not onaycilar:
         raise IzinHatasi(
-            "Personelin yöneticisi tanımlı değil; onay zinciri kurulamıyor. İK'dan yönetici tanımını isteyin."
+            "Personelin yöneticisi tanımlı değil; onay zinciri kurulamıyor. "
+            "İK'dan yönetici tanımını isteyin."
         )
     simdi = clock.now()
     t = IzinTalebi(
@@ -358,7 +365,9 @@ async def _musaitlige_yaz(db: AsyncSession, t: IzinTalebi) -> None:
         logger.info("İzin bloğu planlamaya yazılamadı (çakışma), talep %s", t.id)
 
 
-async def iptal(db: AsyncSession, t: IzinTalebi, *, user: User, clock: Clock, ip: str | None = None) -> IzinTalebi:
+async def iptal(
+    db: AsyncSession, t: IzinTalebi, *, user: User, clock: Clock, ip: str | None = None
+) -> IzinTalebi:
     if t.personel_id != user.id and not user.has(YONETIM_IZNI):
         raise IzinYetkiHatasi("Talebi yalnız sahibi ya da İK iptal eder")
     if t.durum != "BEKLIYOR":
@@ -434,7 +443,9 @@ async def yukselt(db: AsyncSession, clock: Clock) -> str:
         await _onayciya_bildir(db, t, sonraki)
         gecen += 1
     await db.commit()
-    return f"izin yükseltme: {gecen} talep sonraki yöneticiye geçti, {bekleyen} talep İK'ya bildirildi"
+    return (
+        f"izin yükseltme: {gecen} talep sonraki yöneticiye geçti, {bekleyen} talep İK'ya bildirildi"
+    )
 
 
 # --- Okuma ------------------------------------------------------------------------------
@@ -442,7 +453,9 @@ async def yukselt(db: AsyncSession, clock: Clock) -> str:
 
 async def cikti(db: AsyncSession, t: IzinTalebi, *, tam: bool = True) -> dict[str, Any]:
     kimlikler = {t.personel_id, t.vekil_id} | {o.onaylayici_id for o in t.onaylar}
-    adlar = dict((await db.execute(select(User.id, User.full_name).where(User.id.in_(kimlikler)))).all())
+    adlar = dict(
+        (await db.execute(select(User.id, User.full_name).where(User.id.in_(kimlikler)))).all()
+    )
     return {
         "id": t.id,
         "version": t.version,

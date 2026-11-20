@@ -2200,7 +2200,9 @@ async def ulasim_yaz(
 
     so = await _kapsamli_is(db, so_id, user)
     if so.status in ("TAMAMLANDI", "KAPATILDI", "IPTAL"):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Tamamlanmış işin ulaşım bilgisi değiştirilemez")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Tamamlanmış işin ulaşım bilgisi değiştirilemez"
+        )
     try:
         await ulasim.bilgi_yaz(
             db,
