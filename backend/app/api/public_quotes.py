@@ -30,7 +30,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import ClockDep, DbDep, client_ip
 from app.models import Account, Quote, QuoteVersion
-from app.services import audit
+from app.services import audit, belgeler
 from app.services import quotes as svc
 
 router = APIRouter(prefix="/api/public/teklif", tags=["teklif (public)"])
@@ -64,6 +64,10 @@ class AcikTeklif(BaseModel):
     durum: str
     karar_verilebilir: bool
     uyari: str | None = None
+    # Künye PDF'tekiyle aynı kuraldan (rol testi 2026-11-20): Elektronik
+    # teklifinin müşteri sayfasında Mobilite logosu/adı görünmez.
+    sirket_unvan: str = "Denge Mobilite"
+    mobilite_logosu: bool = True
 
 
 async def _versiyon_bul(db: DbDep, token: str) -> tuple[Quote, QuoteVersion]:
@@ -111,7 +115,12 @@ async def goruntule(token: Jeton, request: Request, db: DbDep, clock: ClockDep) 
         )
         await db.commit()
 
+    kunye = belgeler.firma_bilgisi(
+        await belgeler.ayar_haritasi(db), await belgeler.birim_sirketi(db, t.birim)
+    )
     return AcikTeklif(
+        sirket_unvan=kunye["unvan"],
+        mobilite_logosu=kunye["logo"],
         quote_no=t.quote_no,
         title=t.title,
         musteri=musteri.title if musteri else "",

@@ -142,6 +142,8 @@ UC_HEDEFLERI: dict[str, frozenset[str]] = {
     "genel": frozenset({"PLANLAMADA", "YOLA_CIKILDI", "SAHADA", "ISLEMDE", "ATOLYEDE"}),
     "planla": frozenset({"PLANLANDI"}),
     "plan_geri_al": frozenset({"PLANLAMADA"}),
+    # Tayin = iş verildi (2026-11-20): ekip gelince PLANLANDI, ekip boşalınca geri.
+    "tayin": frozenset({"PLANLANDI", "PLANLAMADA"}),
     "sayac": frozenset({"YOLA_CIKILDI", "SAHADA", "PLANLANDI"}),
     "bekleme": frozenset(
         {

@@ -251,7 +251,7 @@ function AtamaPenceresi({
       message.success(toplu ? `${soIdler.length} kaydın ekibi güncellendi` : "Ekip güncellendi");
       bitti();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const secenekler = (aday.data ?? []).map((k) => ({
@@ -411,7 +411,7 @@ function KayitBilgileri({
       message.success("Kaydedildi");
       guncellendi(yeni);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const tedarikciSecenek = [
@@ -625,7 +625,7 @@ function Aksesuarlar({
       setDuzenle(false);
       guncellendi(yeni);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   return (
@@ -753,7 +753,7 @@ function EkipmanDuzeltPenceresi({
       message.success("Cihaz bilgisi düzeltildi");
       bitti(yeni);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   return (
     <Modal

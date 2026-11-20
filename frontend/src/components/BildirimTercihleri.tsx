@@ -49,7 +49,7 @@ export default function BildirimTercihleriPenceresi({ acik, kapat }: BildirimTer
       setTaslak(null);
       kapat();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const vazgec = () => {

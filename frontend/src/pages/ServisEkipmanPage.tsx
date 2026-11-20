@@ -165,7 +165,7 @@ export default function ServisEkipmanPage() {
       setSecili([]);
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const garanti = useMutation({
@@ -181,7 +181,7 @@ export default function ServisEkipmanPage() {
         setOnizleme(r);
       }
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const kartAc = (r: EkipmanSatiri) => git(`/servis-ekipman/${r.id}${yolEki}`);

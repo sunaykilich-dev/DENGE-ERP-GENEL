@@ -124,7 +124,7 @@ function TopluAtama({
       setSorumlu(undefined);
       bitti();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const secenekler = (aday.data ?? []).map((k) => ({ value: k.id, label: `${k.ad} · ${k.saha_rolu}` }));
   return (
@@ -438,6 +438,8 @@ function IsListesi({
   );
 }
 
+const MUSAITLIK_ADI: Record<string, string> = { IZIN: "İzinli", EGITIM: "Eğitimde", OFIS: "Ofiste" };
+
 function PersonelSekmesi({ birim }: { birim?: string }) {
   const veri = useQuery({
     queryKey: ["operasyon-personel", birim],
@@ -462,6 +464,11 @@ function PersonelSekmesi({ birim }: { birim?: string }) {
               {r.acik_sayac.so_no} · {r.acik_sayac.faaliyet}
             </Tag>
           </Tooltip>
+        ) : r.musait_degil ? (
+          <Tag>
+            {MUSAITLIK_ADI[r.musait_degil.tur] ?? "Müsait değil"} ·{" "}
+            {dayjs(r.musait_degil.ends_at).format("DD.MM HH:mm")}'e kadar
+          </Tag>
         ) : (
           <Typography.Text type="secondary">Açık sayaç yok</Typography.Text>
         ),
@@ -508,7 +515,7 @@ function BildirimSekmesi() {
   const gor = useMutation({
     mutationFn: (idler: number[]) => operasyonApi.goruldu(idler),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["operasyon-bildirimler"] }),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const gorulmemis = (veri.data?.kayitlar ?? []).filter((b) => !b.goruldu).map((b) => b.id);
   const sutunlar: ColumnsType<Bildirim> = [
@@ -619,7 +626,7 @@ export function EpostaSekmesi() {
       qc.setQueryData(["operasyon-eposta-ayar"], r);
       message.success("E-posta ayarı kaydedildi");
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const a = ayar.data;
   const sutunlar: ColumnsType<EpostaKutusuSatiri> = [

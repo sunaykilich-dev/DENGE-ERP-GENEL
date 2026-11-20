@@ -97,7 +97,7 @@ export default function AtolyeDurumPenceresi({
       }
       bitti(d);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   if (!hedef) return null;

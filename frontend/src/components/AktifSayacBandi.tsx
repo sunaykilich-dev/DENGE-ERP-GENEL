@@ -101,7 +101,7 @@ export default function AktifSayacBandi() {
           loading={islem.isPending}
           onClick={() =>
             islem.mutate(() => servisZaman.bitir(acik), {
-              onSuccess: () => message.success("Sayaç bitirildi"),
+              onSuccess: () => void message.success("Sayaç bitirildi"),
             })
           }
         >
@@ -119,7 +119,7 @@ export default function AktifSayacBandi() {
             disabled={kilitli}
             onClick={() =>
               islem.mutate(() => servisZaman.geriAl(acik), {
-                onSuccess: () => message.success("Sayaç geri alındı"),
+                onSuccess: () => void message.success("Sayaç geri alındı"),
               })
             }
           >

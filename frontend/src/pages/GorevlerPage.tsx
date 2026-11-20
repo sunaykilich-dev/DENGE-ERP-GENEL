@@ -94,7 +94,7 @@ export default function GorevlerPage() {
       setPanoId(p.id);
       void qc.invalidateQueries({ queryKey: ["panolar"] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const panoArsivle = useMutation({
@@ -104,7 +104,7 @@ export default function GorevlerPage() {
       if (arsivlendi && !arsiviGoster) setPanoId(undefined);
       void qc.invalidateQueries({ queryKey: ["panolar"] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const panoSil = useMutation({
@@ -115,7 +115,7 @@ export default function GorevlerPage() {
       void qc.invalidateQueries({ queryKey: ["panolar"] });
     },
     // Kartlı pano sunucuda 409 ile reddedilir; mesaj ne yapılacağını söyler.
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const kolonEkle = useMutation({
@@ -125,19 +125,19 @@ export default function GorevlerPage() {
       kolonForm.resetFields();
       void qc.invalidateQueries({ queryKey: ["panolar"] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const kolonSil = useMutation({
     mutationFn: (id: number) => gorevApi.kolonSil(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["panolar"] }),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const kartAc = useMutation({
     mutationFn: (v: { column_id: number; title: string }) => gorevApi.kartAc(panoId!, v),
     onSuccess: () => tazele(),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const kartTasi = useMutation({

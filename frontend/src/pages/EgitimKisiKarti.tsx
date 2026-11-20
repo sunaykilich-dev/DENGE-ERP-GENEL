@@ -52,7 +52,7 @@ function GozlemAyrintisi({ g, kendi }: { g: Gozlem; kendi: boolean }) {
       setAcik(false);
       void qc.invalidateQueries({ queryKey: ["egitim-kendim"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
   return (
     <Space orientation="vertical" style={{ width: "100%" }}>

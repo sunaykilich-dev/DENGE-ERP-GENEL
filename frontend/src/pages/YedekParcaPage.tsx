@@ -203,7 +203,7 @@ function StokSekmesi() {
       setDuzenle(null);
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
 
   const kayitlar = liste.data?.kayitlar ?? [];
@@ -400,7 +400,7 @@ function HareketSekmesi() {
       message.success("Ters kayıt yazıldı");
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const tersSor = (h: Hareket) => {
     let metin = "";
@@ -616,12 +616,12 @@ function TalepSekmesi() {
   const iptal = useMutation({
     mutationFn: (id: number) => parcaApi.talepIptal(id, "Kullanıcı iptal etti"),
     onSuccess: () => tazele("Talep iptal edildi"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const onayla = useMutation({
     mutationFn: (id: number) => parcaApi.talepOnayla(id),
     onSuccess: () => tazele("Talep onaylandı; depoya iletildi"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const [redAcik, setRedAcik] = useState(false);
   const [redNedeni, setRedNedeni] = useState("");
@@ -632,12 +632,12 @@ function TalepSekmesi() {
       setRedNedeni("");
       await tazele("Talep reddedildi");
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const teslim = useMutation({
     mutationFn: (id: number) => parcaApi.talepTeslim(id),
     onSuccess: () => tazele("Parça teslim edildi; stoktan çıkış yapıldı"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((t) => t.id === secili[0]) ?? null;
@@ -842,7 +842,7 @@ function IkmalOnerisiKutusu() {
       message.success(t.durum === "ONAY_BEKLIYOR" ? "İkmal talebi amir onayına gönderildi" : "İkmal talebi depoya iletildi");
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const veri = oneriler.data ?? [];
   if (!veri.length) return null;
@@ -922,17 +922,17 @@ function KullanimSekmesi() {
   const onayla = useMutation({
     mutationFn: (id: number) => parcaApi.kullanimOnayla(id),
     onSuccess: () => bitti("Kullanım onaylandı"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const reddet = useMutation({
     mutationFn: ({ id, n }: { id: number; n: string }) => parcaApi.kullanimReddet(id, n),
     onSuccess: () => bitti("Kullanım reddedildi; teknisyene zimmet sorusu açıldı"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const zimmet = useMutation({
     mutationFn: ({ id, n }: { id: number; n: string }) => parcaApi.zimmetCevapla(id, n),
     onSuccess: () => bitti("Açıklama gönderildi"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((k) => k.id === secili[0]) ?? null;
@@ -1105,7 +1105,7 @@ function SayimSekmesi() {
       await qc.invalidateQueries({ queryKey: ["parca"] });
       setSecili(s.id);
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   return (
     <Space orientation="vertical" size={12} style={{ width: "100%" }}>
@@ -1239,7 +1239,7 @@ function SayimCekmecesi({ sayimId, onKapat }: { sayimId: number | null; onKapat:
       setSayilan({});
       await tazele();
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const onayla = useMutation({
     mutationFn: (kabul: boolean) => parcaApi.sayimOnayla(sayimId!, gerekce.trim(), kabul),
@@ -1260,7 +1260,7 @@ function SayimCekmecesi({ sayimId, onKapat }: { sayimId: number | null; onKapat:
       message.success("Sayım iptal edildi");
       await tazele();
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   return (
     <Drawer
@@ -1437,7 +1437,7 @@ function DepoSekmesi() {
       setDuzenle(null);
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const arac = Form.useWatch("arac", form);
   const aracDeposu = duzenle === "yeni" ? arac : duzenle?.location_type === "TEKNISYEN";
@@ -1607,7 +1607,7 @@ function KartPenceresi({ acik, onKapat }: { acik: boolean; onKapat: () => void }
       onKapat();
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   return (
     <Modal

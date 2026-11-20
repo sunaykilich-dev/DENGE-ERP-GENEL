@@ -147,7 +147,7 @@ export default function ZamanTakibiPage() {
       }
     },
     onError: (e: ApiError) =>
-      message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
+      void message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
   });
 
   const kisiSecenekleri = useMemo(

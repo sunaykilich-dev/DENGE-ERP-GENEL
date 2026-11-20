@@ -132,7 +132,7 @@ export default function KvkkPage() {
       void qc.invalidateQueries({ queryKey: ["kvkk-veri"] });
       void qc.invalidateQueries({ queryKey: ["kvkk-log"] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   return (

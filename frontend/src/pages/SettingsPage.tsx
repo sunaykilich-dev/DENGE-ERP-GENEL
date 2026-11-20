@@ -137,7 +137,7 @@ export default function SettingsPage() {
       message.success("Parametreler kaydedildi");
       void qc.invalidateQueries({ queryKey: ["ayarlar"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   function alan(anahtar: string) {

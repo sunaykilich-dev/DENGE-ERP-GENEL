@@ -132,7 +132,7 @@ function DevirListesi({ durum }: { durum: "bekleyen" | "iletildi" }) {
       setGerekce("");
       yenile();
     },
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
 
   const tutarVar = (liste.data?.kayitlar ?? []).some((r) => "tutar" in r);

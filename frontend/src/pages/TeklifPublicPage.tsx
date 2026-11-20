@@ -44,6 +44,9 @@ interface Kalem {
 }
 
 interface AcikTeklif {
+  /** Teklifin şirketi (künye PDF'tekiyle aynı kural). */
+  sirket_unvan: string;
+  mobilite_logosu: boolean;
   quote_no: string;
   title: string | null;
   musteri: string;
@@ -99,7 +102,7 @@ export default function TeklifPublicPage() {
       setRedAcik(false);
       message.success(yeni.durum === "KABUL" ? "Teklif kabul edildi." : "Yanıtınız kaydedildi.");
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const t = teklif.data;
@@ -116,7 +119,11 @@ export default function TeklifPublicPage() {
           gap: 12,
         }}
       >
-        <img src="/brand/denge-mobilite-mono.svg" alt="Denge Mobilite" style={{ height: 22 }} />
+        {t && !t.mobilite_logosu ? (
+          <Typography.Text style={{ color: "#fff", fontWeight: 700 }}>{t.sirket_unvan}</Typography.Text>
+        ) : t ? (
+          <img src="/brand/denge-mobilite-mono.svg" alt="Denge Mobilite" style={{ height: 22 }} />
+        ) : null}
         <Typography.Text style={{ color: "#fff", fontWeight: 600, letterSpacing: "-0.02em" }}>
           Fiyat Teklifi
         </Typography.Text>
@@ -289,7 +296,7 @@ export default function TeklifPublicPage() {
             )}
 
             <Typography.Paragraph type="secondary" style={{ textAlign: "center", marginTop: 8 }}>
-              Denge Mobilite · Bu bağlantı yalnız size özeldir, paylaşmayınız.
+              {t.sirket_unvan} · Bu bağlantı yalnız size özeldir, paylaşmayınız.
             </Typography.Paragraph>
           </Space>
         )}

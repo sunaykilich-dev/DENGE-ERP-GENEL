@@ -236,7 +236,7 @@ export default function TeklifFormu({
       void qc.invalidateQueries({ queryKey: ["teklifler"] });
       onKaydedildi?.(t.id);
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   function degis(anahtar: number, yama: Partial<Kalem>) {

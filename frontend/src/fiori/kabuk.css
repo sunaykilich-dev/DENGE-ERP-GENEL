@@ -237,6 +237,12 @@
   text-align: center;
 }
 .dk-menu-rozet.kirmizi { background: #bb0000; }
+/* Rozetli yaprakta favori yıldızının yeri yalnız yıldız görünürken ayrılır;
+   yoksa etkin (kalın) "Operasyon Merkezi" adı kesiliyordu (rol testi 2026-11-20). */
+.dk-menu-yaprak:has(.dk-menu-rozet) .dk-menu-baglanti { padding-inline-end: 10px; }
+.dk-menu-yaprak:has(.dk-menu-rozet):is(:hover, :focus-within) .dk-menu-baglanti,
+.dk-menu-yaprak:has(.dk-menu-yildiz.dolu) .dk-menu-baglanti { padding-inline-end: 40px; }
+@media (hover: none) { .dk-menu-yaprak:has(.dk-menu-rozet) .dk-menu-baglanti { padding-inline-end: 40px; } }
 
 .dk-menu-yaprak { position: relative; display: flex; align-items: center; }
 .dk-menu-yaprak .dk-menu-baglanti { padding-inline-end: 40px; }

@@ -106,7 +106,7 @@ export default function HatlarPage() {
       );
       void qc.invalidateQueries({ queryKey: ["hatlar"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   // Sayfalama SUNUCUDA; gelen liste "hepsi" değil, istenen sayfadır.

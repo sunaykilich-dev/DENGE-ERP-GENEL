@@ -776,7 +776,7 @@ function KiralamaCekmecesi({
       message.success("Kaydedildi");
       onDegisti();
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) => void message.error(hataMesaji(e)),
   });
 
   const k = kart.data;

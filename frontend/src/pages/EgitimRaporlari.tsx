@@ -260,7 +260,7 @@ export function EslemeSekmesi() {
       message.success("Kursun yetkinlik bağları kaydedildi");
       qc.invalidateQueries({ queryKey: ["egitim", "kurs-yetkinlik"] });
     },
-    onError: (e) => message.error(hata(e)),
+    onError: (e) => void message.error(hata(e)),
   });
 
   // --- Servis işi türü → asgari yetkinlik --------------------------------------------
@@ -298,7 +298,7 @@ export function EslemeSekmesi() {
       message.success("Eşleme kaydedildi");
       qc.invalidateQueries({ queryKey: ["egitim", "gereksinim"] });
     },
-    onError: (e) => message.error(hata(e)),
+    onError: (e) => void message.error(hata(e)),
   });
 
   const yetkinlikSecenekleri = (yetkinlikler.data ?? []).map((y) => ({
