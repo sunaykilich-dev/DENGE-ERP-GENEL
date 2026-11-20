@@ -29,6 +29,7 @@ from app.api import kvkk as kvkk_api
 from app.api import lokasyonlar as lokasyonlar_api
 from app.api import orders as orders_api
 from app.api import oturum as oturum_api
+from app.api import ozluk as ozluk_api
 from app.api import payments as payments_api
 from app.api import personel as personel_api
 from app.api import pricing as pricing_api
@@ -245,6 +246,7 @@ def create_app() -> FastAPI:
     # (operasyon, atölye, kiralama, parça, maliyet, eğitim) D2-S ekledi.
     app.include_router(personel_api.router)
     app.include_router(ik_belgeler_api.router)
+    app.include_router(ozluk_api.router)
     app.include_router(lokasyonlar_api.router)
     app.include_router(teknik_servis_ana_veri_api.router)
     app.include_router(teknik_servis_planlama_api.router)

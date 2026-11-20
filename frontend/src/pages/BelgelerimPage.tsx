@@ -7,6 +7,7 @@ import { useState } from "react";
 import type { ApiError } from "../api/client";
 import { type Belgem, DURUM_ETIKETLERI, ikBelgeApi } from "../api/ikBelgeler";
 import { useAuth } from "../auth/AuthContext";
+import OzlukDosyasi from "../components/OzlukDosyasi";
 
 /**
  * Belgelerim (KARARLAR 2026-10-28 §11): personelin kendi bordroları ve
@@ -33,28 +34,34 @@ export default function BelgelerimPage() {
   const yanitlanan = belgeler.filter((b) => !bekleyen.includes(b));
 
   return (
-    <Card title="Belgelerim">
-      {liste.isLoading && <Spin />}
-      {liste.error && <Alert type="error" title={(liste.error as Error).message} />}
-      {liste.data && belgeler.length === 0 && <Empty description="Size gönderilmiş belge yok" />}
-      {bekleyen.length > 0 && (
-        <Alert
-          style={{ marginBottom: 12 }}
-          type="warning"
-          showIcon
-          title={`${bekleyen.length} belge onayınızı bekliyor`}
-          description="Belgeyi açıp okuyun, sonra onaylayın ya da gerekçe yazarak itiraz edin."
-        />
-      )}
-      {[...bekleyen, ...yanitlanan].length > 0 && (
-        <List
-          itemLayout="vertical"
-          dataSource={[...bekleyen, ...yanitlanan]}
-          renderItem={(b) => <BelgeSatiri belge={b} onAc={ac} onYanit={(onay) => setYanit({ belge: b, onay })} />}
-        />
-      )}
-      {yanit && <YanitPenceresi belge={yanit.belge} onay={yanit.onay} kapat={() => setYanit(null)} />}
-    </Card>
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
+      <Card title="Belgelerim">
+        {liste.isLoading && <Spin />}
+        {liste.error && <Alert type="error" title={(liste.error as Error).message} />}
+        {liste.data && belgeler.length === 0 && <Empty description="Size gönderilmiş belge yok" />}
+        {bekleyen.length > 0 && (
+          <Alert
+            style={{ marginBottom: 12 }}
+            type="warning"
+            showIcon
+            title={`${bekleyen.length} belge onayınızı bekliyor`}
+            description="Belgeyi açıp okuyun, sonra onaylayın ya da gerekçe yazarak itiraz edin."
+          />
+        )}
+        {[...bekleyen, ...yanitlanan].length > 0 && (
+          <List
+            itemLayout="vertical"
+            dataSource={[...bekleyen, ...yanitlanan]}
+            renderItem={(b) => <BelgeSatiri belge={b} onAc={ac} onYanit={(onay) => setYanit({ belge: b, onay })} />}
+          />
+        )}
+        {yanit && <YanitPenceresi belge={yanit.belge} onay={yanit.onay} kapat={() => setYanit(null)} />}
+      </Card>
+      {/* Özlük dosyası (2026-11-20): İK'nın yüklediği kendi belgeleri, salt okunur. */}
+      <Card title="Özlük dosyam">
+        <OzlukDosyasi benim />
+      </Card>
+    </Space>
   );
 }
 

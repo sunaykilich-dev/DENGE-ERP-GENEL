@@ -28,6 +28,7 @@ import {
   type EkipmanKarti,
 } from "../api/servisEkipman";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "./MusteriLokasyonSecici";
 
 interface FormDegerleri {
@@ -73,8 +74,14 @@ export default function EkipmanFormu({
   const secim = Form.useWatch("musteri", form);
   const lokasyonId = secim?.lokasyonId ?? null;
 
-  const tumBirimler = kullanici?.role.scope === "TUMU" || !(kullanici?.birimler ?? []).length;
-  const birimler = tumBirimler ? BIRIM_KODLARI : (kullanici?.birimler ?? []);
+  // Seçenekler sunucunun kayıt kuralıyla aynı: etkin şirketin birimleri ∩
+  // kullanıcının kapsamı (`menuBirimleri`; null = süzgeç yok). Eskiden birim
+  // üyeliği olmayan kullanıcıya bütün birimler sunuluyor, kayıt "Birim
+  // kapsamınız dışında" ile reddediliyordu (2026-11-20).
+  const { menuBirimleri } = useSirket();
+  const birimler = BIRIM_KODLARI.filter(
+    (b) => menuBirimleri == null || menuBirimleri.has(b) || b === kayit?.birim,
+  );
 
   const irtibatlar = useQuery({
     queryKey: ["lokasyon-kart", lokasyonId],
@@ -110,7 +117,7 @@ export default function EkipmanFormu({
       });
     } else {
       form.setFieldsValue({
-        birim: kullanici?.birincil_birim ?? birimler[0],
+        birim: birimler.find((b) => b === kullanici?.birincil_birim) ?? birimler[0],
         equipment_type: "XRAY",
         lifecycle_status: "BILINMIYOR",
       });
@@ -174,6 +181,15 @@ export default function EkipmanFormu({
       width={720}
       destroyOnHidden
     >
+      {!kayit && birimler.length === 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Kayıt açabileceğiniz bir birim yok"
+          description="Hesabınız bu şirkette hiçbir birime bağlı değil. Personel kartından birim eklenmesi için yöneticinize başvurun."
+        />
+      )}
       <Form form={form} layout="vertical" onFinish={(v) => void kaydet(v)}>
         <Row gutter={12}>
           <Col xs={24} sm={12}>
