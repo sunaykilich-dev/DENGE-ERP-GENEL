@@ -62,6 +62,7 @@ import {
 } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
 import { useSirket } from "../auth/SirketContext";
+import OzlukDosyasi from "../components/OzlukDosyasi";
 import {
   Aciklama,
   AltNot,
@@ -189,7 +190,7 @@ function YoneticiAlani({ p, yazabilir, bitti }: { p: Personel; yazabilir: boolea
       message.success("Yönetici kaydedildi");
       bitti();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
   if (!yazabilir) return <>{p.yonetici?.ad ?? "—"}</>;
   const secenekler = (adaylar.data?.kayitlar ?? [])
@@ -287,7 +288,7 @@ function VekaletAlani({ p, verebilir }: { p: Personel; verebilir: boolean }) {
       form.resetFields();
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
   const iptal = useMutation({
     mutationFn: (izin: string) => api.post<Vekalet[]>(`/api/vekalet/${p.id}/iptal`, { izin }),
@@ -295,7 +296,7 @@ function VekaletAlani({ p, verebilir }: { p: Personel; verebilir: boolean }) {
       message.success("Vekâlet iptal edildi");
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   return (
@@ -479,7 +480,7 @@ export default function PersonelPage() {
       tazele();
       setSeciliId(p.id);
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const kartKaydet = useMutation({
@@ -503,7 +504,7 @@ export default function PersonelPage() {
       message.success("Personel kartı kaydedildi");
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const aktiflestir = useMutation({
@@ -512,7 +513,7 @@ export default function PersonelPage() {
       message.success(r.mesaj);
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const cikisYetkisi = yetkili("personel.cikis");
@@ -560,7 +561,7 @@ export default function PersonelPage() {
         ),
       });
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const anonimlestir = useMutation({
@@ -574,7 +575,7 @@ export default function PersonelPage() {
       setAnonimOnay(false);
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const o = onizleme.data;
@@ -941,6 +942,16 @@ export default function PersonelPage() {
 
             {yetkili("vekalet.ver") && (
               <VekaletAlani p={p} verebilir={p.calisiyor && p.giris_acik} />
+            )}
+
+            {/* Özlük dosyası (2026-11-20): İK yükler, türleri yönetir. */}
+            {yetkili("ik_belge.yonet") && (
+              <div>
+                <Typography.Title level={5} style={{ marginBottom: 8 }}>
+                  Özlük dosyası
+                </Typography.Title>
+                <OzlukDosyasi kisiId={p.id} />
+              </div>
             )}
 
             {yazabilir ? (

@@ -249,7 +249,7 @@ export function KararTarihleriPenceresi({ acik, onKapat }: { acik: boolean; onKa
       setOnizleme(null);
       onKapat();
     },
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
   const girisSayisi = govde().length;
 

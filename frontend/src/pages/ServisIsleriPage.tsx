@@ -44,6 +44,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   Col,
   DatePicker,
   Descriptions,
@@ -113,6 +114,7 @@ import ListeRaporu, { type FioriEylem, type FioriKategori } from "../fiori/Liste
 import { useYeniParametresi } from "../fiori/useYeniParametresi";
 import { yerelOku, yerelYaz } from "../fiori/yerelDepo";
 import EkYukleyici from "../components/EkYukleyici";
+import { IsEkibiBelgeleri } from "../components/OzlukDosyasi";
 import ServisFisiDugmesi, { fisTuru } from "../components/ServisFisiDugmesi";
 import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
@@ -400,7 +402,7 @@ function AtamaPenceresi({
       }
       bitti();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const secenekler = (aday.data ?? []).map((k) => ({
@@ -673,7 +675,7 @@ export function IsDetayCekmecesi({
       setNotMetni("");
       void qc.invalidateQueries({ queryKey: ["servis-is-gecmis", id] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   // Alt çubuktaki Düzenle / İptal: kayıt yüklenince ilgili pencere açılır;
@@ -1163,6 +1165,20 @@ export function IsDetayCekmecesi({
                         </List.Item>
                       )}
                     />
+                    {/* Özlük: işe atanmış personelin işte paylaşılabilir belgeleri
+                        (SRC, İSG…; 2026-11-20). Açılmadan sorgulanmaz. */}
+                    {(yetkili("servis.planla") || yetkili("operasyon.gor")) && d.ekip.length > 0 && (
+                      <Collapse
+                        size="small"
+                        items={[
+                          {
+                            key: "belgeler",
+                            label: "Ekip belgeleri (SRC, İSG, ehliyet…)",
+                            children: <IsEkibiBelgeleri soId={d.id} />,
+                          },
+                        ]}
+                      />
+                    )}
                   </Space>
                 ),
               },
@@ -2114,7 +2130,7 @@ export function ServisIsListesi({
         );
       } else message.success(`${r.onaylanan.length} işe kalite onayı verildi`);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const ekSuzgecSayisi = [
@@ -2345,7 +2361,7 @@ export function ServisIsListesi({
         ),
       });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const satirMenusu = (r: IsSatiri): MenuProps | null => {
     const toplu = secili.length > 1 && secili.includes(r.id);

@@ -94,6 +94,8 @@ export interface PersonelYuku {
   bugun_planli: number;
   yarin_planli: number;
   acik_atanmis: number;
+  /** Şu an süren izin/eğitim/ofis bloğu (yoksa null). */
+  musait_degil: MusaitDegil | null;
   /** Yalnız `servis_rapor.personel` izniyle gelir; `null` = kayıt yok (eksik), 0 değil. */
   bugun_calisilan_dk?: number | null;
 }
@@ -116,7 +118,12 @@ export interface Sapma extends PanoSatiri {
   plan_baslangic: string | null;
 }
 
-export type EkipDurumu = "BOSTA" | "YOLDA" | "SAHADA";
+export type EkipDurumu = "BOSTA" | "YOLDA" | "SAHADA" | "MUSAIT_DEGIL";
+
+export interface MusaitDegil {
+  tur: "IZIN" | "EGITIM" | "OFIS" | "DIGER";
+  ends_at: string;
+}
 
 export interface EkipUyesi {
   user_id: number;
@@ -125,6 +132,7 @@ export interface EkipUyesi {
   birimler: string[];
   durum: EkipDurumu;
   acik_sayac: PersonelYuku["acik_sayac"];
+  musait_degil: MusaitDegil | null;
   bugun_planli: number;
   acik_atanmis: number;
 }
@@ -139,6 +147,7 @@ export interface OperasyonPanosu {
     yolda: number;
     sahada: number;
     bosta: number;
+    musait_degil: number;
     tayin_bekleyen: number;
     tayin_geciken: number;
     sapma: number;

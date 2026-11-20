@@ -58,7 +58,7 @@ export default function KayitGorevleri({
       void qc.invalidateQueries({ queryKey: ["pano-kartlar"] });
       void qc.invalidateQueries({ queryKey: ["panolar"] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   return (

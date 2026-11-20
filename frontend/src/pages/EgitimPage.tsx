@@ -236,7 +236,7 @@ function TopluPlanPenceresi({ acik, kapat }: { acik: boolean; kapat: () => void 
       setSecili([]);
       kapat();
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   const tumu = (kisiler.data?.kayitlar ?? []).map((k) => k.id);
   return (
@@ -329,7 +329,7 @@ function PlanSekmesi() {
       setErtelenen(null);
       tazele();
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((r) => r.id === secili[0]) ?? null;
@@ -523,12 +523,12 @@ function Kriterler({ kurs, yazabilir }: { kurs: Kurs; yazabilir: boolean }) {
       setKritik(false);
       tazele();
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   const guncelle = useMutation({
     mutationFn: (g: { id: number; version: number; is_active: boolean }) => egitimApi.kriterGuncelle(g),
     onSuccess: tazele,
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Space orientation="vertical" style={{ width: "100%" }}>
@@ -595,7 +595,7 @@ function KatalogSekmesi() {
       setDuzenlenen(null);
       void qc.invalidateQueries({ queryKey: ["egitim-kurslar"] });
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Card
@@ -724,7 +724,7 @@ function KatilimSekmesi() {
       setSecili(o);
       void qc.invalidateQueries({ queryKey: ["egitim-oturumlar"] });
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Space orientation="vertical" style={{ width: "100%" }}>
@@ -1149,7 +1149,7 @@ function YetkinlikSekmesi() {
         ? egitimApi.yetkinlikOlustur(v)
         : egitimApi.yetkinlikGuncelle({ ...v, id: (duzenlenen as Yetkinlik).id, version: (duzenlenen as Yetkinlik).version }),
     onSuccess: () => { setDuzenlenen(null); void qc.invalidateQueries({ queryKey: ["egitim-yetkinlikler"] }); },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   const degerlendir = useMutation({
     mutationFn: (v: { user_id: number; competency_id: number; mevcut_seviye: number; hedef_seviye?: number; kanit?: string }) =>
@@ -1160,7 +1160,7 @@ function YetkinlikSekmesi() {
       setDegAcik(false);
       void qc.invalidateQueries({ queryKey: ["egitim-matris"] });
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Space orientation="vertical" style={{ width: "100%" }}>
@@ -1265,7 +1265,7 @@ function BelgeSekmesi() {
         gecerlilik_bitis: v.gecerlilik_bitis ? v.gecerlilik_bitis.format("YYYY-MM-DD") : null,
       }),
     onSuccess: () => { message.success("Belge kaydedildi"); setAcik(false); void qc.invalidateQueries({ queryKey: ["egitim-belgeler"] }); },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Card

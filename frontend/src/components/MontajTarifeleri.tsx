@@ -67,7 +67,7 @@ export default function MontajTarifeleri({ hesapId }: { hesapId: number }) {
       form.resetFields();
       qc.invalidateQueries({ queryKey: ["tarifeler", hesapId] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const hepsi = tarifeler.data ?? [];

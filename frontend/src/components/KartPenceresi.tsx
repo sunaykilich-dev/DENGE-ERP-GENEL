@@ -119,7 +119,7 @@ export default function KartPenceresi({
       tazele();
       onKapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const sil = useMutation({
@@ -129,7 +129,7 @@ export default function KartPenceresi({
       tazele();
       onKapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const yorumEkle = useMutation({
@@ -139,7 +139,7 @@ export default function KartPenceresi({
       void qc.invalidateQueries({ queryKey: ["kart-yorumlar", kart?.id] });
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const kolonAdi = (id: number | undefined) =>

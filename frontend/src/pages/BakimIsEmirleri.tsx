@@ -67,7 +67,7 @@ function OtomatikUretim() {
   const ayarla = useMutation({
     mutationFn: bakimApi.otomatikUretimAyarla,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bakim", "otomatik-uretim"] }),
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
   const o = otomatik.data;
   if (!o) return null;
@@ -154,7 +154,7 @@ export default function BakimIsEmirleriSekmesi() {
 
   const ac = useMutation({
     mutationFn: (onizleme: boolean) => bakimApi.planliIsleriAc(secim, onizleme),
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
 
   const baslat = async () => {

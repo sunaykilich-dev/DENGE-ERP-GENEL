@@ -122,7 +122,7 @@ function ErisimGozden() {
       setNot("");
       void qc.invalidateQueries({ queryKey: ["erisim-gozden"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
   const kpiSec = (k: string | undefined) => {
     setKpi(k);
@@ -361,7 +361,7 @@ export default function UsersPage() {
       form.resetFields();
       void yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const guncelle = useMutation({

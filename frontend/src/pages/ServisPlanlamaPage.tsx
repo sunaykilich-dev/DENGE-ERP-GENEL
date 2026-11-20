@@ -51,7 +51,7 @@ import {
   Typography,
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import type { ApiError } from "../api/client";
@@ -221,6 +221,32 @@ export default function ServisPlanlamaPage() {
   const bitStr = bit.format(ISO);
   const kpiKodu = params.get("kpi");
 
+  // "Planla…" bağlantısı (Servis İşleri, Operasyon panosu) ?is=<id> ile gelir:
+  // planlayabilen kullanıcıda işin plan penceresi, diğerlerinde iş ayrıntısı
+  // açılır; parametre bir kez işlenip adresten silinir (rol testi 2026-11-20).
+  const isParam = params.get("is");
+  useEffect(() => {
+    const id = Number(isParam);
+    if (!isParam || !Number.isInteger(id) || id <= 0) return;
+    const yeni = new URLSearchParams(params);
+    yeni.delete("is");
+    setParams(yeni, { replace: true });
+    if (!planlayabilir) {
+      setIsDetayId(id);
+      return;
+    }
+    void (async () => {
+      try {
+        const [is, p] = await Promise.all([teknikServisApi.getir(id), planlamaApi.isPlani(id)]);
+        setPencere({ mod: "tekli", isIdler: [id], birim: is.birim, mevcut: p.plan, gun: gun.format(ISO) });
+      } catch (e) {
+        message.error((e as ApiError).message);
+      }
+    })();
+    // Yalnız parametre değişince (bağlantıyla gelişte) çalışır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isParam]);
+
   const takvim = useQuery({
     queryKey: ["servis-takvim", basStr, bitStr, birim, tur],
     queryFn: () => planlamaApi.takvim(basStr, bitStr, suzgec),
@@ -272,7 +298,7 @@ export default function ServisPlanlamaPage() {
       tazele();
     },
     onError: (e: ApiError) =>
-      message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
+      void message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
   });
 
   const kartlar = useMemo(() => kartlaraBol(takvim.data ?? []), [takvim.data]);
@@ -1034,7 +1060,7 @@ function AracSekmesi() {
       void qc.invalidateQueries({ queryKey: ["servis-araclar"] });
     },
     onError: (e: ApiError) =>
-      message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
+      void message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
   });
 
   const ac = (a: Arac | "yeni") => {

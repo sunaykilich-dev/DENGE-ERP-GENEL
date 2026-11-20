@@ -52,7 +52,7 @@ export default function IskontoLimitleri() {
       message.success("Rol limitleri kaydedildi");
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
   const kisiKaydet = useMutation({
     mutationFn: (k: Kisi) =>
@@ -69,7 +69,7 @@ export default function IskontoLimitleri() {
       });
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const roller = [

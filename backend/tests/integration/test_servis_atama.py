@@ -48,9 +48,11 @@ async def test_atama_izin_ve_olay(client, db, birimli_kullanici_ac, servis_isi_a
     assert r.status_code == 200, r.text
     assert [(k["ad"], k["is_lead"]) for k in r.json()] == [("Tek_A1", True), ("Tek_A2", False)]
     assert await olay_sayisi(db, so.id, "ATAMA") == 1
-    assert await olay_sayisi(db, so.id, "DURUM") == 0  # atama durumu değiştirmez
+    # 2026-11-20 kullanıcı kararı: tayin = iş verildi → PLANLANDI ("TAYİN EDİLDİ").
+    assert await olay_sayisi(db, so.id, "DURUM") == 1
+    assert (await client.get(f"/api/teknik-servis/isler/{so.id}")).json()["status"] == "PLANLANDI"
     so = await tazele(db, so)
-    assert so.status == "MUSTERI_TALEBI"
+    assert so.status == "PLANLANDI"
 
     # Sorumlu değişimi: eski satır kapanır, geçmiş kalır; aynı istek tekrarı olay üretmez.
     govde2 = {"atamalar": [{"user_id": t2.id, "rol": "TEKNISYEN", "is_lead": True}]}

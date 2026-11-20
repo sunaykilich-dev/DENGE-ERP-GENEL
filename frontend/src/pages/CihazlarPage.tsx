@@ -202,7 +202,7 @@ export default function CihazlarPage() {
       void qc.invalidateQueries({ queryKey: ["cihaz"] });
       void qc.invalidateQueries({ queryKey: ["cihazlar"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const k = kart.data;

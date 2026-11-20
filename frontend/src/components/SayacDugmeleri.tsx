@@ -517,7 +517,7 @@ export function ManuelKayitPenceresi({
       void qc.invalidateQueries({ queryKey: ["is-zamani", isId] });
       onKapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const faaliyet = Form.useWatch("faaliyet", form);
   return (

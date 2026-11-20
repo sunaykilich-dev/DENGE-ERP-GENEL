@@ -191,7 +191,7 @@ export default function EkipmanKarti({
       message.success("Kayıtlı frekans güncellendi");
       tazele();
     },
-    onError: (e) => message.error((e as Error).message),
+    onError: (e) => void message.error((e as Error).message),
   });
 
   const tazele = () => {
@@ -214,7 +214,7 @@ export default function EkipmanKarti({
       setDurumAcik(false);
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const aktiflik = useMutation({
@@ -227,7 +227,7 @@ export default function EkipmanKarti({
       setAktiflikAcik(false);
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const imha = useMutation({
@@ -237,7 +237,7 @@ export default function EkipmanKarti({
       imhaGerekcesi.current = "";
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const k = kart.data;

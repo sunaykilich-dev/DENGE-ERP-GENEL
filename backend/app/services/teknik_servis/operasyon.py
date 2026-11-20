@@ -40,6 +40,7 @@ from app.models import (
     ServicePlan,
     ServicePlanMember,
     ServiceTimeEntry,
+    ServiceUnavailability,
     User,
     UserUnit,
 )
@@ -421,6 +422,23 @@ async def is_yuku(
         ).all()
     )
 
+    # Şu an süren müsaitlik bloğu (izin/eğitim/ofis): pano ve tayin penceresi
+    # izinli kişiyi "boşta" göstermesin (rol testi 2026-11-20).
+    simdi = clock.now()
+    musait_degil = {
+        b.user_id: {"tur": b.tur, "ends_at": b.ends_at}
+        for b in (
+            await db.scalars(
+                select(ServiceUnavailability).where(
+                    ServiceUnavailability.user_id.in_(kimlikler),
+                    ServiceUnavailability.is_deleted.is_(False),
+                    ServiceUnavailability.starts_at <= simdi,
+                    ServiceUnavailability.ends_at > simdi,
+                )
+            )
+        ).all()
+    }
+
     kisi_saat_gorur = user.has("servis_rapor.personel")
     calisilan: dict[int, int] = {}
     if kisi_saat_gorur:
@@ -465,6 +483,7 @@ async def is_yuku(
             "bugun_planli": planlar.get((k.id, bugun), 0),
             "yarin_planli": planlar.get((k.id, yarin), 0),
             "acik_atanmis": int(atanmis.get(k.id, 0)),
+            "musait_degil": musait_degil.get(k.id),
         }
         if kisi_saat_gorur:
             # Kayıt yoksa None ("eksik"); 0 yazılmaz (korunacak iş kararı).

@@ -342,7 +342,7 @@ function SlaPolitikalari() {
       message.success(`Mesai penceresi: ${m.metin}`);
       qc.invalidateQueries({ queryKey: ["sla-sozluk"] });
     },
-    onError: (e) => message.error(hataMesaji(e)),
+    onError: (e) => void message.error(hataMesaji(e)),
   });
   const takvimAdi = (t: string) =>
     sozluk.data?.takvim_turleri.find((x) => x.kod === t)?.ad ?? (t === "7_24" ? "7/24" : t);

@@ -117,7 +117,7 @@ export default function EkipmanVeriKalitesi({ liste, onListe, onKalite }: Ekipma
       message.success("Kütüğe uygulandı");
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const yoksayMut = useMutation({
@@ -127,7 +127,7 @@ export default function EkipmanVeriKalitesi({ liste, onListe, onKalite }: Ekipma
       setYoksay(null);
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   return (

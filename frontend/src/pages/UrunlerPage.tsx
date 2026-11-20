@@ -138,7 +138,7 @@ export default function UrunlerPage() {
       void qc.invalidateQueries({ queryKey: ["urun-markalar"] });
       void qc.invalidateQueries({ queryKey: ["urun", id] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   function duzenle(u: Urun | null) {

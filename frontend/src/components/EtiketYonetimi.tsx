@@ -47,13 +47,13 @@ export default function EtiketYonetimi({
       setYeniAd("");
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const guncelle = useMutation({
     mutationFn: (v: Etiket) => gorevApi.etiketGuncelle(v.id, { ad: v.ad, renk: v.renk }),
     onSuccess: () => tazele(),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const sil = useMutation({
@@ -62,7 +62,7 @@ export default function EtiketYonetimi({
       message.success("Etiket silindi");
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   return (

@@ -72,7 +72,7 @@ export default function KutucukPano({
   const sifirla = useMutation({
     mutationFn: () => ekranDuzeniApi.sifirla(ekran),
     onSuccess: (d) => qc.setQueryData(anahtar, d),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const kayitli = duzen.data?.kutular ?? null;
 
