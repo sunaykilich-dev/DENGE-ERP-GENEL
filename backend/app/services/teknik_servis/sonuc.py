@@ -178,6 +178,10 @@ async def sonuc_gir(
         raise is_emirleri.IsEmriYetkiHatasi("Sonuç girmek için yetkiniz yok (servis.tamamla)")
     if girdi.sonuc in TAMAMLAYAN_SONUCLAR and not SERVIS_IS_EMRI.izinli_mi(so.status, "TAMAMLANDI"):
         raise SonucHatasi(f"'{is_emirleri.DURUM_ADLARI[so.status]}' durumundaki iş tamamlanamaz")
+    if girdi.sonuc in TAMAMLAYAN_SONUCLAR:
+        from app.services.teknik_servis import ulasim
+
+        await ulasim.tamamlama_dogrula(db, so, girdi.cozum_kanali)
     sonuc = await sonuc_kaydet(db, so, girdi, user=user, clock=clock)
     if girdi.sonuc in TAMAMLAYAN_SONUCLAR:
         await zaman.sure_eksik_kapanis_dogrula(

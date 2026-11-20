@@ -566,6 +566,31 @@ export const donemAraligiMetni = (donem: string): string | null => {
 
 const isYolu = (id: number) => `${TS}/isler/${id}`;
 
+export const ULASIM_TURLERI = [
+  { value: "SIRKET_ARACI", label: "Şirket aracı" },
+  { value: "UCAK", label: "Uçak" },
+  { value: "METRO", label: "Metro" },
+  { value: "OTOBUS", label: "Otobüs" },
+] as const;
+
+export interface UlasimBilgisi {
+  zorunlu: boolean;
+  ulasim_turu: string | null;
+  servis_arac_id: number | null;
+  baslangic_km: number | null;
+  bitis_km: number | null;
+  oneri_arac_id: number | null;
+  oneri_plaka: string | null;
+  oneri_baslangic_km: number | null;
+}
+
+export interface UlasimGirdisi {
+  ulasim_turu: string;
+  servis_arac_id?: number | null;
+  baslangic_km?: number | null;
+  bitis_km?: number | null;
+}
+
 export const teknikServisApi = {
   formVerileri: () => api.get<FormVerileri>(`${TS}/isler/form-verileri`),
   liste: (s: IsSuzgeci, limit: number, offset: number): Promise<Sayfa<IsSatiri>> => {
@@ -618,6 +643,9 @@ export const teknikServisApi = {
   guncelle: (id: number, g: Record<string, unknown>) => api.patch<IsDetayi>(isYolu(id), g),
   seriler: (id: number, seriler: string[], gerekce?: string) =>
     api.put<IsDetayi>(`${isYolu(id)}/seriler`, { seriler, gerekce }),
+  /** KARARLAR 2026-11-20 §1: saha ulaşımı ve araç km. */
+  ulasim: (id: number) => api.get<UlasimBilgisi>(`${isYolu(id)}/ulasim`),
+  ulasimYaz: (id: number, g: UlasimGirdisi) => api.put<UlasimBilgisi>(`${isYolu(id)}/ulasim`, g),
   durum: (id: number, hedef: string, beklenen_durum?: string, gerekce?: string) =>
     api.post<IsDetayi>(`${isYolu(id)}/durum`, { hedef, beklenen_durum, gerekce }),
   kapat: (id: number, beklenen_durum?: string, gerekce?: string) =>

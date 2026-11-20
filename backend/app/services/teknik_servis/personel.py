@@ -273,6 +273,80 @@ async def sicil_cakisiyor_mu(db: AsyncSession, sicil_no: str, haric_id: int | No
     return (await db.scalar(stmt.limit(1))) is not None
 
 
+# --- Otomatik sicil (KARARLAR 2026-11-20 §8) ------------------------------------------
+
+SICIL_BASAMAK = 4
+
+
+async def _sicil_onek(db: AsyncSession) -> str:
+    from app.services import settings as ayarlar
+
+    return str(await ayarlar.get(db, "sicil_onek") or "").strip()
+
+
+def _sicil_sayisi(sicil: str | None, onek: str) -> int | None:
+    """Önekten sonrası yalnız rakamsa sayısı; değilse None (elle verilmiş sicil)."""
+    if not sicil or not sicil.startswith(onek):
+        return None
+    govde = sicil[len(onek):]
+    return int(govde) if govde.isdigit() else None
+
+
+async def sicil_sonraki(db: AsyncSession) -> str:
+    """En büyük sayısal sicilin bir fazlası (önekli, 4 hane sıfır dolgulu)."""
+    onek = await _sicil_onek(db)
+    enbuyuk = 0
+    for s in (await db.scalars(select(User.sicil_no).where(User.sicil_no.is_not(None)))).all():
+        n = _sicil_sayisi(s, onek)
+        if n is not None and n > enbuyuk:
+            enbuyuk = n
+    return f"{onek}{enbuyuk + 1:0{SICIL_BASAMAK}d}"
+
+
+async def sicil_numarala(
+    db: AsyncSession, *, aktor: User, uygula: bool, ip: str | None = None
+) -> list[dict[str, Any]]:
+    """Sicilsiz personeli şirket geçmişine göre numaralar.
+
+    Sıra: işe giriş tarihi (boşlar en sonda), eşitse kayıt sırası (id). Var
+    olan sicil değişmez. `uygula=False` yalnız önizleme döner.
+    """
+    onek = await _sicil_onek(db)
+    sonraki = int((await sicil_sonraki(db))[len(onek):])
+    kisiler = (
+        await db.scalars(
+            select(User)
+            .where(User.sicil_no.is_(None), User.is_active.is_(True))
+            .order_by(User.ise_giris_tarihi.asc().nulls_last(), User.id.asc())
+        )
+    ).all()
+    sonuc: list[dict[str, Any]] = []
+    for kisi in kisiler:
+        sicil = f"{onek}{sonraki:0{SICIL_BASAMAK}d}"
+        sonraki += 1
+        sonuc.append(
+            {
+                "id": kisi.id,
+                "ad": kisi.full_name,
+                "ise_giris_tarihi": kisi.ise_giris_tarihi,
+                "sicil_no": sicil,
+            }
+        )
+        if uygula:
+            kisi.sicil_no = sicil
+    if uygula and sonuc:
+        await db.flush()
+        await audit.log(
+            db,
+            "users",
+            "personel.sicil_numarala",
+            new_value={"adet": len(sonuc), "ilk": sonuc[0]["sicil_no"], "son": sonuc[-1]["sicil_no"]},
+            user_id=aktor.id,
+            ip=ip,
+        )
+    return sonuc
+
+
 def rastgele_parola_ozeti() -> str:
     """Kimsenin bilmediği bir sırrın argon2 özeti.
 
@@ -314,6 +388,9 @@ async def personel_olustur(
     sicil = _sicil_temizle(girdi.sicil_no)
     if sicil and await sicil_cakisiyor_mu(db, sicil):
         raise PersonelKuralHatasi(f"Bu sicil numarası başka bir personelde kayıtlı: {sicil}")
+    if not sicil:
+        # KARARLAR 2026-11-20 §8: boş bırakılan sicil otomatik ilerler.
+        sicil = await sicil_sonraki(db)
     birimler = birim_satirlarini_dogrula(girdi.birimler)
     if aktor.role.scope != SCOPE_ALL and not birimler:
         raise PersonelGirdiHatasi("Personelin en az bir birimi olmalı.")

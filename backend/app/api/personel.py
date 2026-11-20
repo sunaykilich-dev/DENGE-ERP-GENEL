@@ -438,6 +438,37 @@ async def atanabilir(
     return [AtanabilirOut(**k.__dict__) for k in kisiler]
 
 
+# --- Sicil numarası (KARARLAR 2026-11-20 §8) -------------------------------------------
+
+
+class SicilNumaralaIn(BaseModel):
+    uygula: bool = False
+
+
+@router.get("/sicil/sonraki")
+async def sicil_sonraki(db: DbDep, user: Yazici) -> dict:
+    """Yeni personelde boş bırakılırsa verilecek sicil numarası."""
+    return {"sicil_no": await svc.sicil_sonraki(db)}
+
+
+@router.post("/sicil/numarala")
+async def sicil_numarala(
+    payload: SicilNumaralaIn, request: Request, db: DbDep, user: Yazici
+) -> dict:
+    """Sicilsiz personeli işe giriş sırasına göre numaralar; önce önizleme.
+
+    Şirket geneli bir işlem: yalnız kapsamı TÜMÜ olan rol (İK, müdür, yönetici).
+    """
+    if user.role.scope != "TUMU":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Toplu sicil numaralama yetkiniz yok")
+    satirlar = await svc.sicil_numarala(
+        db, aktor=user, uygula=payload.uygula, ip=client_ip(request)
+    )
+    if payload.uygula:
+        await db.commit()
+    return {"uygulandi": payload.uygula, "satirlar": satirlar}
+
+
 # --- Kart ------------------------------------------------------------------------------
 
 

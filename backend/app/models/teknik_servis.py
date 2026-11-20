@@ -614,6 +614,16 @@ class ServiceOrder(
         ForeignKey("rentals.id", ondelete="SET NULL", name="fk_so_kiralama", use_alter=True),
     )
 
+    # --- Saha ulaşımı ve araç km (KARARLAR 2026-11-20 §1; fch000000001) ---------
+    # GÜVENLİK/HABERLEŞME saha işinde işleme alırken ulaşım (+ şirket aracında
+    # plaka ve başlangıç km), tamamlarken son km zorunlu (`ulasim.py`).
+    ulasim_turu: Mapped[str | None] = mapped_column(String(16))
+    servis_arac_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("service_vehicles.id", ondelete="SET NULL")
+    )
+    baslangic_km: Mapped[int | None] = mapped_column(Integer)
+    bitis_km: Mapped[int | None] = mapped_column(Integer)
+
     seriler: Mapped[list["ServiceOrderSerial"]] = relationship(
         lazy="selectin",
         order_by="ServiceOrderSerial.id",

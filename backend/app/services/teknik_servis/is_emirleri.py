@@ -591,6 +591,10 @@ async def durum_degistir(
         await cihaz_bilgisi.kapanis_dogrula(db, so)
     if hedef == "KAPATILDI" and user is not None:
         await kapanis_zinciri_dogrula(db, so, user)
+    if hedef == "ISLEMDE" and kaynak == "genel" and user is not None:
+        from app.services.teknik_servis import ulasim
+
+        await ulasim.islem_dogrula(db, so)
 
     await kancalar.durum_dogrula(db, so, hedef, kaynak)
 

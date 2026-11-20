@@ -137,6 +137,9 @@ class ServiceVehicle(Base, PkMixin, TimestampMixin, ActorMixin, SoftDeleteMixin,
         Boolean, server_default=text("true"), default=True, nullable=False
     )
     notes: Mapped[str | None] = mapped_column(Text)
+    # Son bilinen km (KARARLAR 2026-11-20 §1): saha işinin son km'si yazar;
+    # bir sonraki işte başlangıç km önerisidir.
+    son_km: Mapped[int | None] = mapped_column(Integer)
 
 
 class ServicePlan(

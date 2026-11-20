@@ -34,10 +34,17 @@ import { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../api/client";
 import { ZAMAN_SORGULARI } from "../api/servisZaman";
-import { imzaYukle, ONAY_TURLERI, teknikServisApi, type OnayGirdisi } from "../api/teknikServis";
+import {
+  imzaYukle,
+  ONAY_TURLERI,
+  teknikServisApi,
+  type OnayGirdisi,
+  type UlasimBilgisi,
+} from "../api/teknikServis";
 import { olcuBirimiAdi, parcaApi } from "../api/yedekParca";
 import { useAuth } from "../auth/AuthContext";
 import EkYukleyici from "./EkYukleyici";
+import UlasimPenceresi, { ulasimGerekiyor } from "./UlasimPenceresi";
 import ImzaAlani, { tuvalPng } from "./ImzaAlani";
 import ParcaHareketPenceresi from "./ParcaHareketPenceresi";
 import { TalepPenceresi } from "./ServisParcalari";
@@ -139,6 +146,37 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
   );
   const parcaKullanabilir = yetkili("parca.kullan") && !!parcalar.data?.acik;
 
+  // KARARLAR 2026-11-20 §1: saha işinde ulaşım/km önce sorulur.
+  const [ulasim, setUlasim] = useState<{
+    bilgi: UlasimBilgisi;
+    mod: "baslangic" | "bitis";
+    sonra: () => void;
+  } | null>(null);
+  const ulasimlaIslemeAl = async () => {
+    try {
+      const b = await ulasimGerekiyor(isId, "baslangic");
+      if (b) setUlasim({ bilgi: b, mod: "baslangic", sonra: () => durumaAl.mutate() });
+      else durumaAl.mutate();
+    } catch (e) {
+      message.error((e as Error).message);
+    }
+  };
+  const ulasimlaKaydet = async (v: SonucFormu) => {
+    if (v.cozum_kanali === "YERINDE" && (v.sonuc === "COZULDU" || v.sonuc === "COZULEMEDI")) {
+      try {
+        const b = await ulasimGerekiyor(isId, "bitis");
+        if (b) {
+          setUlasim({ bilgi: b, mod: "bitis", sonra: () => kaydet.mutate(v) });
+          return;
+        }
+      } catch (e) {
+        message.error((e as Error).message);
+        return;
+      }
+    }
+    kaydet.mutate(v);
+  };
+
   const durumaAl = useMutation({
     mutationFn: () => teknikServisApi.durum(isId, "ISLEMDE", d?.status),
     onSuccess: () => {
@@ -236,7 +274,7 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
       {detay.isLoading ? null : !d ? (
         <Empty description={(detay.error as Error | null)?.message ?? "İş bulunamadı"} />
       ) : (
-        <Form form={form} layout="vertical" onFinish={(v) => kaydet.mutate(v)} requiredMark="optional">
+        <Form form={form} layout="vertical" onFinish={(v) => void ulasimlaKaydet(v)} requiredMark="optional">
           {!sonucGecisi && (
             <Alert
               type="warning"
@@ -250,7 +288,7 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
               }
               action={
                 islemeAl ? (
-                  <Button style={BUYUK} loading={durumaAl.isPending} onClick={() => durumaAl.mutate()}>
+                  <Button style={BUYUK} loading={durumaAl.isPending} onClick={() => void ulasimlaIslemeAl()}>
                     İşleme al
                   </Button>
                 ) : undefined
@@ -469,6 +507,18 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
         birim={birim}
       />
       <TalepPenceresi acik={talepAcik} soId={isId} birim={birim} onKapat={() => setTalepAcik(false)} />
+      <UlasimPenceresi
+        isId={isId}
+        birim={birim}
+        bilgi={ulasim?.bilgi ?? null}
+        mod={ulasim?.mod ?? "baslangic"}
+        onKapat={() => setUlasim(null)}
+        onTamam={() => {
+          const sonra = ulasim?.sonra;
+          setUlasim(null);
+          sonra?.();
+        }}
+      />
     </Drawer>
   );
 }

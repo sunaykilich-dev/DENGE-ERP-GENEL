@@ -291,6 +291,14 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "İK Belgeleri",
         "Form/talimat/taahhütname şablonu tanımlar, personele gönderir, imzayı takip eder",
     ),
+    # KARARLAR 2026-11-20 §7: izin talebi. Kendi talebini herkes girer; bu izin
+    # başkası adına girmek ve bütün talepleri görmek içindir.
+    "izin.yonet": ("İzin Talepleri", "Başkası adına izin talebi girer, bütün talepleri görür"),
+    # KARARLAR 2026-11-20 §5-6: satış/kiralama talebini birime yönlendirme.
+    "servis.yonlendir": (
+        "Teknik Servis",
+        "Satış ve kiralama taleplerini birim yöneticisine yönlendirir",
+    ),
     # --- Ana Panel (KARARLAR 2026-11-09 S8.3, G7.3) ---------------------------------
     # Kişisel düzen izne bağlı DEĞİLDİR (S8.1: herkes kendi panelini düzenler;
     # bileşenler ayrıca kendi veri izinleriyle süzülür). Rolün VARSAYILAN
@@ -606,6 +614,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "servis.kapat",
             "servis.kalite_onay",
             "servis.son_onay",
+            "servis.yonlendir",
             "servis.uzaktan_coz",
             "servis.tanim",
             "servis.arac_yaz",
@@ -814,6 +823,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "personel.cikis",
             "bordro.yonet",
             "ik_belge.yonet",
+            "izin.yonet",
             "egitim.gor",
             "egitim.detay",
             "egitim.yaz",

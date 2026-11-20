@@ -94,6 +94,7 @@ import {
   type IsSuzgeci,
   type OnayGirdisi,
   type TopluKaliteSonucu,
+  type UlasimBilgisi,
 } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
 import { useSirket } from "../auth/SirketContext";
@@ -112,6 +113,7 @@ import ListeRaporu, { type FioriEylem, type FioriKategori } from "../fiori/Liste
 import { useYeniParametresi } from "../fiori/useYeniParametresi";
 import { yerelOku, yerelYaz } from "../fiori/yerelDepo";
 import EkYukleyici from "../components/EkYukleyici";
+import UlasimPenceresi, { ulasimGerekiyor } from "../components/UlasimPenceresi";
 import ServisFisiDugmesi, { fisTuru } from "../components/ServisFisiDugmesi";
 import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
@@ -564,6 +566,39 @@ function IsDetayCekmecesi({
     setPencere(p);
   };
   const pencereKapat = () => setPencere(null);
+
+  // KARARLAR 2026-11-20 §1: saha işinde işleme alırken ulaşım, yerinde
+  // tamamlarken aracın son km'si önce sorulur (kural sunucuda).
+  const [ulasim, setUlasim] = useState<{
+    bilgi: UlasimBilgisi;
+    mod: "baslangic" | "bitis";
+    v: Record<string, unknown>;
+  } | null>(null);
+  const ulasimlaIslem = async (v: Record<string, unknown>) => {
+    if (d) {
+      const mod =
+        pencere === "genel" && hedef === "ISLEMDE"
+          ? "baslangic"
+          : pencere === "sonuc" &&
+              v.cozum_kanali === "YERINDE" &&
+              (v.sonuc === "COZULDU" || v.sonuc === "COZULEMEDI")
+            ? "bitis"
+            : null;
+      if (mod) {
+        try {
+          const b = await ulasimGerekiyor(d.id, mod);
+          if (b) {
+            setUlasim({ bilgi: b, mod, v });
+            return;
+          }
+        } catch (e) {
+          message.error((e as Error).message);
+          return;
+        }
+      }
+    }
+    islem.mutate(v);
+  };
 
   const islem = useMutation({
     mutationFn: async (v: Record<string, unknown>) => {
@@ -1397,7 +1432,7 @@ function IsDetayCekmecesi({
             form={form}
             layout="vertical"
             initialValues={bagliIsBaslangic}
-            onFinish={(v) => islem.mutate(v)}
+            onFinish={(v) => void ulasimlaIslem(v)}
           >
             {pencere === "genel" && (
               <Form.Item name="gerekce" label="Not (isteğe bağlı)">
@@ -1681,6 +1716,20 @@ function IsDetayCekmecesi({
           bitti={() => {
             pencereKapat();
             yenile();
+          }}
+        />
+      )}
+      {d && (
+        <UlasimPenceresi
+          isId={d.id}
+          birim={d.birim}
+          bilgi={ulasim?.bilgi ?? null}
+          mod={ulasim?.mod ?? "baslangic"}
+          onKapat={() => setUlasim(null)}
+          onTamam={() => {
+            const v = ulasim?.v;
+            setUlasim(null);
+            if (v) islem.mutate(v);
           }}
         />
       )}

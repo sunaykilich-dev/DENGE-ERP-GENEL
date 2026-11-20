@@ -2169,6 +2169,55 @@ async def _durum_ucu(
     return await _detay(db, so, user, clock)
 
 
+# --- Saha ulaşımı ve araç km (KARARLAR 2026-11-20 §1) ---------------------------------
+
+
+class UlasimIn(BaseModel):
+    ulasim_turu: Literal["SIRKET_ARACI", "UCAK", "METRO", "OTOBUS"]
+    servis_arac_id: int | None = None
+    baslangic_km: int | None = None
+    bitis_km: int | None = None
+
+
+@router.get("/isler/{so_id}/ulasim", response_model=None)
+async def ulasim_getir(so_id: int, db: DbDep, user: Okuyucu) -> dict[str, Any]:
+    """Kayıtlı ulaşım bilgisi, plan aracı önerisi ve aracın son km'si."""
+    from app.services.teknik_servis import ulasim
+
+    so = await _kapsamli_is(db, so_id, user)
+    return await ulasim.ozet(db, so)
+
+
+@router.put("/isler/{so_id}/ulasim", response_model=None)
+async def ulasim_yaz(
+    so_id: int, payload: UlasimIn, request: Request, db: DbDep, user: Yazici
+) -> dict[str, Any]:
+    """İşleme alırken (plaka + başlangıç km) ve tamamlarken (son km) yazılır.
+
+    Tamamlanmış/kapatılmış işte değiştirilemez (409).
+    """
+    from app.services.teknik_servis import ulasim
+
+    so = await _kapsamli_is(db, so_id, user)
+    if so.status in ("TAMAMLANDI", "KAPATILDI", "IPTAL"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Tamamlanmış işin ulaşım bilgisi değiştirilemez")
+    try:
+        await ulasim.bilgi_yaz(
+            db,
+            so,
+            ulasim_turu=payload.ulasim_turu,
+            servis_arac_id=payload.servis_arac_id,
+            baslangic_km=payload.baslangic_km,
+            bitis_km=payload.bitis_km,
+            user=user,
+            ip=client_ip(request),
+        )
+    except _HATALAR as exc:
+        raise _hata(exc) from exc
+    await db.commit()
+    return await ulasim.ozet(db, so)
+
+
 @router.post("/isler/{so_id}/durum", response_model=None)
 async def durum(
     so_id: int, payload: DurumIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici

@@ -108,6 +108,12 @@ DEFAULTS: dict[str, Any] = {
     # KARARLAR 2026-11-05 §9: açıkken iş kapanışı iki aşamalı — önce ekip
     # liderinin kalite onayı, sonra `servis.son_onay` (müdür) kapatır.
     "servis_kapanis_onay_zinciri": False,
+    # KARARLAR 2026-11-20 §1: GÜVENLİK/HABERLEŞME saha işinde ulaşım + araç km.
+    "servis_saha_ulasim_zorunlu": True,
+    # KARARLAR 2026-11-20 §7–8: izin onayı ve sicil.
+    "izin_onay_sure_saat": 24,
+    "ik_eposta": "",
+    "sicil_onek": "",
     "servis_toplu_atama_ust_sinir": 150,  # toplu atama/plan; 151 → 422
     "servis_ek_silme_saat": 24,
     "servis_kapsam_son_is_gun": 30,
@@ -211,6 +217,8 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     # İzinli değerler servis türü sözlüğünün KENDİSİ (kopya değil).
     "servis_onay_zorunlu_turler": ("liste", frozenset(SERVIS_TURLERI), None),
     "servis_kapanis_onay_zinciri": ("bool", None, None),
+    "servis_saha_ulasim_zorunlu": ("bool", None, None),
+    "izin_onay_sure_saat": ("tam", 1, 240),
     "servis_toplu_atama_ust_sinir": ("tam", 1, 1000),
     "servis_ek_silme_saat": ("tam", 0, 720),
     "servis_kapsam_son_is_gun": ("tam", 1, 365),

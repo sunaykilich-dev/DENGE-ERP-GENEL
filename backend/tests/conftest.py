@@ -143,6 +143,20 @@ async def db(session_factory):
 
 
 @pytest.fixture(autouse=True)
+def _saha_ulasim_varsayilan(request, monkeypatch):
+    """Saha ulaşım/km zorunluluğu (KARARLAR 2026-11-20 §1) varsayılan testlerde KAPALI.
+
+    Var olan yüzlerce test GÜVENLİK işini ulaşım girmeden işleme alıp
+    tamamlıyor. Kural kendi testinde `@pytest.mark.saha_ulasim` ile açık sınanır.
+    """
+    if request.node.get_closest_marker("saha_ulasim") is not None:
+        return
+    from app.services import settings as ayarlar
+
+    monkeypatch.setitem(ayarlar.DEFAULTS, "servis_saha_ulasim_zorunlu", False)
+
+
+@pytest.fixture(autouse=True)
 def _sirket_ayrimi_varsayilan(request, monkeypatch):
     """Şirket ayrımı (KARARLAR 2026-11-04 §1) varsayılan testlerde NÖTR.
 
