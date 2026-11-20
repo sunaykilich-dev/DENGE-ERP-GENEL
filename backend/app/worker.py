@@ -109,10 +109,17 @@ async def ek_dosya_temizligi(db: AsyncSession, clock: Clock) -> str:
     paylaşıyorsa silme onu da götürürdü). Artan dosyalar burada toplanır.
     En az 24 saat beklenir: yüklemesi süren dosya da yetim görünür.
     """
-    from app.models import Attachment
+    from app.db import Base
     from app.services import storage as depo
 
-    kullanilan = {y for y in (await db.scalars(select(Attachment.storage_path))).all() if y}
+    # Depoya dosya yazan HER tablo sayılır (ekler, İK şablon ve belgeleri,
+    # özlük belgeleri...). Eskiden yalnız `attachments` sayılıyordu; İK'nın
+    # bordro/imzalı belge dosyaları 24 saat sonra "yetim" diye silinebiliyordu
+    # (2026-11-20). Yeni tablo `storage_path` sütunuyla kendiliğinden katılır.
+    kullanilan: set[str] = set()
+    for tablo in Base.metadata.sorted_tables:
+        if "storage_path" in tablo.c:
+            kullanilan |= {y for y in (await db.scalars(select(tablo.c.storage_path))).all() if y}
     silinen = depo.yetimleri_temizle(kullanilan, en_az_yas_saat=24)
     return f"{silinen} yetim dosya silindi ({len(kullanilan)} dosya kullanımda)"
 

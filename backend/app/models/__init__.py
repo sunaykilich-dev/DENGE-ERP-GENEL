@@ -44,6 +44,7 @@ from app.models.irsaliye import BelgeSayaci, Irsaliye, IrsaliyeKalemi
 from app.models.izin import IzinOnayi, IzinTalebi
 from app.models.login_attempt import LoginAttempt
 from app.models.order import Order, OrderLine, OrderReservation
+from app.models.ozluk import OzlukBelgesi, OzlukBelgeTuru
 from app.models.personel import PersonnelNameMap
 from app.models.pricing import PriceBatch
 from app.models.purchase import (
@@ -307,4 +308,7 @@ __all__ = [
     "IzinOnayi",
     # --- Ekran kutucuk düzeni (2026-11-18) ---
     "EkranDuzeni",
+    # --- Personel özlük dosyası (2026-11-20) ---
+    "OzlukBelgeTuru",
+    "OzlukBelgesi",
 ]
