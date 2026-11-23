@@ -21,7 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import Clock
 from app.models import Account, Rental, ServiceOrder, ServisYonlendirme, User, UserUnit
-from app.services import audit, sirketler
+from app.services import audit
+from app.services.teknik_servis import kapsam
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 
 YONLENDIRME_IZNI = "servis.yonlendir"
@@ -110,7 +111,7 @@ class Suzgec:
 
 
 async def liste(db: AsyncSession, user: User, s: Suzgec) -> list[dict[str, Any]]:
-    """Müdür hepsini (etkin şirketin birimleri), şef kendisine yönlendirilenleri görür."""
+    """Müdür kapsamındaki birimlerin hepsini, şef kendisine yönlendirilenleri görür."""
     stmt = (
         select(ServisYonlendirme, ServiceOrder, Rental)
         .outerjoin(ServiceOrder, ServiceOrder.id == ServisYonlendirme.service_order_id)
@@ -119,9 +120,8 @@ async def liste(db: AsyncSession, user: User, s: Suzgec) -> list[dict[str, Any]]
     )
     if not user.has(YONLENDIRME_IZNI):
         stmt = stmt.where(ServisYonlendirme.hedef_user_id == user.id)
-    birimler = sirketler.etkin_birimler(user)
-    if birimler is not None:
-        stmt = stmt.where(ServisYonlendirme.birim.in_(birimler))
+    # Kullanıcının birim kapsamı (KENDI_BIRIMI → kendi birimleri, TUMU → etkin şirket).
+    stmt = kapsam.kapsam_birim(stmt, user, ServisYonlendirme.birim)
     if s.acik:
         stmt = stmt.where(
             or_(
@@ -245,8 +245,7 @@ async def yonlendir(
 
 async def kapsamli(db: AsyncSession, user: User, kayit_id: int) -> ServisYonlendirme:
     kayit = await db.get(ServisYonlendirme, kayit_id)
-    birimler = sirketler.etkin_birimler(user)
-    if kayit is None or (birimler is not None and kayit.birim not in birimler):
+    if kayit is None or kapsam.birim_disinda_mi(user, kayit.birim):
         raise YonlendirmeBulunamadi("Yönlendirme bulunamadı")
     return kayit
 

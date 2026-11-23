@@ -234,6 +234,7 @@ async def _kiralama(db, musteri) -> dict[str, int]:
         serial_no="FS-0001",
         serial_key="FS0001",
         birim="GUVENLIK",
+        etiket_kodu="FS-ETIKET-1",
         warehouse_id=depo.id,
     )
     kiralama = Rental(
@@ -370,6 +371,7 @@ async def ortam(
         "kiralama_id": kiralama["kiralama"],
         "kiralik_id": kiralama["kiralik"],
         "kiralik_urun": kiralama["kiralik_urun"],
+        "kod": "FS-ETIKET-1",  # kiralık cihaz karekodu (/api/kiralama/etiket/{kod})
         "atolye_so": atolye_so,
         "cihaz": cihaz.id,
     }

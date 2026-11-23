@@ -8,7 +8,7 @@ Kilitlenen kurallar:
 - `temizle` yalnız [ÖRNEK] kayıtlarını siler; olay tetikleyicisi yeniden açık kalır.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import func, select, text
@@ -33,13 +33,16 @@ async def test_yukle_tekrar_temizle(client, db, kullanici_ac):
     kapali.giris_acik = False
     await db.commit()
 
-    s = await ik_ornek.yukle(db, bugun=date(2026, 11, 6))
+    # Sabit tarih son_tarih (bugün+14) kontrolünü zamanla geçmişe düşürüyordu.
+    bugun = date.today()
+    onceki = (bugun.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+    s = await ik_ornek.yukle(db, bugun=bugun)
     await db.commit()
     assert s["alici"] == 2  # admin + ali; girişi kapalı kişi dışarıda
     assert (s["bordro"], s["sablon"], s["belge_gonderimi"]) == (2, 4, 4)
 
     g = await db.scalar(select(IkGonderim).where(IkGonderim.tur == "BORDRO"))
-    assert g.donem == "2026-10" and g.baslik.startswith("[ÖRNEK]")
+    assert g.donem == onceki and g.baslik.startswith("[ÖRNEK]")
     assert set((await db.scalars(select(IkBelge.durum))).all()) == {"GONDERILDI"}
     assert (
         await db.scalar(
@@ -49,7 +52,7 @@ async def test_yukle_tekrar_temizle(client, db, kullanici_ac):
     )
 
     # Tekrar: hiçbir şey eklenmez.
-    s2 = await ik_ornek.yukle(db, bugun=date(2026, 11, 6))
+    s2 = await ik_ornek.yukle(db, bugun=bugun)
     await db.commit()
     assert (s2["bordro"], s2["sablon"], s2["belge_gonderimi"]) == (0, 0, 0)
     assert await db.scalar(select(func.count()).select_from(IkBelge)) == 10

@@ -52,7 +52,14 @@ _SAYILAN = (
     RentalContact,
     ServiceOrder,
 )
-_PARAM_HEDEFI = {"kiralama_id": "kiralama", "kiralik_id": "kiralik", "katalog_id": "katalog"}
+_PARAM_HEDEFI = {
+    "kiralama_id": "kiralama",
+    "kiralik_id": "kiralik",
+    "katalog_id": "katalog",
+    "kod": "kiralik",  # karekod etiketi: değer cihazın etiket kodu
+}
+# Kimlik yerine başka alanla adreslenen parametreler.
+_PARAM_ALANI = {"kod": "etiket_kodu"}
 
 
 @pytest.fixture
@@ -114,6 +121,8 @@ async def test_kapsam_disi_kimlik_404_ve_veri_degismez(ortam, db) -> None:
     hab = ortam["hab"]
     kiralama = await db.get(Rental, hab["k"]["id"])
     kiralik = await db.get(RentalAsset, hab["cihazlar"][0])
+    kiralik.etiket_kodu = "KH-ETIKET-1"
+    await db.commit()
     katalog = await db.scalar(
         select(RentalCatalogItem).where(RentalCatalogItem.product_id == hab["seri"].id)
     )
@@ -121,7 +130,7 @@ async def test_kapsam_disi_kimlik_404_ve_veri_degismez(ortam, db) -> None:
     hatalar = []
     for uc in _kiralama_uclari():
         degerler = {
-            p: hedefler[_PARAM_HEDEFI[p]].id
+            p: getattr(hedefler[_PARAM_HEDEFI[p]], _PARAM_ALANI.get(p, "id"))
             for p in yol_parametreleri(uc.yol)
             if p in _PARAM_HEDEFI
         }

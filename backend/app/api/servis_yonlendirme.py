@@ -52,9 +52,9 @@ class YonlendirIn(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-@router.post("/{kayit_id}/yonlendir")
+@router.post("/{yonlendirme_id}/yonlendir")
 async def yonlendir(
-    kayit_id: int,
+    yonlendirme_id: int,
     payload: YonlendirIn,
     request: Request,
     db: DbDep,
@@ -62,7 +62,7 @@ async def yonlendir(
     user: Yonlendirici,
 ) -> dict[str, Any]:
     try:
-        kayit = await svc.kapsamli(db, user, kayit_id)
+        kayit = await svc.kapsamli(db, user, yonlendirme_id)
         await svc.yonlendir(
             db,
             kayit,

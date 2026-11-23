@@ -74,7 +74,11 @@ _PARAM_HEDEFLERI = {
     "kiralik_id": "kiralik",
     "katalog_id": "katalog",
     "tahsis_id": "tahsis",
+    "yonlendirme_id": "yonlendirme",
+    "kod": "kiralik",  # kiralık cihaz karekodu
 }
+# Kimlik yerine başka alanla adreslenen parametreler.
+_PARAM_ALANI = {"kod": "etiket_kodu"}
 
 # Yalın `{id}` için önek → hedef (uzun önek önce).
 _ONEK_HEDEFLERI = (
@@ -95,6 +99,7 @@ _BIRIM_HEDEFLERI = {
     "kiralik",
     "katalog",
     "tahsis",
+    "yonlendirme",
 }
 
 # Yazma sızıntısını yakalamak için sayılan tablolar: kaydın kendisi dışında
@@ -170,6 +175,7 @@ async def _kiralama_hedefleri(db, musteri) -> dict[str, Any]:
         serial_no="TRZ-0001",
         serial_key="TRZ0001",
         birim="HABERLESME",
+        etiket_kodu="TRZ-ETIKET-1",
         warehouse_id=depo.id,
     )
     kiralama = Rental(
@@ -196,8 +202,18 @@ async def _kiralama_hedefleri(db, musteri) -> dict[str, Any]:
         bitis=kiralama.bitis,
     )
     db.add(tahsis)
+    from app.models import ServisYonlendirme
+
+    yonlendirme = ServisYonlendirme(kaynak="KIRALAMA", rental_id=kiralama.id, birim="HABERLESME")
+    db.add(yonlendirme)
     await db.commit()
-    return {"kiralama": kiralama, "kiralik": kiralik, "katalog": katalog, "tahsis": tahsis}
+    return {
+        "kiralama": kiralama,
+        "kiralik": kiralik,
+        "katalog": katalog,
+        "tahsis": tahsis,
+        "yonlendirme": yonlendirme,
+    }
 
 
 @pytest.fixture
@@ -289,7 +305,9 @@ async def test_kapsam_disi_kimlik_404_ve_veri_degismez(ortam, db) -> None:
     assert taranacak, "taranacak {id} yollu teknik servis ucu bulunamadı"
     hatalar: list[str] = []
     for uc, eslesme in taranacak:
-        degerler = {p: ortam.hedefler[t].id for p, t in eslesme.items()}
+        degerler = {
+            p: getattr(ortam.hedefler[t], _PARAM_ALANI.get(p, "id")) for p, t in eslesme.items()
+        }
         birim_mi = any(t in _BIRIM_HEDEFLERI for t in eslesme.values())
         istemci = ortam.birim_istemci if birim_mi else ortam.musteri_istemci
         izlenen = [ortam.hedefler[t] for t in dict.fromkeys(eslesme.values())]
