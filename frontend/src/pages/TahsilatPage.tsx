@@ -119,7 +119,7 @@ export default function TahsilatPage() {
     void qc.invalidateQueries({ queryKey: ["tahsilat-bakiye"] });
   };
 
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
 
   const olustur = useMutation({
     mutationFn: (v: Record<string, unknown>) => api.post<Tahsilat>("/api/tahsilat", v),

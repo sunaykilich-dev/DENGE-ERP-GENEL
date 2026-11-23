@@ -25,7 +25,7 @@ export default function KiralamaTalepOnayi({ kiralamaId, onBitti }: { kiralamaId
       setAcik(false);
       onBitti();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   return (
     <>

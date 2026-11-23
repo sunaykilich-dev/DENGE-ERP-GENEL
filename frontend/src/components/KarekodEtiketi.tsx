@@ -23,7 +23,7 @@ export default function KarekodEtiketiDugmesi({ kiralikId }: { kiralikId: number
   const uret = useMutation({
     mutationFn: () => kiralamaApi.etiketUret(kiralikId),
     onSuccess: setEtiket,
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const yazdir = () => {

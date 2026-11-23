@@ -145,7 +145,7 @@ function YonlendirPenceresi({ kayit, onKapat }: { kayit: Yonlendirme; onKapat: (
       void qc.invalidateQueries({ queryKey: ["yonlendirmeler"] });
       onKapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   return (
     <Modal

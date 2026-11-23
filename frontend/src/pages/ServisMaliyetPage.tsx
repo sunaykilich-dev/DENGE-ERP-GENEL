@@ -386,7 +386,7 @@ export function IsFinansiCekmecesi({ soId, onClose }: { soId: number | null; onC
     void qc.invalidateQueries({ queryKey: ["is-finansi-gecmis", soId] });
     void qc.invalidateQueries({ queryKey: ["maliyet-analiz"] });
   };
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
 
   const gelir = useMutation({
     mutationFn: (v: { kaynak: string; tutar: number | null; not?: string | null }) =>

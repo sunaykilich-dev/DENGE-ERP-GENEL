@@ -30,7 +30,7 @@ export default function SicilNumaralaPenceresi({ acik, onKapat }: { acik: boolea
       void qc.invalidateQueries({ queryKey: ["personel"] });
       onKapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const satirlar = onizleme.data?.satirlar ?? [];
   return (

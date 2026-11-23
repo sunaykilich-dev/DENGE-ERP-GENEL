@@ -772,7 +772,7 @@ function KatilimSekmesi() {
                               onOk: () =>
                                 egitimApi.oturumSil(o).then(
                                   () => void qc.invalidateQueries({ queryKey: ["egitim-oturumlar"] }),
-                                  (er: ApiError) => message.error(hata(er)),
+                                  (er: ApiError) => void message.error(hata(er)),
                                 ),
                             });
                           }}

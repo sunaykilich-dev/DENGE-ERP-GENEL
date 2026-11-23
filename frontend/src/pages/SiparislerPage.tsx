@@ -233,7 +233,7 @@ export default function SiparislerPage() {
     void qc.invalidateQueries({ queryKey: ["uygun-cihazlar"] });
   };
 
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
 
   const olustur = useMutation({
     mutationFn: (v: Record<string, unknown>) => api.post<Siparis>("/api/siparisler", v),

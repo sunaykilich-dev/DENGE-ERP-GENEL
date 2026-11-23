@@ -135,7 +135,7 @@ export default function BakimFormu({
     if (yeni) qc.setQueryData(["bakim", "form", soId], yeni);
     qc.invalidateQueries({ queryKey: ["bakim"] });
   };
-  const hata = (e: unknown) => message.error(hataMetni(e));
+  const hata = (e: unknown) => void message.error(hataMetni(e));
 
   const girdi = () => {
     const alanlar = form.getFieldsValue() as Record<string, unknown>;
@@ -591,7 +591,7 @@ function UygunsuzlukKarti({
   const [kapatilan, setKapatilan] = useState<Uygunsuzluk | null>(null);
   const [kapatForm] = Form.useForm();
   const yonetebilir = yetkili("bakim.onayla");
-  const hata = (e: unknown) => message.error(hataMetni(e));
+  const hata = (e: unknown) => void message.error(hataMetni(e));
 
   const duzenle = useMutation({
     mutationFn: (g: { kayit: Uygunsuzluk; action_type?: string; due_date?: string | null }) =>

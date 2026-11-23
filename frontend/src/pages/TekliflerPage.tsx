@@ -431,7 +431,7 @@ export default function TekliflerPage() {
     void qc.invalidateQueries({ queryKey: ["teklifler"] });
     void qc.invalidateQueries({ queryKey: ["teklif"] });
   };
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
   const sonuc = (mesaj: string) => (t: Teklif) => {
     message.success(mesaj);
     for (const u of t?.uyarilar ?? []) message.warning(u);
