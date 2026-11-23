@@ -211,13 +211,16 @@ def create_app() -> FastAPI:
     # aşağıda `MOBILITE_KAPISI` ile yalnız DENGE MOBİLİTE etkinken açılır.
     app.include_router(oturum_api.router)
     app.include_router(accounts_api.router)
+    # Katalog, cihaz, hat ve stok ŞİRKET BAZLIDIR (fcl000000001): üç şirkete
+    # açıktır, her uç etkin şirkete süzülür (`services/sirket_kapsami.py`).
+    # Operatör senkronu ve cihaz uzlaştırma uç düzeyinde MOBİLİTE'ye kapalıdır.
     app.include_router(catalog_api.router)
-    app.include_router(devices_api.router, dependencies=MOBILITE_KAPISI)
-    app.include_router(sims_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(devices_api.router)
+    app.include_router(sims_api.router)
     app.include_router(vehicles_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(workorders_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(settlements_api.router, dependencies=MOBILITE_KAPISI)
-    app.include_router(stock_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(stock_api.router)
     # Teklif uçları mobilite (birimsiz) ve servis (birimli) teklifinin ORTAK ucu:
     # şirket kuralı yönlendiricide değil `services/quotes._sirket_kosulu`'nda.
     app.include_router(quotes_api.router)

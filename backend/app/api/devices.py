@@ -5,7 +5,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, or_, select
 
-from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala
+from app.api.deps import (
+    ClockDep,
+    DbDep,
+    client_ip,
+    mobilite_sirketi_gerekli,
+    require_permission,
+    sayfala,
+)
 from app.models import (
     Attachment,
     Device,
@@ -26,6 +33,7 @@ from app.schemas.devices import (
 from app.services import accounts as hesap_svc
 from app.services import audit
 from app.services import devices as svc
+from app.services import sirket_kapsami as kapsam
 from app.services.statemachine import CIHAZ, IzinsizGecis
 
 router = APIRouter(prefix="/api/cihazlar", tags=["cihazlar"])
@@ -61,6 +69,8 @@ async def listele(
         .order_by(Device.id.desc())
     )
     stmt = hesap_svc.kapsam_musteri(stmt, user, Device.current_customer_id)
+    # Şirket bazlı (fcl000000001): cihazın şirketi ürününkidir; ortak ürün herkese.
+    stmt = kapsam.uygula(stmt, kapsam.urun_kosulu(user))
     if q:
         stmt = stmt.where(
             or_(
@@ -139,7 +149,11 @@ async def kart(kimlik: str, db: DbDep, user: Okuyucu) -> CihazKarti:
             .where(kosul, Device.is_deleted.is_(False))
         )
     ).first()
-    if satir is None or await hesap_svc.kapsam_disinda_mi(db, user, satir[0].current_customer_id):
+    if (
+        satir is None
+        or not kapsam.urun_gorunur_mu(user, satir[1].sirket)
+        or await hesap_svc.kapsam_disinda_mi(db, user, satir[0].current_customer_id)
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"'{kimlik}' ile cihaz bulunamadı")
     cihaz, urun = satir
 
@@ -149,7 +163,7 @@ async def kart(kimlik: str, db: DbDep, user: Okuyucu) -> CihazKarti:
     acik = await svc.aktif_hat(db, cihaz.id)
     if acik is not None:
         hat = await db.get(SimCard, acik.sim_id)
-        if hat is not None:
+        if hat is not None and kapsam.hat_gorunur_mu(user, hat):
             karti.hat = HatOzeti.model_validate(hat)
         # Eşleşme ICCID'den geldi, aktivasyon anı kaynakta yoktu. Ekranda
         # boş bir tarih göstermek yerine bunu AÇIKÇA söyle: ekip gerçek
@@ -167,10 +181,13 @@ async def kart(kimlik: str, db: DbDep, user: Okuyucu) -> CihazKarti:
     # Ek kameralar (ana cihazın kanalları)
     altlar = (
         await db.execute(
-            select(Device, Product)
-            .join(Product, Product.id == Device.product_id)
-            .where(Device.parent_device_id == cihaz.id, Device.is_deleted.is_(False))
-            .order_by(Device.channel_no)
+            kapsam.uygula(
+                select(Device, Product)
+                .join(Product, Product.id == Device.product_id)
+                .where(Device.parent_device_id == cihaz.id, Device.is_deleted.is_(False))
+                .order_by(Device.channel_no),
+                kapsam.urun_kosulu(user),
+            )
         )
     ).all()
     karti.alt_cihazlar = [_cikti(c, u) for c, u in altlar]
@@ -202,6 +219,14 @@ async def kart(kimlik: str, db: DbDep, user: Okuyucu) -> CihazKarti:
 
 @router.post("", response_model=CihazOut, status_code=status.HTTP_201_CREATED)
 async def olustur(payload: CihazIn, request: Request, db: DbDep, user: Yazici) -> CihazOut:
+    # Başka şirketin ürününe cihaz açılamaz (fcl000000001): ürün yokmuş gibi.
+    urun_sirketi = await db.scalar(select(Product.sirket).where(Product.id == payload.product_id))
+    if not kapsam.urun_gorunur_mu(user, urun_sirketi):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ürün bulunamadı")
+    if payload.parent_device_id is not None and not await kapsam.cihaz_gorunur_mu(
+        db, user, await db.get(Device, payload.parent_device_id)
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ana cihaz bulunamadı")
     try:
         identity_kind = await svc.kimlik_dogrula(
             db, payload.product_id, payload.imei, payload.serial_no
@@ -239,6 +264,7 @@ async def durum_degistir(
     if (
         cihaz is None
         or cihaz.is_deleted
+        or not await kapsam.cihaz_gorunur_mu(db, user, cihaz)
         or await hesap_svc.kapsam_disinda_mi(db, user, cihaz.current_customer_id)
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cihaz bulunamadı")
@@ -264,9 +290,13 @@ async def uzlastir(
     request: Request,
     db: DbDep,
     user: Annotated[User, Depends(require_permission("sistem.goc"))],
+    _mobilite: Annotated[User, Depends(mobilite_sirketi_gerekli)],
     yaz: bool = True,
 ) -> dict:
     """Türetilmiş "şu an" alanlarını tarihli tablolardan yeniden hesaplar.
+
+    Bütün cihazlara dokunan sistem işi: şirket kapısı kalkınca da yalnız
+    DENGE MOBİLİTE etkinken çalışır (fcl000000001).
 
     `yaz=false` ile yalnız farkı raporlar. Gece koşan iş bu ucu kullanır;
     göçten sonra bir kez elle çalıştırmak da gerekir.

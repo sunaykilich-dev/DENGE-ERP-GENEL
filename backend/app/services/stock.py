@@ -12,9 +12,11 @@ from app.models import (
     DeviceCustodyHistory,
     Transfer,
     TransferItem,
+    User,
     Warehouse,
 )
 from app.services import settings as ayar_svc
+from app.services import sirket_kapsami as kapsam
 
 
 class TransferHatasi(ValueError):
@@ -131,8 +133,12 @@ async def transferi_teslim_et(
     return len(kalemler)
 
 
-async def bayi_stogu(db: AsyncSession, *, account_id: int | None = None) -> list[dict]:
-    """Bayi/montaj noktası bazında elde duran cihaz sayısı ve bekleme günü."""
+async def bayi_stogu(
+    db: AsyncSession, *, account_id: int | None = None, user: User | None = None
+) -> list[dict]:
+    """Bayi/montaj noktası bazında elde duran cihaz sayısı ve bekleme günü.
+
+    `user` verilirse yalnız görünür cihazlar (ürünün şirketi, fcl000000001)."""
     # Unvan sorguya katılır: çağıranların tek tek hesap çekmesi (N+1) iki
     # ayrı uçta tekrarlanıyordu ve biri unvanı hiç doldurmuyordu.
     stmt = (
@@ -152,6 +158,8 @@ async def bayi_stogu(db: AsyncSession, *, account_id: int | None = None) -> list
     )
     if account_id:
         stmt = stmt.where(DeviceCustodyHistory.account_id == account_id)
+    if user is not None and (kosul := kapsam.cihaz_kosulu(user)) is not None:
+        stmt = stmt.join(Device, Device.id == DeviceCustodyHistory.device_id).where(kosul)
     return [
         {
             "account_id": r.account_id,
@@ -164,7 +172,7 @@ async def bayi_stogu(db: AsyncSession, *, account_id: int | None = None) -> list
     ]
 
 
-async def yaslanan_stok(db: AsyncSession, clock: Clock) -> list[dict]:
+async def yaslanan_stok(db: AsyncSession, clock: Clock, *, user: User | None = None) -> list[dict]:
     """Bayide eşik günden uzun süredir bekleyen cihazlar.
 
     Konsinye kapsam dışı olduğu için bu rapor "satılmış ama hâlâ bayide
@@ -172,18 +180,19 @@ async def yaslanan_stok(db: AsyncSession, clock: Clock) -> list[dict]:
     """
     esik_gun = int(await ayar_svc.get(db, "bayi_stok_yaslanma_gun"))
     sinir = clock.now() - timedelta(days=esik_gun)
-    satirlar = (
-        await db.execute(
-            select(DeviceCustodyHistory, Device)
-            .join(Device, Device.id == DeviceCustodyHistory.device_id)
-            .where(
-                DeviceCustodyHistory.valid_to.is_(None),
-                DeviceCustodyHistory.location_type.in_(("BAYI", "MONTAJ_NOKTASI")),
-                DeviceCustodyHistory.valid_from < sinir,
-            )
-            .order_by(DeviceCustodyHistory.valid_from)
+    stmt = (
+        select(DeviceCustodyHistory, Device)
+        .join(Device, Device.id == DeviceCustodyHistory.device_id)
+        .where(
+            DeviceCustodyHistory.valid_to.is_(None),
+            DeviceCustodyHistory.location_type.in_(("BAYI", "MONTAJ_NOKTASI")),
+            DeviceCustodyHistory.valid_from < sinir,
         )
-    ).all()
+        .order_by(DeviceCustodyHistory.valid_from)
+    )
+    if user is not None:
+        stmt = kapsam.uygula(stmt, kapsam.cihaz_kosulu(user))
+    satirlar = (await db.execute(stmt)).all()
     return [
         {
             "device_id": c.id,
@@ -206,7 +215,9 @@ YOLDAKI = ("ITHALATTA", "SEVK_EDILDI")
 AYRILMIS = ("REZERVE",)
 
 
-async def denge_stogu(db: AsyncSession, *, urun_tipi: str | None = None) -> list[dict]:
+async def denge_stogu(
+    db: AsyncSession, *, urun_tipi: str | None = None, user: User | None = None
+) -> list[dict]:
     """Model bazında Denge stoğu: hangi üründen kaç adet var.
 
     İki farklı ürün türü tek listede birleşir:
@@ -219,12 +230,23 @@ async def denge_stogu(db: AsyncSession, *, urun_tipi: str | None = None) -> list
     Sayım `devices.status` üzerinden yapılır, konum geçmişi üzerinden değil:
     durum durum makinesiyle korunuyor ve göçten gelen cihazların bir kısmında
     konum kaydı hiç yok. Konum kırılımı ayrıca verilir ("nerede duruyor").
+
+    Şirket bazlı (fcl000000001, `user` verilirse): ortak + etkin şirketin
+    ürünleri; serisiz adet yalnız görünür (ortak / etkin şirket) depolardan.
+    Cihaz sayımı ürüne bağlı olduğu için ürün süzgeci yeter.
     """
     from app.models import Product, StockMovement
 
+    urun_kosulu = kapsam.urun_kosulu(user) if user is not None else None
+    hareket_kosulu = (
+        kapsam.depo_id_kosulu(user, StockMovement.warehouse_id) if user is not None else None
+    )
     urunler = (
         await db.scalars(
-            select(Product).where(Product.is_deleted.is_(False)).order_by(Product.name)
+            kapsam.uygula(
+                select(Product).where(Product.is_deleted.is_(False)).order_by(Product.name),
+                urun_kosulu,
+            )
         )
     ).all()
     if urun_tipi:
@@ -262,8 +284,9 @@ async def denge_stogu(db: AsyncSession, *, urun_tipi: str | None = None) -> list
     serisiz: dict[int, int] = dict(
         (
             await db.execute(
-                select(
-                    StockMovement.product_id, func.coalesce(func.sum(StockMovement.qty), 0)
+                kapsam.uygula(
+                    select(StockMovement.product_id, func.coalesce(func.sum(StockMovement.qty), 0)),
+                    hareket_kosulu,
                 ).group_by(StockMovement.product_id)
             )
         ).all()
@@ -273,10 +296,12 @@ async def denge_stogu(db: AsyncSession, *, urun_tipi: str | None = None) -> list
     servis_deposunda: dict[int, int] = dict(
         (
             await db.execute(
-                select(StockMovement.product_id, func.coalesce(func.sum(StockMovement.qty), 0))
-                .join(Warehouse, Warehouse.id == StockMovement.warehouse_id)
-                .where(Warehouse.servis_deposu.is_(True))
-                .group_by(StockMovement.product_id)
+                kapsam.uygula(
+                    select(StockMovement.product_id, func.coalesce(func.sum(StockMovement.qty), 0))
+                    .join(Warehouse, Warehouse.id == StockMovement.warehouse_id)
+                    .where(Warehouse.servis_deposu.is_(True)),
+                    hareket_kosulu,
+                ).group_by(StockMovement.product_id)
             )
         ).all()
     )

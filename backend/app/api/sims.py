@@ -11,6 +11,7 @@ from app.api.deps import (
     ClockDep,
     DbDep,
     client_ip,
+    mobilite_sirketi_gerekli,
     require_permission,
     sayfala,
     sees_cost,
@@ -24,6 +25,7 @@ from app.services import audit, normalize
 from app.services import devices as cihaz_svc
 from app.services import settings as ayar_svc
 from app.services import sims as sim_svc
+from app.services import sirket_kapsami as kapsam
 from app.services.statemachine import HAT, IzinsizGecis
 
 router = APIRouter(prefix="/api/hatlar", tags=["hatlar"])
@@ -86,6 +88,8 @@ class HatDetay(HatOzeti):
     iccid_eksik: bool = False
     sonraki_durumlar: list[str] = []
     version: int = 1
+    # Hattın şirketi (`permissions.SIRKETLER` kodu; fcl000000001).
+    sirket: str | None = None
 
 
 class HatTakIn(BaseModel):
@@ -118,6 +122,17 @@ def _detay(hat: SimCard, bugun: date, *, maliyet: bool = True) -> HatDetay:
     return d
 
 
+_HAT_YOK = "Hat bulunamadı"
+
+
+async def _hat_getir(db: DbDep, user: User, hat_id: int) -> SimCard:
+    """Etkin şirketin hattı; başka şirketin hattı yokmuş gibi 404."""
+    hat = await db.get(SimCard, hat_id)
+    if hat is None or hat.is_deleted or not kapsam.hat_gorunur_mu(user, hat):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _HAT_YOK)
+    return hat
+
+
 @router.get("", response_model=list[HatDetay])
 async def listele(
     db: DbDep,
@@ -137,6 +152,7 @@ async def listele(
 ) -> list[HatDetay]:
     bugun = clock.now().date()
     stmt = select(SimCard).where(SimCard.is_deleted.is_(False)).order_by(SimCard.iccid)
+    stmt = kapsam.uygula(stmt, kapsam.hat_kosulu(user))
     if q:
         rakam = "".join(ch for ch in q if ch.isdigit())
         kosullar = [SimCard.iccid.startswith(rakam)] if rakam else []
@@ -168,6 +184,9 @@ async def olustur(
     if await db.scalar(select(SimCard).where(SimCard.iccid == payload.iccid)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Bu ICCID zaten kayıtlı")
     hat = SimCard(**payload.model_dump(), created_by=user.id)
+    # Yeni hat etkin şirkete aittir (fcl000000001).
+    if (sirket := kapsam.yeni_hat_sirketi(user)) is not None:
+        hat.sirket = sirket
     db.add(hat)
     await db.flush()
     await audit.log(
@@ -175,7 +194,7 @@ async def olustur(
         "sim_cards",
         "olustur",
         entity_id=hat.id,
-        new_value={"iccid": hat.iccid, "operator": hat.operator},
+        new_value={"iccid": hat.iccid, "operator": hat.operator, "sirket": hat.sirket},
         user_id=user.id,
         ip=client_ip(request),
         is_personal_data=True,  # MSISDN kişisel veri
@@ -191,7 +210,13 @@ async def cihaza_tak(
     """Hattı cihaza takar; her iki taraftaki açık dönemi kapatır."""
     hat = await db.get(SimCard, hat_id)
     cihaz = await db.get(Device, payload.device_id)
-    if hat is None or cihaz is None:
+    # Şirket bazlı (fcl000000001): başka şirketin hattı ya da cihazı yokmuş gibi.
+    if (
+        hat is None
+        or cihaz is None
+        or not kapsam.hat_gorunur_mu(user, hat)
+        or not await kapsam.cihaz_gorunur_mu(db, user, cihaz)
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Hat veya cihaz bulunamadı")
 
     await cihaz_svc.hat_tak(db, device_id=cihaz.id, sim_id=hat.id, clock=clock)
@@ -217,9 +242,7 @@ async def durum_degistir(
     clock: ClockDep,
     user: Yazici,
 ) -> HatDetay:
-    hat = await db.get(SimCard, hat_id)
-    if hat is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Hat bulunamadı")
+    hat = await _hat_getir(db, user, hat_id)
     hedef = payload.get("to_status", "")
     try:
         HAT.dogrula(hat.status, hedef)
@@ -255,9 +278,7 @@ async def paket_degistir(
     hat_id: int, payload: PaketIn, request: Request, db: DbDep, clock: ClockDep, user: Yazici
 ) -> HatDetay:
     """Yeni paket dönemi açar; önceki dönem kapanır ve geçmişte kalır."""
-    hat = await db.get(SimCard, hat_id)
-    if hat is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Hat bulunamadı")
+    hat = await _hat_getir(db, user, hat_id)
     await sim_svc.paket_degistir(
         db,
         hat,
@@ -287,9 +308,10 @@ async def paket_degistir(
 
 
 @router.get("/{hat_id}/paket-gecmisi")
-async def paket_gecmisi(hat_id: int, db: DbDep, _: Okuyucu) -> list[dict]:
+async def paket_gecmisi(hat_id: int, db: DbDep, user: Okuyucu) -> list[dict]:
     from app.models import SimPlanHistory
 
+    await _hat_getir(db, user, hat_id)
     kayitlar = (
         await db.scalars(
             select(SimPlanHistory)
@@ -316,13 +338,16 @@ async def senkronize_et(
     db: DbDep,
     clock: ClockDep,
     user: Annotated[User, Depends(require_permission("hat.senkron"))],
+    _mobilite: Annotated[User, Depends(mobilite_sirketi_gerekli)],
     limit: int = Query(default=200, ge=1, le=1000),
 ) -> dict:
-    """Operatörden hat bilgilerini çeker. Elle girilen alanlar korunur."""
+    """Operatörden hat bilgilerini çeker. Elle girilen alanlar korunur.
+
+    Operatör hesabı DENGE MOBİLİTE'nindir: uç yalnız MOBİLİTE etkinken açılır
+    ve yalnız o şirketin hatlarını sorar (fcl000000001)."""
     adaptor = await operator_adaptoru(db)
-    hatlar = (
-        await db.scalars(select(SimCard).where(SimCard.is_deleted.is_(False)).limit(limit))
-    ).all()
+    stmt = select(SimCard).where(SimCard.is_deleted.is_(False)).limit(limit)
+    hatlar = (await db.scalars(kapsam.uygula(stmt, kapsam.hat_kosulu(user)))).all()
     try:
         durumlar = {d.iccid: d for d in await adaptor.toplu_durum([h.iccid for h in hatlar])}
     except AdaptorHazirDegil as exc:
@@ -363,19 +388,19 @@ def _maliyeti_gizle(satirlar: list[dict], alanlar: tuple[str, ...], user: User) 
 
 
 @router.get("/rapor/kota")
-async def rapor_kota(db: DbDep, _: Okuyucu) -> list[dict]:
-    return await sim_svc.kota_uyarilari(db)
+async def rapor_kota(db: DbDep, user: Okuyucu) -> list[dict]:
+    return await sim_svc.kota_uyarilari(db, user=user)
 
 
 @router.get("/rapor/2g-riski")
-async def rapor_2g(db: DbDep, _: Okuyucu) -> list[dict]:
+async def rapor_2g(db: DbDep, user: Okuyucu) -> list[dict]:
     """Yalnız 2G/3G destekleyen cihaz ve hatlar — hem risk hem satış fırsatı."""
-    return await sim_svc.iki_g_riski(db)
+    return await sim_svc.iki_g_riski(db, user=user)
 
 
 @router.get("/rapor/atil")
 async def rapor_atil(db: DbDep, clock: ClockDep, user: Okuyucu) -> list[dict]:
-    satirlar = await sim_svc.atil_hatlar(db, clock)
+    satirlar = await sim_svc.atil_hatlar(db, clock, user=user)
     return _maliyeti_gizle(satirlar, ("aylik_maliyet",), user)
 
 
@@ -385,12 +410,12 @@ async def rapor_karlilik(
     user: Annotated[User, Depends(require_permission("maliyet.gor"))],
 ) -> dict:
     """Maliyet içerdiği için ayrı izin ister."""
-    sonuc = await sim_svc.hat_karliligi(db)
-    sonuc["cihaza_takili_olmayan"] = await sim_svc.cihazsiz_hatlar(db)
+    sonuc = await sim_svc.hat_karliligi(db, user=user)
+    sonuc["cihaza_takili_olmayan"] = await sim_svc.cihazsiz_hatlar(db, user=user)
     return sonuc
 
 
 @router.get("/rapor/taahhut")
 async def rapor_taahhut(db: DbDep, clock: ClockDep, user: Okuyucu) -> list[dict]:
-    satirlar = await sim_svc.taahhudu_bitenler(db, clock)
+    satirlar = await sim_svc.taahhudu_bitenler(db, clock, user=user)
     return _maliyeti_gizle(satirlar, ("indirimli_maliyet",), user)

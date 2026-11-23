@@ -181,7 +181,10 @@ async def test_sirketsiz_kullanici_hicbir_sey_gormez(client, kullanici_ac, isler
     assert (await client.get("/api/oturum/sirketler")).json() == {"aktif": None, "sirketler": []}
     gorunen, toplam = await _liste(client)
     assert gorunen == set() and toplam == 0
-    assert (await client.get("/api/cihazlar")).status_code == 403
+    # Cihaz ekranı artık şirket bazlı (fcl000000001): kapı yok, liste boş.
+    r = await client.get("/api/cihazlar")
+    assert r.status_code == 200 and r.json() == []
+    assert (await client.get("/api/araclar")).status_code == 403
 
 
 async def test_mobilite_ucu_mobilite_disinda_403(client, kullanici_ac, uyelik_ver) -> None:
@@ -192,10 +195,15 @@ async def test_mobilite_ucu_mobilite_disinda_403(client, kullanici_ac, uyelik_ve
     assert (await client.get("/api/cihazlar")).status_code == 200
 
     assert (await _sec(client, "TELEKOM")).status_code == 200
-    for yol in ("/api/cihazlar", "/api/hatlar", "/api/araclar", "/api/is-emirleri"):
+    for yol in ("/api/araclar", "/api/is-emirleri"):
         r = await client.get(yol)
         assert r.status_code == 403, yol
         assert r.json()["detail"]["kod"] == "SIRKET_DISI", yol
+    # Cihaz, hat ve stok şirket bazlıdır (fcl000000001): her şirkete açık,
+    # etkin şirkete süzülür (`test_sirket_bazli_stok.py`).
+    # (Bu rolün `hat.gor` izni yok; hat ekranı orada sınanır.)
+    for yol in ("/api/cihazlar", "/api/stok/ozet"):
+        assert (await client.get(yol)).status_code == 200, yol
     r = await client.get("/api/raporlar/dashboard")
     assert r.status_code == 403 and r.json()["detail"]["kod"] == "SIRKET_DISI"
     # Uyarı zili bütün modüllerin ortak ucu: kapısız (mobilite satırları süzülür)
@@ -312,10 +320,13 @@ async def test_teklif_sirket_suzgeci(client, db, kullanici_ac, uyelik_ver) -> No
 
 
 async def test_genel_aramada_mobilite_sonucu_yalniz_mobilitede(
-    client, kullanici_ac, uyelik_ver, cihaz_ac
+    client, kullanici_ac, uyelik_ver, cihaz_ac, urun_ac
 ) -> None:
-    """Ekranı 403 olan cihaz, genel aramada da çıkmaz (kapı yan yoldan açılmasın)."""
-    await cihaz_ac(imei="356789012345678")
+    """Başka şirkette görünmeyen cihaz genel aramada da çıkmaz (yan yol yok).
+
+    Cihazın şirketi ürününkidir (fcl000000001): MOBİLİTE ürünü."""
+    urun = await urun_ac("ARAMA-MOB", sirket="MOBILITE")
+    await cihaz_ac(imei="356789012345678", urun=urun)
     kisi = await kullanici_ac("arayan", "ADMIN")
     await uyelik_ver(kisi, "TELEKOM", "MOBILITE")
     await giris(client, "arayan")

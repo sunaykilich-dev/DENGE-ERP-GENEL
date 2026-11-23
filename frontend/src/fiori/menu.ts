@@ -16,7 +16,6 @@ import {
   BarChartOutlined,
   CalendarOutlined,
   ShopOutlined,
-  CarOutlined,
   DatabaseOutlined,
   FieldTimeOutlined,
   InboxOutlined,
@@ -26,7 +25,6 @@ import {
 } from "@ant-design/icons";
 
 import {
-  SAYFALAR,
   UYGULAMALAR,
   type IkonBileseni,
   type Uygulama,
@@ -108,7 +106,6 @@ function tur(kod: string, baslik: string, birimler?: string[]): MenuYapragi {
   };
 }
 
-const mobiliteSayfalari = SAYFALAR.filter((u) => u.grup === "mobilite").map((u) => sayfa(u.id));
 
 /**
  * Menü ağacı (sıra = ekrandaki sıra). KARARLAR 2026-11-09 S7: göreve göre
@@ -167,7 +164,7 @@ export const MENU_AGACI: MenuOgesi[] = [
     "satis",
     "Satış",
     [
-      sayfa("/hesaplar", "Müşteri Kartları", "satis:hesaplar"),
+      sayfa("/hesaplar", "Cari Hesaplar", "satis:hesaplar"),
       sayfa("/teklifler", "Teklifler", "satis:teklifler"),
       sayfa("/tekliflerim", "Tekliflerim", "satis:tekliflerim"),
       sayfa("/satislarim", "Satışlarımın Durumu", "satis:satislarim"),
@@ -188,9 +185,18 @@ export const MENU_AGACI: MenuOgesi[] = [
     ],
     // Satışın bölümü: teknisyen burada yalnız kendi işlerinin süzülmüş
     // görünümlerini görüyordu (2026-11-09); bölüm satış izni ister.
-    { ikon: ShopOutlined, birimler: ["GUVENLIK", "BARIYER", "HABERLESME", "POC"], izin: ["hesap.gor", "teklif.gor"] },
+    // 2026-11-23: üç şirkette de açık (Mobilite bölümü kaldırıldı; cari,
+    // teklif ve ürün kataloğu buradan, kayıtlar etkin şirkete göre süzülür).
+    { ikon: ShopOutlined, izin: ["hesap.gor", "teklif.gor"] },
   ),
-  grup("depo", "Depo", [sayfa("/yedek-parca"), sayfa("/servis-ekipman")], { ikon: DatabaseOutlined }),
+  // 2026-11-23: Stok ve Hatlar Mobilite bölümünden buraya; her şirket kendi
+  // cihaz ve hatlarını görür (sunucu etkin şirkete göre süzer).
+  grup(
+    "depo",
+    "Depo",
+    [sayfa("/yedek-parca"), sayfa("/servis-ekipman"), sayfa("/stok"), sayfa("/hatlar")],
+    { ikon: DatabaseOutlined },
+  ),
   grup("kiralama", "Kiralama", [sayfa("/kiralamalar"), sayfa("/kiralik-envanter")], { ikon: InboxOutlined }),
   grup(
     "raporlar",
@@ -206,8 +212,9 @@ export const MENU_AGACI: MenuOgesi[] = [
     [sayfa("/personel"), sayfa("/egitim"), sayfa("/ik-belgeler"), sayfa("/izin-talepleri")],
     { ikon: TeamOutlined },
   ),
-  // Mobilite modülü (DENGE MOBİLİTE etkinken). Modülün kendisine dokunulmadı.
-  grup("mobilite", "Mobilite", mobiliteSayfalari, { ikon: CarOutlined, birimler: ["MOBILITE", "ARAC_TAKIP"] }),
+  // 2026-11-23: "Mobilite" bölümü kaldırıldı (DENGE MOBİLİTE ayrı şirket, kendi
+  // ERP'si var). Cari/teklif/ürün Satış'ta, Stok/Hatlar Depo'da; diğer mobilite
+  // ekranları menüde yok, adresle açılırsa şirket kapısı çalışır.
   grup(
     "sistem",
     "Yönetim",

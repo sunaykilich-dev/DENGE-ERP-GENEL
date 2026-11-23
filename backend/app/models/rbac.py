@@ -212,6 +212,12 @@ def _sirket_check(sutun: str) -> str:
     return f"{sutun} IN (" + ", ".join(f"'{k}'" for k in SIRKET_KODLARI) + ")"
 
 
+def sirket_check(sutun: str) -> str:
+    """`<sutun> IS NULL OR <sutun> IN ('TELEKOM', ...)` — şirket damgalı tablolar
+    (ürün, hat; migration fcl000000001). NULL = ortak (ürün) / damgasız."""
+    return f"{sutun} IS NULL OR {_sirket_check(sutun)}"
+
+
 class Sirket(Base):
     """Grup şirketi (DENGE TELEKOM / ELEKTRONİK / MOBİLİTE).
 
