@@ -150,6 +150,8 @@ _SATIS_EKLERI = {"iskonto_rol_limitleri"}
 _SAHA_IK_EKLERI = {"servis_saha_ulasim_zorunlu", "atolye_teslim_seri_okutma", "izin_onay_sure_saat"}
 # 2026-11-18 Operasyon Merkezi panosu: tayinsiz iş eşiği (mesai dakikası).
 _OPERASYON_EKLERI = {"servis_tayin_suresi_kritik_dk", "servis_tayin_suresi_dk"}
+# 2026-11-23: cihazlı servis işinde açılış/kapanış seri okutma zorunluluğu.
+_SERI_OKUTMA_EKLERI = {"servis_seri_okutma_zorunlu"}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
@@ -162,6 +164,7 @@ def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:
         | _SATIS_EKLERI
         | _SAHA_IK_EKLERI
         | _OPERASYON_EKLERI
+        | _SERI_OKUTMA_EKLERI
     )
     assert beklenen <= set(ayar.DEFAULTS)
     # Her yeni anahtar sınır tablosunda; tablo yalnız yeni anahtarları kapsar.
@@ -234,3 +237,21 @@ def test_ofis_ag_listesi_dogrulamasi() -> None:
     for kotu in (["10.0.0.0/33"], ["ofis"], "10.0.0.0/8", [1]):
         with pytest.raises(ayar.AyarHatasi):
             ayar.ayar_dogrula("ofis_ag_listesi", kotu)
+
+
+# --- Seri okutma (2026-11-23) ----------------------------------------------------
+
+
+def test_seri_okutma_sozlukleri_tek_kaynak() -> None:
+    from app.services.teknik_servis import seri_okutma
+
+    assert tuple(seri_okutma.ELLE_GEREKCE_ADLARI) == teknik_servis.SERI_ELLE_GEREKCELERI
+    assert seri_okutma.CIHAZLI_TURLER <= set(teknik_servis.SERVIS_TURLERI)
+    # Sahip kararı: cihazsız türler kural dışı.
+    assert not {"DESTEK", "KESIF", "TOPLAMA", "TASIMA", "DEMONTAJ"} & seri_okutma.CIHAZLI_TURLER
+    assert seri_okutma.UZAKTAN_KANALLAR <= set(teknik_servis.COZUM_KANALLARI)
+
+
+@pytest.mark.seri_okutma
+def test_seri_okutma_varsayilan_acik() -> None:
+    assert ayar.DEFAULTS["servis_seri_okutma_zorunlu"] is True

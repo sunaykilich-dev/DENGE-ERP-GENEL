@@ -99,3 +99,4 @@ from app.services.teknik_servis import fatura_devri  # noqa: F401
 from app.services.teknik_servis import kiralik_sayim  # noqa: F401
 
 # --- Dalga 4+ (D4-S buraya ekler) ---------------------------------------------------
+from app.services.teknik_servis import seri_okutma  # noqa: F401  (2026-11-23 seri okutma)

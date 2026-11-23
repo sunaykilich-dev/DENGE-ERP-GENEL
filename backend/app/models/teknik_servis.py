@@ -155,6 +155,31 @@ SERVIS_SONUCLARI = ("COZULDU", "COZULEMEDI", "TEKRAR_GIDILECEK", "TEKLIF_SUNULAC
 COZUM_KANALLARI = ("YERINDE", "UZAKTAN", "TELEFON", "ATOLYE")
 # Sahada görülen seri/bölge kütükten farklıysa (E03-14); PB'de form tutar.
 KUTUK_FARK_DURUMLARI = ("ACIK", "UYGULANDI", "YOK_SAYILDI")
+# Seri okuma kaynağı (2026-11-23 sahip kararı, migration fcn000000001): OKUTMA =
+# barkod/QR (telefon kamerası ya da el okuyucu), ELLE = yazıldı. NULL = eski
+# kayıt (kaynak bilinmiyor; geçmiş "okutuldu" diye işaretlenmez). ELLE girişte
+# gerekçe zorunlu; DIGER'de açıklama da zorunlu.
+SERI_OKUMA_KAYNAKLARI = ("OKUTMA", "ELLE")
+SERI_ELLE_GEREKCELERI = ("ETIKET_YOK", "CIHAZ_YANINDA_DEGIL", "DIGER")
+
+
+def _okuma_kisitlari(on: str, ad: str) -> tuple[CheckConstraint, ...]:
+    """Okuma kaynağı CHECK'leri (seri satırı ve kapanış okuması aynı kural)."""
+    kaynak, gerekce, aciklama = f"{on}okuma_kaynagi", f"{on}elle_gerekce", f"{on}elle_aciklama"
+    return (
+        CheckConstraint(_in(kaynak, SERI_OKUMA_KAYNAKLARI, bos=True), name=f"ck_{ad}_okuma"),
+        CheckConstraint(
+            f"({kaynak} IS DISTINCT FROM 'ELLE' AND {gerekce} IS NULL) OR ({kaynak} = 'ELLE' AND "
+            + _in(gerekce, SERI_ELLE_GEREKCELERI)
+            + ")",
+            name=f"ck_{ad}_elle_gerekce",
+        ),
+        CheckConstraint(
+            f"{gerekce} IS DISTINCT FROM 'DIGER' OR coalesce(length(trim({aciklama})), 0) > 0",
+            name=f"ck_{ad}_elle_aciklama",
+        ),
+    )
+
 
 ONAY_TURLERI = ("IMZA", "SOZLU", "BASILI_FORM", "ALINAMADI")
 ATAMA_ROLLERI = ("SEF", "TEKNISYEN")
@@ -662,6 +687,7 @@ class ServiceOrderSerial(Base, PkMixin, TimestampMixin, ActorMixin):
         ),
         CheckConstraint("is_active OR removed_at IS NOT NULL", name="ck_sos_pasif"),
         CheckConstraint("length(trim(seri_no)) > 0", name="ck_sos_seri_bos"),
+        *_okuma_kisitlari("", "sos"),
         Index("ix_sos_seri_norm", "seri_norm"),
         Index("ix_sos_seri_trgm", text("seri_norm gin_trgm_ops"), postgresql_using="gin"),
     )
@@ -682,6 +708,10 @@ class ServiceOrderSerial(Base, PkMixin, TimestampMixin, ActorMixin):
     removed_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
+    # Açılışta nasıl girildi (OKUTMA/ELLE; NULL = eski kayıt ya da sistem/içe aktarma).
+    okuma_kaynagi: Mapped[str | None] = mapped_column(String(10))
+    elle_gerekce: Mapped[str | None] = mapped_column(String(30))
+    elle_aciklama: Mapped[str | None] = mapped_column(String(200))
 
 
 class ServiceOrderEvent(Base, PkMixin):
@@ -844,6 +874,10 @@ class ServiceResult(Base, PkMixin, TimestampMixin, ActorMixin):
         CheckConstraint(
             _in("kutuk_fark_durumu", KUTUK_FARK_DURUMLARI, bos=True), name="ck_sr_kutuk_fark"
         ),
+        CheckConstraint(
+            "(kapanis_seri_no IS NULL) = (kapanis_okuma_kaynagi IS NULL)", name="ck_sr_kapanis_seri"
+        ),
+        *_okuma_kisitlari("kapanis_", "sr_kapanis"),
         Index("ix_sr_is", "service_order_id"),
     )
 
@@ -860,6 +894,12 @@ class ServiceResult(Base, PkMixin, TimestampMixin, ActorMixin):
     saha_seri_no: Mapped[str | None] = mapped_column(String(200))
     saha_bolge: Mapped[str | None] = mapped_column(String(120))
     kutuk_fark_durumu: Mapped[str | None] = mapped_column(String(12))
+    # Kapanışta (tamamlayan sonuçta) okutulan cihaz serisi ve nasıl girildiği
+    # (2026-11-23). Açılış serisinden farklıysa uyarılır, engellenmez.
+    kapanis_seri_no: Mapped[str | None] = mapped_column(String(200))
+    kapanis_okuma_kaynagi: Mapped[str | None] = mapped_column(String(10))
+    kapanis_elle_gerekce: Mapped[str | None] = mapped_column(String(30))
+    kapanis_elle_aciklama: Mapped[str | None] = mapped_column(String(200))
     gecersiz_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     gecersiz_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")

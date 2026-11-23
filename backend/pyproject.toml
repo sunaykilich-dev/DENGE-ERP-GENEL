@@ -44,6 +44,7 @@ markers = [
     "slow: buyuk veriyle performans olcumu (ornegin takvim/liste < 1 sn); -m 'not slow' ile atlanir",
     "saha_ulasim: saha ulasim/km zorunlulugu ACIK (varsayilan testlerde kapali)",
     "sirket_ayrimi: sirket suzgeci ve mobilite kapisi GERCEK calisir (varsayilan testlerde notr)",
+    "seri_okutma: servis isi seri okutma zorunlulugu ACIK (varsayilan testlerde kapali)",
 ]
 
 [tool.ruff]

@@ -35,6 +35,7 @@ from app.models.teknik_servis import COZUM_KANALLARI, SERVIS_SONUCLARI
 from app.services.statemachine import SERVIS_IS_EMRI
 from app.services.teknik_servis import gecmis, kancalar
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
+from app.services.teknik_servis.seri_okutma import SeriOkuma
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,6 +76,8 @@ class SonucGirdisi:
     saha_seri_no: str | None = None
     saha_bolge: str | None = None
     sure_eksik_onay: bool = False
+    # Kapanışta okutulan cihaz serisi (`seri_okutma.SeriOkuma`; 2026-11-23).
+    kapanis_okuma: SeriOkuma | None = None
 
 
 async def _ariza_nedeni_dogrula(db: AsyncSession, so: ServiceOrder, neden_id: int | None) -> None:
@@ -127,6 +130,7 @@ async def sonuc_kaydet(
         eski.gecersiz_by = kimlik
     saha_seri = (girdi.saha_seri_no or "").strip() or None
     saha_bolge = (girdi.saha_bolge or "").strip() or None
+    ko = girdi.kapanis_okuma
     sonuc = ServiceResult(
         service_order_id=so.id,
         sonuc=girdi.sonuc,
@@ -136,11 +140,17 @@ async def sonuc_kaydet(
         saha_seri_no=saha_seri,
         saha_bolge=saha_bolge,
         kutuk_fark_durumu="ACIK" if (saha_seri or saha_bolge) else None,
+        kapanis_seri_no=ko.seri_no if ko else None,
+        kapanis_okuma_kaynagi=ko.okuma_kaynagi if ko else None,
+        kapanis_elle_gerekce=ko.elle_gerekce if ko else None,
+        kapanis_elle_aciklama=ko.elle_aciklama if ko else None,
         created_by=kimlik,
         updated_by=kimlik,
     )
     db.add(sonuc)
     await db.flush()
+    if ko is not None:
+        await _kapanis_farki_yaz(db, so, sonuc, user=user, clock=clock)
     if olay:
         await gecmis.olay_yaz(
             db,
@@ -157,6 +167,26 @@ async def sonuc_kaydet(
             },
         )
     return sonuc
+
+
+async def _kapanis_farki_yaz(
+    db: AsyncSession, so: ServiceOrder, sonuc: ServiceResult, *, user: User | None, clock: Clock
+) -> None:
+    """Kapanış serisi açılıştakinden farklıysa geçmişe not (engellemez)."""
+    from app.services.teknik_servis import is_emirleri, seri_okutma
+
+    acilis = [s.seri_norm for s in await is_emirleri.aktif_seriler(db, so)]
+    if not seri_okutma.kapanis_farkli(sonuc, acilis):
+        return
+    await gecmis.olay_yaz(
+        db,
+        so,
+        "NOT",
+        f"Kapanışta okutulan seri ({sonuc.kapanis_seri_no}) açılıştaki seriden farklı",
+        user=user,
+        clock=clock,
+        veri={"kapanis_seri_farkli": True, "sonuc_id": sonuc.id},
+    )
 
 
 async def sonuc_gir(

@@ -30,7 +30,7 @@ from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import func, select
 
 from app.api.deps import (
@@ -56,6 +56,8 @@ from app.models.teknik_servis import (
     COZUM_KANALLARI,
     DURUM_GRUPLARI,
     ONCELIKLER,
+    SERI_ELLE_GEREKCELERI,
+    SERI_OKUMA_KAYNAKLARI,
     SERVIS_DURUMLARI,
     SERVIS_SONUCLARI,
     TALEP_KANALLARI,
@@ -65,6 +67,7 @@ from app.permissions import BIRIMLER
 from app.services import audit, kvkk, sirketler
 from app.services import export as export_svc
 from app.services.accounts import kapsam_disinda_mi as hesap_kapsam_disinda_mi
+from app.services.normalize import normalize_seri
 from app.services.pdf import PdfUretilemedi
 from app.services.teknik_servis import (
     atama,
@@ -74,6 +77,7 @@ from app.services.teknik_servis import (
     is_emirleri,
     kapsam,
     role_montaj,
+    seri_okutma,
     sonuc,
 )
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
@@ -111,6 +115,40 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 # --- Şemalar ------------------------------------------------------------------------
 
 
+class SeriOkumaIn(BaseModel):
+    """Bir serinin nasıl girildiği (2026-11-23, `seri_okutma`). OKUTMA: kamera ya
+    da el okuyucu; ELLE: yazıldı — sabit listeden neden zorunlu, DIGER'de açıklama."""
+
+    seri_no: str = Field(min_length=1, max_length=200)
+    okuma_kaynagi: Literal[SERI_OKUMA_KAYNAKLARI]  # type: ignore[valid-type]
+    elle_gerekce: Literal[SERI_ELLE_GEREKCELERI] | None = None  # type: ignore[valid-type]
+    elle_aciklama: str | None = Field(default=None, max_length=200)
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"seri_no": "SN-1", "okuma_kaynagi": "OKUTMA"},
+                {"seri_no": "SN-2", "okuma_kaynagi": "ELLE", "elle_gerekce": "ETIKET_YOK"},
+            ]
+        }
+    }
+
+
+def _okumalar(liste: list[SeriOkumaIn] | None) -> list[seri_okutma.SeriOkuma]:
+    try:
+        return [
+            seri_okutma.okuma(o.seri_no, o.okuma_kaynagi, o.elle_gerekce, o.elle_aciklama)
+            for o in liste or ()
+        ]
+    except ServisGirdiHatasi as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+def _okumalari_serilere_kat(seriler: list[str], okumalar: list[SeriOkumaIn]) -> list[str]:
+    """Okunan seriler `seriler`'e eklenir: mükerrer kontrolü tek listeye bakar."""
+    return [*seriler, *(o.seri_no for o in okumalar if o.seri_no not in seriler)]
+
+
 class IsAcIn(BaseModel):
     """Ekrandan servis işi açılışı (E01-02/09). Sözlük doğrulaması serviste (400)."""
 
@@ -139,6 +177,13 @@ class IsAcIn(BaseModel):
     nitelikler: list[str] | None = Field(default=None, max_length=8)
     gecis_kaydi: bool = False
     gecis_gerekcesi: str | None = Field(default=None, max_length=500)
+    # Serilerin nasıl girildiği (cihazlı işte ayar açıkken her seri için zorunlu).
+    seri_okumalari: list[SeriOkumaIn] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _okunanlari_kat(self) -> IsAcIn:
+        self.seriler = _okumalari_serilere_kat(self.seriler, self.seri_okumalari)
+        return self
 
     model_config = {
         "json_schema_extra": {
@@ -210,6 +255,13 @@ class IsPatch(BaseModel):
 class SerilerIn(BaseModel):
     seriler: list[str] = Field(default_factory=list, max_length=50)
     gerekce: str | None = Field(default=None, max_length=500)
+    # Yeni eklenen serilerin okuma kaynağı (isteğe bağlı; verilmezse NULL).
+    seri_okumalari: list[SeriOkumaIn] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _okunanlari_kat(self) -> SerilerIn:
+        self.seriler = _okumalari_serilere_kat(self.seriler, self.seri_okumalari)
+        return self
 
     model_config = {"json_schema_extra": {"examples": [{"seriler": ["SN-1"]}]}}
 
@@ -231,6 +283,8 @@ class BagliIsIn(BaseModel):
     contact_id: int | None = None
     # None = önceki işin aktif serileri; [] = cihazsız.
     seriler: list[str] | None = Field(default=None, max_length=50)
+    # Önceki işte olmayan (yeni) serinin okuma kaynağı; önceki işin serisi devralınır.
+    seri_okumalari: list[SeriOkumaIn] = Field(default_factory=list, max_length=50)
     mukerrer_gec: bool = False
     # Rol testi tur 2 (5_teknisyen B8): bağın türü (iliskili_is_id = önceki iş).
     # Verilmezse yalnız `onceki_is_id` bağı kurulur (eski davranış).
@@ -368,6 +422,8 @@ class SonucIn(BaseModel):
     saha_seri_no: str | None = Field(default=None, max_length=200)
     saha_bolge: str | None = Field(default=None, max_length=120)
     sure_eksik_onay: bool = False
+    # Kapanışta okutulan cihaz serisi (cihazlı işte yerinde/atölyede tamamlarken zorunlu).
+    kapanis_okuma: SeriOkumaIn | None = None
 
     model_config = {
         "json_schema_extra": {
@@ -645,6 +701,8 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "sla_durdurur": aktif.sla_durdurur,
         }
     gecerli = await sonuc.gecerli_sonuc(db, so)
+    aktif_seriler = await is_emirleri.aktif_seriler(db, so)
+    okutma_acik = await seri_okutma.acik_mi(db)
     sonuc_cikti = None
     if gecerli is not None:
         neden_adi = None
@@ -661,6 +719,7 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "saha_seri_no": gecerli.saha_seri_no,
             "saha_bolge": gecerli.saha_bolge,
             "created_at": gecerli.created_at,
+            **seri_okutma.kapanis_ozeti(gecerli, [s.seri_norm for s in aktif_seriler]),
         }
     bekleme_dk = await bekletme.toplam_bekleme_dk(db, [so.id], clock)
     satir.update(
@@ -678,9 +737,22 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "cihaz_bilgisi_eksik": await cihaz_bilgisi.eksikler(db, so),
             "aciklama": so.aciklama,
             "seriler": [
-                {"id": x.id, "seri_no": x.seri_no, "seri_norm": x.seri_norm}
-                for x in await is_emirleri.aktif_seriler(db, so)
+                {
+                    "id": x.id,
+                    "seri_no": x.seri_no,
+                    "seri_norm": x.seri_norm,
+                    "okuma_kaynagi": x.okuma_kaynagi,
+                    "elle_gerekce": x.elle_gerekce,
+                    "elle_aciklama": x.elle_aciklama,
+                    "okuma_etiketi": seri_okutma.etiket(
+                        x.okuma_kaynagi, x.elle_gerekce, x.elle_aciklama
+                    ),
+                }
+                for x in aktif_seriler
             ],
+            # Cihazlı işte açılış/kapanış okutması isteniyor mu (ekran alanı gösterir).
+            "seri_okutma_zorunlu": okutma_acik
+            and seri_okutma.kapsamda(so.tur, gecis=so.sla_kaynak == "GECIS"),
             "ekip": [
                 {
                     "user_id": a.user_id,
@@ -740,6 +812,8 @@ def _girdi(payload: IsAcIn) -> is_emirleri.ServisIsiGirdisi:
         gecis_kaydi=payload.gecis_kaydi,
         nitelikler=payload.nitelikler,
         nitelik_zorunlu=True,
+        seri_okumalari=_okumalar(payload.seri_okumalari),
+        okutma_denetimi=True,
     )
 
 
@@ -961,6 +1035,13 @@ async def form_verileri(db: DbDep, user: SozlukOkuyucu) -> dict[str, Any]:
             {"kod": n.kod, "ad": n.ad, "aciklama_zorunlu": n.aciklama_zorunlu} for n in nedenler
         ],
         "olay_turleri": [{"kod": k, "ad": a} for k, a in gecmis.OLAY_ADLARI.items()],
+        "seri_okutma": {
+            "zorunlu": await seri_okutma.acik_mi(db),
+            "cihazli_turler": sorted(seri_okutma.CIHAZLI_TURLER),
+            "elle_gerekceleri": [
+                {"kod": k, "ad": a} for k, a in seri_okutma.ELLE_GEREKCE_ADLARI.items()
+            ],
+        },
     }
 
 
@@ -1857,7 +1938,13 @@ async def seriler(
     so = await _kapsamli_is(db, so_id, user)
     try:
         await is_emirleri.serileri_yaz(
-            db, so, payload.seriler, user=user, clock=clock, gerekce=payload.gerekce
+            db,
+            so,
+            payload.seriler,
+            user=user,
+            clock=clock,
+            gerekce=payload.gerekce,
+            okumalar=_okumalar(payload.seri_okumalari),
         )
     except _HATALAR as exc:
         raise _hata(exc) from exc
@@ -1909,6 +1996,16 @@ async def bagli_yeni_is(
     uyarilar = await _acilis_on_kontrol(db, acilis, user)
     girdi = _girdi(acilis)
     girdi.equipment_id = varsayilan.equipment_id
+    # Önceki işin (yeni işte kalan) serisi devralınır: kaynağı da kopyalanır.
+    secilen = {normalize_seri(x) for x in acilis.seriler}
+    yeni_okunan = {o.norm for o in girdi.seri_okumalari}
+    devralinan = [s for s in await is_emirleri.aktif_seriler(db, onceki) if s.seri_norm in secilen]
+    for s in devralinan:
+        if s.okuma_kaynagi and s.seri_norm not in yeni_okunan:
+            girdi.seri_okumalari.append(
+                seri_okutma.SeriOkuma(s.seri_no, s.okuma_kaynagi, s.elle_gerekce, s.elle_aciklama)
+            )
+    girdi.devralinan_seriler = frozenset(s.seri_norm for s in devralinan)
     if payload.iliski_turu is not None:
         girdi.iliskili_is_id = onceki.id
         girdi.iliski_turu = payload.iliski_turu
@@ -1953,6 +2050,7 @@ def _bagli_acilis(
         aciklama=degerler.get("aciklama"),
         seriler=varsayilan.seriler if payload.seriler is None else list(payload.seriler),
         mukerrer_gec=payload.mukerrer_gec,
+        seri_okumalari=payload.seri_okumalari,
     )
 
 
@@ -2429,6 +2527,9 @@ async def sonuc_gir(
                 saha_seri_no=payload.saha_seri_no,
                 saha_bolge=payload.saha_bolge,
                 sure_eksik_onay=payload.sure_eksik_onay,
+                kapanis_okuma=_okumalar([payload.kapanis_okuma])[0]
+                if payload.kapanis_okuma
+                else None,
             ),
             user=user,
             clock=clock,

@@ -123,6 +123,8 @@ import KayitGorevleri from "../components/KayitGorevleri";
 import { PlanGecmisiSekmesi, ZamanSekmesi } from "../components/ServisIsSekmeleri";
 import ImzaAlani, { tuvalPng } from "../components/ImzaAlani";
 import ServisParcalari from "../components/ServisParcalari";
+import { okumaDogrula, okumaGovdesi, OkumaliSeriAlani } from "../components/barkod/SeriAlani";
+import { seriAnahtari } from "../components/SeriOkutucu";
 import SlaEtiketi, { SlaKartiPenceresi, useSlaYururlukte } from "../components/SlaEtiketi";
 import BakimFormu from "./BakimFormu";
 import CihazBilgisiFormu from "./CihazBilgisiFormu";
@@ -635,6 +637,7 @@ export function IsDetayCekmecesi({
             saha_seri_no: (v.saha_seri_no as string) || null,
             saha_bolge: (v.saha_bolge as string) || null,
             sure_eksik_onay: !!v.sure_eksik_onay,
+            kapanis_okuma: okumaGovdesi(v.kapanis_okuma as Parameters<typeof okumaGovdesi>[0]),
           });
         case "kapat":
           return teknikServisApi.kapat(d.id, beklenen, (v.gerekce as string) || undefined);
@@ -683,6 +686,9 @@ export function IsDetayCekmecesi({
         message.success(`Bağlı yeni iş açıldı: ${sonuc.so_no}`);
         if (isAc) isAc(sonuc.id);
         return;
+      }
+      if (pencere === "sonuc" && sonuc && typeof sonuc === "object" && "sonuc" in sonuc && sonuc.sonuc?.kapanis_seri_farkli) {
+        message.warning("Kapanışta okutulan seri açılıştaki seriden farklı; kayda not düşüldü.", 6);
       }
       message.success(
         pencere === "kalite_red"
@@ -1065,7 +1071,18 @@ export function IsDetayCekmecesi({
                         </Descriptions.Item>
                       )}
                       <Descriptions.Item label="Seri" span={2}>
-                        {d.seriler.length ? d.seriler.map((s) => <Tag key={s.id}>{s.seri_no}</Tag>) : "—"}
+                        {d.seriler.length
+                          ? d.seriler.map((s) => (
+                              <Tag
+                                key={s.id}
+                                color={s.okuma_kaynagi === "ELLE" ? "orange" : s.okuma_kaynagi === "OKUTMA" ? "green" : undefined}
+                                title={s.okuma_etiketi ?? "Eski kayıt (nasıl girildiği bilinmiyor)"}
+                              >
+                                {s.seri_no}
+                                {s.okuma_etiketi && <span style={{ marginLeft: 4, fontSize: 11 }}>· {s.okuma_etiketi}</span>}
+                              </Tag>
+                            ))
+                          : "—"}
                       </Descriptions.Item>
                       <Descriptions.Item label="Bildirim">{zaman(d.reported_at)}</Descriptions.Item>
                       <Descriptions.Item label="Açılış">{zaman(d.created_at)}</Descriptions.Item>
@@ -1164,6 +1181,15 @@ export function IsDetayCekmecesi({
                             {d.sonuc.ariza_nedeni ? ` · ${d.sonuc.ariza_nedeni}` : ""}
                           </span>
                           <Typography.Text style={{ whiteSpace: "pre-wrap" }}>{d.sonuc.yapilan_islem}</Typography.Text>
+                          {d.sonuc.kapanis_seri_no && (
+                            <span>
+                              Kapanış serisi: <Tag>{d.sonuc.kapanis_seri_no}</Tag>
+                              <Tag color={d.sonuc.kapanis_okuma?.okuma_kaynagi === "ELLE" ? "orange" : "green"}>
+                                {d.sonuc.kapanis_okuma?.etiket}
+                              </Tag>
+                              {d.sonuc.kapanis_seri_farkli && <Tag color="red">Açılıştaki seriden farklı</Tag>}
+                            </span>
+                          )}
                         </Space>
                       </Card>
                     )}
@@ -1542,6 +1568,35 @@ export function IsDetayCekmecesi({
                       .filter((n) => n.is_active)
                       .map((n) => ({ value: n.id, label: n.ad }))}
                   />
+                </Form.Item>
+                <Form.Item noStyle shouldUpdate>
+                  {() => {
+                    const istenir =
+                      !!d.seri_okutma_zorunlu &&
+                      ["COZULDU", "COZULEMEDI"].includes(form.getFieldValue("sonuc")) &&
+                      !["TELEFON", "UZAKTAN"].includes(form.getFieldValue("cozum_kanali"));
+                    if (!istenir) return null;
+                    const okunan = (form.getFieldValue("kapanis_okuma") as { seri_no?: string } | undefined)?.seri_no;
+                    const farkli =
+                      !!okunan?.trim() &&
+                      d.seriler.length > 0 &&
+                      !d.seriler.some((s) => seriAnahtari(s.seri_no) === seriAnahtari(okunan));
+                    return (
+                      <Form.Item
+                        name="kapanis_okuma"
+                        label="Cihaz seri numarası (kapanış okutması)"
+                        required
+                        extra={
+                          farkli
+                            ? `Açılıştaki seriden farklı (${d.seriler.map((s) => s.seri_no).join(", ")}); kaydedilir, not düşülür.`
+                            : "Cihazın barkodunu el okuyucuyla ya da kamera düğmesiyle okutun."
+                        }
+                        rules={[{ validator: (_, x) => okumaDogrula(x, true) }]}
+                      >
+                        <OkumaliSeriAlani />
+                      </Form.Item>
+                    );
+                  }}
                 </Form.Item>
                 <Row gutter={8}>
                   <Col xs={24} sm={12}>

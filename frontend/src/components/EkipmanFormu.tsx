@@ -30,6 +30,7 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import { useSirket } from "../auth/SirketContext";
 import MusteriLokasyonSecici, { type MusteriLokasyonSecimi } from "./MusteriLokasyonSecici";
+import SeriAlani from "./barkod/SeriAlani";
 
 interface FormDegerleri {
   birim: string;
@@ -252,7 +253,7 @@ export default function EkipmanFormu({
               rules={[{ max: 200 }]}
               extra="Olduğu gibi saklanır (baştaki sıfır, - . / korunur)."
             >
-              <Input className="mono" />
+              <SeriAlani placeholder="Okutun ya da yazın" />
             </Form.Item>
           </Col>
         </Row>

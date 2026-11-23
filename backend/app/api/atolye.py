@@ -60,7 +60,7 @@ from app.models.servis_atolye import (
     ATOLYE_TEST_SONUCLARI,
 )
 from app.models.servis_ekipman import EKIPMAN_TIPLERI
-from app.models.teknik_servis import ONCELIKLER
+from app.models.teknik_servis import ONCELIKLER, SERI_ELLE_GEREKCELERI, SERI_OKUMA_KAYNAKLARI
 from app.services import audit
 from app.services import export as export_svc
 from app.services.pdf import PdfUretilemedi
@@ -72,6 +72,7 @@ from app.services.teknik_servis import (
     gecmis,
     is_emirleri,
     kapsam,
+    seri_okutma,
     sonuc,
     zaman,
 )
@@ -119,6 +120,10 @@ class EkipmanIn(BaseModel):
     warranty_start: date | None = None
     warranty_end: date | None = None
     mukerrer_gerekce: str | None = Field(default=None, max_length=300)
+    # Seri nasıl girildi (2026-11-23): tekil kabulde ayar açıkken zorunlu.
+    okuma_kaynagi: Literal[SERI_OKUMA_KAYNAKLARI] | None = None  # type: ignore[valid-type]
+    elle_gerekce: Literal[SERI_ELLE_GEREKCELERI] | None = None  # type: ignore[valid-type]
+    elle_aciklama: str | None = Field(default=None, max_length=200)
 
 
 class AksesuarIn(BaseModel):
@@ -832,6 +837,8 @@ async def form_verileri(db: DbDep, user: Okuyucu, birim: str | None = None) -> d
         ],
         "ariza_nedenleri": [{"id": n.id, "ad": n.ad} for n in nedenler],
         "yas_kovalari": list(atolye_rapor.YAS_KOVALARI),
+        # Tekil kabulde cihaz serisi okutulur; elle girilirse neden (2026-11-23).
+        "seri_okutma_zorunlu": await seri_okutma.acik_mi(db),
     }
 
 
@@ -847,7 +854,14 @@ async def kabul(
     veri = _ortak(payload, birim)
     veri.ekipman = _secim(payload.ekipman, birim)
     veri.aksesuarlar = _aksesuarlar(payload.aksesuarlar)
+    veri.okutma_denetimi = True
     try:
+        if payload.ekipman.okuma_kaynagi is not None:
+            ek = payload.ekipman
+            # Seri metni kütükten gelir; burada yalnız kaynak/gerekçe doğrulanır.
+            veri.seri_okuma = seri_okutma.okuma(
+                ek.seri or "-", ek.okuma_kaynagi, ek.elle_gerekce, ek.elle_aciklama
+            )
         kayit = await atolye.kabul(db, veri, user=user, clock=clock, ip=client_ip(request))
     except _HATALAR as exc:
         raise _hata(exc) from exc

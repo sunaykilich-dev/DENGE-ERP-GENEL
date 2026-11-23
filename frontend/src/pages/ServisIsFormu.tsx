@@ -21,6 +21,9 @@
  * - Faz A: yeni işte lokasyon, talep eden kişinin adı ve telefonu ve arıza
  *   tanımı zorunlu (M1.2); günlük servis işinde (arıza/destek/plansız bakım)
  *   en çok bir cihaz (M1.6). Sunucu aynı kuralı 400 ile uygular.
+ * - 2026-11-23: seri alanı el okuyucu + kamera düğmeli `SeriOkutucu`. Cihazlı
+ *   işte (ayar açıkken) seri zorunlu; okutulmayan (elle yazılan, kütükten
+ *   seçilen) seri için neden sorulur. Her serinin kaynağı `seri_okumalari`'yla gider.
  */
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -62,6 +65,9 @@ import MusteriLokasyonSecici, {
   type MusteriLokasyonSecimi,
   type SahaOnerisi,
 } from "../components/MusteriLokasyonSecici";
+import SeriOkutucu, { seriAnahtari } from "../components/SeriOkutucu";
+import { ELLE_GEREKCELERI, type ElleGerekce, type SeriOkumasi } from "../components/barkod/elleGerekce";
+import type { OkumaKaynagi } from "../components/barkod/okuyucuAlgilama";
 
 interface FormDegeri {
   birim: string;
@@ -89,6 +95,9 @@ interface FormDegeri {
   /** Geçiş/içe aktarma kaydı (`servis.gecis_kaydi`): 7 gün sınırı yok, SLA ölçülmez. */
   gecis_kaydi?: boolean;
   gecis_gerekcesi?: string;
+  /** Okutulmayan seri(ler) için neden (cihazlı işte zorunlu). */
+  elle_gerekce?: ElleGerekce;
+  elle_aciklama?: string;
 }
 
 const GECIS_GEREKCE_ALT = 10;
@@ -172,6 +181,8 @@ export default function ServisIsFormu({
   const [mukerrer, setMukerrer] = useState<MukerrerSonucu | null>(null);
   const [onerilenIrtibat, setOnerilenIrtibat] = useState<SahaOnerisi["irtibat"]>(null);
   const [irtibatlar, setIrtibatlar] = useState<NonNullable<SahaOnerisi["irtibatlar"]>>([]);
+  /** Bu formda eklenen serilerin kaynağı (anahtar `seriAnahtari`). */
+  const [kaynaklar, setKaynaklar] = useState<Record<string, OkumaKaynagi>>({});
   const duzenleme = !!mevcut;
   const kapali = !!mevcut && KAPALI.includes(mevcut.status);
   const musteriDuzeltebilir = !duzenleme || (yetkili("servis.planla") && mevcut?.tur !== "PB");
@@ -192,6 +203,26 @@ export default function ServisIsFormu({
   const tekCihaz =
     formVerileri?.turler.find((t) => t.kod === turDegeri)?.kategori === "GUNLUK_SERVIS" ||
     turDegeri === "PB";
+  const elleGerekce = Form.useWatch("elle_gerekce", form);
+  // Cihazlı işte (ayar açıkken) seri okutulur; elle girilene neden sorulur.
+  const okutmaZorunlu =
+    !!formVerileri?.seri_okutma?.zorunlu &&
+    !!turDegeri &&
+    formVerileri.seri_okutma.cihazli_turler.includes(turDegeri) &&
+    !gecis;
+  const mevcutAnahtarlar = useMemo(
+    () => new Set((mevcut?.seriler ?? []).map((s) => seriAnahtari(s.seri_no))),
+    [mevcut],
+  );
+  const kaynakBul = (s: string): OkumaKaynagi | null =>
+    mevcutAnahtarlar.has(seriAnahtari(s)) ? null : (kaynaklar[seriAnahtari(s)] ?? "ELLE");
+  const elleSeriVar = (seriler ?? []).some((s) => kaynakBul(s) === "ELLE");
+  const seriEtiketleri = Object.fromEntries([
+    ...(mevcut?.seriler ?? []).map((s) => [seriAnahtari(s.seri_no), s.okuma_etiketi ?? "eski kayıt"]),
+    ...(seriler ?? [])
+      .filter((s) => !mevcutAnahtarlar.has(seriAnahtari(s)))
+      .map((s) => [seriAnahtari(s), kaynakBul(s) === "OKUTMA" ? "Okutuldu" : "Elle"]),
+  ]);
 
   // KARARLAR §12: arıza işinde müşterinin kütükteki cihazı seçilince seri (ve
   // Haberleşmede kayıtlı frekans) kütükten gelir.
@@ -268,6 +299,7 @@ export default function ServisIsFormu({
     if (sozlukBekleniyor) return;
     form.resetFields();
     form.setFieldsValue(baslangic);
+    setKaynaklar({});
   }, [baslangic, form, sozlukBekleniyor]);
 
   // Canlı mükerrer uyarısı (yalnız uyarı; asıl kontrol kayıtta sunucuda).
@@ -316,7 +348,28 @@ export default function ServisIsFormu({
     }
   };
 
+  /** Seriler → kaynağı bilinenler `seri_okumalari`, diğerleri düz `seriler`. */
+  function seriAyir(v: FormDegeri) {
+    const tum = (v.seriler ?? []).map((s) => s.trim()).filter(Boolean);
+    const duz: string[] = [];
+    const okumalar: SeriOkumasi[] = [];
+    for (const s of tum) {
+      const k = kaynakBul(s);
+      if (k === "OKUTMA") okumalar.push({ seri_no: s, okuma_kaynagi: "OKUTMA" });
+      else if (k === "ELLE" && v.elle_gerekce)
+        okumalar.push({
+          seri_no: s,
+          okuma_kaynagi: "ELLE",
+          elle_gerekce: v.elle_gerekce,
+          elle_aciklama: v.elle_aciklama?.trim() || null,
+        });
+      else duz.push(s);
+    }
+    return { tum, duz, okumalar };
+  }
+
   function govdeKur(v: FormDegeri): IsGirdisi {
+    const { duz, okumalar } = seriAyir(v);
     const irtibatAyni =
       !!onerilenIrtibat && (v.iletisim_ad ?? "").trim() === onerilenIrtibat.ad.trim();
     return {
@@ -334,7 +387,8 @@ export default function ServisIsFormu({
       proje: v.proje?.trim() || null,
       sistem: v.sistem?.trim() || null,
       aciklama: v.aciklama?.trim() || null,
-      seriler: (v.seriler ?? []).map((s) => s.trim()).filter(Boolean),
+      seriler: duz,
+      ...(okumalar.length ? { seri_okumalari: okumalar } : {}),
       ...(nitelikSorulur(v.birim, v.tur) ? { nitelikler: v.nitelikler ?? [] } : {}),
       ...(gecisYetkili && v.gecis_kaydi
         ? { gecis_kaydi: true, gecis_gerekcesi: (v.gecis_gerekcesi ?? "").trim() }
@@ -455,7 +509,8 @@ export default function ServisIsFormu({
       if (yeni !== eskiN) degisen.nitelikler = v.nitelikler ?? [];
     }
     if (kapali || v.gerekce || degisen.kategori) degisen.gerekce = v.gerekce?.trim() || undefined;
-    const yeniSeriler = g.seriler ?? [];
+    const ayrik = seriAyir(v);
+    const yeniSeriler = ayrik.tum;
     const eskiSeriler = mevcut.seriler.map((s) => s.seri_no);
     const seriDegisti = JSON.stringify(yeniSeriler) !== JSON.stringify(eskiSeriler);
     try {
@@ -464,7 +519,12 @@ export default function ServisIsFormu({
         sonuc = await teknikServisApi.guncelle(mevcut.id, degisen);
       }
       if (seriDegisti) {
-        sonuc = await teknikServisApi.seriler(mevcut.id, yeniSeriler, v.gerekce?.trim() || undefined);
+        sonuc = await teknikServisApi.seriler(
+          mevcut.id,
+          ayrik.duz,
+          v.gerekce?.trim() || undefined,
+          ayrik.okumalar,
+        );
       }
       message.success("Kaydedildi");
       onKaydedildi(sonuc);
@@ -626,22 +686,59 @@ export default function ServisIsFormu({
       <Form.Item
         name="seriler"
         label={tekCihaz ? "Cihaz seri numarası" : "Seri numaraları"}
+        required={okutmaZorunlu && !duzenleme}
         extra={
-          tekCihaz
-            ? "Barkod okutabilirsiniz. Bu iş türünde tek cihaz olur; her cihaz için ayrı iş açın."
-            : "Barkod okutun ya da yazıp Enter ile ekleyin. Seri metin olarak saklanır (baştaki sıfır korunur)."
+          (okutmaZorunlu ? "Cihazın barkodunu el okuyucuyla ya da kamera düğmesiyle okutun. " : "") +
+          (tekCihaz
+            ? "Bu iş türünde tek cihaz olur; her cihaz için ayrı iş açın."
+            : "Yazıp Enter ile de eklenir. Seri metin olarak saklanır (baştaki sıfır korunur).")
         }
         rules={[
           {
-            validator: (_, v: string[] | undefined) =>
-              tekCihaz && (v ?? []).filter((s) => s.trim()).length > 1
-                ? Promise.reject(new Error("Bu iş türünde en çok bir cihaz (seri) girilebilir"))
-                : Promise.resolve(),
+            validator: (_, v: string[] | undefined) => {
+              const dolu = (v ?? []).filter((s) => s.trim());
+              if (tekCihaz && dolu.length > 1)
+                return Promise.reject(new Error("Bu iş türünde en çok bir cihaz (seri) girilebilir"));
+              if (okutmaZorunlu && !duzenleme && !dolu.length)
+                return Promise.reject(
+                  new Error("Cihazlı işte seri zorunlu: barkodu okutun ya da elle girip nedenini seçin"),
+                );
+              return Promise.resolve();
+            },
           },
         ]}
       >
-        <Select mode="tags" tokenSeparators={[",", ";"]} open={false} disabled={mevcut?.tur === "PB"} />
+        <SeriOkutucu
+          placeholder="Barkodu okutun (kamera düğmesi) ya da seriyi yazıp Enter'a basın"
+          disabled={mevcut?.tur === "PB"}
+          etiketler={seriEtiketleri}
+          onOkuma={(seri, k) => setKaynaklar((x) => ({ ...x, [seriAnahtari(seri)]: k }))}
+        />
       </Form.Item>
+      {okutmaZorunlu && elleSeriVar && (
+        <Row gutter={12}>
+          <Col xs={24} sm={12}>
+            <Form.Item
+              name="elle_gerekce"
+              label="Seri okutulmadı: neden?"
+              rules={[{ required: true, message: "Elle girilen seri için neden seçin" }]}
+            >
+              <Select options={ELLE_GEREKCELERI.map((g) => ({ value: g.kod, label: g.ad }))} />
+            </Form.Item>
+          </Col>
+          {elleGerekce === "DIGER" && (
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="elle_aciklama"
+                label="Açıklama"
+                rules={[{ required: true, whitespace: true, message: "Açıklama yazın" }]}
+              >
+                <Input maxLength={200} />
+              </Form.Item>
+            </Col>
+          )}
+        </Row>
+      )}
       {kutukBirimi && (kutukCihazlari.data?.length ?? 0) > 0 && (
         <Form.Item
           label="Kütükteki cihazdan seç"
@@ -663,6 +760,8 @@ export default function ServisIsFormu({
             onChange={(id?: number) => {
               const c = kutukCihazlari.data?.find((x) => x.id === id);
               form.setFieldValue("seriler", c?.serial_no ? [c.serial_no] : []);
+              // Kütükten seçilen seri okutulmuş sayılmaz (cihaz yanında değil).
+              if (c?.serial_no) setKaynaklar((x) => ({ ...x, [seriAnahtari(c.serial_no!)]: "ELLE" }));
             }}
             options={(kutukCihazlari.data ?? [])
               .filter((c) => c.serial_no)

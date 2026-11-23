@@ -112,6 +112,10 @@ DEFAULTS: dict[str, Any] = {
     "servis_saha_ulasim_zorunlu": True,
     # KARARLAR 2026-11-20 §4: telsiz atölyesinde kargo/teslim öncesi seri okutma.
     "atolye_teslim_seri_okutma": True,
+    # 2026-11-23: cihazlı servis işinde açılışta ve kapanışta seri okutma (kamera
+    # ya da el okuyucu); elle girişte gerekçe zorunlu. Kapalıysa yalnız serbest
+    # seri girişi (eski davranış). İçe aktarma ve sistem açılışları kural dışı.
+    "servis_seri_okutma_zorunlu": True,
     # KARARLAR 2026-11-20 §7–8: izin onayı ve sicil.
     "izin_onay_sure_saat": 24,
     "ik_eposta": "",
@@ -225,6 +229,7 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "servis_kapanis_onay_zinciri": ("bool", None, None),
     "servis_saha_ulasim_zorunlu": ("bool", None, None),
     "atolye_teslim_seri_okutma": ("bool", None, None),
+    "servis_seri_okutma_zorunlu": ("bool", None, None),
     "izin_onay_sure_saat": ("tam", 1, 240),
     "servis_toplu_atama_ust_sinir": ("tam", 1, 1000),
     "servis_ek_silme_saat": ("tam", 0, 720),

@@ -12,6 +12,9 @@
  * - Sonuç düğmesi sunucunun `gecisler` listesinden gelir (ekran kural yazmaz);
  *   sonuç girilemiyorsa nedeni söylenir.
  * - Bütün dokunma hedefleri en az 44 px (B10). Fiyat/maliyet alanı YOK.
+ * - 2026-11-23: cihazlı işte yerinde/atölyede tamamlarken cihazın serisi
+ *   okutulur (kamera düğmesi ya da el okuyucu); elle girilirse neden seçilir.
+ *   Açılıştaki seriden farklıysa engellenmez, uyarılır.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -48,6 +51,9 @@ import UlasimPenceresi, { ulasimGerekiyor } from "./UlasimPenceresi";
 import ImzaAlani, { tuvalPng } from "./ImzaAlani";
 import ParcaHareketPenceresi from "./ParcaHareketPenceresi";
 import { TalepPenceresi } from "./ServisParcalari";
+import { seriAnahtari } from "./SeriOkutucu";
+import type { SeriOkumasi } from "./barkod/elleGerekce";
+import { okumaDogrula, okumaGovdesi, OkumaliSeriAlani } from "./barkod/SeriAlani";
 
 const BUYUK = { minHeight: 44 } as const;
 
@@ -63,6 +69,7 @@ interface SonucFormu {
   ariza_nedeni_id?: number;
   saha_seri_no?: string;
   sure_eksik_onay?: boolean;
+  kapanis_okuma?: Partial<SeriOkumasi>;
 }
 
 export interface MobilSonucCekmecesiProps {
@@ -79,6 +86,9 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
   const qc = useQueryClient();
   const [form] = Form.useForm<SonucFormu>();
   const onayTuru = Form.useWatch("onay_turu", form);
+  const sonucSecimi = Form.useWatch("sonuc", form);
+  const kanalSecimi = Form.useWatch("cozum_kanali", form);
+  const kapanisOkuma = Form.useWatch("kapanis_okuma", form);
   const [imzaBos, setImzaBos] = useState(true);
   const [onayYazildi, setOnayYazildi] = useState(false);
   const [sureEksik, setSureEksik] = useState<string | null>(null);
@@ -145,6 +155,16 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
     (o) => !(onaylar.data ?? []).some((x) => x.gecersiz_kilan_id === o.id),
   );
   const parcaKullanabilir = yetkili("parca.kullan") && !!parcalar.data?.acik;
+  // Cihazlı işte yerinde/atölyede tamamlarken kapanış okutması (sunucu da ister).
+  const kapanisIstenir =
+    !!d?.seri_okutma_zorunlu &&
+    (sonucSecimi === "COZULDU" || sonucSecimi === "COZULEMEDI") &&
+    kanalSecimi !== "TELEFON" &&
+    kanalSecimi !== "UZAKTAN";
+  const kapanisFarkli =
+    !!kapanisOkuma?.seri_no?.trim() &&
+    (d?.seriler.length ?? 0) > 0 &&
+    !d!.seriler.some((s) => seriAnahtari(s.seri_no) === seriAnahtari(kapanisOkuma.seri_no!));
 
   // KARARLAR 2026-11-20 §1: saha işinde ulaşım/km önce sorulur.
   const [ulasim, setUlasim] = useState<{
@@ -219,9 +239,13 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
         ariza_nedeni_id: v.ariza_nedeni_id ?? null,
         saha_seri_no: v.saha_seri_no?.trim() || null,
         sure_eksik_onay: !!v.sure_eksik_onay,
+        kapanis_okuma: kapanisIstenir ? okumaGovdesi(v.kapanis_okuma) : null,
       });
     },
-    onSuccess: () => {
+    onSuccess: (r) => {
+      if (r.sonuc?.kapanis_seri_farkli) {
+        message.warning("Okutulan seri açılıştaki seriden farklı; kayda not düşüldü.", 6);
+      }
       message.success(`${soNo} tamamlandı`);
       tazele();
       onKapat();
@@ -474,6 +498,21 @@ export default function MobilSonucCekmecesi({ isId, soNo, birim, acik, onKapat }
                 .map((n) => ({ value: n.id, label: n.ad }))}
             />
           </Form.Item>
+          {kapanisIstenir && (
+            <Form.Item
+              name="kapanis_okuma"
+              label="Cihaz seri numarası"
+              required
+              extra={
+                kapanisFarkli
+                  ? `Açılıştaki seriden farklı (${d.seriler.map((s) => s.seri_no).join(", ")}); kaydedilir, not düşülür.`
+                  : "Kamera düğmesine dokunup cihazın barkodunu okutun."
+              }
+              rules={[{ validator: (_, x) => okumaDogrula(x, true) }]}
+            >
+              <OkumaliSeriAlani buyuk placeholder="Seri numarasını okutun" />
+            </Form.Item>
+          )}
           <Form.Item name="saha_seri_no" label="Sahada görülen seri (farklıysa)">
             <Input size="large" maxLength={200} />
           </Form.Item>

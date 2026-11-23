@@ -347,6 +347,16 @@ class ServisIsiGirdisi:
     coverage_snapshot: dict | None = None
     # Numaranın ay bilgisi (PB: dönemin hedef ayı); None = açılış anı.
     numara_tarihi: date | None = None
+    # --- seri okutma (2026-11-23, `seri_okutma`) ---
+    # Serilerin nasıl girildiği (OKUTMA/ELLE+gerekçe); `seriler`'de olmayan
+    # okuma seriye eklenir. Kaynağı verilmeyen seri NULL (eski davranış) yazılır.
+    seri_okumalari: list[Any] = field(default_factory=list)
+    # Ekran açılışı: cihazlı işte seri + kaynak zorunlu (ayar açıksa). Sistem,
+    # toplu ve içe aktarma açılışları False bırakır (kural dışı).
+    okutma_denetimi: bool = False
+    # Bağlı yeni işte önceki işten kopyalanan serilerin `seri_norm`'ları:
+    # kaynak önceki işteki kayıttır, yeniden okutma istenmez.
+    devralinan_seriler: frozenset[str] = frozenset()
 
 
 def _bos(deger: str | None) -> str | None:
@@ -431,7 +441,19 @@ async def olustur(
     konu = _bos(girdi.konu)
     if konu is None:
         raise ServisGirdiHatasi("Konu boş olamaz")
-    seriler = seri_listesi(girdi.seriler)
+    from app.services.teknik_servis import seri_okutma
+
+    okumalar = seri_okutma.okuma_haritasi(girdi.seri_okumalari)
+    seriler = seri_listesi([*girdi.seriler, *(o.seri_no for o in girdi.seri_okumalari)])
+    if girdi.okutma_denetimi:
+        await seri_okutma.acilis_dogrula(
+            db,
+            girdi.tur,
+            seriler,
+            okumalar,
+            gecis=girdi.gecis_kaydi,
+            devralinan=girdi.devralinan_seriler,
+        )
     if kural.seri_zorunlu and not seriler:
         raise ServisGirdiHatasi(f"'{TUR_ADLARI[girdi.tur]}' işinde seri numarası zorunlu")
     if kural.tek_seri and len(seriler) != 1:
@@ -480,14 +502,14 @@ async def olustur(
     db.add(so)
     await db.flush()
     for seri in seriler:
-        db.add(
-            ServiceOrderSerial(
-                service_order_id=so.id,
-                seri_no=seri,
-                seri_norm=normalize_seri(seri),
-                created_by=user.id if user is not None else None,
-            )
+        satir = ServiceOrderSerial(
+            service_order_id=so.id,
+            seri_no=seri,
+            seri_norm=normalize_seri(seri),
+            created_by=user.id if user is not None else None,
         )
+        seri_okutma.satira_yaz(satir, okumalar.get(normalize_seri(seri)))
+        db.add(satir)
     await db.flush()
     await gecmis.olay_yaz(
         db,
@@ -504,6 +526,7 @@ async def olustur(
             "oncelik": so.oncelik,
             "talep_kanali": so.talep_kanali,
             "seri_sayisi": len(seriler),
+            "elle_seri": sum(1 for o in okumalar.values() if o.okuma_kaynagi == "ELLE"),
         },
     )
     if girdi.iliskili_is_id is not None or girdi.iliski_turu is not None:
@@ -871,6 +894,7 @@ async def serileri_yaz(
     user: User,
     clock: Clock,
     gerekce: str | None = None,
+    okumalar: list[Any] | None = None,
 ) -> list[ServiceOrderSerial]:
     """Seri listesini verilene eşitler; eski satır SİLİNMEZ, pasiflenir (E01-13).
 
@@ -879,9 +903,12 @@ async def serileri_yaz(
     (KENDI_ISLERI) sahada gördüğü seriyi girebilir: seri, temel bilgiden
     farklı olarak saha verisidir.
     """
+    from app.services.teknik_servis import seri_okutma
+
     kural = TUR_KURALLARI[so.tur]
     gerekce = _bos(gerekce)
-    yeni_liste = seri_listesi(seriler)
+    harita = seri_okutma.okuma_haritasi(okumalar)
+    yeni_liste = seri_listesi([*seriler, *(o.seri_no for o in okumalar or ())])
     mevcut = await aktif_seriler(db, so)
     mevcut_norm = {s.seri_norm: s for s in mevcut}
     yeni_norm = {normalize_seri(s): s for s in yeni_liste}
@@ -907,14 +934,14 @@ async def serileri_yaz(
         satir.removed_by = user.id
     await db.flush()
     for seri in eklenen:
-        db.add(
-            ServiceOrderSerial(
-                service_order_id=so.id,
-                seri_no=seri,
-                seri_norm=normalize_seri(seri),
-                created_by=user.id,
-            )
+        satir = ServiceOrderSerial(
+            service_order_id=so.id,
+            seri_no=seri,
+            seri_norm=normalize_seri(seri),
+            created_by=user.id,
         )
+        seri_okutma.satira_yaz(satir, harita.get(normalize_seri(seri)))
+        db.add(satir)
     so.updated_by = user.id
     await db.flush()
     ozet = f"Seri değişti: {len(eklenen)} eklendi, {len(cikan)} çıkarıldı"

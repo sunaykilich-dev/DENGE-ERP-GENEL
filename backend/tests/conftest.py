@@ -159,6 +159,21 @@ def _saha_ulasim_varsayilan(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _seri_okutma_varsayilan(request, monkeypatch):
+    """Cihazlı işte açılış/kapanış seri okutması (2026-11-23) varsayılan testlerde KAPALI.
+
+    Var olan yüzlerce test arıza/kurulum işini serisiz ya da kaynaksız seriyle
+    açıp tamamlıyor. Kural kendi testlerinde `@pytest.mark.seri_okutma` ile
+    gerçek varsayılanıyla (açık) sınanır (`tests/integration/test_seri_okutma.py`).
+    """
+    if request.node.get_closest_marker("seri_okutma") is not None:
+        return
+    from app.services import settings as ayarlar
+
+    monkeypatch.setitem(ayarlar.DEFAULTS, "servis_seri_okutma_zorunlu", False)
+
+
+@pytest.fixture(autouse=True)
 def _sirket_ayrimi_varsayilan(request, monkeypatch):
     """Şirket ayrımı (KARARLAR 2026-11-04 §1) varsayılan testlerde NÖTR.
 

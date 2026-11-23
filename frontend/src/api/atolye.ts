@@ -72,6 +72,8 @@ export interface KodAd {
 export interface FormVerileri {
   /** Sözlüğün birimi (sunucunun seçtiği ya da istenen); kabul bu birimle gönderilir. */
   birim?: string;
+  /** Tekil kabulde seri okutması zorunlu mu (ayar `servis_seri_okutma_zorunlu`). */
+  seri_okutma_zorunlu?: boolean;
   durumlar: KodAd[];
   servis_turleri: KodAd[];
   /** Telsiz birimlerinde marka sözlüğü; diğerlerinde kütükteki markalar + DIGER. */
@@ -338,6 +340,10 @@ export interface EkipmanGirdisi {
   warranty_start?: string | null;
   warranty_end?: string | null;
   mukerrer_gerekce?: string | null;
+  /** Seri nasıl girildi (tekil kabulde ayar açıkken zorunlu; 2026-11-23). */
+  okuma_kaynagi?: "OKUTMA" | "ELLE" | null;
+  elle_gerekce?: string | null;
+  elle_aciklama?: string | null;
 }
 
 export interface AksesuarGirdisi {

@@ -49,7 +49,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Awaitable, Callable, Iterator
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -293,6 +293,11 @@ class KabulGirdisi:
     # Sistem çağrıları (toplu kabul, kiralama köprüsü TS-102).
     intake_group_no: int | None = None
     rental_asset_id: int | None = None
+    # Seri okutma (2026-11-23): cihaz serisinin nasıl girildiği (`seri_okutma.SeriOkuma`;
+    # `seri_no` yok sayılır, kütükteki seri kullanılır). Tekil ekran kabulünde
+    # `okutma_denetimi` açıktır; toplu ve kiralık kabul kural dışıdır.
+    seri_okuma: Any | None = None
+    okutma_denetimi: bool = False
 
 
 @dataclass
@@ -797,6 +802,10 @@ async def kabul(
                 aciklama=sikayet,
                 seriler=[e.serial_no] if e.serial_no else [],
                 equipment_id=e.id,
+                seri_okumalari=[replace(veri.seri_okuma, seri_no=e.serial_no)]
+                if veri.seri_okuma is not None and e.serial_no
+                else [],
+                okutma_denetimi=veri.okutma_denetimi,
             ),
             user=user,
             clock=clock,

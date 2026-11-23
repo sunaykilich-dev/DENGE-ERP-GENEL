@@ -30,6 +30,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../api/client";
 import { teknikServisApi, type RoleMontajAlani } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
+import SeriAlani from "../components/barkod/SeriAlani";
 
 const KAYNAK_ETIKETI: Record<string, { renk: string; ad: string }> = {
   KUTUK: { renk: "green", ad: "Kütükten otomatik geldi" },
@@ -154,7 +155,7 @@ export default function CihazBilgisiFormu({
                 required={!frekansli}
                 extra={frekansli ? "İşte seri yoksa girin; kütükte varsa frekans oradan gelir." : undefined}
               >
-                <Input maxLength={200} disabled={!yazabilir} />
+                <SeriAlani disabled={!yazabilir} />
               </Form.Item>
             )}
             {frekansli && (

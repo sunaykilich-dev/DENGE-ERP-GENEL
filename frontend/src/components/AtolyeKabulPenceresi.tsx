@@ -23,7 +23,7 @@
  * öneri olarak gelir). Ekipman tipi zorunlu değil: boşsa sunucu birimin
  * varsayılan tipini kullanır.
  */
-import { BarcodeOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Alert,
@@ -66,6 +66,8 @@ import {
   type SeriGecmisi,
 } from "../api/atolye";
 import { TIP_ETIKETLERI } from "../api/servisEkipman";
+import { ELLE_GEREKCELERI } from "./barkod/elleGerekce";
+import SeriAlani from "./barkod/SeriAlani";
 import MusteriLokasyonSecici, {
   type MusteriLokasyonSecimi,
   type SahaOnerisi,
@@ -80,6 +82,9 @@ interface CihazSatiri {
   marka_diger?: string;
   model?: string;
   seri?: string;
+  okuma_kaynagi?: "OKUTMA" | "ELLE";
+  elle_gerekce?: string;
+  elle_aciklama?: string;
   customer_complaint?: string;
   warranty_start?: Dayjs | null;
   warranty_end?: Dayjs | null;
@@ -114,8 +119,22 @@ const ONCELIKLER = [
 const gun = (d?: Dayjs | null) => (d ? d.format("YYYY-MM-DD") : null);
 const tarih = (d?: string | null) => (d ? dayjs(d).format("DD.MM.YYYY") : "—");
 
+/** Seri okuma kaynağı (yalnız bilinen kaynak gider: okutuldu ya da nedenli elle). */
+function okumaAlanlari(c: CihazSatiri): Partial<EkipmanGirdisi> {
+  if (!c.seri?.trim()) return {};
+  if (c.okuma_kaynagi === "OKUTMA") return { okuma_kaynagi: "OKUTMA" };
+  if (c.elle_gerekce)
+    return {
+      okuma_kaynagi: "ELLE",
+      elle_gerekce: c.elle_gerekce,
+      elle_aciklama: c.elle_aciklama?.trim() || null,
+    };
+  return {};
+}
+
 function ekipmanGovdesi(c: CihazSatiri): EkipmanGirdisi {
   return {
+    ...okumaAlanlari(c),
     // Boş tip gönderilmez: sunucu birimin varsayılan tipini kullanır.
     ...(c.tip ? { tip: c.tip } : {}),
     marka: c.marka?.trim() || null,
@@ -187,6 +206,12 @@ function CihazAlanlari({
   kompakt?: boolean;
 }) {
   const marka = Form.useWatch([...(kok ?? ad), "marka"]);
+  const form = Form.useFormInstance();
+  const seri = Form.useWatch([...(kok ?? ad), "seri"]) as string | undefined;
+  const okumaKaynagi = Form.useWatch([...(kok ?? ad), "okuma_kaynagi"]);
+  const elleGerekce = Form.useWatch([...(kok ?? ad), "elle_gerekce"]);
+  // Tekil kabulde cihazlı iş açılır: seri okutulur, elle girilirse neden sorulur.
+  const okutmaSorulur = !kompakt && !!sozluk?.seri_okutma_zorunlu;
   const tipler = sozluk?.ekipman_tipleri ?? [];
   const markalar = sozluk?.markalar ?? Object.keys(MARKA_ADLARI);
   // Telsiz birimi değilse marka serbest metin; kütükteki markalar öneri.
@@ -249,17 +274,39 @@ function CihazAlanlari({
           rules={[{ required: true, whitespace: true, message: "Seri numarası zorunlu" }]}
         >
           {/* KARARLAR 2026-11-20 §4: barkod okuyucu seriyi yazıp Enter'a basar;
-              Enter formu göndermez, okunan seri alanda kalır. */}
-          <Input
-            maxLength={200}
+              Enter formu göndermez, okunan seri alanda kalır. Kamera düğmesi
+              telefonla okutur; kaynak (okutuldu/elle) ayrı alana yazılır. */}
+          <SeriAlani
             placeholder="Seri no (barkod okutun)"
-            className="mono"
-            prefix={<BarcodeOutlined />}
-            autoComplete="off"
-            onPressEnter={(e) => e.preventDefault()}
+            onKaynak={(k) => form.setFieldValue([...(kok ?? ad), "okuma_kaynagi"], k)}
           />
         </Form.Item>
+        <Form.Item name={[...ad, "okuma_kaynagi"]} hidden>
+          <Input />
+        </Form.Item>
       </Col>
+      {okutmaSorulur && !!seri?.trim() && okumaKaynagi !== "OKUTMA" && (
+        <Col xs={24} md={12}>
+          <Form.Item
+            name={[...ad, "elle_gerekce"]}
+            label="Seri okutulmadı: neden?"
+            rules={[{ required: true, message: "Elle girilen seri için neden seçin" }]}
+          >
+            <Select options={ELLE_GEREKCELERI.map((g) => ({ value: g.kod, label: g.ad }))} />
+          </Form.Item>
+        </Col>
+      )}
+      {okutmaSorulur && !!seri?.trim() && okumaKaynagi !== "OKUTMA" && elleGerekce === "DIGER" && (
+        <Col xs={24} md={12}>
+          <Form.Item
+            name={[...ad, "elle_aciklama"]}
+            label="Açıklama"
+            rules={[{ required: true, whitespace: true, message: "Açıklama yazın" }]}
+          >
+            <Input maxLength={200} />
+          </Form.Item>
+        </Col>
+      )}
     </Row>
   );
 }
@@ -429,7 +476,7 @@ export default function AtolyeKabulPenceresi({
       }));
       if (mod === "TEK") {
         const ekipman = ekipmanId
-          ? { ekipman_id: ekipmanId, ...(v.cihaz.tip ? { tip: v.cihaz.tip } : {}) }
+          ? { ekipman_id: ekipmanId, ...(v.cihaz.tip ? { tip: v.cihaz.tip } : {}), ...okumaAlanlari(v.cihaz) }
           : ekipmanGovdesi(v.cihaz);
         const detay = await atolyeApi.kabul({ ...ortak, ekipman, aksesuarlar });
         return { detay, soIdler: [detay.so_id] };
