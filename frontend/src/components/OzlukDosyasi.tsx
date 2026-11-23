@@ -5,12 +5,17 @@
  * belgeler listelenir. Üç kullanım:
  * - `OzlukDosyasi kisiId` — personel kartında, İK (`ik_belge.yonet`): yükle,
  *   sil, tür listesini düzenle.
- * - `OzlukDosyasi benim` — Belgelerim'de, personelin kendi belgeleri (salt okunur).
+ * - `OzlukDosyasi benim` — Belgelerim'de, personelin kendi belgeleri; "Belge
+ *   yükle" ile kendi dosyasına yükler (2026-11-23). Bu belge İK onaylayana dek
+ *   "Onay bekliyor"dur, reddedilirse gerekçesiyle görünür kalır.
+ * - `OzlukBekleyenler` — Personel ekranında İK: onay bekleyen bütün belgeler.
  * - `IsEkibiBelgeleri soId` — servis işinde, şef/koordinatör: işe atanmış
  *   personelin "işte paylaşılabilir" türdeki belgeleri.
  * Dosyalar yeni sekmede açılır; her açılış sunucuda denetime yazılır.
  */
 import {
+  CheckOutlined,
+  CloseOutlined,
   DeleteOutlined,
   FileOutlined,
   FolderFilled,
@@ -29,7 +34,9 @@ import {
   Input,
   Modal,
   Popconfirm,
+  Select,
   Skeleton,
+  Space,
   Switch,
   Table,
   Tag,
@@ -40,7 +47,13 @@ import {
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
 
-import { ozlukApi, type OzlukBelgesi, type OzlukDosyasi as Dosya, type OzlukTuru } from "../api/ozluk";
+import {
+  ozlukApi,
+  type BekleyenOzlukBelgesi,
+  type OzlukBelgesi,
+  type OzlukDosyasi as Dosya,
+  type OzlukTuru,
+} from "../api/ozluk";
 
 function boyut(b: number): string {
   return b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`;
@@ -54,6 +67,81 @@ function GecerlilikEtiketi({ tarih }: { tarih: string | null }) {
     <Tag color={renk} style={{ marginInlineEnd: 0 }}>
       {kalan < 0 ? "süresi doldu" : "geçerli"} · {dayjs(tarih).format("DD.MM.YYYY")}
     </Tag>
+  );
+}
+
+/** Kendi yüklemesinin durumu; onaylı belgede etiket yok. */
+function DurumEtiketi({ belge }: { belge: OzlukBelgesi }) {
+  if (belge.durum === "ONAY_BEKLIYOR") return <Tag color="gold">Onay bekliyor</Tag>;
+  if (belge.durum === "REDDEDILDI") return <Tag color="red">Reddedildi</Tag>;
+  return null;
+}
+
+function ozlukTazele(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ["ozluk"] });
+  void qc.invalidateQueries({ queryKey: ["uyarilar"] });
+}
+
+/** İK: bekleyen belgeye "Onayla" / "Reddet" (gerekçe sorar). */
+function KararDugmeleri({ belge }: { belge: OzlukBelgesi }) {
+  const { message } = App.useApp();
+  const qc = useQueryClient();
+  const [redAcik, setRedAcik] = useState(false);
+  const [gerekce, setGerekce] = useState("");
+  const onayla = useMutation({
+    mutationFn: () => ozlukApi.onayla(belge),
+    onSuccess: () => {
+      void message.success("Belge onaylandı");
+      ozlukTazele(qc);
+    },
+    onError: (e: Error) => void message.error(e.message),
+  });
+  const reddet = useMutation({
+    mutationFn: () => ozlukApi.reddet(belge, gerekce.trim()),
+    onSuccess: () => {
+      void message.success("Belge reddedildi; personel gerekçeyi görür");
+      setRedAcik(false);
+      ozlukTazele(qc);
+    },
+    onError: (e: Error) => void message.error(e.message),
+  });
+  return (
+    <Space size={4}>
+      <Button
+        size="small"
+        type="primary"
+        icon={<CheckOutlined />}
+        loading={onayla.isPending}
+        onClick={() => onayla.mutate()}
+      >
+        Onayla
+      </Button>
+      <Button size="small" danger icon={<CloseOutlined />} onClick={() => setRedAcik(true)}>
+        Reddet
+      </Button>
+      {redAcik && (
+        <Modal
+          open
+          title={`Reddet — ${belge.dosya_adi}`}
+          okText="Reddet"
+          cancelText="Vazgeç"
+          okButtonProps={{ danger: true, disabled: gerekce.trim().length < 3 }}
+          confirmLoading={reddet.isPending}
+          onOk={() => reddet.mutate()}
+          onCancel={() => setRedAcik(false)}
+          destroyOnHidden
+        >
+          <Input.TextArea
+            autoFocus
+            rows={3}
+            maxLength={500}
+            value={gerekce}
+            onChange={(e) => setGerekce(e.target.value)}
+            placeholder="Red gerekçesi (personel görür; ör. fotoğraf okunmuyor)"
+          />
+        </Modal>
+      )}
+    </Space>
   );
 }
 
@@ -91,8 +179,17 @@ function BelgeTablosu({
             <div>
               <a href={ozlukApi.dosyaUrl(b.id, isId)} target="_blank" rel="noreferrer">
                 <FileOutlined /> {b.dosya_adi}
-              </a>
+              </a>{" "}
+              <DurumEtiketi belge={b} />
               {b.aciklama && <div className="ozluk-aciklama">{b.aciklama}</div>}
+              {b.durum === "REDDEDILDI" && b.red_gerekcesi && (
+                <div className="ozluk-red">Reddedildi: {b.red_gerekcesi}</div>
+              )}
+              {silinebilir && b.durum === "ONAY_BEKLIYOR" && (
+                <div style={{ marginTop: 4 }}>
+                  <KararDugmeleri belge={b} />
+                </div>
+              )}
             </div>
           ),
         },
@@ -146,12 +243,18 @@ function Klasorler({
   secili: number | null;
   sec: (id: number | null) => void;
 }) {
+  // Klasör sayısı yalnız onaylı (geçerli) belgedir; bekleyen ayrıca yazılır.
   const sayilar = new Map<number, number>();
-  for (const b of belgeler) sayilar.set(b.tur_id, (sayilar.get(b.tur_id) ?? 0) + 1);
+  const bekleyen = new Map<number, number>();
+  for (const b of belgeler) {
+    if (b.durum === "ONAYLANDI") sayilar.set(b.tur_id, (sayilar.get(b.tur_id) ?? 0) + 1);
+    else if (b.durum === "ONAY_BEKLIYOR") bekleyen.set(b.tur_id, (bekleyen.get(b.tur_id) ?? 0) + 1);
+  }
   return (
     <div className="ozluk-klasorler">
       {turler.map((t) => {
         const adet = sayilar.get(t.id) ?? 0;
+        const bekleyenAdet = bekleyen.get(t.id) ?? 0;
         const acik = secili === t.id;
         return (
           <button
@@ -163,6 +266,7 @@ function Klasorler({
           >
             {acik ? <FolderOpenFilled className="ozluk-ikon" /> : <FolderFilled className="ozluk-ikon" />}
             <span className="ozluk-klasor-ad">{t.ad}</span>
+            {bekleyenAdet > 0 && <span className="ozluk-klasor-bekleyen">{bekleyenAdet} bekliyor</span>}
             <span className="ozluk-klasor-sayi">{adet || "—"}</span>
           </button>
         );
@@ -171,18 +275,40 @@ function Klasorler({
   );
 }
 
-function YuklemePenceresi({ kisiId, tur, kapat }: { kisiId: number; tur: OzlukTuru; kapat: () => void }) {
+/**
+ * Yükleme penceresi. İK (`kisiId`): seçili klasöre, doğrudan onaylı. Kişinin
+ * kendisi (`turler` verilir): türü seçer; belge İK onayına düşer.
+ */
+function YuklemePenceresi({
+  kisiId,
+  tur,
+  turler,
+  kapat,
+}: {
+  kisiId?: number;
+  tur: OzlukTuru | null;
+  turler?: OzlukTuru[];
+  kapat: () => void;
+}) {
   const { message } = App.useApp();
   const qc = useQueryClient();
+  const kendi = kisiId == null;
+  const [turId, setTurId] = useState<number | null>(tur?.id ?? null);
   const [dosya, setDosya] = useState<File | null>(null);
   const [bitis, setBitis] = useState<Dayjs | null>(null);
   const [aciklama, setAciklama] = useState("");
+  const turAdi = (tur?.id === turId ? tur?.ad : turler?.find((t) => t.id === turId)?.ad) ?? "Belge";
   const yukle = useMutation({
-    mutationFn: () =>
-      ozlukApi.yukle(kisiId, tur.id, dosya!, bitis?.format("YYYY-MM-DD"), aciklama.trim() || undefined),
+    mutationFn: () => {
+      const bitisMetni = bitis?.format("YYYY-MM-DD");
+      const not = aciklama.trim() || undefined;
+      return kendi
+        ? ozlukApi.kendiYukle(turId!, dosya!, bitisMetni, not)
+        : ozlukApi.yukle(kisiId, turId!, dosya!, bitisMetni, not);
+    },
     onSuccess: () => {
-      message.success(`${tur.ad} yüklendi`);
-      void qc.invalidateQueries({ queryKey: ["ozluk"] });
+      void message.success(kendi ? `${turAdi} İK onayına gönderildi` : `${turAdi} yüklendi`);
+      ozlukTazele(qc);
       kapat();
     },
     onError: (e: Error) => void message.error(e.message),
@@ -190,15 +316,30 @@ function YuklemePenceresi({ kisiId, tur, kapat }: { kisiId: number; tur: OzlukTu
   return (
     <Modal
       open
-      title={`Belge yükle — ${tur.ad}`}
+      title={kendi ? "Belge yükle" : `Belge yükle — ${turAdi}`}
       onCancel={kapat}
       onOk={() => yukle.mutate()}
-      okText="Yükle"
+      okText={kendi ? "Gönder" : "Yükle"}
       cancelText="Vazgeç"
-      okButtonProps={{ disabled: !dosya }}
+      okButtonProps={{ disabled: !dosya || turId == null }}
       confirmLoading={yukle.isPending}
       destroyOnHidden
     >
+      {kendi && (
+        <>
+          <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+            Yüklediğiniz belge İK onaylayana kadar &quot;Onay bekliyor&quot; görünür ve geçerli belge sayılmaz.
+          </Typography.Paragraph>
+          <Select
+            style={{ width: "100%", marginBottom: 12 }}
+            placeholder="Belge türü seçin"
+            value={turId ?? undefined}
+            onChange={setTurId}
+            showSearch={{ optionFilterProp: "label" }}
+            options={(turler ?? []).filter((t) => t.aktif).map((t) => ({ value: t.id, label: t.ad }))}
+          />
+        </>
+      )}
       <Upload.Dragger
         maxCount={1}
         accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.docx"
@@ -340,7 +481,8 @@ function TurDuzenleme({ kapat }: { kapat: () => void }) {
 /** Kişinin özlük dosyası: İK modu (`kisiId`) ya da kişinin kendisi (`benim`). */
 export default function OzlukDosyasi({ kisiId, benim }: { kisiId?: number; benim?: boolean }) {
   const [secili, setSecili] = useState<number | null>(null);
-  const [yukleme, setYukleme] = useState<OzlukTuru | null>(null);
+  // İK: seçili klasöre yükler; kişi: "yeni" (tür seçer) ya da açık klasör.
+  const [yukleme, setYukleme] = useState<OzlukTuru | "yeni" | null>(null);
   const [turAcik, setTurAcik] = useState(false);
   const ik = !benim && kisiId != null;
   const dosya = useQuery<Dosya>({
@@ -359,17 +501,32 @@ export default function OzlukDosyasi({ kisiId, benim }: { kisiId?: number; benim
       .map((id) => ({ id, ad: "Diğer", sira: 9999, aktif: false, is_paylasimi: false, version: 0 })),
   ];
   const tur = gorunurTurler.find((t) => t.id === secili) ?? null;
+  const onayli = belgeler.filter((b) => b.durum === "ONAYLANDI").length;
+  const bekleyen = belgeler.filter((b) => b.durum === "ONAY_BEKLIYOR").length;
   return (
     <div className="ozluk">
       <div className="ozluk-bas">
         <span>
-          {belgeler.length} belge · {turler.length} klasör
+          {onayli} belge · {turler.length} klasör
+          {bekleyen > 0 && (
+            <>
+              {" "}
+              · <Tag color="gold">{bekleyen} onay bekliyor</Tag>
+            </>
+          )}
         </span>
-        {ik && (
-          <Button size="small" type="text" icon={<SettingOutlined />} onClick={() => setTurAcik(true)}>
-            Türleri düzenle
-          </Button>
-        )}
+        <span className="ozluk-bas-sag">
+          {benim && (
+            <Button size="small" type="primary" icon={<UploadOutlined />} onClick={() => setYukleme("yeni")}>
+              Belge yükle
+            </Button>
+          )}
+          {ik && (
+            <Button size="small" type="text" icon={<SettingOutlined />} onClick={() => setTurAcik(true)}>
+              Türleri düzenle
+            </Button>
+          )}
+        </span>
       </div>
       <Klasorler turler={gorunurTurler} belgeler={belgeler} secili={secili} sec={setSecili} />
       {tur && (
@@ -377,7 +534,7 @@ export default function OzlukDosyasi({ kisiId, benim }: { kisiId?: number; benim
           <div className="ozluk-icerik-bas">
             <b>{tur.ad}</b>
             {tur.is_paylasimi && <Tag color="blue">işte paylaşılır</Tag>}
-            {ik && tur.aktif && (
+            {(ik || benim) && tur.aktif && (
               <Button size="small" type="primary" icon={<UploadOutlined />} onClick={() => setYukleme(tur)}>
                 Belge yükle
               </Button>
@@ -386,7 +543,16 @@ export default function OzlukDosyasi({ kisiId, benim }: { kisiId?: number; benim
           <BelgeTablosu belgeler={belgeler.filter((b) => b.tur_id === tur.id)} silinebilir={ik} />
         </div>
       )}
-      {yukleme && kisiId != null && <YuklemePenceresi kisiId={kisiId} tur={yukleme} kapat={() => setYukleme(null)} />}
+      {yukleme && ik && (
+        <YuklemePenceresi
+          kisiId={kisiId}
+          tur={yukleme === "yeni" ? null : yukleme}
+          kapat={() => setYukleme(null)}
+        />
+      )}
+      {yukleme && benim && (
+        <YuklemePenceresi tur={yukleme === "yeni" ? null : yukleme} turler={turler} kapat={() => setYukleme(null)} />
+      )}
       {turAcik && <TurDuzenleme kapat={() => setTurAcik(false)} />}
     </div>
   );
@@ -426,5 +592,72 @@ export function IsEkibiBelgeleri({ soId }: { soId: number }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * İK (Personel ekranı): personelin kendi yüklediği, onay bekleyen bütün
+ * belgeler. Yoksa hiçbir şey çizmez; varsa tek satır uyarı + "Göster".
+ * `acik` ile (uyarı zilinden `?ozluk=bekleyen`) liste doğrudan açılır.
+ */
+export function OzlukBekleyenler({ acik: ilkAcik = false }: { acik?: boolean }) {
+  const [acik, setAcik] = useState(ilkAcik);
+  const veri = useQuery({ queryKey: ["ozluk", "bekleyenler"], queryFn: ozlukApi.bekleyenler });
+  const liste = veri.data ?? [];
+  if (!liste.length && !acik) return null;
+  return (
+    <>
+      {liste.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={`${liste.length} özlük belgesi onay bekliyor`}
+          description="Personelin kendi yüklediği belge, onaylanana kadar geçerli sayılmaz ve işte paylaşılmaz."
+          action={
+            <Button size="small" onClick={() => setAcik(true)}>
+              Göster
+            </Button>
+          }
+        />
+      )}
+      {acik && (
+        <Modal open title="Onay bekleyen özlük belgeleri" footer={null} width={820} onCancel={() => setAcik(false)}>
+          <Table<BekleyenOzlukBelgesi>
+            rowKey="id"
+            size="small"
+            pagination={false}
+            loading={veri.isLoading}
+            dataSource={liste}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Onay bekleyen belge yok" /> }}
+            columns={[
+              { title: "Personel", dataIndex: "kisi_adi", width: 170 },
+              { title: "Tür", dataIndex: "tur_adi", width: 150 },
+              {
+                title: "Dosya",
+                key: "dosya",
+                render: (_, b) => (
+                  <div>
+                    <a href={ozlukApi.dosyaUrl(b.id)} target="_blank" rel="noreferrer">
+                      <FileOutlined /> {b.dosya_adi}
+                    </a>
+                    {b.aciklama && <div className="ozluk-aciklama">{b.aciklama}</div>}
+                    {b.gecerlilik_bitis && <GecerlilikEtiketi tarih={b.gecerlilik_bitis} />}
+                  </div>
+                ),
+              },
+              {
+                title: "Yüklendi",
+                dataIndex: "created_at",
+                width: 100,
+                responsive: ["sm"],
+                render: (v: string) => dayjs(v).format("DD.MM.YYYY"),
+              },
+              { title: "", key: "karar", width: 190, render: (_, b) => <KararDugmeleri belge={b} /> },
+            ]}
+          />
+        </Modal>
+      )}
+    </>
   );
 }

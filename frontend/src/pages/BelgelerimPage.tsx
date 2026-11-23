@@ -57,7 +57,8 @@ export default function BelgelerimPage() {
         )}
         {yanit && <YanitPenceresi belge={yanit.belge} onay={yanit.onay} kapat={() => setYanit(null)} />}
       </Card>
-      {/* Özlük dosyası (2026-11-20): İK'nın yüklediği kendi belgeleri, salt okunur. */}
+      {/* Özlük dosyası (2026-11-20): kendi belgeleri. 2026-11-23: "Belge yükle" ile
+          kişi de yükler; belge İK onayına düşer (Onay bekliyor / Reddedildi: gerekçe). */}
       <Card title="Özlük dosyam">
         <OzlukDosyasi benim />
       </Card>

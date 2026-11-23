@@ -185,3 +185,149 @@ async def test_yalniz_belge_turleri_ve_kaldirilan_tur_adi(client, db, ortam) -> 
     await giris(client, "oz_tek")
     turler = {t["id"]: t for t in (await client.get(f"{OZ}/benim")).json()["turler"]}
     assert turler[src_id]["ad"] == "SRC Belgesi" and turler[src_id]["aktif"] is False
+
+
+# --- Personelin kendi yüklemesi + İK onayı (2026-11-23 sahip kararı) -------------------
+
+
+async def _kendi_yukle(client, tur_id: int, ad: str = "kendi.pdf", **ek):
+    return await client.post(
+        f"{OZ}/benim",
+        data={"tur_id": str(tur_id), **ek},
+        files={"dosya": (ad, PDF, "application/pdf")},
+    )
+
+
+def _uyari_adedi(veri: dict, kod: str) -> int:
+    return sum(u["adet"] for u in veri["uyarilar"] if u["kod"] == kod)
+
+
+async def test_kendi_yuklemesi_onay_bekler_ve_ik_ye_uyari_duser(client, db, ortam) -> None:
+    src = await _tur_id(db, "SRC Belgesi")
+    await giris(client, "oz_tek")
+    r = await _kendi_yukle(client, src, gecerlilik_bitis="2027-06-30", aciklama="yeni SRC")
+    assert r.status_code == 201, r.text
+    belge = r.json()
+    assert belge["durum"] == "ONAY_BEKLIYOR"
+    assert belge["user_id"] == ortam["tek"].id and belge["gecerlilik_bitis"] == "2027-06-30"
+    benim = (await client.get(f"{OZ}/benim")).json()["belgeler"]
+    assert [(b["id"], b["durum"]) for b in benim] == [(belge["id"], "ONAY_BEKLIYOR")]
+    # Kişi kendi bekleyen belgesini açabilir.
+    assert (await client.get(f"{OZ}/belgeler/{belge['id']}/dosya")).status_code == 200
+    # Aynı dosya kuralı: .txt reddedilir.
+    r = await client.post(
+        f"{OZ}/benim",
+        data={"tur_id": str(src)},
+        files={"dosya": ("not.txt", b"metin", "text/plain")},
+    )
+    assert r.status_code == 400 and "PDF" in r.json()["detail"]
+    # Personel İK uçlarına erişemez.
+    assert (await client.get(f"{OZ}/bekleyenler")).status_code == 403
+    assert _uyari_adedi((await client.get("/api/raporlar/uyarilar")).json(), "ozluk.onay") == 0
+
+    # İK: her yükleme bir bildirim (hesaplanan uyarı) ve bekleyen listesinde.
+    await giris(client, "oz_ik")
+    uyari = (await client.get("/api/raporlar/uyarilar")).json()
+    assert _uyari_adedi(uyari, "ozluk.onay") == 1
+    bekleyen = (await client.get(f"{OZ}/bekleyenler")).json()
+    assert [(b["id"], b["kisi_adi"], b["tur_adi"]) for b in bekleyen] == [
+        (belge["id"], ortam["tek"].full_name, "SRC Belgesi")
+    ]
+    kisi = (await client.get(f"{OZ}/kisi/{ortam['tek'].id}")).json()
+    assert [b["durum"] for b in kisi["belgeler"]] == ["ONAY_BEKLIYOR"]
+
+    await giris(client, "oz_tek")
+    assert (await _kendi_yukle(client, await _tur_id(db, "Kimlik"))).status_code == 201
+    await giris(client, "oz_ik")
+    uyari = (await client.get("/api/raporlar/uyarilar")).json()
+    assert _uyari_adedi(uyari, "ozluk.onay") == 2
+
+
+async def test_bekleyen_belge_iste_paylasilmaz_onaylaninca_paylasilir(client, db, ortam) -> None:
+    src = await _tur_id(db, "SRC Belgesi")
+    await giris(client, "oz_tek")
+    belge = (await _kendi_yukle(client, src)).json()
+
+    so_id = ortam["so"].id
+    await giris(client, "oz_sef")
+    kisiler = (await client.get(f"{OZ}/is/{so_id}")).json()["kisiler"]
+    assert kisiler[0]["belgeler"] == []
+    r = await client.get(f"{OZ}/belgeler/{belge['id']}/dosya?is_id={so_id}")
+    assert r.status_code == 404
+    # İK değil: onaylayamaz/reddedemez.
+    r = await client.post(f"{OZ}/belgeler/{belge['id']}/onayla", json={"version": 1})
+    assert r.status_code == 403
+    await giris(client, "oz_tek")
+    r = await client.post(f"{OZ}/belgeler/{belge['id']}/onayla", json={"version": 1})
+    assert r.status_code == 403
+
+    await giris(client, "oz_ik")
+    # Eski sürümle karar → 409 (iyimser kilit).
+    r = await client.post(
+        f"{OZ}/belgeler/{belge['id']}/onayla", json={"version": belge["version"] + 1}
+    )
+    assert r.status_code == 409
+    r = await client.post(f"{OZ}/belgeler/{belge['id']}/onayla", json={"version": belge["version"]})
+    assert r.status_code == 200, r.text
+    onayli = r.json()
+    assert onayli["durum"] == "ONAYLANDI" and onayli["karar_at"] is not None
+    assert onayli["version"] == belge["version"] + 1
+    assert (await client.get(f"{OZ}/bekleyenler")).json() == []
+    uyari = (await client.get("/api/raporlar/uyarilar")).json()
+    assert _uyari_adedi(uyari, "ozluk.onay") == 0
+    # Karar verilmiş belgeye ikinci karar yok.
+    r = await client.post(
+        f"{OZ}/belgeler/{belge['id']}/reddet",
+        json={"version": onayli["version"], "gerekce": "geç kaldı"},
+    )
+    assert r.status_code == 409
+
+    await giris(client, "oz_sef")
+    kisiler = (await client.get(f"{OZ}/is/{so_id}")).json()["kisiler"]
+    assert [b["id"] for b in kisiler[0]["belgeler"]] == [belge["id"]]
+    r = await client.get(f"{OZ}/belgeler/{belge['id']}/dosya?is_id={so_id}")
+    assert r.status_code == 200
+
+
+async def test_ik_gerekceyle_reddeder_kisi_gorur_ve_yeniden_yukler(client, db, ortam) -> None:
+    ehliyet = await _tur_id(db, "Ehliyet")
+    await giris(client, "oz_tek")
+    belge = (await _kendi_yukle(client, ehliyet, "ehliyet.jpg")).json()
+
+    await giris(client, "oz_ik")
+    yol = f"{OZ}/belgeler/{belge['id']}/reddet"
+    r = await client.post(yol, json={"version": belge["version"], "gerekce": " "})
+    assert r.status_code == 422
+    r = await client.post(yol, json={"version": belge["version"], "gerekce": "Fotoğraf okunmuyor"})
+    assert r.status_code == 200, r.text
+    assert r.json()["durum"] == "REDDEDILDI"
+
+    await giris(client, "oz_tek")
+    benim = (await client.get(f"{OZ}/benim")).json()["belgeler"]
+    assert [(b["durum"], b["red_gerekcesi"]) for b in benim] == [
+        ("REDDEDILDI", "Fotoğraf okunmuyor")
+    ]
+    # Reddedilen belge işte paylaşılmaz; kişi yeniden yükleyebilir.
+    yeni = await _kendi_yukle(client, ehliyet, "ehliyet2.pdf")
+    assert yeni.status_code == 201 and yeni.json()["durum"] == "ONAY_BEKLIYOR"
+    await giris(client, "oz_sef")
+    kisiler = (await client.get(f"{OZ}/is/{ortam['so'].id}")).json()["kisiler"]
+    assert kisiler[0]["belgeler"] == []
+
+
+async def test_kisi_baskasinin_dosyasina_yukleyemez_ik_yuklemesi_onayli(client, db, ortam) -> None:
+    kimlik = await _tur_id(db, "Kimlik")
+    await giris(client, "oz_tek")
+    assert (await _yukle(client, ortam["diger"].id, kimlik)).status_code == 403
+    # `/benim` her zaman oturumdaki kişinin dosyasıdır.
+    belge = (await _kendi_yukle(client, kimlik)).json()
+    assert belge["user_id"] == ortam["tek"].id
+    await giris(client, "oz_diger")
+    assert (await client.get(f"{OZ}/benim")).json()["belgeler"] == []
+
+    await giris(client, "oz_ik")
+    r = await _yukle(client, ortam["diger"].id, kimlik)
+    assert r.status_code == 201 and r.json()["durum"] == "ONAYLANDI"
+    assert [b["user_id"] for b in (await client.get(f"{OZ}/bekleyenler")).json()] == [
+        ortam["tek"].id
+    ]

@@ -48,7 +48,7 @@ import {
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { api, type ApiError } from "../api/client";
 import {
@@ -62,7 +62,7 @@ import {
 } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
 import { useSirket } from "../auth/SirketContext";
-import OzlukDosyasi from "../components/OzlukDosyasi";
+import OzlukDosyasi, { OzlukBekleyenler } from "../components/OzlukDosyasi";
 import {
   Aciklama,
   AltNot,
@@ -432,6 +432,8 @@ export default function PersonelPage() {
   const qc = useQueryClient();
   const { message, modal } = App.useApp();
   const yazabilir = yetkili("personel.yaz");
+  // Uyarı zili "Onay bekleyen özlük belgesi" → `/personel?ozluk=bekleyen`.
+  const [arama] = useSearchParams();
 
   const [suzgec, setSuzgec] = useState<PersonelSuzgeci>({ durum: "CALISIYOR" });
   const [sayfa, setSayfa] = useState(1);
@@ -777,6 +779,8 @@ export default function PersonelPage() {
         </KutucukPano>
       )}
 
+      {/* 2026-11-23: personelin kendi yüklediği, İK onayı bekleyen özlük belgeleri. */}
+      {yetkili("ik_belge.yonet") && <OzlukBekleyenler acik={arama.get("ozluk") === "bekleyen"} />}
       <SicilNumaralaPenceresi acik={sicilAcik} onKapat={() => setSicilAcik(false)} />
       <ListeRaporu<Personel>
         kategoriBasligi="Birim"

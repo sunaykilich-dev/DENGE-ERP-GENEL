@@ -59,7 +59,7 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
     mobilite = sirketler.mobilite_acik_mi(user)
 
     if mobilite and user.has("hat.gor"):
-        taahhut = await hat_svc.taahhudu_bitenler(db, clock)
+        taahhut = await hat_svc.taahhudu_bitenler(db, clock, user=user)
         if taahhut:
             ozet.uyarilar.append(
                 Uyari(
@@ -93,7 +93,7 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
                 )
             )
 
-        kota = await hat_svc.kota_uyarilari(db)
+        kota = await hat_svc.kota_uyarilari(db, user=user)
         if kota:
             ozet.uyarilar.append(
                 Uyari(
@@ -223,6 +223,22 @@ async def topla(db: AsyncSession, clock: Clock, user: User) -> UyariOzeti:
                 yol="/izin-talepleri?sekme=onay",
                 onem="uyari",
                 aciklama="24 saat içinde karar verilmezse talep bir üst yöneticiye geçer.",
+            )
+        )
+    # 2026-11-23: personelin kendi yüklediği, İK onayı bekleyen özlük belgesi
+    # (her yükleme bir adet; kapsamla süzülür).
+    from app.services import ozluk
+
+    ozluk_bekleyen = await ozluk.bekleyen_sayisi(db, user)
+    if ozluk_bekleyen:
+        ozet.uyarilar.append(
+            Uyari(
+                kod="ozluk.onay",
+                baslik="Onay bekleyen özlük belgesi",
+                adet=ozluk_bekleyen,
+                yol="/personel?ozluk=bekleyen",
+                onem="uyari",
+                aciklama="Personelin kendi yüklediği belge, onaylanana dek geçerli sayılmaz.",
             )
         )
     if user.has("servis.yonlendir") or user.has("servis.planla"):

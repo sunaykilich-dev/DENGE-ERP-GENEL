@@ -249,6 +249,10 @@
 .ozluk-icerik-bas { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .ozluk-icerik-bas button { margin-inline-start: auto; }
 .ozluk-aciklama { color: var(--fl-gri); font-size: 12px; }
+/* 2026-11-23: personelin kendi yüklemesi — İK onayı bekleyen / reddedilen belge. */
+.ozluk-klasor-bekleyen { flex: 0 0 auto; color: #a15c00; font-size: 11px; }
+.ozluk-red { color: #b42318; font-size: 12px; }
+.ozluk-bas-sag { display: flex; align-items: center; gap: 6px; }
 .ozluk-form-satir { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
 .ozluk-form-satir > span { color: var(--fl-gri); font-size: 13px; }
 .ozluk-tur-pasif td { opacity: .55; }

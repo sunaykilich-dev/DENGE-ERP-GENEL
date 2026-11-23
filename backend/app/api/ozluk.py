@@ -4,7 +4,11 @@ Erişim (kullanıcı kararı; modele bkz. `models/ozluk.py`):
 
 - `ik_belge.yonet` (İK): türleri yönetir; kapsamındaki personelin belgelerini
   yükler, görür, siler.
-- Personelin kendisi: kendi belgelerini görür ve indirir (`/benim`).
+- Personelin kendisi: kendi belgelerini görür ve indirir (`/benim`); kendi
+  dosyasına belge yükler (`POST /benim`, 2026-11-23). Bu belge İK onaylayana
+  dek `ONAY_BEKLIYOR`dır: işte paylaşılmaz, geçerli belge sayılmaz.
+- İK onay bekleyenleri listeler (`/bekleyenler`), onaylar ya da gerekçeyle
+  reddeder. Bildirim hesaplanır (`services/ozluk.py`, uyarı "ozluk.onay").
 - İş bazlı (`servis.planla` ya da `operasyon.gor`, iş kapsamda): işe aktif
   atanmış personelin, türü `is_paylasimi` olan belgelerini görür ve indirir.
 
@@ -12,7 +16,9 @@ Her görüntüleme/indirme kişisel veri olarak denetime yazılır.
 
 Yollar (`/api/ozluk`):
 - `GET /turler` (oturum) · `POST /turler`, `PATCH /turler/{id}` (İK)
-- `GET /benim` · `GET /kisi/{user_id}` (İK) · `POST /kisi/{user_id}` (İK, dosya)
+- `GET /benim` · `POST /benim` (kendi yüklemesi, dosya)
+- `GET /kisi/{user_id}` (İK) · `POST /kisi/{user_id}` (İK, dosya)
+- `GET /bekleyenler` (İK) · `POST /belgeler/{id}/onayla`, `POST /belgeler/{id}/reddet` (İK)
 - `DELETE /belgeler/{id}` (İK) · `GET /belgeler/{id}/dosya[?is_id=]`
 - `GET /is/{so_id}` (iş bazlı ekip belgeleri)
 """
@@ -53,6 +59,7 @@ from app.models import (
     User,
 )
 from app.services import audit
+from app.services import ozluk as ozluk_svc
 from app.services import storage as depo
 from app.services.teknik_servis import kapsam
 
@@ -79,6 +86,15 @@ class TurDegisikligi(BaseModel):
     sira: int | None = Field(default=None, ge=0, le=10_000)
 
 
+class KararGirdisi(BaseModel):
+    version: int
+
+
+class RedGirdisi(BaseModel):
+    version: int
+    gerekce: str = Field(min_length=3, max_length=500)
+
+
 def _tur(t: OzlukBelgeTuru) -> dict[str, Any]:
     return {
         "id": t.id,
@@ -101,6 +117,10 @@ def _belge(b: OzlukBelgesi) -> dict[str, Any]:
         "gecerlilik_bitis": b.gecerlilik_bitis,
         "aciklama": b.aciklama,
         "created_at": b.created_at,
+        "durum": b.durum,
+        "red_gerekcesi": b.red_gerekcesi,
+        "karar_at": b.karar_at,
+        "version": b.version,
     }
 
 
@@ -140,18 +160,44 @@ OZLUK_TIPLERI = frozenset(
 )
 
 
+async def _dosyayi_yaz(dosya: UploadFile) -> tuple[str, Any]:
+    """Yüklenen dosyayı denetleyip depoya yazar (İK ve kişi yüklemesi aynı kural)."""
+    ad = depo.temiz_ad(dosya.filename or "belge")
+    try:
+        icerik = await depo.sinirli_oku(dosya)
+        mime = depo.mime_coz(dosya.content_type or "", ad)
+        if mime not in OZLUK_TIPLERI:
+            raise depo.DepoHatasi(
+                "Yalnız PDF, fotoğraf (JPG, PNG, WEBP, HEIC) ya da Word (DOCX) yüklenebilir"
+            )
+        return ad, depo.yaz(icerik, mime_type=mime)
+    except depo.DepoHatasi as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+async def _etkin_tur(db, tur_id: int) -> OzlukBelgeTuru:
+    tur = await db.get(OzlukBelgeTuru, tur_id)
+    if tur is None or not tur.aktif:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçerli bir belge türü seçin")
+    return tur
+
+
 async def _kisi_kapsamda_mi(db, user: User, kisi_id: int) -> bool:
     """İK için: personel kapsamındaki kişi mi (personel listesiyle aynı kural)."""
     stmt = kapsam.kapsam_personel(select(User.id).where(User.id == kisi_id), user, User.id)
     return (await db.scalar(stmt)) is not None
 
 
-async def _kisi_belgeleri(db, kisi_id: int, tur_idler: set[int] | None = None) -> list:
+async def _kisi_belgeleri(
+    db, kisi_id: int, tur_idler: set[int] | None = None, *, yalniz_onayli: bool = False
+) -> list:
     stmt = select(OzlukBelgesi).where(
         OzlukBelgesi.user_id == kisi_id, OzlukBelgesi.is_deleted.is_(False)
     )
     if tur_idler is not None:
         stmt = stmt.where(OzlukBelgesi.tur_id.in_(tur_idler))
+    if yalniz_onayli:
+        stmt = stmt.where(OzlukBelgesi.durum == ozluk_svc.ONAYLANDI)
     return list((await db.scalars(stmt.order_by(OzlukBelgesi.created_at.desc()))).all())
 
 
@@ -260,12 +306,121 @@ async def tur_degistir(
 
 @router.get("/benim")
 async def benim(db: DbDep, user: CurrentUser) -> dict[str, Any]:
-    """Personelin kendi özlük belgeleri (yalnız görür; yükleme/silme İK'dadır)."""
+    """Personelin kendi özlük belgeleri; onay bekleyen ve reddedilenler dahil
+    (durum ve red gerekçesiyle). Silme İK'dadır."""
     belgeler = await _kisi_belgeleri(db, user.id)
     return {
         "turler": [_tur(t) for t in await _dosya_turleri(db, belgeler)],
         "belgeler": [_belge(b) for b in belgeler],
     }
+
+
+@router.post("/benim", status_code=status.HTTP_201_CREATED)
+async def kendi_yuklemesi(
+    request: Request,
+    db: DbDep,
+    user: CurrentUser,
+    tur_id: Annotated[int, Form()],
+    dosya: Annotated[UploadFile, File()],
+    gecerlilik_bitis: Annotated[date | None, Form()] = None,
+    aciklama: Annotated[str | None, Form(max_length=500)] = None,
+) -> dict[str, Any]:
+    """Personel kendi dosyasına belge yükler (kişi kendisi; izin gerekmez).
+    Belge İK onaylayana dek `ONAY_BEKLIYOR`dır; İK'ya uyarı olarak düşer."""
+    tur = await _etkin_tur(db, tur_id)
+    ad, kayit = await _dosyayi_yaz(dosya)
+    belge = OzlukBelgesi(
+        user_id=user.id,
+        tur_id=tur.id,
+        dosya_adi=ad,
+        storage_path=kayit.storage_path,
+        mime_type=kayit.mime_type,
+        size_bytes=kayit.size_bytes,
+        sha256=kayit.sha256,
+        gecerlilik_bitis=gecerlilik_bitis,
+        aciklama=(aciklama or "").strip() or None,
+        durum=ozluk_svc.ONAY_BEKLIYOR,
+        created_by=user.id,
+    )
+    db.add(belge)
+    await db.flush()
+    await _gorme(db, request, user, user.id, "kendi_yukle", belge_id=belge.id, tur=tur.ad)
+    await db.commit()
+    return _belge(belge)
+
+
+@router.get("/bekleyenler")
+async def bekleyenler(request: Request, db: DbDep, user: IkYonetici) -> list[dict[str, Any]]:
+    """İK: kapsamındaki personelin onay bekleyen belgeleri (eskiden yeniye)."""
+    stmt = ozluk_svc.bekleyen_kosulu(
+        select(OzlukBelgesi, User.full_name, OzlukBelgeTuru.ad)
+        .join(User, User.id == OzlukBelgesi.user_id)
+        .join(OzlukBelgeTuru, OzlukBelgeTuru.id == OzlukBelgesi.tur_id),
+        user,
+    ).order_by(OzlukBelgesi.created_at)
+    satirlar = (await db.execute(stmt)).all()
+    if satirlar:
+        kisiler = sorted({b.user_id for b, _, _ in satirlar})
+        await _gorme(db, request, user, 0, "bekleyen_listesi", kisiler=kisiler)
+        await db.commit()
+    return [{**_belge(b), "kisi_adi": ad, "tur_adi": tur_ad} for b, ad, tur_ad in satirlar]
+
+
+async def _karar_belgesi(db, user: User, belge_id: int, version: int) -> OzlukBelgesi:
+    belge = await db.get(OzlukBelgesi, belge_id)
+    if belge is None or belge.is_deleted or not await _kisi_kapsamda_mi(db, user, belge.user_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Belge bulunamadı")
+    if belge.version != version:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Kayıt başka biri tarafından değiştirildi; sayfayı yenileyin"
+        )
+    if belge.durum != ozluk_svc.ONAY_BEKLIYOR:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Bu belge onay beklemiyor")
+    return belge
+
+
+@router.post("/belgeler/{belge_id}/onayla")
+async def onayla(
+    belge_id: int,
+    payload: KararGirdisi,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: IkYonetici,
+) -> dict[str, Any]:
+    belge = await _karar_belgesi(db, user, belge_id, payload.version)
+    belge.durum = ozluk_svc.ONAYLANDI
+    belge.karar_veren_id = user.id
+    belge.karar_at = clock.now()
+    belge.updated_by = user.id
+    await db.flush()
+    await _gorme(db, request, user, belge.user_id, "onayla", belge_id=belge.id)
+    await db.commit()
+    return _belge(belge)
+
+
+@router.post("/belgeler/{belge_id}/reddet")
+async def reddet(
+    belge_id: int,
+    payload: RedGirdisi,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: IkYonetici,
+) -> dict[str, Any]:
+    gerekce = payload.gerekce.strip()
+    if len(gerekce) < 3:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Red gerekçesi yazın")
+    belge = await _karar_belgesi(db, user, belge_id, payload.version)
+    belge.durum = ozluk_svc.REDDEDILDI
+    belge.red_gerekcesi = gerekce
+    belge.karar_veren_id = user.id
+    belge.karar_at = clock.now()
+    belge.updated_by = user.id
+    await db.flush()
+    await _gorme(db, request, user, belge.user_id, "reddet", belge_id=belge.id)
+    await db.commit()
+    return _belge(belge)
 
 
 @router.get("/kisi/{kisi_id}")
@@ -294,20 +449,9 @@ async def yukle(
 ) -> dict[str, Any]:
     if not await _kisi_kapsamda_mi(db, user, kisi_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Personel bulunamadı")
-    tur = await db.get(OzlukBelgeTuru, tur_id)
-    if tur is None or not tur.aktif:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçerli bir belge türü seçin")
-    ad = depo.temiz_ad(dosya.filename or "belge")
-    try:
-        icerik = await depo.sinirli_oku(dosya)
-        mime = depo.mime_coz(dosya.content_type or "", ad)
-        if mime not in OZLUK_TIPLERI:
-            raise depo.DepoHatasi(
-                "Yalnız PDF, fotoğraf (JPG, PNG, WEBP, HEIC) ya da Word (DOCX) yüklenebilir"
-            )
-        kayit = depo.yaz(icerik, mime_type=mime)
-    except depo.DepoHatasi as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    tur = await _etkin_tur(db, tur_id)
+    ad, kayit = await _dosyayi_yaz(dosya)
+    # İK'nın yüklediği belge doğrudan onaylıdır (bugünkü akış).
     belge = OzlukBelgesi(
         user_id=kisi_id,
         tur_id=tur.id,
@@ -345,7 +489,8 @@ async def dosya(
     belge_id: int, request: Request, db: DbDep, user: CurrentUser, is_id: int | None = None
 ) -> Response:
     """Belgeyi açar. İzin: İK (kapsam), kişinin kendisi ya da `is_id` ile iş bazlı
-    (iş kapsamda, kişi işe aktif atanmış, tür işte paylaşılabilir)."""
+    (iş kapsamda, kişi işe aktif atanmış, tür işte paylaşılabilir, belge İK
+    onaylı)."""
     belge = await db.get(OzlukBelgesi, belge_id)
     if belge is None or belge.is_deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Belge bulunamadı")
@@ -356,7 +501,13 @@ async def dosya(
     if not izinli and is_id is not None and is_bazli:
         _, ekip = await _is_ve_ekip(db, user, is_id)
         tur = await db.get(OzlukBelgeTuru, belge.tur_id)
-        izinli = belge.user_id in ekip and tur is not None and tur.aktif and tur.is_paylasimi
+        izinli = (
+            belge.user_id in ekip
+            and belge.durum == ozluk_svc.ONAYLANDI
+            and tur is not None
+            and tur.aktif
+            and tur.is_paylasimi
+        )
     if not izinli:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Belge bulunamadı")
     await _gorme(db, request, user, belge.user_id, "goruntule", belge_id=belge.id, is_id=is_id)
@@ -381,7 +532,7 @@ async def dosya(
 
 @router.get("/is/{so_id}")
 async def is_ekibi(so_id: int, request: Request, db: DbDep, user: IsBazli) -> dict[str, Any]:
-    """Servis işine aktif atanmış personelin işte paylaşılabilir belgeleri."""
+    """Servis işine aktif atanmış personelin işte paylaşılabilir, İK onaylı belgeleri."""
     _, ekip = await _is_ve_ekip(db, user, so_id)
     turler = [t for t in await _turler(db) if t.is_paylasimi]
     tur_idler = {t.id for t in turler}
@@ -390,7 +541,7 @@ async def is_ekibi(so_id: int, request: Request, db: DbDep, user: IsBazli) -> di
         for kisi in (
             await db.scalars(select(User).where(User.id.in_(ekip)).order_by(User.full_name))
         ).all():
-            belgeler = await _kisi_belgeleri(db, kisi.id, tur_idler)
+            belgeler = await _kisi_belgeleri(db, kisi.id, tur_idler, yalniz_onayli=True)
             kisiler.append(
                 {
                     "user_id": kisi.id,
