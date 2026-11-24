@@ -374,6 +374,69 @@ async def takvim(
     return await _plan_satirlari(db, user, [(p, so) for p, so in satirlar])
 
 
+async def plansiz_isler(
+    db: AsyncSession,
+    user: User,
+    baslangic: date,
+    bitis: date,
+    *,
+    birim: str | None = None,
+    tur: str | None = None,
+) -> list[dict[str, Any]]:
+    """Aktif planı OLMAYAN işler, kapsadıkları günlerle (2026-11-24 sahip kararı).
+
+    Excel'den aktarılan, plansız açılıp kapanan ya da doğrudan tamamlanan işler
+    takvimde hiç görünmüyordu. İş başladığı günden (bildirim, yoksa açılış)
+    bittiği güne (tamamlanma, yoksa kapanış) kadar HER günde soluk kart olur;
+    açık iş yalnız başladığı günde (açık plansız iş zaten havuzda). İptal
+    edilen iş gösterilmez. Salt okunur: sürüklenmez, plan sayılmaz.
+    """
+    aralik_dogrula(baslangic, bitis)
+    bas_utc, bit_utc = _gunler_utc(baslangic, bitis)
+    basla = func.coalesce(ServiceOrder.reported_at, ServiceOrder.created_at)
+    bitti = func.coalesce(ServiceOrder.completed_at, ServiceOrder.closed_at)
+    aktif = select(ServicePlan.service_order_id).where(
+        ServicePlan.is_active.is_(True), ServicePlan.is_deleted.is_(False)
+    )
+    stmt = (
+        select(ServiceOrder, Account.title)
+        .outerjoin(Account, Account.id == ServiceOrder.customer_id)
+        .where(
+            ServiceOrder.is_deleted.is_(False),
+            ServiceOrder.status != "IPTAL",
+            ServiceOrder.id.not_in(aktif),
+            basla <= bit_utc,
+            func.coalesce(bitti, basla) >= bas_utc,
+        )
+        .order_by(basla, ServiceOrder.id)
+        .limit(2000)
+    )
+    stmt = _suz(stmt, user, birim=birim, tur=tur)
+    from app.services.teknik_servis.is_emirleri import DURUM_ADLARI
+
+    cikti: list[dict[str, Any]] = []
+    for so, unvan in (await db.execute(stmt)).all():
+        bas = yerel_gun(so.reported_at or so.created_at)
+        son_an = (so.completed_at or so.closed_at) if so.status in KAPALI else None
+        bit = max(yerel_gun(son_an), bas) if son_an else bas
+        cikti.append(
+            {
+                "is_id": so.id,
+                "so_no": so.so_no,
+                "birim": so.birim,
+                "tur": so.tur,
+                "konu": so.konu,
+                "musteri": unvan or so.customer_name_raw,
+                "durum": so.status,
+                "durum_adi": DURUM_ADLARI.get(so.status, so.status),
+                "kapali": so.status in KAPALI,
+                "baslangic": bas.isoformat(),
+                "bitis": bit.isoformat(),
+            }
+        )
+    return cikti
+
+
 # --- Havuz --------------------------------------------------------------------------
 
 

@@ -331,6 +331,22 @@ async def _arac_cikti(db, arac: ServiceVehicle) -> dict[str, Any]:
 # --- Takvim, havuz, KPI -------------------------------------------------------------
 
 
+@router.get("/takvim/plansiz", response_model=None)
+async def takvim_plansiz(
+    db: DbDep,
+    user: TakipOkuyucu,
+    baslangic: date,
+    bitis: date,
+    birim: str | None = None,
+    tur: str | None = None,
+) -> Any:
+    """Aralıktaki plansız işler (başlangıç–bitiş günleriyle; takvimde soluk kart)."""
+    try:
+        return await takvim.plansiz_isler(db, user, baslangic, bitis, birim=_birim(birim), tur=tur)
+    except _HATALAR as exc:
+        return _hata_yaniti(exc)
+
+
 @router.get("/takvim", response_model=None)
 async def takvim_getir(
     db: DbDep,

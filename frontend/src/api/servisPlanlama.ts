@@ -77,6 +77,21 @@ export interface IsOzeti {
   irtibat_telefon: string | null;
 }
 
+/** Aktif planı olmayan iş (takvimde başlangıç–bitiş günleri boyunca soluk kart). */
+export interface PlansizIs {
+  is_id: number;
+  so_no: string;
+  birim: string;
+  tur: string;
+  konu: string;
+  musteri: string | null;
+  durum: string;
+  durum_adi: string;
+  kapali: boolean;
+  baslangic: string;
+  bitis: string;
+}
+
 export interface TakvimSatiri extends IsOzeti {
   plan_id: number;
   plan_tarihi: string;
@@ -240,6 +255,8 @@ export function sorunluIsler(e: unknown): string[] {
 }
 
 export const planlamaApi = {
+  plansiz: (baslangic: string, bitis: string, s: Suzgec) =>
+    api.get<PlansizIs[]>(`${ON}/takvim/plansiz?${parametre({ baslangic, bitis, ...s })}`),
   takvim: (baslangic: string, bitis: string, s: Suzgec) =>
     api.get<TakvimSatiri[]>(`${ON}/takvim?${parametre({ baslangic, bitis, ...s })}`),
   havuz: (

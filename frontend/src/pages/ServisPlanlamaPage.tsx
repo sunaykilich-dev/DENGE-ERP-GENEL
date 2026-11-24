@@ -64,6 +64,7 @@ import {
   type HavuzSatiri,
   PLAN_NEDENLERI,
   type Plan,
+  type PlansizIs,
   type TakvimSatiri,
   planlamaApi,
   planlamaP3Api,
@@ -129,6 +130,34 @@ function kartTuru(k: Kart): string {
   const pb = k.satirlar.filter((s) => s.tur === "PB").length;
   if (pb === 0) return "Servis";
   return pb === k.satirlar.length ? "Bakım" : "Karma";
+}
+
+/** Planı olmayan iş: soluk, kesik çerçeveli; tıklanınca iş ayrıntısı (2026-11-24). */
+function PlansizKart({ is, onAc }: { is: PlansizIs; onAc: () => void }) {
+  const cokGun = is.baslangic !== is.bitis;
+  return (
+    <Card
+      size="small"
+      hoverable
+      onClick={onAc}
+      style={{ marginBottom: 6, opacity: 0.55, borderStyle: "dashed", cursor: "pointer" }}
+      styles={{ body: { padding: 6 } }}
+    >
+      <Space size={4} wrap style={{ fontSize: 12 }}>
+        <Typography.Text strong>{is.so_no}</Typography.Text>
+        <Tag style={{ marginInlineEnd: 0 }}>Plansız</Tag>
+        {is.kapali && <Tag style={{ marginInlineEnd: 0 }}>{is.durum_adi}</Tag>}
+      </Space>
+      <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {is.musteri ?? "—"}
+      </div>
+      <div style={{ fontSize: 11, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {cokGun
+          ? `${dayjs(is.baslangic).format("DD.MM")} – ${dayjs(is.bitis).format("DD.MM")} · ${is.konu}`
+          : is.konu}
+      </div>
+    </Card>
+  );
 }
 
 function ZiyaretKarti({ kart, onAc }: { kart: Kart; onAc: () => void }) {
@@ -251,6 +280,10 @@ export default function ServisPlanlamaPage() {
     queryKey: ["servis-takvim", basStr, bitStr, birim, tur],
     queryFn: () => planlamaApi.takvim(basStr, bitStr, suzgec),
   });
+  const plansiz = useQuery({
+    queryKey: ["servis-takvim-plansiz", basStr, bitStr, birim, tur],
+    queryFn: () => planlamaApi.plansiz(basStr, bitStr, suzgec),
+  });
   const havuz = useQuery({
     queryKey: ["servis-havuz", birim, tur, gruplama, arama],
     queryFn: () => planlamaApi.havuz({ ...suzgec, gruplama, q: arama || undefined }),
@@ -302,6 +335,23 @@ export default function ServisPlanlamaPage() {
   });
 
   const kartlar = useMemo(() => kartlaraBol(takvim.data ?? []), [takvim.data]);
+  // Plansız işler: başlangıçtan bitişe her gün (görünen aralıkla sınırlı).
+  const plansizGunleri = useMemo(() => {
+    const m = new Map<string, PlansizIs[]>();
+    for (const p of plansiz.data ?? []) {
+      let g = dayjs(p.baslangic, ISO);
+      const son = dayjs(p.bitis, ISO);
+      if (g.isBefore(bas)) g = bas;
+      while (!g.isAfter(son) && !g.isAfter(bit)) {
+        const k = g.format(ISO);
+        m.set(k, [...(m.get(k) ?? []), p]);
+        g = g.add(1, "day");
+      }
+    }
+    return m;
+    // bas/bit basStr/bitStr'den türer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plansiz.data, basStr, bitStr]);
   // Açık kart, takvim tazelenince güncel satırlarla yeniden kurulur.
   const acikKart = useMemo(() => {
     if (!kart) return null;
@@ -335,12 +385,17 @@ export default function ServisPlanlamaPage() {
 
   const gunHucresi = (g: Dayjs, sinir: number) => {
     const liste = kartlar.get(g.format(ISO)) ?? [];
+    const plansizlar = plansizGunleri.get(g.format(ISO)) ?? [];
+    const toplam = liste.length + plansizlar.length;
     return (
       <>
         {liste.slice(0, sinir).map((k) => (
           <ZiyaretKarti key={k.anahtar} kart={k} onAc={() => kartAc(k)} />
         ))}
-        {liste.length > sinir && (
+        {plansizlar.slice(0, Math.max(0, sinir - liste.length)).map((p) => (
+          <PlansizKart key={`p${p.is_id}`} is={p} onAc={() => setIsDetayId(p.is_id)} />
+        ))}
+        {toplam > sinir && (
           <Button
             size="small"
             type="link"
@@ -349,7 +404,7 @@ export default function ServisPlanlamaPage() {
               setGorunum("gun");
             }}
           >
-            +{liste.length - sinir} daha
+            +{toplam - sinir} daha
           </Button>
         )}
       </>
@@ -358,7 +413,7 @@ export default function ServisPlanlamaPage() {
 
   const takvimGovdesi = () => {
     if (gorunum === "gun") {
-      return (kartlar.get(gun.format(ISO)) ?? []).length ? (
+      return (kartlar.get(gun.format(ISO)) ?? []).length + (plansizGunleri.get(gun.format(ISO)) ?? []).length ? (
         gunHucresi(gun, KART_SINIRI.gun)
       ) : (
         <Empty description="Bu gün plan yok" />
