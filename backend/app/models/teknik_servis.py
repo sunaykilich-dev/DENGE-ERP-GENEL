@@ -144,6 +144,10 @@ TALEP_KANALLARI = (
     "WHATSAPP",
     "EPOSTA",
     "SAHADA_BILDIRILDI",
+    # Cihazın kendisi gelir (2026-11-24 sahip kararı, migration fco000000001):
+    # müşteri elden getirir ya da kargoyla gönderir.
+    "ELDEN",
+    "KARGO",
     "BAKIM_OTOMATIK",
     "DIGER",
 )
@@ -153,6 +157,9 @@ KAPSAM_DURUMLARI = ("SOZLESMELI", "GARANTILI", "KAPSAM_DISI", "BILINMIYOR")
 
 SERVIS_SONUCLARI = ("COZULDU", "COZULEMEDI", "TEKRAR_GIDILECEK", "TEKLIF_SUNULACAK")
 COZUM_KANALLARI = ("YERINDE", "UZAKTAN", "TELEFON", "ATOLYE")
+# Cihazın geliş durumu (2026-11-24 sahip kararı, migration fcp000000001):
+# seçim + isteğe bağlı açıklama; onarım fişinde müşteriye basılır.
+CIHAZ_DURUMLARI = ("CALISIYOR", "ARIZALI", "HASARLI", "PARCA_EKSIK")
 # Sahada görülen seri/bölge kütükten farklıysa (E03-14); PB'de form tutar.
 KUTUK_FARK_DURUMLARI = ("ACIK", "UYGULANDI", "YOK_SAYILDI")
 # Seri okuma kaynağı (2026-11-23 sahip kararı, migration fcn000000001): OKUTMA =
@@ -688,6 +695,7 @@ class ServiceOrderSerial(Base, PkMixin, TimestampMixin, ActorMixin):
         CheckConstraint("is_active OR removed_at IS NOT NULL", name="ck_sos_pasif"),
         CheckConstraint("length(trim(seri_no)) > 0", name="ck_sos_seri_bos"),
         *_okuma_kisitlari("", "sos"),
+        CheckConstraint(_in("cihaz_durumu", CIHAZ_DURUMLARI, bos=True), name="ck_sos_cihaz_durumu"),
         Index("ix_sos_seri_norm", "seri_norm"),
         Index("ix_sos_seri_trgm", text("seri_norm gin_trgm_ops"), postgresql_using="gin"),
     )
@@ -712,6 +720,14 @@ class ServiceOrderSerial(Base, PkMixin, TimestampMixin, ActorMixin):
     okuma_kaynagi: Mapped[str | None] = mapped_column(String(10))
     elle_gerekce: Mapped[str | None] = mapped_column(String(30))
     elle_aciklama: Mapped[str | None] = mapped_column(String(200))
+    # Cihaz başına bilgi (2026-11-24). `notlar` ve `musteri_sikayeti` YALNIZ
+    # personel içindir (müşteri belgesine/bağlantısına basılmaz); `cihaz_durumu`
+    # + açıklaması ve `onarim_bilgisi` onarım fişinde müşteriye gider.
+    notlar: Mapped[str | None] = mapped_column(Text)
+    musteri_sikayeti: Mapped[str | None] = mapped_column(Text)
+    cihaz_durumu: Mapped[str | None] = mapped_column(String(20))
+    cihaz_durumu_aciklama: Mapped[str | None] = mapped_column(String(500))
+    onarim_bilgisi: Mapped[str | None] = mapped_column(Text)
 
 
 class ServiceOrderEvent(Base, PkMixin):
@@ -1315,6 +1331,7 @@ __all__ = [
     "ATAMA_ROLLERI",
     "SORUMLU_ROLLERI",
     "BIRIM_KODLARI",
+    "CIHAZ_DURUMLARI",
     "COZUM_KANALLARI",
     "DURUM_GRUPLARI",
     "EPOSTA_ANLIK_KODLAR",

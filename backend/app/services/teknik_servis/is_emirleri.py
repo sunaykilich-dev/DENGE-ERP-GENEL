@@ -116,10 +116,12 @@ class TurKurali:
 # Kategori YALNIZ buradan türetilir (iş no önekinden tahmin yasak, E12-04).
 # Birim kısıtı Dalga 1'de yok: her tür her birimde açılabilir (pilot GUVENLIK).
 TUR_KURALLARI: dict[str, TurKurali] = {
-    # M1.6 (Faz A): günlük servis işinde en çok bir cihaz; seri zorunlu değil.
-    "ARIZA": TurKurali("GUNLUK_SERVIS", sla_olculur=True, azami_seri=1),
-    "PLANSIZ_BAKIM": TurKurali("GUNLUK_SERVIS", sla_olculur=True, azami_seri=1),
-    "DESTEK": TurKurali("GUNLUK_SERVIS", sla_olculur=True, azami_seri=1),
+    # M1.6 (Faz A) "günlük servis işinde tek cihaz" kuralı 2026-11-24 sahip
+    # kararıyla KALKTI: bir işe birden fazla cihaz eklenir (cihaz başına bilgi
+    # `service_order_serials`'da). PB yine 1 cihaz = 1 iş.
+    "ARIZA": TurKurali("GUNLUK_SERVIS", sla_olculur=True),
+    "PLANSIZ_BAKIM": TurKurali("GUNLUK_SERVIS", sla_olculur=True),
+    "DESTEK": TurKurali("GUNLUK_SERVIS", sla_olculur=True),
     "PB": TurKurali(
         "PLANLI_BAKIM", seri_zorunlu=True, yalniz_sistem=True, tek_seri=True, azami_seri=1
     ),
@@ -243,6 +245,8 @@ KANAL_ADLARI: dict[str, str] = {
     "WHATSAPP": "WhatsApp",
     "EPOSTA": "E-posta",
     "SAHADA_BILDIRILDI": "Sahada bildirildi",
+    "ELDEN": "Elden teslim",
+    "KARGO": "Kargo",
     "BAKIM_OTOMATIK": "Bakım (otomatik)",
     "DIGER": "Diğer",
 }

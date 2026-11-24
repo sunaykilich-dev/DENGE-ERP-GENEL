@@ -18,18 +18,23 @@
  *   istekte (iş TAMAMLANDI doğar; şef ayrıca kapatır).
  * - Düzenlemede `version` gönderilir (iyimser kilit): başkası değiştirdiyse
  *   409 → çağıran kaydı yeniler. Kapalı işte düzeltme gerekçe ister.
- * - Faz A: yeni işte lokasyon, talep eden kişinin adı ve telefonu ve arıza
- *   tanımı zorunlu (M1.2); günlük servis işinde (arıza/destek/plansız bakım)
- *   en çok bir cihaz (M1.6). Sunucu aynı kuralı 400 ile uygular.
+ * - Faz A: yeni işte talep eden kişinin adı ve telefonu ve arıza tanımı
+ *   zorunlu (M1.2; lokasyon 2026-11-24'ten beri isteğe bağlı — elden/kargo
+ *   gelen cihaz). M1.6 "günlük serviste tek cihaz" 2026-11-24'te kalktı: her
+ *   türde birden çok cihaz (PB hariç); her cihazın durumu, onarım bilgisi,
+ *   müşteri şikâyeti ve notu (son ikisi yalnız personel) ayrı girilir.
  * - 2026-11-23: seri alanı el okuyucu + kamera düğmeli `SeriOkutucu`. Cihazlı
  *   işte (ayar açıkken) seri zorunlu; okutulmayan (elle yazılan, kütükten
  *   seçilen) seri için neden sorulur. Her serinin kaynağı `seri_okumalari`'yla gider.
+ * - 2026-11-24: `servis.planla` olan açarken personel tayin edebilir (isteğe
+ *   bağlı); tayin işle tek istekte gider, sunucu tayin kurallarını uygular.
  */
 import { useQuery } from "@tanstack/react-query";
 import {
   Alert,
   App,
   Button,
+  Card,
   Checkbox,
   Col,
   DatePicker,
@@ -49,12 +54,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
+import { personelApi } from "../api/personel";
 import {
   HABERLESME_NITELIKLERI,
   nitelikSorulur,
   ONCELIK_ADLARI,
   teknikServisApi,
   type AcilisUyarisi,
+  type AtamaSatiri,
+  type CihazBilgisi,
   type FormVerileri,
   type IsDetayi,
   type IsGirdisi,
@@ -65,6 +73,7 @@ import MusteriLokasyonSecici, {
   type MusteriLokasyonSecimi,
   type SahaOnerisi,
 } from "../components/MusteriLokasyonSecici";
+import { CihazBilgisiAlanlari } from "../components/CihazBilgileri";
 import SeriOkutucu, { seriAnahtari } from "../components/SeriOkutucu";
 import { ELLE_GEREKCELERI, type ElleGerekce, type SeriOkumasi } from "../components/barkod/elleGerekce";
 import type { OkumaKaynagi } from "../components/barkod/okuyucuAlgilama";
@@ -98,6 +107,11 @@ interface FormDegeri {
   /** Okutulmayan seri(ler) için neden (cihazlı işte zorunlu). */
   elle_gerekce?: ElleGerekce;
   elle_aciklama?: string;
+  /** Cihaz başına bilgi; anahtar `seriAnahtari(seri)`. */
+  cihaz_bilgileri?: Record<string, CihazBilgisi>;
+  /** Açılışta tayin (yalnız `servis.planla`): personel + sorumlu. */
+  tayin_kisiler?: number[];
+  tayin_sorumlu?: number;
 }
 
 const GECIS_GEREKCE_ALT = 10;
@@ -191,6 +205,7 @@ export default function ServisIsFormu({
   // Yalnız kurulum açan (satış destek): `servis.kurulum_ac` var, `servis.yaz` yok.
   const yalnizKurulum = !duzenleme && !yetkili("servis.yaz") && yetkili("servis.kurulum_ac");
   const gecisYetkili = !duzenleme && yetkili("servis.gecis_kaydi");
+  const tayinYetkili = !duzenleme && yetkili("servis.planla");
 
   const birim = Form.useWatch("birim", form);
   const uzaktan = Form.useWatch("uzaktan", form);
@@ -200,10 +215,15 @@ export default function ServisIsFormu({
   const turDegeri = Form.useWatch("tur", form);
   const gecis = !!Form.useWatch("gecis_kaydi", form) && gecisYetkili;
   const nitelikVar = nitelikSorulur(birim, turDegeri);
-  const tekCihaz =
-    formVerileri?.turler.find((t) => t.kod === turDegeri)?.kategori === "GUNLUK_SERVIS" ||
-    turDegeri === "PB";
+  // 2026-11-24: tek cihaz yalnız planlı bakımda (1 cihaz = 1 iş).
+  const tekCihaz = turDegeri === "PB";
   const elleGerekce = Form.useWatch("elle_gerekce", form);
+  const tayinKisiler = Form.useWatch("tayin_kisiler", form);
+  const tayinAdaylari = useQuery({
+    queryKey: ["atanabilir", birim],
+    queryFn: () => personelApi.atanabilir(birim),
+    enabled: tayinYetkili && !!birim,
+  });
   // Cihazlı işte (ayar açıkken) seri okutulur; elle girilene neden sorulur.
   const okutmaZorunlu =
     !!formVerileri?.seri_okutma?.zorunlu &&
@@ -368,6 +388,30 @@ export default function ServisIsFormu({
     return { tum, duz, okumalar };
   }
 
+  /** Doldurulmuş cihaz bilgileri (boş alanlı cihaz gönderilmez). */
+  function cihazBilgileriKur(v: FormDegeri): (CihazBilgisi & { seri_no: string })[] {
+    if (duzenleme) return [];
+    const tum = (v.seriler ?? []).map((x) => x.trim()).filter(Boolean);
+    return tum.flatMap((seri) => {
+      const b = v.cihaz_bilgileri?.[seriAnahtari(seri)];
+      if (!b) return [];
+      const temiz = Object.fromEntries(
+        Object.entries(b).filter(([, d]) => (typeof d === "string" ? d.trim() !== "" : d != null)),
+      ) as CihazBilgisi;
+      return Object.keys(temiz).length ? [{ seri_no: seri, ...temiz }] : [];
+    });
+  }
+
+  /** Tayin satırları: tek kişi seçildiyse sorumlu odur; rol saha rolünden. */
+  function tayinSatirlari(kisiler: number[], sorumlu?: number): AtamaSatiri[] {
+    const lider = sorumlu ?? (kisiler.length === 1 ? kisiler[0] : undefined);
+    return kisiler.map((id) => ({
+      user_id: id,
+      rol: tayinAdaylari.data?.find((k) => k.id === id)?.saha_rolu === "SEF" ? "SEF" : "TEKNISYEN",
+      is_lead: id === lider,
+    }));
+  }
+
   function govdeKur(v: FormDegeri): IsGirdisi {
     const { duz, okumalar } = seriAyir(v);
     const irtibatAyni =
@@ -388,8 +432,12 @@ export default function ServisIsFormu({
       sistem: v.sistem?.trim() || null,
       aciklama: v.aciklama?.trim() || null,
       seriler: duz,
+      ...(cihazBilgileriKur(v).length ? { cihaz_bilgileri: cihazBilgileriKur(v) } : {}),
       ...(okumalar.length ? { seri_okumalari: okumalar } : {}),
       ...(nitelikSorulur(v.birim, v.tur) ? { nitelikler: v.nitelikler ?? [] } : {}),
+      ...(tayinYetkili && !v.uzaktan && v.tayin_kisiler?.length
+        ? { atamalar: tayinSatirlari(v.tayin_kisiler, v.tayin_sorumlu) }
+        : {}),
       ...(gecisYetkili && v.gecis_kaydi
         ? { gecis_kaydi: true, gecis_gerekcesi: (v.gecis_gerekcesi ?? "").trim() }
         : {}),
@@ -437,6 +485,14 @@ export default function ServisIsFormu({
       message.success(`${sonuc.so_no} açıldı`);
       for (const u of sonuc.uyarilar ?? []) {
         if (u.kod === "AYNI_LOKASYON") ayniLokasyonBildir(u);
+      }
+      const yetkinlik = (sonuc.uyarilar ?? []).filter((u) => u.kod === "YETKINLIK");
+      if (yetkinlik.length) {
+        notification.warning({
+          message: "Tayin edildi; yetkinlik uyarısı var",
+          description: yetkinlik.map((u) => u.mesaj).join(" · "),
+          duration: 10,
+        });
       }
       onKaydedildi(sonuc);
     } catch (e) {
@@ -621,14 +677,13 @@ export default function ServisIsFormu({
       <Form.Item
         name="musteri"
         label="Müşteri ve lokasyon"
+        extra={duzenleme ? undefined : "Lokasyon isteğe bağlı (elden ya da kargoyla gelen cihazda boş bırakılabilir)."}
         rules={[
           {
             validator: (_, v: MusteriLokasyonSecimi | undefined) =>
               !v?.musteriId
                 ? Promise.reject(new Error("Müşteri seçin"))
-                : !duzenleme && !v.lokasyonId
-                  ? Promise.reject(new Error("Lokasyon seçin"))
-                  : Promise.resolve(),
+                : Promise.resolve(),
           },
         ]}
       >
@@ -685,20 +740,20 @@ export default function ServisIsFormu({
       </Form.Item>
       <Form.Item
         name="seriler"
-        label={tekCihaz ? "Cihaz seri numarası" : "Seri numaraları"}
+        label={tekCihaz ? "Cihaz seri numarası" : "Cihazlar (seri numaraları)"}
         required={okutmaZorunlu && !duzenleme}
         extra={
           (okutmaZorunlu ? "Cihazın barkodunu el okuyucuyla ya da kamera düğmesiyle okutun. " : "") +
           (tekCihaz
-            ? "Bu iş türünde tek cihaz olur; her cihaz için ayrı iş açın."
-            : "Yazıp Enter ile de eklenir. Seri metin olarak saklanır (baştaki sıfır korunur).")
+            ? "Planlı bakımda tek cihaz olur."
+            : "Birden çok cihaz eklenebilir; her seriyi okutun ya da yazıp Enter'a basın.")
         }
         rules={[
           {
             validator: (_, v: string[] | undefined) => {
               const dolu = (v ?? []).filter((s) => s.trim());
               if (tekCihaz && dolu.length > 1)
-                return Promise.reject(new Error("Bu iş türünde en çok bir cihaz (seri) girilebilir"));
+                return Promise.reject(new Error("Planlı bakımda tek cihaz olur"));
               if (okutmaZorunlu && !duzenleme && !dolu.length)
                 return Promise.reject(
                   new Error("Cihazlı işte seri zorunlu: barkodu okutun ya da elle girip nedenini seçin"),
@@ -759,7 +814,10 @@ export default function ServisIsFormu({
             disabled={mevcut?.tur === "PB"}
             onChange={(id?: number) => {
               const c = kutukCihazlari.data?.find((x) => x.id === id);
-              form.setFieldValue("seriler", c?.serial_no ? [c.serial_no] : []);
+              // Çoklu cihaz (2026-11-24): kütükten seçilen seri listeye EKLENİR.
+              const mevcutSeriler: string[] = form.getFieldValue("seriler") ?? [];
+              if (c?.serial_no && !mevcutSeriler.some((x) => seriAnahtari(x) === seriAnahtari(c.serial_no!)))
+                form.setFieldValue("seriler", tekCihaz ? [c.serial_no] : [...mevcutSeriler, c.serial_no]);
               // Kütükten seçilen seri okutulmuş sayılmaz (cihaz yanında değil).
               if (c?.serial_no) setKaynaklar((x) => ({ ...x, [seriAnahtari(c.serial_no!)]: "ELLE" }));
             }}
@@ -777,6 +835,22 @@ export default function ServisIsFormu({
                   .join(" · "),
               }))}
           />
+        </Form.Item>
+      )}
+      {!duzenleme && (seriler ?? []).filter((x) => x.trim()).length > 0 && (
+        <Form.Item
+          label="Cihaz bilgileri"
+          extra="Müşteri şikâyeti ve notlar yalnız personele görünür; cihaz durumu ve onarım bilgisi onarım fişine basılır."
+        >
+          <Space orientation="vertical" style={{ width: "100%" }} size={8}>
+            {(seriler ?? [])
+              .filter((x) => x.trim())
+              .map((seri, i) => (
+                <Card key={seriAnahtari(seri)} size="small" title={`Cihaz ${i + 1} · ${seri}`}>
+                  <CihazBilgisiAlanlari onek={["cihaz_bilgileri", seriAnahtari(seri)]} />
+                </Card>
+              ))}
+          </Space>
         </Form.Item>
       )}
       <MukerrerUyarisi m={mukerrer} />
@@ -880,6 +954,53 @@ export default function ServisIsFormu({
               </Form.Item>
             </>
           )}
+        </>
+      )}
+
+      {tayinYetkili && !uzaktan && (
+        <>
+          <Divider style={{ margin: "8px 0 12px" }} />
+          <Row gutter={12}>
+            <Col xs={24} sm={14}>
+              <Form.Item
+                name="tayin_kisiler"
+                label="Personel tayini"
+                extra="İsteğe bağlı. Boş bırakılırsa iş tayin bekler."
+              >
+                <Select
+                  mode="multiple"
+                  allowClear
+                  placeholder={birim ? "Personel seçin" : "Önce birim seçin"}
+                  disabled={!birim}
+                  loading={tayinAdaylari.isFetching}
+                  optionFilterProp="label"
+                  onChange={(v: number[]) => {
+                    const s = form.getFieldValue("tayin_sorumlu");
+                    if (s && !v.includes(s)) form.setFieldValue("tayin_sorumlu", undefined);
+                  }}
+                  options={(tayinAdaylari.data ?? []).map((k) => ({
+                    value: k.id,
+                    label: `${k.ad}${k.giris_acik ? "" : " (girişsiz)"} · ${k.saha_rolu}`,
+                  }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={10}>
+              <Form.Item
+                name="tayin_sorumlu"
+                label="Sorumlu"
+                extra={(tayinKisiler?.length ?? 0) === 1 ? "Tek kişi seçildiyse sorumlu odur." : undefined}
+              >
+                <Select
+                  allowClear
+                  disabled={!tayinKisiler?.length}
+                  options={(tayinAdaylari.data ?? [])
+                    .filter((k) => tayinKisiler?.includes(k.id))
+                    .map((k) => ({ value: k.id, label: k.ad }))}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
         </>
       )}
 

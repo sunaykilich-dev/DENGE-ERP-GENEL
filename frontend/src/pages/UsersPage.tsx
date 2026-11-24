@@ -8,6 +8,7 @@ import {
   Form,
   Input,
   Modal,
+  Popconfirm,
   Row,
   Select,
   Space,
@@ -400,14 +401,51 @@ export default function UsersPage() {
     },
   });
 
+  // Silme (2026-11-24): yalnız iz bırakmamış hesap kalıcı silinir; izi olan
+  // için sunucu 409 KAYITLI_KULLANICI döner → pasifleştirme önerilir.
+  const sil = useMutation({
+    mutationFn: (k: KullaniciSatiri) => api.delete<void>(`/api/kullanicilar/${k.id}`),
+    onSuccess: () => {
+      message.success("Kullanıcı silindi");
+      void yenile();
+    },
+    onError: (e: ApiError, k) => {
+      const detay = (e.govde as { detail?: { kod?: string; mesaj?: string } } | undefined)?.detail;
+      if (e.status === 409 && detay?.kod === "KAYITLI_KULLANICI") {
+        modal.confirm({
+          title: "Bu kullanıcı silinemez",
+          content: detay.mesaj,
+          okText: k.is_active ? "Pasifleştir" : "Tamam",
+          cancelText: "Vazgeç",
+          onOk: () =>
+            k.is_active
+              ? guncelle.mutate({ id: k.id, is_active: false, version: k.version })
+              : undefined,
+        });
+        return;
+      }
+      message.error(e.message);
+    },
+  });
+  const [pasifleriGoster, setPasifleriGoster] = useState(false);
+
   return (
     <Card
       title="Kullanıcılar ve roller"
       extra={
         sekme === "kullanicilar" ? (
-          <Button type="primary" onClick={() => setAcik(true)}>
-            Yeni kullanıcı
-          </Button>
+          <Space>
+            <Switch
+              size="small"
+              checked={pasifleriGoster}
+              onChange={setPasifleriGoster}
+              checkedChildren="Pasifler görünür"
+              unCheckedChildren="Pasifler gizli"
+            />
+            <Button type="primary" onClick={() => setAcik(true)}>
+              Yeni kullanıcı
+            </Button>
+          </Space>
         ) : sekme === "roller" ? (
           <Button type="primary" onClick={() => setRolDuzenle({ acik: true })}>
             Yeni rol
@@ -474,7 +512,7 @@ export default function UsersPage() {
       <Table
         rowKey="id"
         loading={kullanicilar.isLoading}
-        dataSource={kullanicilar.data ?? []}
+        dataSource={(kullanicilar.data ?? []).filter((k) => pasifleriGoster || k.is_active)}
         pagination={false}
         columns={[
           {
@@ -560,9 +598,23 @@ export default function UsersPage() {
           {
             title: "",
             render: (_, k: KullaniciSatiri) => (
-              <Button size="small" onClick={() => setDuzenlenen(k)}>
-                Düzenle
-              </Button>
+              <Space size={4}>
+                <Button size="small" onClick={() => setDuzenlenen(k)}>
+                  Düzenle
+                </Button>
+                <Popconfirm
+                  title={`${k.full_name} silinsin mi?`}
+                  description="Sistemde kaydı olmayan hesap kalıcı silinir; kaydı olan pasifleştirilir."
+                  okText="Sil"
+                  okButtonProps={{ danger: true }}
+                  cancelText="Vazgeç"
+                  onConfirm={() => sil.mutate(k)}
+                >
+                  <Button size="small" danger loading={sil.isPending && sil.variables?.id === k.id}>
+                    Sil
+                  </Button>
+                </Popconfirm>
+              </Space>
             ),
           },
         ]}

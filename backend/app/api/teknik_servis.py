@@ -48,11 +48,13 @@ from app.models import (
     ServiceHoldReason,
     ServiceOrder,
     ServiceOrderAssignment,
+    ServiceOrderSerial,
     ServiceResult,
     User,
 )
 from app.models.rbac import BIRIM_KODLARI
 from app.models.teknik_servis import (
+    CIHAZ_DURUMLARI,
     COZUM_KANALLARI,
     DURUM_GRUPLARI,
     ONCELIKLER,
@@ -73,6 +75,7 @@ from app.services.teknik_servis import (
     atama,
     bekletme,
     cihaz_bilgisi,
+    cihaz_notlari,
     gecmis,
     is_emirleri,
     kapsam,
@@ -149,6 +152,27 @@ def _okumalari_serilere_kat(seriler: list[str], okumalar: list[SeriOkumaIn]) -> 
     return [*seriler, *(o.seri_no for o in okumalar if o.seri_no not in seriler)]
 
 
+class CihazBilgisiAlanlari(BaseModel):
+    """Cihaz başına bilgi (2026-11-24; `cihaz_notlari`). Not ve müşteri
+    şikâyeti yalnız personel görür; durum ve onarım onarım fişine basılır."""
+
+    notlar: str | None = Field(default=None, max_length=4000)
+    musteri_sikayeti: str | None = Field(default=None, max_length=4000)
+    cihaz_durumu: Literal[CIHAZ_DURUMLARI] | None = None  # type: ignore[valid-type]
+    cihaz_durumu_aciklama: str | None = Field(default=None, max_length=500)
+    onarim_bilgisi: str | None = Field(default=None, max_length=4000)
+
+
+class CihazNotuIn(CihazBilgisiAlanlari):
+    seri_no: str = Field(min_length=1, max_length=200)
+
+
+class AtamaSatiriIn(BaseModel):
+    user_id: int
+    rol: Literal["SEF", "TEKNISYEN"] = "TEKNISYEN"
+    is_lead: bool = False
+
+
 class IsAcIn(BaseModel):
     """Ekrandan servis işi açılışı (E01-02/09). Sözlük doğrulaması serviste (400)."""
 
@@ -179,6 +203,12 @@ class IsAcIn(BaseModel):
     gecis_gerekcesi: str | None = Field(default=None, max_length=500)
     # Serilerin nasıl girildiği (cihazlı işte ayar açıkken her seri için zorunlu).
     seri_okumalari: list[SeriOkumaIn] = Field(default_factory=list, max_length=50)
+    # Açılışta tayin (2026-11-24 sahip kararı): `servis.planla` olan kişi işi
+    # açarken ekibi de verir; kurallar `PUT /isler/{id}/atama` ile AYNI
+    # (`atama.ata`), tek işlemde — tayin reddedilirse iş de açılmaz.
+    atamalar: list[AtamaSatiriIn] = Field(default_factory=list, max_length=30)
+    # Cihaz başına bilgi (seriye göre eşlenir; seri `seriler`'de olmalı).
+    cihaz_bilgileri: list[CihazNotuIn] = Field(default_factory=list, max_length=50)
 
     @model_validator(mode="after")
     def _okunanlari_kat(self) -> IsAcIn:
@@ -438,12 +468,6 @@ class NotIn(BaseModel):
     metin: str = Field(min_length=1, max_length=500)
 
     model_config = {"json_schema_extra": {"examples": [{"metin": "Müşteri aranacak"}]}}
-
-
-class AtamaSatiriIn(BaseModel):
-    user_id: int
-    rol: Literal["SEF", "TEKNISYEN"] = "TEKNISYEN"
-    is_lead: bool = False
 
 
 class AtamaIn(BaseModel):
@@ -747,6 +771,7 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
                     "okuma_etiketi": seri_okutma.etiket(
                         x.okuma_kaynagi, x.elle_gerekce, x.elle_aciklama
                     ),
+                    **cihaz_notlari.cikti(x),
                 }
                 for x in aktif_seriler
             ],
@@ -858,19 +883,20 @@ async def _talep_bilgisi_dogrula(
     *,
     gecis: bool = False,
 ) -> None:
-    """M1.2 (Faz A): ekrandan açılan işte lokasyon ve talep eden kişinin adı
-    + telefonu zorunlu. Ad/telefon elle girilir ya da seçilen irtibat
+    """M1.2 (Faz A): ekrandan açılan işte talep eden kişinin adı + telefonu
+    zorunlu. Lokasyon 2026-11-24 sahip kararıyla İSTEĞE BAĞLI (elden/kargo
+    gelen cihazda, lokasyonu tanımlanmamış müşteride iş açılabilmeli);
+    `address_id` parametresi imza uyumu için durur. Ad/telefon elle girilir ya da seçilen irtibat
     kişisinin kaydından gelir. PB ve sistem açılışları (bakım üretimi,
     atölye kabulü, kiralama, bakım bulgusu) bu kapıdan geçmez.
 
     Geçiş kaydında (`servis.gecis_kaydi` + gerekçe; KARARLAR 2026-11-05 §9.8)
-    kaynak listede talep eden kişi yoksa ad/telefon aranmaz; lokasyon yine
-    zorunludur. Kişi sahada/ilk aramada işin irtibatına girilir."""
+    kaynak listede talep eden kişi yoksa ad/telefon aranmaz. Kişi sahada/ilk
+    aramada işin irtibatına girilir."""
     from app.models import Contact
 
+    del address_id
     eksik = []
-    if address_id is None:
-        eksik.append("lokasyon")
     kisi = await db.get(Contact, contact_id) if contact_id is not None else None
     ad = (iletisim_ad or "").strip() or (kisi.full_name if kisi is not None else "")
     telefon = (iletisim_telefon or "").strip() or ((kisi.phone or "") if kisi is not None else "")
@@ -1353,8 +1379,26 @@ async def olustur(
     """Servis işi açar. Mükerrer seri 409 (`mukerrer_gec` ile geçilir);
     aynı müşteri+lokasyonda açık iş yalnız `uyarilar`'da döner."""
     uyarilar = await _acilis_on_kontrol(db, payload, user)
+    if payload.atamalar and not user.has("servis.planla"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tayin yetkiniz yok (servis.planla)")
     try:
         so = await is_emirleri.olustur(db, _girdi(payload), user=user, clock=clock)
+        if payload.cihaz_bilgileri:
+            cihaz_notlari.acilista_yaz(
+                list(await is_emirleri.aktif_seriler(db, so)),
+                [b.model_dump() for b in payload.cihaz_bilgileri],
+            )
+            await db.flush()
+        if payload.atamalar:
+            with atama.uyari_toplayici() as tayin_uyarilari:
+                await atama.ata(
+                    db,
+                    so,
+                    [atama.AtamaSatiri(a.user_id, a.rol, a.is_lead) for a in payload.atamalar],
+                    user=user,
+                    clock=clock,
+                )
+            uyarilar.extend({"kod": "YETKINLIK", "mesaj": m} for m in tayin_uyarilari)
         if any(u["kod"] == "MUKERRER_GECILDI" for u in uyarilar):
             await gecmis.olay_yaz(
                 db,
@@ -1371,6 +1415,7 @@ async def olustur(
                 },
             )
     except _HATALAR as exc:
+        await db.rollback()
         raise _hata(exc) from exc
     if payload.gecis_kaydi:
         await gecmis.olay_yaz(
@@ -2625,6 +2670,36 @@ async def _ekip_cikti(db, so: ServiceOrder) -> list[dict[str, Any]]:
         }
         for a in ekip
     ]
+
+
+@router.patch("/isler/{so_id}/cihazlar/{seri_id}", response_model=None)
+async def cihaz_bilgisi_duzenle(
+    so_id: int,
+    seri_id: int,
+    payload: CihazBilgisiAlanlari,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yazici,
+) -> dict[str, Any]:
+    """Cihazın notu, müşteri şikâyeti, durumu ve onarım bilgisi (2026-11-24).
+    Yalnız gönderilen alanlar yazılır; kapatılmış/iptal işte 409."""
+    so = await _kapsamli_is(db, so_id, user)
+    satir = await db.get(ServiceOrderSerial, seri_id)
+    if satir is None or satir.service_order_id != so.id or not satir.is_active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cihaz bu işte yok")
+    # TAMAMLANDI'da da düzenlenir (onarım bilgisi sonuçtan sonra yazılabilir);
+    # şef kapattıktan ya da iptalden sonra değişmez.
+    if so.status in ("KAPATILDI", "IPTAL"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Kapalı işte cihaz bilgisi değişmez")
+    try:
+        await cihaz_notlari.duzenle(
+            db, so, satir, payload.model_dump(exclude_unset=True), user=user, clock=clock
+        )
+    except _HATALAR as exc:
+        await db.rollback()
+        raise _hata(exc) from exc
+    await db.commit()
+    return {"id": satir.id, "seri_no": satir.seri_no, **cihaz_notlari.cikti(satir)}
 
 
 @router.get("/isler/{so_id}/ekip", response_model=None)

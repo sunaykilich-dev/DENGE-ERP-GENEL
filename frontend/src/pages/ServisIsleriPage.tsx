@@ -117,6 +117,7 @@ import { yerelOku, yerelYaz } from "../fiori/yerelDepo";
 import EkYukleyici from "../components/EkYukleyici";
 import { IsEkibiBelgeleri } from "../components/OzlukDosyasi";
 import UlasimPenceresi, { ulasimGerekiyor } from "../components/UlasimPenceresi";
+import { CihazlarBolumu } from "../components/CihazBilgileri";
 import ServisFisiDugmesi, { fisTuru } from "../components/ServisFisiDugmesi";
 import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
@@ -1157,6 +1158,14 @@ export function IsDetayCekmecesi({
                           : <Typography.Text type="warning">{TAYIN.tayinEdilmemis}</Typography.Text>}
                       </Descriptions.Item>
                     </Descriptions>
+                    {d.seriler.length > 0 && (
+                      <CihazlarBolumu
+                        isId={d.id}
+                        seriler={d.seriler}
+                        duzenlenebilir={yetkili("servis.yaz") && !["KAPATILDI", "IPTAL"].includes(d.status)}
+                        onKaydedildi={yenile}
+                      />
+                    )}
                     {d.bekleme && (
                       <Alert
                         type="warning"

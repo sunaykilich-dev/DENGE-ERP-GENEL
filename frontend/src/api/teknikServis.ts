@@ -48,6 +48,30 @@ export interface IsSerisi {
   elle_aciklama?: string | null;
   /** "Okutuldu" / "Elle: <neden>" / null. */
   okuma_etiketi?: string | null;
+  /** Cihaz başına bilgi (2026-11-24). Not ve müşteri şikâyeti yalnız personel görür. */
+  notlar?: string | null;
+  musteri_sikayeti?: string | null;
+  cihaz_durumu?: CihazDurumu | null;
+  cihaz_durumu_adi?: string | null;
+  cihaz_durumu_aciklama?: string | null;
+  onarim_bilgisi?: string | null;
+}
+
+export type CihazDurumu = "CALISIYOR" | "ARIZALI" | "HASARLI" | "PARCA_EKSIK";
+export const CIHAZ_DURUMLARI: { kod: CihazDurumu; ad: string }[] = [
+  { kod: "CALISIYOR", ad: "Çalışıyor" },
+  { kod: "ARIZALI", ad: "Arızalı" },
+  { kod: "HASARLI", ad: "Fiziksel hasarlı" },
+  { kod: "PARCA_EKSIK", ad: "Parçası eksik" },
+];
+
+/** Cihazın notu, şikâyeti, durumu ve onarım bilgisi (açılışta ya da sonradan). */
+export interface CihazBilgisi {
+  notlar?: string | null;
+  musteri_sikayeti?: string | null;
+  cihaz_durumu?: CihazDurumu | null;
+  cihaz_durumu_aciklama?: string | null;
+  onarim_bilgisi?: string | null;
 }
 
 export const DURUM_RENKLERI: Record<string, string> = {
@@ -232,6 +256,8 @@ export interface IsDetayi extends Omit<IsSatiri, "seriler"> {
 
 export interface AcilisUyarisi {
   kod: string;
+  /** `YETKINLIK` (açılışta tayin uyarısı) metni. */
+  mesaj?: string;
   so_no: string;
   id: number;
   adet?: number;
@@ -306,6 +332,10 @@ export interface IsGirdisi {
   gecis_gerekcesi?: string | null;
   /** Haberleşme saha işinde zorunlu, çoktan seçmeli (KARARLAR §10). */
   nitelikler?: string[] | null;
+  /** Açılışta tayin (yalnız `servis.planla`; kurallar `/atama` ile aynı). */
+  atamalar?: AtamaSatiri[];
+  /** Cihaz başına bilgi (seriye göre eşlenir). */
+  cihaz_bilgileri?: (CihazBilgisi & { seri_no: string })[];
 }
 
 /** Haberleşme saha işinin niteliği (sunucu `role_montaj.NITELIK_ADLARI` ile aynı). */
@@ -719,6 +749,9 @@ export const teknikServisApi = {
   sonuc: (id: number, g: SonucGirdisi) => api.post<IsDetayi>(`${isYolu(id)}/sonuc`, g),
   gecmis: (id: number) => api.get<Olay[]>(`${isYolu(id)}/gecmis`),
   notEkle: (id: number, metin: string) => api.post<Olay>(`${isYolu(id)}/notlar`, { metin }),
+  /** Cihazın notu/şikâyeti/durumu/onarım bilgisi (2026-11-24). */
+  cihazNotuKaydet: (id: number, seriId: number, g: CihazBilgisi) =>
+    api.patch<IsSerisi>(`${isYolu(id)}/cihazlar/${seriId}`, g),
   ekip: (id: number) => api.get<EkipUyesi[]>(`${isYolu(id)}/ekip`),
   ata: (id: number, atamalar: AtamaSatiri[]) =>
     api.put<EkipUyesi[]>(`${isYolu(id)}/atama`, { atamalar }),

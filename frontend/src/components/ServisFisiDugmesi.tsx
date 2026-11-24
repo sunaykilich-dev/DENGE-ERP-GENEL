@@ -15,8 +15,8 @@ export type FisTuru = "bakim" | "onarim";
 
 export function fisTuru(tur: string | null | undefined): FisTuru | null {
   if (tur === "PB" || tur === "PLANSIZ_BAKIM") return "bakim";
-  if (tur === "ARIZA" || tur === "ATOLYE") return "onarim";
-  return null;
+  // 2026-11-24: onarım fişi (cihaz tablosuyla) bakım dışındaki her işte.
+  return tur ? "onarim" : null;
 }
 
 interface Props {

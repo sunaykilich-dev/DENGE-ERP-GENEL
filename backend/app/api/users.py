@@ -17,7 +17,7 @@ from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 
 from app.api.deps import ClockDep, DbDep, client_ip, require_permission
 from app.models import (
@@ -1052,6 +1052,119 @@ async def patch_user(
         gecici_parola=gecici,
         gecici_parola_bitis=user.gecici_parola_bitis if gecici else None,
     )
+
+
+# Kullanıcıya bağlanan, silinince KAYBOLMAYACAK izler: CASCADE olmayan her
+# yabancı anahtar (RESTRICT engeller; SET NULL "kim yaptı" bilgisini silerdi).
+_IZ_SORGUSU = text(
+    """
+    SELECT c.conrelid::regclass::text AS tablo, a.attname AS sutun
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f' AND c.confrelid = 'users'::regclass
+      AND c.confdeltype <> 'c' AND array_length(c.conkey, 1) = 1
+    ORDER BY 1, 2
+    """
+)
+
+# Denetimde kayıt tablosu yerine okunur ad (yalnız sık görülenler).
+_IZ_ADLARI = {
+    "audit_logs": "işlem geçmişi",
+    "service_orders": "servis işleri",
+    "service_order_assignments": "servis tayinleri",
+    "service_order_events": "servis geçmişi",
+    "quotes": "teklifler",
+    "accounts": "cari hesaplar",
+    "login_attempts": "giriş kayıtları",
+    "sessions": "oturumlar",
+    "service_plan_members": "servis planları",
+    "personnel_certificates": "sertifikalar",
+    "competency_assessments": "yetkinlik değerlendirmeleri",
+    "izin_talepleri": "izin talepleri",
+    "ozluk_belgeleri": "özlük belgeleri",
+}
+
+
+async def _kullanici_izleri(db, user_id: int) -> list[str]:
+    """Kullanıcının sistemde bıraktığı izlerin tabloları (boşsa güvenle silinir)."""
+    izler: list[str] = []
+    for tablo, sutun in (await db.execute(_IZ_SORGUSU)).all():
+        kosul = f'"{sutun}" = :id'
+        if tablo == "users":
+            kosul += " AND id <> :id"
+        var = await db.scalar(text(f"SELECT 1 FROM {tablo} WHERE {kosul} LIMIT 1"), {"id": user_id})  # noqa: S608
+        if var and tablo not in izler:
+            izler.append(tablo)
+    return izler
+
+
+@router.delete("/kullanicilar/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def kullanici_sil(user_id: int, request: Request, db: DbDep, admin: AdminDep) -> None:
+    """Yanlış/gereksiz açılmış kullanıcıyı KALICI siler (2026-11-24 sahip isteği).
+
+    Yalnız sistemde hiç iz bırakmamış hesap silinir (giriş, işlem, tayin,
+    kayıt …). İzi olan hesap silinmez — geçmişteki "kim yaptı" bilgisi
+    kaybolurdu; 409 `KAYITLI_KULLANICI` ile pasifleştirme önerilir. Kendi
+    hesabı ve giriş yapabilen son yönetici silinemez.
+    """
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kullanıcı bulunamadı")
+    if user.id == admin.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kendi hesabınızı silemezsiniz")
+    ret = {"entity": "users", "entity_id": user.id}
+    if await yetki.son_admin_mi(db, user):
+        await _reddet(
+            db,
+            request,
+            admin,
+            **ret,
+            durum=status.HTTP_409_CONFLICT,
+            mesaj="Giriş yapabilen son sistem yöneticisi silinemez.",
+            ayrinti={"islem": "sil"},
+        )
+    try:
+        yetki.hedef_kontrol(admin, user)
+    except yetki.YetkiHatasi as e:
+        await _reddet(
+            db,
+            request,
+            admin,
+            **ret,
+            durum=status.HTTP_403_FORBIDDEN,
+            mesaj=str(e),
+            ayrinti={"islem": "sil"},
+        )
+    izler = await _kullanici_izleri(db, user.id)
+    if izler:
+        adlar = [_IZ_ADLARI[t] for t in izler if t in _IZ_ADLARI]
+        if len(adlar) < len(izler):
+            adlar.append("diğer kayıtlar")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "kod": "KAYITLI_KULLANICI",
+                "mesaj": (
+                    f"{user.full_name} sistemde kayıt bırakmış ({', '.join(adlar)}); "
+                    "silinirse geçmişte kimin yaptığı kaybolur. Pasifleştirin."
+                ),
+                "aktif": user.is_active,
+                "version": user.version,
+            },
+        )
+    eski = {"username": user.username, "full_name": user.full_name, "rol": user.role.code}
+    await db.delete(user)
+    await db.flush()
+    await audit.log(
+        db,
+        "users",
+        "sil",
+        entity_id=user_id,
+        old_value=eski,
+        user_id=admin.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
 
 
 @router.get("/kullanicilar/kilitli", response_model=list[str])
