@@ -29,6 +29,7 @@ from app.models import (
     UserPermission,
     UserUnit,
 )
+from app.models.teknik_servis import SERVIS_TURLERI
 from app.permissions import (
     BIRIM_KAPSAMLARI,
     BIRIMLER,
@@ -988,6 +989,11 @@ async def patch_user(
         user.is_active = payload.is_active
     if payload.giris_acik is not None:
         user.giris_acik = payload.giris_acik
+    if payload.varsayilan_is_turu is not None:
+        tur = payload.varsayilan_is_turu.strip() or None
+        if tur is not None and tur not in SERVIS_TURLERI:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Geçersiz iş türü: {tur}")
+        user.varsayilan_is_turu = tur
     if role is not None:
         user.role_id = role.id
     # Yönetici parolası GEÇİCİDİR (TS-212): zorunlu değişim + 72 sa + tek giriş.

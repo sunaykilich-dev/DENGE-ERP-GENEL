@@ -18,6 +18,8 @@ export const EKIPMAN_TIPLERI = [
   "ROLE_TEKRARLAYICI",
   "TELSIZ_DIGER",
   "DIGER",
+  "ARAC_TELSIZI",
+  "AKSESUAR",
 ] as const;
 
 export const TIP_ETIKETLERI: Record<string, string> = {
@@ -29,6 +31,8 @@ export const TIP_ETIKETLERI: Record<string, string> = {
   ROLE_TEKRARLAYICI: "Röle / Tekrarlayıcı",
   TELSIZ_DIGER: "Diğer Haberleşme",
   DIGER: "Diğer",
+  ARAC_TELSIZI: "Araç Telsizi",
+  AKSESUAR: "Aksesuar",
 };
 
 export const DURUM_ETIKETLERI: Record<string, string> = {

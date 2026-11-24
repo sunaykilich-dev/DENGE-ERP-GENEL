@@ -180,13 +180,20 @@ ONARIM_ADLARI: dict[str, str] = {
     "DIGER": "Diğer",
 }
 AKSESUAR_ADLARI: dict[str, str] = {
+    "SARJ_ADAPTORU": "Adaptör",
+    "SARJ_UNITESI": "Şarj yuvası",
+    "SARJ_KABLOSU": "Şarj kablosu",
+    "SARJ_TAKIMI": "Şarj takımı",
     "BATARYA": "Batarya",
-    "SARJ_UNITESI": "Şarj ünitesi",
-    "SARJ_ADAPTORU": "Şarj adaptörü",
+    "ASKI_IPI": "Askı ipi",
     "ANTEN": "Anten",
-    "KEMER_KLIPSI": "Kemer klipsi",
-    "KILIF": "Kılıf",
+    "KAPAK": "Kapak",
+    "KEMER_KLIPSI": "Klips",
+    "SIM": "SIM kart",
+    "KUTU": "Kutu",
+    "SPEAKER_MIKROFON": "Speaker mikrofon",
     "KULAKLIK": "Kulaklık",
+    "KILIF": "Kılıf",
     "HARICI_MIKROFON": "Harici mikrofon",
     "KABLO": "Kablo",
     "DIGER": "Diğer",
@@ -1660,6 +1667,8 @@ async def seri_gecmisi(
                 "marka": e.brand,
                 "model": e.model,
                 "seri": e.serial_no,
+                # Kabul ekranı garanti tarihlerini kütükten otomatik doldurur.
+                "warranty_start": e.warranty_start,
                 "warranty_end": e.warranty_end,
             }
             for e in ekipmanlar

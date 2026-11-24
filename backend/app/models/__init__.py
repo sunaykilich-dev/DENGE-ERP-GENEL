@@ -66,7 +66,7 @@ from app.models.rbac import (
 )
 from app.models.satis_takip import SatisIsBagi
 from app.models.service import RmaCase
-from app.models.servis_atolye import WorkshopAccessory, WorkshopRecord
+from app.models.servis_atolye import AtolyeModeli, WorkshopAccessory, WorkshopRecord
 from app.models.servis_bakim import (
     MaintenanceContract,
     MaintenanceContractItem,
@@ -286,6 +286,7 @@ __all__ = [
     "TrainingObservationRating",
     "TrainingPlan",
     "TrainingSession",
+    "AtolyeModeli",
     "WorkshopAccessory",
     "WorkshopRecord",
     # --- Teknik servis (Dalga 3, D3-S) ---

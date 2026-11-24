@@ -103,6 +103,10 @@ class User(Base, PkMixin, TimestampMixin, VersionedMixin):
     )
     sicil_no: Mapped[str | None] = mapped_column(String(30))
     unvan: Mapped[str | None] = mapped_column(String(80))
+    # 2026-11-24 sahip kararı: yeni servis kaydında hazır gelen iş türü
+    # (ör. operasyon uzmanı için ARIZA). Formda değiştirilebilir; birimin o
+    # türü yoksa yok sayılır. Varsayılan birim = birincil birim.
+    varsayilan_is_turu: Mapped[str | None] = mapped_column(String(20))
     saha_rolu: Mapped[str | None] = mapped_column(String(12))
     ise_giris_tarihi: Mapped[date | None] = mapped_column(Date)
     ayrilis_tarihi: Mapped[date | None] = mapped_column(Date)

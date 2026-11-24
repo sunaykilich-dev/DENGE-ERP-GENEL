@@ -223,7 +223,9 @@ function KorumaliUygulama() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ConfigProvider locale={trTR} theme={theme}>
+    {/* 2026-11-24 sahip belgesi: pencere dışına tıklamak formu kapatıp girilenleri
+        siliyordu. Pencereler yalnız Vazgeç / X / Esc ile kapanır. */}
+    <ConfigProvider locale={trTR} theme={theme} modal={{ mask: { closable: false } }}>
       <AntApp>
         <QueryClientProvider client={qc}>
           <BrowserRouter>

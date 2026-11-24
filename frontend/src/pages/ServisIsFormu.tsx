@@ -164,6 +164,8 @@ const KUTUK_TIP_ADI: Record<string, string> = {
   ROLE_TEKRARLAYICI: "Röle",
   TELSIZ: "Telsiz",
   TELSIZ_DIGER: "Telsiz (diğer)",
+  ARAC_TELSIZI: "Araç telsizi",
+  AKSESUAR: "Aksesuar",
 };
 
 export default function ServisIsFormu({
@@ -294,11 +296,13 @@ export default function ServisIsFormu({
       birimler.find((b) => b.kod === onerilenBirim)?.kod ??
       birimler.find((b) => b.kod === kullanici?.birincil_birim)?.kod ??
       (birimler.length === 1 ? birimler[0].kod : undefined);
+    // Liste süzgecinden gelen tür önce; yoksa kullanıcının varsayılan iş türü
+    // (2026-11-24, Kullanıcılar ekranından; birimde yoksa yok sayılır).
+    const turVarMi = (kod?: string | null) =>
+      kod && kod !== "PB" ? formVerileri?.turler.find((t) => t.kod === kod)?.kod : undefined;
     const varsayilanTur = yalnizKurulum
       ? KURULUM
-      : onerilenTur && onerilenTur !== "PB"
-        ? formVerileri?.turler.find((t) => t.kod === onerilenTur)?.kod
-        : undefined;
+      : (turVarMi(onerilenTur) ?? turVarMi(kullanici?.varsayilan_is_turu));
     return {
       birim: varsayilanBirim,
       ...(varsayilanTur ? { tur: varsayilanTur } : {}),

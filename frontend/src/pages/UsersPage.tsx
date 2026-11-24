@@ -25,6 +25,19 @@ import { Link } from "react-router-dom";
 
 import { api, ApiError, type Kullanici, type Rol } from "../api/client";
 import { personelApi } from "../api/personel";
+
+/** Yeni servis kaydında hazır gelecek iş türü (2026-11-24; PB ve atölye ayrı akış). */
+const VARSAYILAN_IS_TURLERI = [
+  { value: "ARIZA", label: "Arıza" },
+  { value: "PLANSIZ_BAKIM", label: "Bakım" },
+  { value: "DESTEK", label: "Destek" },
+  { value: "KURULUM", label: "Kurulum" },
+  { value: "TOPLAMA", label: "Toplama" },
+  { value: "KESIF", label: "Keşif" },
+  { value: "DEMONTAJ", label: "Demontaj" },
+  { value: "TASIMA", label: "Taşıma" },
+  { value: "TESLIMAT", label: "Teslimat" },
+];
 import { kapsamEtiketi, kapsamKataloguSorgusu, useAuth } from "../auth/AuthContext";
 import IzinIstisnalari from "../components/IzinIstisnalari";
 import RolDuzenle from "../components/RolDuzenle";
@@ -346,6 +359,7 @@ export default function UsersPage() {
         sirketler: duzenlenen.sirketler ?? [],
         birimler: duzenlenen.birimler ?? [],
         birincil_birim: duzenlenen.birincil_birim ?? undefined,
+        varsayilan_is_turu: duzenlenen.varsayilan_is_turu ?? undefined,
         giris_acik: duzenlenen.giris_acik ?? true,
         password: undefined,
         parola_sifirla: false,
@@ -760,6 +774,8 @@ export default function UsersPage() {
               giris_acik: v.giris_acik,
               reset_mfa: v.reset_mfa || undefined,
             };
+            if ((v.varsayilan_is_turu ?? null) !== (duzenlenen.varsayilan_is_turu ?? null))
+              gonderilecek.varsayilan_is_turu = v.varsayilan_is_turu ?? "";
             const yeniSirketler: string[] = v.sirketler ?? [];
             const eskiSirketler = duzenlenen.sirketler ?? [];
             if (
@@ -813,6 +829,13 @@ export default function UsersPage() {
               </Form.Item>
             </>
           )}
+          <Form.Item
+            name="varsayilan_is_turu"
+            label="Varsayılan iş türü"
+            extra="Yeni servis kaydında birincil birimle birlikte hazır gelir; formda değiştirilebilir."
+          >
+            <Select allowClear placeholder="Yok" options={VARSAYILAN_IS_TURLERI} />
+          </Form.Item>
           <Form.Item
             name="giris_acik"
             label="Oturum açabilir"

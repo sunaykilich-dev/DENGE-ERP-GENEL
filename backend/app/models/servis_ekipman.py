@@ -65,6 +65,9 @@ EKIPMAN_TIPLERI = (
     "ROLE_TEKRARLAYICI",
     "TELSIZ_DIGER",
     "DIGER",
+    # 2026-11-24 sahip kararı: haberleşme kabulünde araç telsizi ve aksesuar.
+    "ARAC_TELSIZI",
+    "AKSESUAR",
 )
 EKIPMAN_DURUMLARI = ("KURULU", "KURULUM_BEKLIYOR", "DEVRE_DISI", "HURDA", "BILINMIYOR")
 GARANTI_KAYNAKLARI = ("BELGE", "HESAPLANDI", "BILINMIYOR")

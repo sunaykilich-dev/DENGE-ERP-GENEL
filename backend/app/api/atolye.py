@@ -27,6 +27,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import (
     ClockDep,
@@ -39,6 +40,7 @@ from app.api.deps import (
 )
 from app.models import (
     Account,
+    Contact,
     ServiceEquipment,
     ServiceFaultReason,
     ServiceHoldReason,
@@ -58,13 +60,16 @@ from app.models.servis_atolye import (
     ATOLYE_SERVIS_TURLERI,
     ATOLYE_TESLIM_TIPLERI,
     ATOLYE_TEST_SONUCLARI,
+    AtolyeModeli,
 )
 from app.models.servis_ekipman import EKIPMAN_TIPLERI
 from app.models.teknik_servis import ONCELIKLER, SERI_ELLE_GEREKCELERI, SERI_OKUMA_KAYNAKLARI
 from app.services import audit
 from app.services import export as export_svc
+from app.services.normalize import normalize_msisdn
 from app.services.pdf import PdfUretilemedi
 from app.services.teknik_servis import (
+    ana_veri,
     atama,
     atolye,
     atolye_rapor,
@@ -81,6 +86,7 @@ from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 router = APIRouter(prefix="/api/teknik-servis/atolye", tags=["atolye"])
 
 Okuyucu = Annotated[User, Depends(require_permission("atolye.gor"))]
+ModelEkleyici = Annotated[User, Depends(require_permission("atolye.model_ekle"))]
 Yazici = Annotated[User, Depends(require_permission("atolye.yaz"))]
 # Kabul (tekli/toplu): atölye ustası (`atolye.yaz`) ya da yalnız kabul yetkili
 # operasyon (`atolye.kabul`, rol testi B4). Teşhis/onarım/teslim Yazici'da kalır.
@@ -90,7 +96,7 @@ Aktarici = Annotated[User, Depends(require_permission("atolye.gor", "servis_rapo
 
 EXCEL_UST_SINIR = 20_000
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-TELSIZ_TIPLERI = ("TELSIZ", "ROLE_TEKRARLAYICI", "TELSIZ_DIGER")
+TELSIZ_TIPLERI = ("TELSIZ", "ARAC_TELSIZI", "ROLE_TEKRARLAYICI", "AKSESUAR", "TELSIZ_DIGER")
 # Rol testi tur 2 (B12): atölye kabulünde birime göre tip ve marka listesi.
 TELSIZ_BIRIMLERI = frozenset({"HABERLESME", "POC"})
 BIRIM_EKIPMAN_TIPLERI: dict[str, tuple[str, ...]] = {
@@ -780,6 +786,146 @@ async def seri_gecmisi(
         )
     except _HATALAR as exc:
         raise _hata(exc) from exc
+
+
+class ModelIn(BaseModel):
+    marka: str = Field(min_length=1, max_length=60)
+    model: str = Field(min_length=1, max_length=80)
+
+
+def _model_ciktisi(m: AtolyeModeli) -> dict[str, Any]:
+    return {"id": m.id, "marka": m.marka, "model": m.model}
+
+
+@router.get("/modeller", response_model=None)
+async def modeller(
+    db: DbDep, user: Okuyucu, marka: str = Query(min_length=1, max_length=60)
+) -> list[dict[str, Any]]:
+    """Kabul ekranının model listesi: markanın kayıtlı modelleri (2026-11-24)."""
+    del user
+    satirlar = (
+        await db.scalars(
+            select(AtolyeModeli)
+            .where(func.lower(AtolyeModeli.marka) == marka.strip().lower())
+            .order_by(func.lower(AtolyeModeli.model))
+            .limit(1000)
+        )
+    ).all()
+    return [_model_ciktisi(m) for m in satirlar]
+
+
+@router.post("/modeller", response_model=None, status_code=status.HTTP_201_CREATED)
+async def model_ekle(
+    payload: ModelIn, request: Request, db: DbDep, user: ModelEkleyici
+) -> dict[str, Any]:
+    """Listede olmayan modeli ekler; aynı ad (büyük/küçük harf farkıyla) varsa
+    var olanı döner — iki kullanıcı aynı anda eklese de tek satır kalır."""
+    marka, model = payload.marka.strip(), " ".join(payload.model.split())
+    if not marka or not model:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Marka ve model boş olamaz")
+
+    async def _var_olan() -> AtolyeModeli | None:
+        return await db.scalar(
+            select(AtolyeModeli).where(
+                func.lower(AtolyeModeli.marka) == marka.lower(),
+                func.lower(AtolyeModeli.model) == model.lower(),
+            )
+        )
+
+    if (mevcut := await _var_olan()) is not None:
+        return _model_ciktisi(mevcut)
+    yeni = AtolyeModeli(marka=marka, model=model, created_by=user.id, updated_by=user.id)
+    try:
+        async with db.begin_nested():
+            db.add(yeni)
+            await db.flush()
+    except IntegrityError:
+        if (mevcut := await _var_olan()) is not None:
+            return _model_ciktisi(mevcut)
+        raise
+    await audit.log(
+        db,
+        "atolye_modelleri",
+        "olustur",
+        entity_id=yeni.id,
+        new_value={"marka": marka, "model": model},
+        user_id=user.id,
+        ip=client_ip(request),
+    )
+    await db.commit()
+    return _model_ciktisi(yeni)
+
+
+class IrtibatIn(BaseModel):
+    musteri_id: int
+    ad: str = Field(min_length=2, max_length=120)
+    unvan: str | None = Field(default=None, max_length=80)
+    telefon: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=160)
+
+
+def _irtibat_ciktisi(k: Contact) -> dict[str, Any]:
+    return {"id": k.id, "ad": k.full_name, "unvan": k.title, "telefon": k.phone}
+
+
+async def _musteri(db: DbDep, musteri_id: int) -> Account:
+    try:
+        hesap, _, _ = await ana_veri.lokasyon_dogrula(db, musteri_id)
+    except ana_veri.AnaVeriHatasi as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return hesap
+
+
+@router.get("/irtibatlar", response_model=None)
+async def irtibatlar(db: DbDep, user: Kabulcu, musteri_id: int) -> list[dict[str, Any]]:
+    """Kabul ekranı: müşterinin TÜM irtibatları (lokasyon irtibatları dahil;
+    2026-11-24 — firma seçilince ilgili kişiler listelenir). Önce birincil."""
+    del user
+    await _musteri(db, musteri_id)
+    kisiler = (
+        await db.scalars(
+            select(Contact)
+            .where(Contact.account_id == musteri_id)
+            .order_by(Contact.is_primary.desc(), Contact.full_name)
+            .limit(500)
+        )
+    ).all()
+    return [_irtibat_ciktisi(k) for k in kisiler]
+
+
+@router.post("/irtibatlar", response_model=None, status_code=status.HTTP_201_CREATED)
+async def irtibat_ekle(
+    payload: IrtibatIn, request: Request, db: DbDep, user: Kabulcu
+) -> dict[str, Any]:
+    """Kabul ekranından müşteriye yeni irtibat (hesap düzenleme yetkisi gerekmez)."""
+    await _musteri(db, payload.musteri_id)
+    telefon = (payload.telefon or "").strip() or None
+    if telefon:
+        try:
+            telefon = normalize_msisdn(telefon)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    kisi = Contact(
+        account_id=payload.musteri_id,
+        full_name=" ".join(payload.ad.split()),
+        title=(payload.unvan or "").strip() or None,
+        phone=telefon,
+        email=(payload.email or "").strip() or None,
+    )
+    db.add(kisi)
+    await db.flush()
+    await audit.log(
+        db,
+        "contacts",
+        "olustur.atolye_kabul",
+        entity_id=kisi.id,
+        new_value={"account_id": payload.musteri_id, "ad": kisi.full_name},
+        user_id=user.id,
+        ip=client_ip(request),
+        is_personal_data=True,
+    )
+    await db.commit()
+    return _irtibat_ciktisi(kisi)
 
 
 @router.get("/form-verileri", response_model=None)

@@ -44,6 +44,8 @@ class UserOut(BaseModel):
     parola_degismeli: bool = False
     birimler: list[str] = []
     birincil_birim: str | None = None
+    # Yeni servis kaydında hazır gelen iş türü (2026-11-24; formda değişir).
+    varsayilan_is_turu: str | None = None
     # Şirket ayrımı (KARARLAR 2026-11-04 §1) — ön yüzle sözleşme: etkin şirket
     # kodu (oturumdan) ve seçilebilir şirket kodları. Oturum dışı (kullanıcı
     # listesi) yanıtta `aktif_sirket` boş, `sirketler` ham üyeliktir.
@@ -74,6 +76,7 @@ class UserOut(BaseModel):
             parola_degismeli=user.parola_degismeli,
             birimler=user.birim_kodlari,
             birincil_birim=user.birincil_birim,
+            varsayilan_is_turu=user.varsayilan_is_turu,
             aktif_sirket=sirket_svc.aktif_sirket(user),
             sirketler=list(secilebilir) if secilebilir is not None else user.sirket_kodlari,
             gorunur_birimler=ts_kapsam.gorunur_birimler(user)
@@ -163,5 +166,7 @@ class UserPatch(BaseModel):
     # Şirket üyeliğini TAMAMEN değiştirir (None = dokunma). Açık oturumların
     # etkin şirketi bir sonraki istekte üyeliğe göre doğrulanır.
     sirketler: list[str] | None = Field(default=None, max_length=10)
+    # Yeni servis kaydında hazır gelen iş türü; "" temizler (None = dokunma).
+    varsayilan_is_turu: str | None = Field(default=None, max_length=20)
     # İyimser kilitleme: istemci gördüğü sürümü geri gönderir.
     version: int | None = None
