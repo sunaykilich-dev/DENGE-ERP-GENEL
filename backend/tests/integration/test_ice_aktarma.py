@@ -871,3 +871,82 @@ class TestYetki:
             client, "cihaz", xlsx([["Ürün Kodu", "IMEI"], ["L300", "860000000000001"]])
         )
         assert r.status_code == 201, r.text
+
+
+class TestKullaniciProfili:
+    """Organizasyon listesinden toplu kullanıcı (2026-11-24)."""
+
+    BASLIK = ["Ad Soyad", "Rol", "Birimler", "Şirketler", "Ünvan", "Saha Rolü", "Giriş"]
+
+    async def test_kullanicilar_rol_sirket_ve_giris_ile_acilir(self, client, kullanici_ac, db):
+        from app.models import User
+
+        await _giris(client, kullanici_ac)
+        await kullanici_ac("ali.veli", "DEPO")  # var olan kullanıcı adı
+        r = await _yukle(
+            client,
+            "kullanici",
+            xlsx(
+                [
+                    self.BASLIK,
+                    [
+                        "Özgür Çavdar",
+                        "SERVIS_TEKNISYEN",
+                        "GUVENLIK",
+                        "",
+                        "Saha",
+                        "TEKNISYEN",
+                        "Açık",
+                    ],
+                    ["Nurettin Erzurum", "YONETIM", "", "Hepsi", "Genel Müdür", "", "Açık"],
+                    ["Hülya Kaplan", "", "", "Hepsi", "Temizlik", "", "Kapalı"],
+                    ["Ali Veli", "DEPO", "", "", "", "", ""],
+                    ["Ad Min", "ADMIN", "", "", "", "", ""],
+                    ["Şef Yok", "SERVIS_SEF", "", "", "", "", "Açık"],
+                    ["Rolsüz", "", "", "", "", "", "Açık"],
+                ]
+            ),
+        )
+        assert r.status_code == 201, r.text
+        s = r.json()["satirlar"]
+        assert [bool(x["hatalar"]) for x in s] == [False, False, False, True, True, True, True]
+        assert s[0]["veri"]["username"] == "ozgur.cavdar"
+        assert s[0]["veri"]["sirketler"] == "ELEKTRONIK"
+        assert any("ADMIN" in h for h in s[4]["hatalar"])
+        u = await client.post(
+            f"/api/ice-aktarma/partiler/{r.json()['parti']['id']}/uygula", json={}
+        )
+        assert u.json()["sonuc"]["eklendi"] == 3, u.text
+
+        db.expire_all()
+        kisiler = {
+            k.username: k
+            for k in (
+                await db.scalars(
+                    select(User).where(
+                        User.username.in_(["ozgur.cavdar", "nurettin.erzurum", "hulya.kaplan"])
+                    )
+                )
+            ).all()
+        }
+        oz = kisiler["ozgur.cavdar"]
+        assert oz.giris_acik and oz.parola_degismeli and oz.saha_rolu == "TEKNISYEN"
+        assert [b.birim for b in oz.birimler] == ["GUVENLIK"]
+        assert sorted(x.sirket_kod for x in kisiler["nurettin.erzurum"].sirket_uyelikleri) == [
+            "ELEKTRONIK",
+            "MOBILITE",
+            "TELEKOM",
+        ]
+        assert kisiler["hulya.kaplan"].giris_acik is False
+        # Parola dosyada yok: rastgele özet, kimse bilmez → giriş yapılamaz.
+        r = await client.post(
+            "/api/auth/login", json={"username": "ozgur.cavdar", "password": "parola1234"}
+        )
+        assert r.status_code == 401
+
+    async def test_izin_sistem_kullanici(self, client, kullanici_ac):
+        await _giris(client, kullanici_ac, username="depocu", rol="DEPO")
+        r = await _yukle(
+            client, "kullanici", xlsx([self.BASLIK, ["A B", "DEPO", "", "", "", "", ""]])
+        )
+        assert r.status_code == 403
