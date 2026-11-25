@@ -163,3 +163,14 @@ karara bağlandı. Hepsi deneme dalında (erp/deneme); main'e alma kullanıcı k
   - `sicil_onek` (boş)
 - Arka plan görevi: `izin-yukseltme`, 15 dakikada bir (`python -m app.worker`).
 - Uyarı merkezi: onayımı bekleyen izin ve yönlendirme bekleyen talepler sayılır.
+
+## Ekler — 2026-11-25 (kullanıcı isteği)
+
+| Konu | Karar | Gerekçe |
+|---|---|---|
+| Plaka | Şirket aracında plaka listeden seçilir **ya da elle yazılır** (`service_orders.arac_plaka`, fci000000001). Havuzdaki bir plakayla (boşluk/büyük-küçük harf farkı gözetmeden) eşleşen metin o araca bağlanır. | Araç havuzu henüz eksiksiz değil; plaka yüzünden iş durmasın. |
+| Araç km | Şimdilik **zorunlu değil**: `servis_saha_km_zorunlu` ayarı (varsayılan kapalı). Girilirse son km başlangıçtan küçük olamaz. Ulaşım türü ve şirket aracında plaka zorunluluğu sürer. | Kullanıcı: "km şimdilik zorunlu istemesin, ileride düzenleyeceğiz" — ayarı açmak yeter. |
+| Güvenlik personeli | `app.seeds.personel_ice_aktar` komutu: CSV'den kişi açar (`ad.soyad` kullanıcı adı, birincil birim, yönetici bağı), geçici parolaları yalnız çıktı dosyasına yazar; `--parola-yenile` var olanlara yeni geçici parola verir. Kişi listesi ve parolalar `.yerel_gizli/` altında, depoda değil. Takım lideri `SERVIS_SEF` (saha rolü ŞEF), diğerleri `SERVIS_TEKNISYEN`; teknisyenlerin yöneticisi takım lideri (izin zinciri). | KVKK: kişi adı/parola koda girmez. Komut canlıda da aynen çalışır. |
+| Sicil | İçe aktarmada sicil verilmez. | Sicil işe giriş tarihine göre sıralanır (§8); tarih bilinmeden numara vermek sırayı bozar. Tarihler girilince "Sicil numarala". |
+| Onay bölümü | İş Emri Onayı'na yalnız **TAMAMLANDI** işler düşer (kalite/son onay bekleyen). Kapatılmış iş — kalite onayı verilmeden kapanmış olsa bile — onay bölümünde görünmez. Toplu seçim/onay (2026-11-17) aynen. | Eskiden "kalite onayı bekleyen" koşulu kapanmış işleri de onaya düşürüyordu. |
+| Kapanan İşler | Servis İşleri › Tüm Servis İşleri'nin altında **Kapanan İşler** (`/kapanan-isler`, `kpi=kapanan_isler`), birim sekmeli, PB hariç, `servis.gor`. | Kullanıcı: kapanan işler onaydan ayrı, servis işlerinin altında ayrı bölüm. |
