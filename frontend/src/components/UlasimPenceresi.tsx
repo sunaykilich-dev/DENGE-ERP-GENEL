@@ -3,12 +3,12 @@
  *
  * GÜVENLİK / HABERLEŞME saha işinde:
  * - İşleme alırken ulaşım türü seçilir; şirket aracında plaka listeden seçilir
- *   (elle yazılmaz) ve başlangıç km girilir. Plan aracı ve aracın son km'si önerilir.
- * - Tamamlarken şirket aracında son km girilir.
+ *   ya da elle yazılır (KARARLAR 2026-11-25). Plan aracı ve son km önerilir.
+ * - Km alanları yalnız `km_zorunlu` açıkken zorunludur (varsayılan kapalı).
  * Kural sunucudadır; bu pencere yalnız gereken bilgiyi toplar.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Form, InputNumber, Modal, Segmented, Select } from "antd";
+import { Alert, AutoComplete, Form, InputNumber, Modal, Segmented } from "antd";
 import { useEffect, useState } from "react";
 
 import { planlamaApi } from "../api/servisPlanlama";
@@ -18,7 +18,7 @@ type Mod = "baslangic" | "bitis";
 
 interface Bicim {
   ulasim_turu: string;
-  servis_arac_id?: number | null;
+  plaka?: string | null;
   baslangic_km?: number | null;
   bitis_km?: number | null;
 }
@@ -29,7 +29,9 @@ export async function ulasimGerekiyor(isId: number, mod: Mod): Promise<UlasimBil
   if (!u.zorunlu) return null;
   if (!u.ulasim_turu) return u;
   if (u.ulasim_turu !== "SIRKET_ARACI") return null;
-  if (u.servis_arac_id == null || u.baslangic_km == null) return u;
+  if (u.servis_arac_id == null && !u.plaka) return u;
+  if (!u.km_zorunlu) return null;
+  if (u.baslangic_km == null) return u;
   if (mod === "bitis" && u.bitis_km == null) return u;
   return null;
 }
@@ -65,7 +67,7 @@ export default function UlasimPenceresi({
     setHata(null);
     form.setFieldsValue({
       ulasim_turu: bilgi.ulasim_turu ?? "SIRKET_ARACI",
-      servis_arac_id: bilgi.servis_arac_id ?? bilgi.oneri_arac_id,
+      plaka: bilgi.plaka ?? bilgi.oneri_plaka,
       baslangic_km: bilgi.baslangic_km ?? bilgi.oneri_baslangic_km,
       bitis_km: bilgi.bitis_km,
     });
@@ -78,7 +80,7 @@ export default function UlasimPenceresi({
     try {
       await teknikServisApi.ulasimYaz(isId, {
         ulasim_turu: v.ulasim_turu,
-        servis_arac_id: v.ulasim_turu === "SIRKET_ARACI" ? (v.servis_arac_id ?? null) : null,
+        plaka: v.ulasim_turu === "SIRKET_ARACI" ? (v.plaka?.trim() ?? null) : null,
         baslangic_km: v.ulasim_turu === "SIRKET_ARACI" ? (v.baslangic_km ?? null) : null,
         bitis_km: v.ulasim_turu === "SIRKET_ARACI" && mod === "bitis" ? (v.bitis_km ?? null) : null,
       });
@@ -91,10 +93,11 @@ export default function UlasimPenceresi({
   };
 
   const arac = tur === "SIRKET_ARACI";
-  // Birimin araçları önce, ortak havuz sonra.
+  const kmZorunlu = bilgi?.km_zorunlu ?? false;
+  // Birimin araçları ve ortak havuz; listede olmayan plaka elle yazılır.
   const secenekler = (araclar.data ?? [])
     .filter((a) => !birim || !a.birim || a.birim === birim)
-    .map((a) => ({ value: a.id, label: a.plaka }));
+    .map((a) => ({ value: a.plaka, label: a.plaka }));
 
   return (
     <Modal
@@ -114,21 +117,28 @@ export default function UlasimPenceresi({
         {arac && (
           <>
             <Form.Item
-              name="servis_arac_id"
+              name="plaka"
               label="Plaka"
-              rules={[{ required: true, message: "Plaka seçin" }]}
+              extra="Listeden seçin ya da plakayı yazın"
+              rules={[{ required: true, whitespace: true, message: "Plakayı seçin ya da yazın" }]}
             >
-              <Select
-                showSearch={{ optionFilterProp: "label" }}
-                placeholder="Araç seçin"
-                loading={araclar.isLoading}
+              <AutoComplete
+                placeholder="Örn. 34 ABC 123"
                 options={secenekler}
+                maxLength={20}
+                showSearch={{
+                  filterOption: (girdi, secenek) =>
+                    String(secenek?.value ?? "")
+                      .replace(/\s/g, "")
+                      .toUpperCase()
+                      .includes(girdi.replace(/\s/g, "").toUpperCase()),
+                }}
               />
             </Form.Item>
             <Form.Item
               name="baslangic_km"
               label="Başlangıç km"
-              rules={[{ required: true, message: "Araç km'sini girin" }]}
+              rules={[{ required: kmZorunlu, message: "Araç km'sini girin" }]}
             >
               <InputNumber min={0} max={9999999} style={{ width: "100%" }} inputMode="numeric" />
             </Form.Item>
@@ -138,7 +148,7 @@ export default function UlasimPenceresi({
                 label="Son km"
                 dependencies={["baslangic_km"]}
                 rules={[
-                  { required: true, message: "Son km'yi girin" },
+                  { required: kmZorunlu, message: "Son km'yi girin" },
                   ({ getFieldValue }) => ({
                     validator: (_, deger?: number | null) =>
                       deger == null || deger >= (getFieldValue("baslangic_km") ?? 0)

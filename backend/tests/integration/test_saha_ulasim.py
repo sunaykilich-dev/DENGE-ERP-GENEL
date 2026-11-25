@@ -7,6 +7,8 @@
   son km'si olur.
 - Toplu ulaşımda (uçak/metro) km istenmez; atölye işi ve diğer birimler kapsam dışı.
 - Uzaktan çözümde yol yok: km istenmez.
+- KARARLAR 2026-11-25: plaka elle yazılabilir (havuzdakiyle eşleşirse araca
+  bağlanır); km varsayılan olarak zorunlu değil (`servis_saha_km_zorunlu`).
 """
 
 from __future__ import annotations
@@ -35,7 +37,13 @@ async def _arac(db, plaka: str = "34 ABC 123", son_km: int | None = 1000) -> Ser
     return a
 
 
-async def test_sirket_araci_km_zorunlu(client, db, kullanici_ac, servis_isi_ac) -> None:
+async def test_sirket_araci_km_zorunlu(
+    client, db, kullanici_ac, servis_isi_ac, monkeypatch
+) -> None:
+    from app.services import settings as ayarlar
+
+    # Km kuralı ayarla açılır (2026-11-25'ten beri varsayılan kapalı).
+    monkeypatch.setitem(ayarlar.DEFAULTS, "servis_saha_km_zorunlu", True)
     await kullanici_ac("ulasim_m", "SERVIS_YONETICI")
     arac = await _arac(db)
     so = await servis_isi_ac(birim="GUVENLIK", durum="SAHADA")
@@ -122,3 +130,36 @@ async def test_kapsam_disi_birim_ve_uzaktan_cozum(client, db, kullanici_ac, serv
     # Uzaktan çözüm: ulaşım girilmeden tamamlanır.
     r = await client.post(f"{ONEK}/{guv.id}/sonuc", json={**SONUC, "cozum_kanali": "UZAKTAN"})
     assert r.status_code == 200, r.text
+
+
+async def test_elle_plaka_km_istemeden(client, db, kullanici_ac, servis_isi_ac) -> None:
+    await kullanici_ac("ulasim_e", "SERVIS_YONETICI")
+    arac = await _arac(db, plaka="06 HVZ 77")
+    so = await servis_isi_ac(birim="GUVENLIK", durum="SAHADA")
+    await giris(client, "ulasim_e")
+
+    r = await client.get(f"{ONEK}/{so.id}/ulasim")
+    assert r.json()["km_zorunlu"] is False
+    # Havuzda olmayan plaka metin olarak kalır; km girmeden işleme alınır.
+    r = await client.put(
+        f"{ONEK}/{so.id}/ulasim", json={"ulasim_turu": "SIRKET_ARACI", "plaka": " 34  yeni 01 "}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["plaka"] == "34 YENI 01" and r.json()["servis_arac_id"] is None
+    r = await client.post(f"{ONEK}/{so.id}/durum", json={"hedef": "ISLEMDE"})
+    assert r.status_code == 200, r.text
+    # Son km olmadan yerinde tamamlanır.
+    r = await client.post(f"{ONEK}/{so.id}/sonuc", json=SONUC)
+    assert r.status_code == 200, r.text
+
+    # Havuzdaki plakayla eşleşen metin o araca bağlanır (boşluk/büyük-küçük farkı yok).
+    so2 = await servis_isi_ac(birim="GUVENLIK", durum="SAHADA")
+    r = await client.put(
+        f"{ONEK}/{so2.id}/ulasim", json={"ulasim_turu": "SIRKET_ARACI", "plaka": "06hvz77"}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["servis_arac_id"] == arac.id and r.json()["plaka"] == "06 HVZ 77"
+    # Plakasız şirket aracı yine olmaz.
+    so3 = await servis_isi_ac(birim="GUVENLIK", durum="SAHADA")
+    r = await client.put(f"{ONEK}/{so3.id}/ulasim", json={"ulasim_turu": "SIRKET_ARACI"})
+    assert r.status_code == 400, r.text

@@ -110,6 +110,8 @@ DEFAULTS: dict[str, Any] = {
     "servis_kapanis_onay_zinciri": False,
     # KARARLAR 2026-11-20 §1: GÜVENLİK/HABERLEŞME saha işinde ulaşım + araç km.
     "servis_saha_ulasim_zorunlu": True,
+    # KARARLAR 2026-11-25: araç km şimdilik zorunlu değil (ileride açılacak).
+    "servis_saha_km_zorunlu": False,
     # KARARLAR 2026-11-20 §4: telsiz atölyesinde kargo/teslim öncesi seri okutma.
     "atolye_teslim_seri_okutma": True,
     # KARARLAR 2026-11-20 §7–8: izin onayı ve sicil.
@@ -220,6 +222,7 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "servis_onay_zorunlu_turler": ("liste", frozenset(SERVIS_TURLERI), None),
     "servis_kapanis_onay_zinciri": ("bool", None, None),
     "servis_saha_ulasim_zorunlu": ("bool", None, None),
+    "servis_saha_km_zorunlu": ("bool", None, None),
     "atolye_teslim_seri_okutma": ("bool", None, None),
     "izin_onay_sure_saat": ("tam", 1, 240),
     "servis_toplu_atama_ust_sinir": ("tam", 1, 1000),

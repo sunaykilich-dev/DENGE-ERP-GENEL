@@ -623,6 +623,9 @@ class ServiceOrder(
     )
     baslangic_km: Mapped[int | None] = mapped_column(Integer)
     bitis_km: Mapped[int | None] = mapped_column(Integer)
+    # Elle yazılan plaka (KARARLAR 2026-11-25; fci000000001). Havuzda varsa
+    # servis_arac_id de dolar; yoksa yalnız metin.
+    arac_plaka: Mapped[str | None] = mapped_column(String(20))
 
     seriler: Mapped[list["ServiceOrderSerial"]] = relationship(
         lazy="selectin",

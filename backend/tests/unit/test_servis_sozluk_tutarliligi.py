@@ -147,7 +147,12 @@ _ONAY_ZINCIRI_EKLERI = {"servis_kapanis_onay_zinciri"}
 # KARARLAR 2026-11-09 S1.1: rol bazlı iskonto limitleri (tek genel eşiğin yerine).
 _SATIS_EKLERI = {"iskonto_rol_limitleri"}
 # KARARLAR 2026-11-20: saha ulaşım/km, atölye teslim seri okutma, izin onay süresi.
-_SAHA_IK_EKLERI = {"servis_saha_ulasim_zorunlu", "atolye_teslim_seri_okutma", "izin_onay_sure_saat"}
+_SAHA_IK_EKLERI = {
+    "servis_saha_ulasim_zorunlu",
+    "servis_saha_km_zorunlu",
+    "atolye_teslim_seri_okutma",
+    "izin_onay_sure_saat",
+}
 
 
 def test_plan_ayar_anahtarlarinin_hepsi_var_ve_sinirli() -> None:

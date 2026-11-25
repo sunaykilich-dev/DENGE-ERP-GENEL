@@ -575,8 +575,12 @@ export const ULASIM_TURLERI = [
 
 export interface UlasimBilgisi {
   zorunlu: boolean;
+  /** Araç km zorunlu mu (servis_saha_km_zorunlu; varsayılan kapalı). */
+  km_zorunlu: boolean;
   ulasim_turu: string | null;
   servis_arac_id: number | null;
+  /** Kayıtlı plaka metni (havuzdan seçilmiş ya da elle yazılmış). */
+  plaka: string | null;
   baslangic_km: number | null;
   bitis_km: number | null;
   oneri_arac_id: number | null;
@@ -587,6 +591,8 @@ export interface UlasimBilgisi {
 export interface UlasimGirdisi {
   ulasim_turu: string;
   servis_arac_id?: number | null;
+  /** Elle yazılan plaka; havuzdaki bir araçla eşleşirse o araca bağlanır. */
+  plaka?: string | null;
   baslangic_km?: number | null;
   bitis_km?: number | null;
 }

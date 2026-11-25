@@ -2175,6 +2175,8 @@ async def _durum_ucu(
 class UlasimIn(BaseModel):
     ulasim_turu: Literal["SIRKET_ARACI", "UCAK", "METRO", "OTOBUS"]
     servis_arac_id: int | None = None
+    # Havuzda olmayan araç için elle yazılan plaka (KARARLAR 2026-11-25).
+    plaka: str | None = Field(default=None, max_length=20)
     baslangic_km: int | None = None
     bitis_km: int | None = None
 
@@ -2209,6 +2211,7 @@ async def ulasim_yaz(
             so,
             ulasim_turu=payload.ulasim_turu,
             servis_arac_id=payload.servis_arac_id,
+            plaka=payload.plaka,
             baslangic_km=payload.baslangic_km,
             bitis_km=payload.bitis_km,
             user=user,
