@@ -53,6 +53,7 @@ from app.models import (
     User,
 )
 from app.models.rbac import BIRIM_KODLARI
+from app.models.servis_atolye import AKSESUAR_TURLERI
 from app.models.teknik_servis import (
     CIHAZ_DURUMLARI,
     COZUM_KANALLARI,
@@ -83,6 +84,7 @@ from app.services.teknik_servis import (
     seri_okutma,
     sonuc,
 )
+from app.services.teknik_servis import atolye as atolye_svc
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 
 router = APIRouter(prefix="/api/teknik-servis", tags=["teknik-servis"])
@@ -152,6 +154,12 @@ def _okumalari_serilere_kat(seriler: list[str], okumalar: list[SeriOkumaIn]) -> 
     return [*seriler, *(o.seri_no for o in okumalar if o.seri_no not in seriler)]
 
 
+class CihazAksesuariIn(BaseModel):
+    kind: str = Field(min_length=1, max_length=20)
+    qty: int = Field(default=1, ge=1, le=99)
+    description: str | None = Field(default=None, max_length=120)
+
+
 class CihazBilgisiAlanlari(BaseModel):
     """Cihaz başına bilgi (2026-11-24; `cihaz_notlari`). Not ve müşteri
     şikâyeti yalnız personel görür; durum ve onarım onarım fişine basılır."""
@@ -161,6 +169,8 @@ class CihazBilgisiAlanlari(BaseModel):
     cihaz_durumu: Literal[CIHAZ_DURUMLARI] | None = None  # type: ignore[valid-type]
     cihaz_durumu_aciklama: str | None = Field(default=None, max_length=500)
     onarim_bilgisi: str | None = Field(default=None, max_length=4000)
+    # 2026-11-25: cihazla gelen aksesuarlar (atölye türleri; doğrulama serviste).
+    aksesuarlar: list[CihazAksesuariIn] | None = Field(default=None, max_length=50)
 
 
 class CihazNotuIn(CihazBilgisiAlanlari):
@@ -1052,6 +1062,10 @@ async def form_verileri(db: DbDep, user: SozlukOkuyucu) -> dict[str, Any]:
         "durum_gruplari": {g: sorted(v) for g, v in DURUM_GRUPLARI.items()},
         "oncelikler": list(ONCELIKLER),
         "talep_kanallari": [{"kod": k, "ad": a} for k, a in is_emirleri.KANAL_ADLARI.items()],
+        # Cihaz başına aksesuar kutucukları (atölye kabulüyle aynı liste).
+        "aksesuar_turleri": [
+            {"kod": k, "ad": atolye_svc.AKSESUAR_ADLARI[k]} for k in AKSESUAR_TURLERI
+        ],
         "iliski_turleri": [
             {"kod": k, "ad": is_emirleri.ILISKI_ADLARI[k]} for k in is_emirleri.EKRAN_ILISKI_TURLERI
         ],

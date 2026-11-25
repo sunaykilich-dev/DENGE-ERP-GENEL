@@ -10,7 +10,7 @@
  * (alan adı `["cihaz_bilgileri", anahtar, ...]`). `CihazlarBolumu`: iş
  * detayında cihaz listesi + düzenleme penceresi.
  */
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { App, Button, Card, Col, Form, Input, Modal, Row, Select, Space, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 
@@ -20,6 +20,18 @@ import {
   type CihazBilgisi,
   type IsSerisi,
 } from "../api/teknikServis";
+import { AksesuarSecici, aksesuarTemizle } from "./AksesuarSecici";
+
+type KodAd = { kod: string; ad: string };
+
+/** "Batarya × 1, Şarj yuvası × 2, Bel çantası × 1" (personel ekranı). */
+function aksesuarMetni(liste: CihazBilgisi["aksesuarlar"], turler: KodAd[]): string | null {
+  if (!liste?.length) return null;
+  const ad = new Map(turler.map((t) => [t.kod, t.ad]));
+  return liste
+    .map((a) => `${a.kind === "DIGER" ? a.description : (ad.get(a.kind) ?? a.kind)} × ${a.qty}`)
+    .join(", ");
+}
 
 const YALNIZ_PERSONEL = (
   <Tag color="default" style={{ marginLeft: 6, fontWeight: 400 }}>
@@ -33,7 +45,14 @@ const MUSTERIYE = (
 );
 
 /** Bir cihazın dört alanı; `onek` form içindeki yol (ör. ["cihaz_bilgileri", "SN1"]). */
-export function CihazBilgisiAlanlari({ onek }: { onek: (string | number)[] }) {
+export function CihazBilgisiAlanlari({
+  onek,
+  aksesuarTurleri,
+}: {
+  onek: (string | number)[];
+  /** Verilirse cihazla gelen aksesuar kutucukları da gösterilir (2026-11-25). */
+  aksesuarTurleri?: KodAd[];
+}) {
   return (
     <>
       <Row gutter={12}>
@@ -61,6 +80,11 @@ export function CihazBilgisiAlanlari({ onek }: { onek: (string | number)[] }) {
       <Form.Item name={[...onek, "onarim_bilgisi"]} label={<>Onarım bilgisi{MUSTERIYE}</>}>
         <Input.TextArea rows={2} maxLength={4000} placeholder="Yapılan onarım (sonradan da girilebilir)" />
       </Form.Item>
+      {aksesuarTurleri && aksesuarTurleri.length > 0 && (
+        <Form.Item name={[...onek, "aksesuarlar"]} label={<>Aksesuarlar{MUSTERIYE}</>}>
+          <AksesuarSecici turler={aksesuarTurleri} />
+        </Form.Item>
+      )}
     </>
   );
 }
@@ -90,6 +114,12 @@ export function CihazlarBolumu({
   const { message } = App.useApp();
   const [secili, setSecili] = useState<IsSerisi | null>(null);
   const [form] = Form.useForm<{ c: CihazBilgisi }>();
+  const formVerileri = useQuery({
+    queryKey: ["servis-form-verileri"],
+    queryFn: teknikServisApi.formVerileri,
+    staleTime: 5 * 60_000,
+  });
+  const turler = formVerileri.data?.aksesuar_turleri ?? [];
 
   useEffect(() => {
     if (secili) {
@@ -100,6 +130,7 @@ export function CihazlarBolumu({
           musteri_sikayeti: secili.musteri_sikayeti ?? undefined,
           notlar: secili.notlar ?? undefined,
           onarim_bilgisi: secili.onarim_bilgisi ?? undefined,
+          aksesuarlar: (secili.aksesuarlar ?? []).map((a) => ({ ...a })),
         },
       });
     }
@@ -142,7 +173,12 @@ export function CihazlarBolumu({
             <Satir etiket="Müşteri şikâyeti" deger={s.musteri_sikayeti} />
             <Satir etiket="Notlar" deger={s.notlar} />
             <Satir etiket="Onarım bilgisi" deger={s.onarim_bilgisi} />
-            {!s.cihaz_durumu_aciklama && !s.musteri_sikayeti && !s.notlar && !s.onarim_bilgisi && (
+            <Satir etiket="Aksesuarlar" deger={aksesuarMetni(s.aksesuarlar, turler)} />
+            {!s.cihaz_durumu_aciklama &&
+              !s.musteri_sikayeti &&
+              !s.notlar &&
+              !s.onarim_bilgisi &&
+              !s.aksesuarlar?.length && (
               <Typography.Text type="secondary">Bilgi girilmedi.</Typography.Text>
             )}
           </Card>
@@ -171,10 +207,11 @@ export function CihazlarBolumu({
               musteri_sikayeti: c.musteri_sikayeti ?? null,
               notlar: c.notlar ?? null,
               onarim_bilgisi: c.onarim_bilgisi ?? null,
+              aksesuarlar: aksesuarTemizle(c.aksesuarlar ?? []),
             });
           }}
         >
-          <CihazBilgisiAlanlari onek={["c"]} />
+          <CihazBilgisiAlanlari onek={["c"]} aksesuarTurleri={turler} />
         </Form>
       </Modal>
     </>

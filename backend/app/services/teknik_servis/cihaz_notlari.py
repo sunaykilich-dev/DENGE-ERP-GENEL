@@ -5,7 +5,7 @@ Bir işe birden fazla cihaz (seri) eklenir; her cihazın kendi bilgisi:
 - **Yalnız personel:** `notlar`, `musteri_sikayeti`. Müşteri belgesine
   (onarım fişi, servis formu) ve müşteri bağlantısına BASILMAZ.
 - **Müşteriye giden:** `cihaz_durumu` (sabit liste) + `cihaz_durumu_aciklama`,
-  `onarim_bilgisi` — onarım fişindeki cihaz tablosu.
+  `onarim_bilgisi`, `aksesuarlar` (2026-11-25) — onarım fişindeki cihaz tablosu.
 
 Dört alan açılışta girilir, iş kapanana kadar düzenlenir (kapalı/iptal işte
 değişmez). Her düzenleme olay geçmişine yazılır (metin değil, yalnız hangi
@@ -27,7 +27,15 @@ if TYPE_CHECKING:
     from app.clock import Clock
     from app.models import ServiceOrder, User
 
-ALANLAR = ("notlar", "musteri_sikayeti", "cihaz_durumu", "cihaz_durumu_aciklama", "onarim_bilgisi")
+ALANLAR = (
+    "notlar",
+    "musteri_sikayeti",
+    "cihaz_durumu",
+    "cihaz_durumu_aciklama",
+    "onarim_bilgisi",
+    # 2026-11-25: cihazla gelen aksesuarlar (atölye kabulüyle aynı türler).
+    "aksesuarlar",
+)
 DURUM_ADLARI = {
     "CALISIYOR": "Çalışıyor",
     "ARIZALI": "Arızalı",
@@ -43,13 +51,44 @@ def _temiz(deger: Any) -> Any:
     return deger
 
 
+def _aksesuar_temiz(liste: Any) -> list[dict[str, Any]] | None:
+    """Aksesuar listesini doğrular ve sadeleştirir; boş liste → None."""
+    if not liste:
+        return None
+    from app.models.servis_atolye import AKSESUAR_TURLERI
+
+    temiz: list[dict[str, Any]] = []
+    for a in liste:
+        tur = a.get("kind")
+        if tur not in AKSESUAR_TURLERI:
+            raise ServisGirdiHatasi(f"Bilinmeyen aksesuar türü: {tur}")
+        aciklama = _temiz(a.get("description"))
+        if tur == "DIGER" and not aciklama:
+            raise ServisGirdiHatasi("'Diğer' aksesuarda açıklama zorunlu")
+        temiz.append({"kind": tur, "qty": int(a.get("qty") or 1), "description": aciklama})
+    return temiz
+
+
+def aksesuar_metni(liste: list[dict[str, Any]] | None) -> str | None:
+    """Fiş için: "Batarya × 1, Şarj yuvası × 1, Bel çantası × 1"."""
+    if not liste:
+        return None
+    from app.services.teknik_servis.atolye import AKSESUAR_ADLARI
+
+    parcalar = []
+    for a in liste:
+        ad = a.get("description") if a["kind"] == "DIGER" else AKSESUAR_ADLARI.get(a["kind"])
+        parcalar.append(f"{ad or a['kind']} × {a.get('qty', 1)}")
+    return ", ".join(parcalar)
+
+
 def uygula(satir: ServiceOrderSerial, degerler: dict[str, Any]) -> list[str]:
     """Verilen alanları satıra yazar; değişen alan adlarını döner."""
     degisen: list[str] = []
     for alan in ALANLAR:
         if alan not in degerler:
             continue
-        yeni = _temiz(degerler[alan])
+        yeni = _aksesuar_temiz(degerler[alan]) if alan == "aksesuarlar" else _temiz(degerler[alan])
         if alan == "cihaz_durumu" and yeni is not None and yeni not in CIHAZ_DURUMLARI:
             raise ServisGirdiHatasi(f"Bilinmeyen cihaz durumu: {yeni}")
         if getattr(satir, alan) != yeni:
@@ -111,4 +150,5 @@ def musteri_ciktisi(satir: ServiceOrderSerial) -> dict[str, Any]:
         "cihaz_durumu": DURUM_ADLARI.get(satir.cihaz_durumu or ""),
         "cihaz_durumu_aciklama": satir.cihaz_durumu_aciklama,
         "onarim_bilgisi": satir.onarim_bilgisi,
+        "aksesuarlar": aksesuar_metni(satir.aksesuarlar),
     }

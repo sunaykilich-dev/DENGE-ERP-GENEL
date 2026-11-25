@@ -183,3 +183,59 @@ async def test_coklu_cihaz_ve_cihaz_bilgisi(client, db, birimli_kullanici_ac, lo
         ),
     )
     assert r.status_code == 400
+
+
+async def test_cihaz_basina_aksesuar(client, db, birimli_kullanici_ac, lokasyon_ac) -> None:
+    """2026-11-25: yeni servis kaydında cihaz kartına aksesuar (atölye türleri)."""
+    await birimli_kullanici_ac("op_aks", "SERVIS_OPERASYON", ["GUVENLIK"])
+    lok = await lokasyon_ac()
+    await giris(client, "op_aks")
+    turler = (await client.get(f"{IS}/form-verileri")).json()["aksesuar_turleri"]
+    assert {"kod": "SARJ_UNITESI", "ad": "Şarj yuvası"} in turler
+    r = await client.post(
+        IS,
+        json=_govde(
+            lok.account_id,
+            tur="ARIZA",
+            konu="Aksesuarlı",
+            seriler=["AK-1", "AK-2"],
+            cihaz_bilgileri=[
+                {
+                    "seri_no": "AK-1",
+                    "aksesuarlar": [
+                        {"kind": "BATARYA", "qty": 2},
+                        {"kind": "DIGER", "qty": 1, "description": "Bel çantası"},
+                    ],
+                }
+            ],
+        ),
+    )
+    assert r.status_code == 201, r.text
+    so = r.json()
+    cihazlar = {c["seri_no"]: c for c in so["seriler"]}
+    assert [a["kind"] for a in cihazlar["AK-1"]["aksesuarlar"]] == ["BATARYA", "DIGER"]
+    assert cihazlar["AK-2"]["aksesuarlar"] is None
+
+    # Düzenleme: tür doğrulanır, "Diğer" açıklamasız olmaz, boş liste temizler.
+    url = f"{IS}/{so['id']}/cihazlar/{cihazlar['AK-2']['id']}"
+    r = await client.patch(url, json={"aksesuarlar": [{"kind": "UYDURMA", "qty": 1}]})
+    assert r.status_code in (400, 422)
+    r = await client.patch(url, json={"aksesuarlar": [{"kind": "DIGER", "qty": 1}]})
+    assert r.status_code in (400, 422)
+    r = await client.patch(url, json={"aksesuarlar": [{"kind": "SIM", "qty": 1}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["aksesuarlar"] == [{"kind": "SIM", "qty": 1, "description": None}]
+
+    # Onarım fişine okunur metin olarak basılır.
+    from app.clock import RealClock
+    from app.models import ServiceOrder
+    from app.services.teknik_servis import servis_fisleri
+
+    is_ = await db.get(ServiceOrder, so["id"])
+    b = await servis_fisleri.baglam(db, is_, "onarim", fiyatli=False, clock=RealClock())
+    fis = {c["seri_no"]: c for c in b["s"]["cihazlar"]}
+    assert fis["AK-1"]["aksesuarlar"] == "Batarya × 2, Bel çantası × 1"
+    assert fis["AK-2"]["aksesuarlar"] == "SIM kart × 1"
+
+    r = await client.patch(url, json={"aksesuarlar": []})
+    assert r.status_code == 200 and r.json()["aksesuarlar"] is None

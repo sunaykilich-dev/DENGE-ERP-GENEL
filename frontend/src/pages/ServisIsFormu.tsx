@@ -73,6 +73,7 @@ import MusteriLokasyonSecici, {
   type MusteriLokasyonSecimi,
   type SahaOnerisi,
 } from "../components/MusteriLokasyonSecici";
+import { aksesuarTemizle } from "../components/AksesuarSecici";
 import { CihazBilgisiAlanlari } from "../components/CihazBilgileri";
 import SeriOkutucu, { seriAnahtari } from "../components/SeriOkutucu";
 import { ELLE_GEREKCELERI, type ElleGerekce, type SeriOkumasi } from "../components/barkod/elleGerekce";
@@ -399,8 +400,11 @@ export default function ServisIsFormu({
     return tum.flatMap((seri) => {
       const b = v.cihaz_bilgileri?.[seriAnahtari(seri)];
       if (!b) return [];
+      const aksesuarlar = aksesuarTemizle(b.aksesuarlar ?? []);
       const temiz = Object.fromEntries(
-        Object.entries(b).filter(([, d]) => (typeof d === "string" ? d.trim() !== "" : d != null)),
+        Object.entries({ ...b, aksesuarlar: aksesuarlar.length ? aksesuarlar : null }).filter(([, d]) =>
+          typeof d === "string" ? d.trim() !== "" : d != null,
+        ),
       ) as CihazBilgisi;
       return Object.keys(temiz).length ? [{ seri_no: seri, ...temiz }] : [];
     });
@@ -844,14 +848,17 @@ export default function ServisIsFormu({
       {!duzenleme && (seriler ?? []).filter((x) => x.trim()).length > 0 && (
         <Form.Item
           label="Cihaz bilgileri"
-          extra="Müşteri şikâyeti ve notlar yalnız personele görünür; cihaz durumu ve onarım bilgisi onarım fişine basılır."
+          extra="Müşteri şikâyeti ve notlar yalnız personele görünür; cihaz durumu, onarım bilgisi ve aksesuarlar onarım fişine basılır."
         >
           <Space orientation="vertical" style={{ width: "100%" }} size={8}>
             {(seriler ?? [])
               .filter((x) => x.trim())
               .map((seri, i) => (
                 <Card key={seriAnahtari(seri)} size="small" title={`Cihaz ${i + 1} · ${seri}`}>
-                  <CihazBilgisiAlanlari onek={["cihaz_bilgileri", seriAnahtari(seri)]} />
+                  <CihazBilgisiAlanlari
+                    onek={["cihaz_bilgileri", seriAnahtari(seri)]}
+                    aksesuarTurleri={formVerileri?.aksesuar_turleri}
+                  />
                 </Card>
               ))}
           </Space>

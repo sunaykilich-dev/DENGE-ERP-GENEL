@@ -34,6 +34,8 @@ export interface FormVerileri {
   cozum_kanallari: KodAd[];
   bekleme_nedenleri: (KodAd & { aciklama_zorunlu: boolean })[];
   olay_turleri: KodAd[];
+  /** Cihaz kartındaki aksesuar kutucukları (atölyeyle aynı liste; 2026-11-25). */
+  aksesuar_turleri?: KodAd[];
   /** 2026-11-23: cihazlı işte açılış/kapanış seri okutması (ayar `servis_seri_okutma_zorunlu`). */
   seri_okutma?: { zorunlu: boolean; cihazli_turler: string[]; elle_gerekceleri: KodAd[] };
 }
@@ -55,6 +57,7 @@ export interface IsSerisi {
   cihaz_durumu_adi?: string | null;
   cihaz_durumu_aciklama?: string | null;
   onarim_bilgisi?: string | null;
+  aksesuarlar?: { kind: string; qty: number; description?: string | null }[] | null;
 }
 
 export type CihazDurumu = "CALISIYOR" | "ARIZALI" | "HASARLI" | "PARCA_EKSIK";
@@ -72,6 +75,7 @@ export interface CihazBilgisi {
   cihaz_durumu?: CihazDurumu | null;
   cihaz_durumu_aciklama?: string | null;
   onarim_bilgisi?: string | null;
+  aksesuarlar?: { kind: string; qty: number; description?: string | null }[] | null;
 }
 
 export const DURUM_RENKLERI: Record<string, string> = {

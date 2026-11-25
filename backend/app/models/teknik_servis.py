@@ -24,6 +24,7 @@ alanına doğrudan atama yasaktır.
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -728,6 +729,9 @@ class ServiceOrderSerial(Base, PkMixin, TimestampMixin, ActorMixin):
     cihaz_durumu: Mapped[str | None] = mapped_column(String(20))
     cihaz_durumu_aciklama: Mapped[str | None] = mapped_column(String(500))
     onarim_bilgisi: Mapped[str | None] = mapped_column(Text)
+    # 2026-11-25: cihazla gelen aksesuarlar [{kind, qty, description}] — türler
+    # atölyeyle ortak (`servis_atolye.AKSESUAR_TURLERI`); onarım fişine basılır.
+    aksesuarlar: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
 
 
 class ServiceOrderEvent(Base, PkMixin):
