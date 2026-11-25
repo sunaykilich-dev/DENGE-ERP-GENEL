@@ -173,18 +173,34 @@ def _s_servis_isleri(stmt, user=None, clock=None, donem=None):
 
 
 def _s_onay_bekleyen(stmt, user=None, clock=None, donem=None):
-    """Kapanış onayı (TAMAMLANDI) ya da kalite onayı bekleyen işler; PB hariç
-    (`kapanis_bekleyen` ile aynı taban)."""
+    """Tamamlanmış, kapanış onayı (ekip lideri/kalite ya da müdür son onayı)
+    bekleyen işler; PB hariç (`kapanis_bekleyen` ile aynı taban).
+
+    2026-11-25 (kullanıcı isteği): KAPATILMIŞ iş onay bölümünde görünmez;
+    eskiden kalite onayı verilmeden kapanan işler de "kalite bekleyen" diye
+    buraya düşüyordu. Kapananlar `kapanan_isler` bölümündedir.
+    """
     return stmt.where(
         ServiceOrder.is_deleted.is_(False),
         ServiceOrder.tur != "PB",
-        or_(ServiceOrder.status == "TAMAMLANDI", is_emirleri.kalite_kosulu("BEKLEYEN")),
+        ServiceOrder.status == "TAMAMLANDI",
+    )
+
+
+def _s_kapanan_isler(stmt, user=None, clock=None, donem=None):
+    """Kapatılmış (son onayı verilmiş) işler; PB hariç. Servis İşleri altındaki
+    "Kapanan İşler" bölümü (2026-11-25)."""
+    return stmt.where(
+        ServiceOrder.is_deleted.is_(False),
+        ServiceOrder.tur != "PB",
+        ServiceOrder.status == "KAPATILDI",
     )
 
 
 for _t in (
     panel.KpiTanimi("sla_riskli", "SLA riski olan işler", "Çözüm hedefinin risk eşiği dolmuş ya da hedefi geçmiş açık işler (SLA riskte + aşıldı); PB hariç.", _s_sla_riskli, grup="ANA_PANEL", vurgu="kritik"),  # noqa: E501
     panel.KpiTanimi("onay_bekleyen", "Bekleyen onaylar", "Şef kapanışı (TAMAMLANDI) ya da kalite onayı bekleyen işler; PB hariç.", _s_onay_bekleyen, grup="ANA_PANEL", vurgu="uyari"),  # noqa: E501
+    panel.KpiTanimi("kapanan_isler", "Kapanan işler", "Son onayı verilip kapatılmış işler; PB hariç.", _s_kapanan_isler, grup="ANA_PANEL"),  # noqa: E501
     panel.KpiTanimi("servis_isleri", "Servis işleri", "Silinmemiş servis işleri; PB hariç (Ana Panel dağılımlarının tabanı).", _s_servis_isleri, grup="ANA_PANEL"),  # noqa: E501
 ):  # fmt: skip
     panel.kpi_kaydet(_t)

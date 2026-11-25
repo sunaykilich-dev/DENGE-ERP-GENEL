@@ -2121,7 +2121,8 @@ export function ServisIsListesi({
   // İş Emri Onayı: lider (kalite) ya da müdür (son onay = kapatma) onaylar.
   const onaylayabilir = kaliteYetkili || (onayEkrani && yetkili("servis.kapat"));
   const cokluEtkin = cokluSecim || kaliteListesi || (onayEkrani && onaylayabilir);
-  const onayBekliyor = (r: IsSatiri) => (onayEkrani ? r.status === "TAMAMLANDI" || kaliteBekliyor(r) : kaliteBekliyor(r));
+  // Onay ekranında yalnız TAMAMLANDI iş seçilir (2026-11-25: kapanan iş onayda yok).
+  const onayBekliyor = (r: IsSatiri) => (onayEkrani ? r.status === "TAMAMLANDI" : kaliteBekliyor(r));
   const topluKaliteSatirlari = seciliSatirlar.filter(onayBekliyor);
   const topluKalite = useMutation({
     mutationFn: () =>

@@ -2,8 +2,8 @@
 
 Ekran (`/is-emri-onayi`) yeni uç açmaz; Ana Panel "Bekleyen Onaylar"
 süzgecini (`kpi=onay_bekleyen`) birimle daraltır. Burada sınanan: birim
-sekmesi yalnız o birimin onay bekleyen (TAMAMLANDI ya da kalite onayı
-bekleyen) işlerini getirir; açık iş gelmez (PB hariçliği Ana Panel
+sekmesi yalnız o birimin onay bekleyen (TAMAMLANDI) işlerini getirir; açık
+ve kapanmış iş gelmez (PB hariçliği Ana Panel
 testlerinde). Ön yüz kaydı (menü,
 rota, izinler katalogda) ayrıca denetlenir.
 """
@@ -56,6 +56,36 @@ def test_on_yuz_kaydi_ve_izinler() -> None:
     assert 'sayfa("/is-emri-onayi")' in (ON_YUZ / "fiori" / "menu.ts").read_text(encoding="utf-8")
     rotalar = (ON_YUZ / "main.tsx").read_text(encoding="utf-8")
     assert 'path="/is-emri-onayi"' in rotalar and 'path="/is-emri-onayi/:id"' in rotalar
+
+
+async def test_kapanan_is_onayda_degil_kapanan_islerde(client, kullanici_ac, servis_isi_ac) -> None:
+    """2026-11-25: tamamlanan iş onaya düşer; kapatılmış iş (kalite onayı
+    verilmeden kapanmış olsa bile) onay bölümünde görünmez, Servis İşleri
+    altındaki "Kapanan İşler" bölümündedir."""
+    await kullanici_ac("onayci_k", "SERVIS_YONETICI")
+    tamam = await servis_isi_ac(birim="GUVENLIK", durum="TAMAMLANDI")
+    kapali = await servis_isi_ac(birim="GUVENLIK", durum="KAPATILDI")
+    hab_kapali = await servis_isi_ac(birim="HABERLESME", durum="KAPATILDI")
+    await servis_isi_ac(birim="GUVENLIK", durum="SAHADA")
+    await giris(client, "onayci_k")
+
+    r = await client.get(LISTE, params={"kpi": "onay_bekleyen", "birim": "GUVENLIK"})
+    assert [k["id"] for k in r.json()] == [tamam.id]
+    for birim, beklenen in (("GUVENLIK", kapali.id), ("HABERLESME", hab_kapali.id)):
+        r = await client.get(LISTE, params={"kpi": "kapanan_isler", "birim": birim})
+        assert r.status_code == 200, r.text
+        assert [k["id"] for k in r.json()] == [beklenen], birim
+
+
+def test_kapanan_isler_on_yuz_kaydi() -> None:
+    if not ON_YUZ.is_dir():
+        pytest.skip("frontend/src yok (yalnız backend)")
+    menu = (ON_YUZ / "fiori" / "menu.ts").read_text(encoding="utf-8")
+    # Servis İşleri grubunda, "Tüm Servis İşleri"nin hemen altında.
+    tum, kapanan = menu.index('sayfa("/servis-isleri"'), menu.index('sayfa("/kapanan-isler")')
+    assert tum < kapanan < menu.index('sayfa("/yonlendirmeler")')
+    rotalar = (ON_YUZ / "main.tsx").read_text(encoding="utf-8")
+    assert 'path="/kapanan-isler"' in rotalar and 'path="/kapanan-isler/:id"' in rotalar
 
 
 TOPLU = "/api/teknik-servis/isler/toplu-onay"

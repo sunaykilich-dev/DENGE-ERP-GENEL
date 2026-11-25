@@ -131,6 +131,8 @@ export const MENU_AGACI: MenuOgesi[] = [
     "Servis İşleri",
     [
       sayfa("/servis-isleri", "Tüm Servis İşleri"),
+      // 2026-11-25: kapatılan işler onay bölümünden ayrı, birim sekmeli.
+      sayfa("/kapanan-isler"),
       sayfa("/yonlendirmeler"),
       tur("ARIZA", "Arıza"),
       tur("KURULUM", "Kurulum"),

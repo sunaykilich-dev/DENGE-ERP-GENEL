@@ -12,6 +12,9 @@
  *   geçer ve kullanıcı bu ekranda, o birimin sekmesinde kalır.
  * - Birim seçimi 2026-11-17'den beri ikon şeridi değil, "Kayıt Sayısı"
  *   satırındaki açılır listedir (şerit tüm ekranlardan kaldırıldı).
+ * - 2026-11-25: yalnız TAMAMLANMIŞ işler onaya düşer; kapatılan işler bu
+ *   ekrandan çıkar ve Servis İşleri altındaki "Kapanan İşler" bölümünde
+ *   (`/kapanan-isler`, aynı birim sekmeli bileşen) görünür.
  * - Toplu onay (2026-11-17): çoklu seçim hep açık; "Seçilenleri onayla"
  *   her işe onaylayanın sıradaki adımını verir: ekip lideri/şef kalite
  *   onayı, müdür son onayı (kapatma). Kurallar sunucuda (`/isler/toplu-onay`).
@@ -23,8 +26,6 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSirket } from "../auth/SirketContext";
 import { ServisIsListesi, type KategoriAlani, type ServisKategorisi } from "./ServisIsleriPage";
 
-const YOL = "/is-emri-onayi";
-const KPI = "onay_bekleyen";
 const ALANLAR: readonly KategoriAlani[] = ["kpi", "birim"];
 
 /** Sekme sırası: kullanıcının istediği üç birim önce, diğerleri sonra. */
@@ -37,7 +38,26 @@ const BIRIM_SEKMELERI: { kod: string; ad: string; ikon: React.ReactNode }[] = [
   { kod: "ARAC_TAKIP", ad: "ARAÇ TAKİP", ikon: <ToolOutlined /> },
 ];
 
-export default function IsEmriOnayiPage() {
+/** Birim sekmeli iş listesi: İş Emri Onayı ve Kapanan İşler aynı iskeleti kullanır. */
+export function BirimSekmeliIsler({
+  yol,
+  kpi,
+  ipucu,
+  onayEkrani = false,
+  hatirlaAnahtari,
+  durumSeridi = true,
+}: {
+  yol: string;
+  kpi: string;
+  /** Sekme ipucunun birim adından sonraki kısmı (ör. "onay bekleyen işleri"). */
+  ipucu: string;
+  onayEkrani?: boolean;
+  hatirlaAnahtari: string;
+  /** Durum grubu düğmeleri (YENİ, TAYİN…); kapanan işlerde anlamsız. */
+  durumSeridi?: boolean;
+}) {
+  const YOL = yol;
+  const KPI = kpi;
   const git = useNavigate();
   const { id } = useParams();
   const [arama] = useSearchParams();
@@ -66,10 +86,10 @@ export default function IsEmriOnayiPage() {
         ipucu:
           birimSirketi.get(b.kod) && birimSirketi.get(b.kod) !== aktif?.kod
             ? `${sirketler.find((s) => s.kod === birimSirketi.get(b.kod))?.ad ?? ""} şirketine geçer`
-            : `${b.ad} onay bekleyen işleri`,
+            : `${b.ad} ${ipucu}`,
         suzgec: { kpi: KPI, birim: b.kod },
       })),
-    [destekleniyor, birimSirketi, aktif?.kod, menuBirimleri, sirketler],
+    [destekleniyor, birimSirketi, aktif?.kod, menuBirimleri, sirketler, KPI, ipucu],
   );
 
   // Varsayılan sekme: etkin şirketin ilk birimi.
@@ -93,10 +113,23 @@ export default function IsEmriOnayiPage() {
       varsayilanKategori={varsayilan}
       yeniKayit={false}
       kategoriBasligi="Birim"
-      onayEkrani
-      hatirlaAnahtari="is-emri-onayi"
+      onayEkrani={onayEkrani}
+      durumGruplari={durumSeridi ? undefined : []}
+      hatirlaAnahtari={hatirlaAnahtari}
       detayId={id ? Number(id) : null}
       detayAc={(x) => git(x ? `${YOL}/${x}${yolEki}` : `${YOL}${yolEki}`)}
+    />
+  );
+}
+
+export default function IsEmriOnayiPage() {
+  return (
+    <BirimSekmeliIsler
+      yol="/is-emri-onayi"
+      kpi="onay_bekleyen"
+      ipucu="onay bekleyen işleri"
+      onayEkrani
+      hatirlaAnahtari="is-emri-onayi"
     />
   );
 }

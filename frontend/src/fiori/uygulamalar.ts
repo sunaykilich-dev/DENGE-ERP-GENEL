@@ -18,6 +18,7 @@ import {
   BarChartOutlined,
   BellOutlined,
   BuildOutlined,
+  CheckCircleOutlined,
   CalendarOutlined,
   CarOutlined,
   CheckSquareOutlined,
@@ -167,6 +168,16 @@ export const UYGULAMALAR: Uygulama[] = [
     ikon: SendOutlined,
     yol: "/yonlendirmeler",
     izin: ["servis.yonlendir", "servis.planla"],
+    grup: "servis",
+  },
+  {
+    // 2026-11-25: kapatılan işler onay bölümünden ayrıldı (birim sekmeli).
+    id: "/kapanan-isler",
+    baslik: "Kapanan İşler",
+    altBaslik: "Son onayı verilip kapanan işler, birim birim",
+    ikon: CheckCircleOutlined,
+    yol: "/kapanan-isler",
+    izin: "servis.gor",
     grup: "servis",
   },
   {
