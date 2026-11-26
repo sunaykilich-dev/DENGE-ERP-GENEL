@@ -26,6 +26,7 @@ import { Link } from "react-router-dom";
 import { api, type ApiError } from "../api/client";
 import { DEPO_KAYNAKLARI, DIS_HEDEFLER, irsaliyeApi } from "../api/irsaliye";
 import IrsaliyeListesi from "../components/IrsaliyeListesi";
+import { KameraDugmesi } from "../components/barkod/KameraOkuyucu";
 import Statistic from "../components/Statistic";
 import { useAuth } from "../auth/AuthContext";
 
@@ -190,7 +191,7 @@ export default function StokPage() {
       form.resetFields();
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const teslim = useMutation({
@@ -199,7 +200,7 @@ export default function StokPage() {
       message.success("Teslim kaydedildi, cihazların konumu güncellendi");
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const hareketYaz = useMutation({
@@ -211,7 +212,7 @@ export default function StokPage() {
       void qc.invalidateQueries({ queryKey: ["stok-ozet"] });
       void qc.invalidateQueries({ queryKey: ["stok-hareketler"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const satirlar = useMemo(() => {
@@ -756,7 +757,7 @@ export default function StokPage() {
             name="kimlikler"
             label="IMEI / seri no listesi"
             rules={[{ required: true }]}
-            extra="Barkod okutarak alt alta ekleyin veya Excel'den yapıştırın. Tanınmayan kimlik varsa transfer hiç oluşturulmaz."
+            extra="El okuyucuyla ya da kamera düğmesiyle okutarak alt alta ekleyin veya Excel'den yapıştırın. Tanınmayan kimlik varsa transfer hiç oluşturulmaz."
           >
             <Input.TextArea
               rows={6}
@@ -764,6 +765,17 @@ export default function StokPage() {
               placeholder="861100063834630&#10;861100063834631"
             />
           </Form.Item>
+          <Space style={{ marginTop: -12, marginBottom: 12 }}>
+            <KameraDugmesi
+              onOkundu={(m) => {
+                const eski = String(form.getFieldValue("kimlikler") ?? "").replace(/\s+$/, "");
+                form.setFieldValue("kimlikler", eski ? `${eski}\n${m}` : m);
+              }}
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Kamerayla okut (her okuma yeni satıra eklenir)
+            </Typography.Text>
+          </Space>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             Transfer oluşunca cihazlar <strong>YOLDA</strong> sayılır; teslim kaydı girilince
             konumları tek işlemde güncellenir.

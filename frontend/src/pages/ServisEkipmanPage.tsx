@@ -67,6 +67,7 @@ import {
   tekliGruplar,
 } from "../fiori/ListeOgeleri";
 import ListeRaporu, { KpiKutucugu, type FioriEylem } from "../fiori/ListeRaporu";
+import KutucukPano from "../fiori/KutucukPano";
 
 const SAYFA_BOYU = 50;
 const TOPLU_UST_SINIR = 200;
@@ -124,7 +125,6 @@ export default function ServisEkipmanPage() {
   const [onizleme, setOnizleme] = useState<GarantiSonucu | null>(null);
   const [topluForm] = Form.useForm<{ hedef: string; gerekce: string }>();
   const [aramaMetni, setAramaMetni] = useState(suzgec.q ?? "");
-  const [cokluSecim, setCokluSecim] = useState(false);
   const [suzgecAcik, setSuzgecAcik] = useState(false);
 
   const kartId = id ? Number(id) : null;
@@ -165,7 +165,7 @@ export default function ServisEkipmanPage() {
       setSecili([]);
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const garanti = useMutation({
@@ -181,7 +181,7 @@ export default function ServisEkipmanPage() {
         setOnizleme(r);
       }
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const kartAc = (r: EkipmanSatiri) => git(`/servis-ekipman/${r.id}${yolEki}`);
@@ -306,7 +306,6 @@ export default function ServisEkipmanPage() {
         ...(aktarabilir
           ? [{ key: "excel", label: `Excel'e aktar${secili.length ? ` (${secili.length} seçili)` : ""}` }]
           : []),
-        ...(secimVar ? [{ key: "coklu", label: cokluSecim ? "Tekli seçime dön" : "Çoklu seçim (toplu işlem)" }] : []),
         { key: "kalite", label: kalitePaneli ? "Veri Kalitesi panelini kapat" : "Veri Kalitesi" },
         { key: "temizle", label: "Seçimi temizle", disabled: !secili.length },
         { type: "divider" as const },
@@ -314,10 +313,7 @@ export default function ServisEkipmanPage() {
       ],
       onMenu: (k) => {
         if (k === "excel") window.open(ekipmanApi.excelYolu(suzgec, secili), "_blank");
-        else if (k === "coklu") {
-          setCokluSecim(!cokluSecim);
-          setSecili((x) => (cokluSecim ? x.slice(0, 1) : x));
-        } else if (k === "kalite") suzgecDegistir(suzgec, kalitePaneli ? { sekme: undefined } : { sekme: "kalite" });
+        else if (k === "kalite") suzgecDegistir(suzgec, kalitePaneli ? { sekme: undefined } : { sekme: "kalite" });
         else if (k === "temizle") setSecili([]);
         else if (k === "yenile") void liste.refetch();
       },
@@ -459,7 +455,7 @@ export default function ServisEkipmanPage() {
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       {(ozet.data ?? []).length > 0 && (
-        <div className="fl-kutucuklar">
+        <KutucukPano ekran="servis-ekipman">
           {(ozet.data ?? []).map((k) => (
             <KpiKutucugu
               key={k.kod}
@@ -472,7 +468,7 @@ export default function ServisEkipmanPage() {
               vurgu={suzgec.kpi === k.kod ? "uyari" : "normal"}
             />
           ))}
-        </div>
+        </KutucukPano>
       )}
 
       {kalitePaneli && (
@@ -518,7 +514,7 @@ export default function ServisEkipmanPage() {
         yukleniyor={liste.isFetching}
         bosMetin={liste.isError ? (liste.error as Error).message : "Veri yok"}
         scrollX={ekran.lg ? 1200 : ekran.md ? 1000 : ekran.sm ? 820 : 640}
-        secimModu={secimVar ? (cokluSecim ? "coklu" : "tek") : "yok"}
+        secimModu={secimVar ? "coklu" : "yok"}
         secili={secili}
         onSecim={(k, satirlar) => secimDegisti(k as number[], satirlar)}
         onSatirAc={kartAc}

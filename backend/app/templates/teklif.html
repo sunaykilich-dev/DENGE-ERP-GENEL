@@ -52,7 +52,7 @@
       U+2212, U+2215, U+FEFF, U+FFFD;
   }
   @font-face {
-    font-family: "Archivo";
+    font-family: "ArchivoExt";
     src: url("{{ font_dir }}/archivo-latin-ext-wdth-normal.woff2") format("woff2");
     font-weight: 100 900;
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
@@ -68,7 +68,7 @@
       U+2212, U+2215, U+FEFF, U+FFFD;
   }
   @font-face {
-    font-family: "PlexMono";
+    font-family: "PlexMonoExt";
     src: url("{{ font_dir }}/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2");
     font-weight: 400;
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
@@ -84,7 +84,7 @@
       U+2212, U+2215, U+FEFF, U+FFFD;
   }
   @font-face {
-    font-family: "PlexMono";
+    font-family: "PlexMonoExt";
     src: url("{{ font_dir }}/ibm-plex-mono-latin-ext-500-normal.woff2") format("woff2");
     font-weight: 500;
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
@@ -97,21 +97,22 @@
     margin: 0 0 10mm 0;
     @bottom-right {
       content: "Sayfa " counter(page) "/" counter(pages);
-      font-family: "Archivo", "DejaVu Sans", sans-serif;
+      font-family: "Archivo", "ArchivoExt", "DejaVu Sans", sans-serif;
       font-size: 7.5pt;
       margin-right: 12mm;
     }
   }
   body {
     margin: 0; padding: 11mm 12mm;
-    font-family: "Archivo", "DejaVu Sans", sans-serif;
+    font-family: "Archivo", "ArchivoExt", "DejaVu Sans", sans-serif;
     color: #000; font-size: 8.5pt;
   }
   /* Numara ve kodlar: hizalı okunsun diye tek aralıklı. */
-  .mono { font-family: "PlexMono", "DejaVu Sans Mono", monospace; }
+  .mono { font-family: "PlexMono", "PlexMonoExt", "DejaVu Sans Mono", monospace; }
 
   .s-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .s-logo { width: 44mm; margin-bottom: 3mm; }
+  .s-unvan { font-size: 13pt; font-weight: 700; letter-spacing: .02em; margin-bottom: 3mm; }
   .s-addr { font-size: 8.5pt; line-height: 1.45; }
 
   .s-meta { font-size: 8.5pt; margin-top: 14mm; border-collapse: collapse;
@@ -166,7 +167,12 @@
 
   <div class="s-top">
     <div>
+      {# Marka logosu yalnız DENGE MOBİLİTE'nin; diğer şirketlerde unvan yazıyla basılır. #}
+      {% if firma.logo is not defined or firma.logo %}
       <img class="s-logo" src="{{ brand_dir }}/denge-mobilite.png" alt="{{ firma.unvan }}">
+      {% else %}
+      <div class="s-unvan">{{ firma.unvan }}</div>
+      {% endif %}
       <div class="s-addr">
         {{ firma.adres }}<br>
         Telefon: {{ firma.telefon }}{% if firma.eposta %} &nbsp; {{ firma.eposta }}{% endif %}
@@ -195,8 +201,8 @@
     <div class="s-preparer">
       <span class="h">Hazırlayan:</span><br>
       {{ hazirlayan }}<br>
-      {{ firma.telefon }}<br>
-      {{ firma.eposta }}
+      {{ firma.telefon }}
+      {%- if firma.eposta %}<br>{{ firma.eposta }}{% endif %}
       {%- if onaylayan is defined and onaylayan %}<br><span class="h">Onaylayan:</span> {{ onaylayan }}{% endif %}
     </div>
   </div>

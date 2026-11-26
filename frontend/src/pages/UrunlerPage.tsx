@@ -24,6 +24,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, type ApiError } from "../api/client";
 import EkYukleyici from "../components/EkYukleyici";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 
 interface Urun {
   id: number;
@@ -49,6 +50,8 @@ interface Urun {
   version: number;
   cover_attachment_id: number | null;
   stok_adedi: number | null;
+  /** null = ortak ürün (her şirket görür); doluysa yalnız o şirket. */
+  sirket: string | null;
 }
 
 interface MarkaGrubu {
@@ -84,11 +87,16 @@ const TIP_ADI: Record<string, string> = {
 };
 
 const MARKASIZ = "-";
+// Select boş değer taşıyamaz; "ortak" (sirket = null) bu işaretle gider.
+const ORTAK = "ORTAK";
 
 export default function UrunlerPage() {
   const qc = useQueryClient();
   const { message } = App.useApp();
   const { yetkili } = useAuth();
+  const { aktif, sirketler } = useSirket();
+  const sirketAdi = (kod: string | null) =>
+    kod ? (sirketler.find((s) => s.kod === kod)?.ad ?? kod) : "Ortak";
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -125,10 +133,12 @@ export default function UrunlerPage() {
   });
 
   const kaydet = useMutation({
-    mutationFn: (v: Record<string, unknown>) =>
-      duzenlenen
-        ? api.patch<Urun>(`/api/urunler/${duzenlenen.id}`, { ...v, version: duzenlenen.version })
-        : api.post<Urun>("/api/urunler", v),
+    mutationFn: ({ sirket, ...v }: Record<string, unknown>) => {
+      const govde = { ...v, sirket: sirket === ORTAK ? null : sirket };
+      return duzenlenen
+        ? api.patch<Urun>(`/api/urunler/${duzenlenen.id}`, { ...govde, version: duzenlenen.version })
+        : api.post<Urun>("/api/urunler", govde);
+    },
     onSuccess: () => {
       message.success(duzenlenen ? "Ürün güncellendi" : "Ürün eklendi");
       setFormAcik(false);
@@ -138,13 +148,21 @@ export default function UrunlerPage() {
       void qc.invalidateQueries({ queryKey: ["urun-markalar"] });
       void qc.invalidateQueries({ queryKey: ["urun", id] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   function duzenle(u: Urun | null) {
     setDuzenlenen(u);
     form.setFieldsValue(
-      u ?? { type: "CIHAZ_SERILI", identity_kind: "IMEI", warranty_months: 24, currency: "TRY" },
+      u
+        ? { ...u, sirket: u.sirket ?? ORTAK }
+        : {
+            type: "CIHAZ_SERILI",
+            identity_kind: "IMEI",
+            warranty_months: 24,
+            currency: "TRY",
+            sirket: aktif?.kod ?? ORTAK,
+          },
     );
     setFormAcik(true);
   }
@@ -262,6 +280,13 @@ export default function UrunlerPage() {
               ),
           },
           { title: "Model", dataIndex: "model", width: 150, className: "mono", ellipsis: true },
+          {
+            title: "Şirket",
+            dataIndex: "sirket",
+            width: 150,
+            ellipsis: true,
+            render: (x: string | null) => (x ? sirketAdi(x) : <Tag>Ortak</Tag>),
+          },
           {
             title: "Tip",
             dataIndex: "type",
@@ -423,6 +448,22 @@ export default function UrunlerPage() {
           </Space>
           <Form.Item name="family" label="Ürün ailesi" extra="Örn. L300, GS900 — raporlarda gruplama için">
             <Input />
+          </Form.Item>
+          <Form.Item
+            name="sirket"
+            label="Şirket"
+            extra="Ortak ürünü her şirket görür; şirkete ait ürünü yalnız o şirket."
+          >
+            <Select
+              options={[
+                { value: ORTAK, label: "Ortak (tüm şirketler)" },
+                ...(aktif ? [{ value: aktif.kod, label: aktif.ad }] : []),
+                // Başka şirketin ürünü düzenleniyorsa değeri görünür kalsın.
+                ...(duzenlenen?.sirket && duzenlenen.sirket !== aktif?.kod
+                  ? [{ value: duzenlenen.sirket, label: sirketAdi(duzenlenen.sirket), disabled: true }]
+                  : []),
+              ]}
+            />
           </Form.Item>
           <Form.Item name="type" label="Tip" rules={[{ required: true }]}>
             <Select options={Object.entries(TIP_ADI).map(([v, l]) => ({ value: v, label: l }))} />

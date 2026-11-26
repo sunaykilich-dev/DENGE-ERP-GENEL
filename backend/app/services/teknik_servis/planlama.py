@@ -681,7 +681,7 @@ async def plani_geri_al(
     """Aktif planı kapatır; yalnız PLANLANDI → PLANLAMADA (`kaynak='plan_geri_al'`).
 
     Nedensiz geri alma 409; kapalı işte 409; aktif plan yoksa 409.
-    Sahada/atölyede/beklemedeki işin durumu DEĞİŞMEZ.
+    Sahada/atölyede/beklemedeki ve ekibi olan işin durumu DEĞİŞMEZ.
     """
     so = await _isi_kilitle(db, so.id)
     if so.status in KAPALI:
@@ -693,7 +693,8 @@ async def plani_geri_al(
     if plan is None:
         raise PlanlamaHatasi("Bu işin aktif planı yok")
     await _pasifle(db, plan, clock.now(), user.id, neden=neden, not_=not_)
-    if so.status == "PLANLANDI":
+    # Ekip duruyorsa iş "tayin edildi" kalır (tayin = verildi, 2026-11-20).
+    if so.status == "PLANLANDI" and not await atama.aktif_ekip(db, so):
         await is_emirleri.durum_degistir(
             db, so, "PLANLAMADA", kaynak="plan_geri_al", user=user, clock=clock
         )

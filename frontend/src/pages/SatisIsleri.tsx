@@ -187,7 +187,7 @@ export default function SatisIsleri({ kaynak, id, birim, kesifAcik, isAcilabilir
       form.resetFields();
       void qc.invalidateQueries({ queryKey: anahtar });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const sonucTeklifi = kaynak === "teklif" ? id : (teklifId ?? null);

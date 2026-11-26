@@ -64,6 +64,10 @@ SUTUNLAR = (
 
 # `accounts.dis_referans` kolon boyu.
 CARI_KODU_UZUNLUK = 40
+# Serbest metin alanlarının kolon boyları — modelden okunur (tek kaynak).
+METIN_SINIRLARI = {
+    alan: Account.__table__.c[alan].type.length for alan in ("tax_office", "region", "segment")
+}
 
 BAYRAKLAR = (
     ("musteri_mi", "is_musteri"),
@@ -144,7 +148,14 @@ class HesapProfili(Profil):
                 ("notes", "notlar"),
             ):
                 deger = clean_cell(ham.get(kaynak))
-                if deger:
+                if not deger:
+                    continue
+                # Kolon boyunu aşan değer önizlemede yakalanmalı; yoksa "Uygula"
+                # bütün partiyi tek bir veritabanı hatasıyla düşürüyordu.
+                sinir = METIN_SINIRLARI.get(alan)
+                if sinir and len(deger) > sinir:
+                    r.hatalar.append(f"{kaynak}: {sinir} karakteri aşıyor ({len(deger)}): {deger}")
+                else:
                     r.veri[alan] = deger
 
             cari_kodu = clean_cell(ham.get("cari_kodu"))

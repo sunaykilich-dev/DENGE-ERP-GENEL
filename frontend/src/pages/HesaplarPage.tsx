@@ -227,7 +227,7 @@ export default function HesaplarPage() {
       void qc.invalidateQueries({ queryKey: ["hesaplar"] });
       void qc.invalidateQueries({ queryKey: ["hesap"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const kisiKaydet = useMutation({
@@ -242,7 +242,7 @@ export default function HesaplarPage() {
       kisiForm.resetFields();
       void qc.invalidateQueries({ queryKey: ["hesap-kart", id] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const kisiSil = useMutation({
@@ -251,7 +251,7 @@ export default function HesaplarPage() {
       message.success("Kişi silindi");
       void qc.invalidateQueries({ queryKey: ["hesap-kart", id] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   function duzenle(hesap: Hesap | null) {

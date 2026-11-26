@@ -1,7 +1,8 @@
 // Menü ↔ rota tutarlılık denetimi (KARARLAR 2026-11-04 §2). `npm run build` önce bunu çalıştırır.
 //
 // 1. Her menü yaprağı `src/main.tsx`'te gerçek bir rotaya gider (yolu bir <Route path> ile eşleşir).
-// 2. Katalogdaki (`uygulamalar.ts` SAYFALAR) her sayfa menüde en az bir yaprakta bulunur — hiçbir sayfa kaybolmaz.
+// 2. Katalogdaki (`uygulamalar.ts` SAYFALAR) her sayfa menüde en az bir yaprakta bulunur — hiçbir sayfa kaybolmaz
+//    (kişisel sayfalar — `kisisel` — kullanıcı menüsündedir; yalnız rotaları denetlenir).
 // 3. Yaprak anahtarları benzersizdir (favoriler/son açılanlar bununla tutulur).
 //
 // menu.ts/uygulamalar.ts TypeScript + ikon bileşenleri içerir; Vite'ın getirdiği esbuild ile
@@ -60,6 +61,11 @@ for (const { yaprak, atalar } of tumYapraklar) {
 const menuYollari = new Set(tumYapraklar.map(({ yaprak }) => yolKismi(yaprak.yol)));
 for (const s of SAYFALAR) {
   if (s.yol.startsWith("#")) continue;
+  // Kişisel sayfalar kullanıcı menüsündedir (Kabuk), sol menüde değil; rotası olmalı.
+  if (s.kisisel) {
+    if (!rotaDesenleri.some((d) => d.test(yolKismi(s.yol)))) hatalar.push(`Rotası olmayan kişisel sayfa: ${s.baslik} (${s.yol})`);
+    continue;
+  }
   if (!menuYollari.has(yolKismi(s.yol))) hatalar.push(`Menüde olmayan sayfa: ${s.baslik} (${s.yol})`);
 }
 

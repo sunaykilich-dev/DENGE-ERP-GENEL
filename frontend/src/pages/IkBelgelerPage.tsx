@@ -45,7 +45,7 @@ import {
 import { useAuth } from "../auth/AuthContext";
 
 /**
- * Bordro ve Belgeler (İK, KARARLAR 2026-10-28 §11) — Kolaysoft PEYK benzeri.
+ * Belge Gönderimi — bordro ve form (İK, KARARLAR 2026-10-28 §11; UI/UX I12 başlık) — Kolaysoft PEYK benzeri.
  *
  * Sekmeler: Takip (kim gördü/onayladı/itiraz etti/bekliyor, hatırlatma),
  * Bordro gönder (toplu PDF, dosya adından kişi eşleştirme), Belge gönder
@@ -71,7 +71,7 @@ export default function IkBelgelerPage() {
       : []),
   ];
   return (
-    <Card title="Bordro ve Belgeler">
+    <Card title="Belge Gönderimi (bordro, form)">
       <Tabs activeKey={sekme} onChange={setSekme} items={items} destroyOnHidden />
     </Card>
   );

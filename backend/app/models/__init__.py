@@ -28,6 +28,7 @@ from app.models.egitim import (
     TrainingPlan,
     TrainingSession,
 )
+from app.models.ekran_duzeni import EkranDuzeni
 from app.models.gorev import (
     Board,
     BoardColumn,
@@ -43,6 +44,7 @@ from app.models.irsaliye import BelgeSayaci, Irsaliye, IrsaliyeKalemi
 from app.models.izin import IzinOnayi, IzinTalebi
 from app.models.login_attempt import LoginAttempt
 from app.models.order import Order, OrderLine, OrderReservation
+from app.models.ozluk import OzlukBelgesi, OzlukBelgeTuru
 from app.models.personel import PersonnelNameMap
 from app.models.pricing import PriceBatch
 from app.models.purchase import (
@@ -64,7 +66,7 @@ from app.models.rbac import (
 )
 from app.models.satis_takip import SatisIsBagi
 from app.models.service import RmaCase
-from app.models.servis_atolye import WorkshopAccessory, WorkshopRecord
+from app.models.servis_atolye import AtolyeModeli, WorkshopAccessory, WorkshopRecord
 from app.models.servis_bakim import (
     MaintenanceContract,
     MaintenanceContractItem,
@@ -284,6 +286,7 @@ __all__ = [
     "TrainingObservationRating",
     "TrainingPlan",
     "TrainingSession",
+    "AtolyeModeli",
     "WorkshopAccessory",
     "WorkshopRecord",
     # --- Teknik servis (Dalga 3, D3-S) ---
@@ -304,4 +307,9 @@ __all__ = [
     "ServisYonlendirme",
     "IzinTalebi",
     "IzinOnayi",
+    # --- Ekran kutucuk düzeni (2026-11-18) ---
+    "EkranDuzeni",
+    # --- Personel özlük dosyası (2026-11-20) ---
+    "OzlukBelgeTuru",
+    "OzlukBelgesi",
 ]

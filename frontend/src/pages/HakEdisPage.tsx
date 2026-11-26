@@ -112,7 +112,7 @@ export default function HakEdisPage() {
       message.success("Durum güncellendi");
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const gonder = useMutation({
@@ -121,7 +121,7 @@ export default function HakEdisPage() {
       message.success("Döküm e-posta ile gönderildi");
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const kesinti = useMutation({
@@ -131,7 +131,7 @@ export default function HakEdisPage() {
       message.success("Kesinti eklendi");
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const ode = useMutation({
@@ -141,7 +141,7 @@ export default function HakEdisPage() {
       message.success("Ödeme kaydedildi, dönem kilitlendi");
       yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const d = detay.data;

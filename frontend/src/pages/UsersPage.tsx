@@ -8,6 +8,7 @@ import {
   Form,
   Input,
   Modal,
+  Popconfirm,
   Row,
   Select,
   Space,
@@ -24,6 +25,19 @@ import { Link } from "react-router-dom";
 
 import { api, ApiError, type Kullanici, type Rol } from "../api/client";
 import { personelApi } from "../api/personel";
+
+/** Yeni servis kaydında hazır gelecek iş türü (2026-11-24; PB ve atölye ayrı akış). */
+const VARSAYILAN_IS_TURLERI = [
+  { value: "ARIZA", label: "Arıza" },
+  { value: "PLANSIZ_BAKIM", label: "Bakım" },
+  { value: "DESTEK", label: "Destek" },
+  { value: "KURULUM", label: "Kurulum" },
+  { value: "TOPLAMA", label: "Toplama" },
+  { value: "KESIF", label: "Keşif" },
+  { value: "DEMONTAJ", label: "Demontaj" },
+  { value: "TASIMA", label: "Taşıma" },
+  { value: "TESLIMAT", label: "Teslimat" },
+];
 import { kapsamEtiketi, kapsamKataloguSorgusu, useAuth } from "../auth/AuthContext";
 import IzinIstisnalari from "../components/IzinIstisnalari";
 import RolDuzenle from "../components/RolDuzenle";
@@ -122,7 +136,7 @@ function ErisimGozden() {
       setNot("");
       void qc.invalidateQueries({ queryKey: ["erisim-gozden"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
   const kpiSec = (k: string | undefined) => {
     setKpi(k);
@@ -345,6 +359,7 @@ export default function UsersPage() {
         sirketler: duzenlenen.sirketler ?? [],
         birimler: duzenlenen.birimler ?? [],
         birincil_birim: duzenlenen.birincil_birim ?? undefined,
+        varsayilan_is_turu: duzenlenen.varsayilan_is_turu ?? undefined,
         giris_acik: duzenlenen.giris_acik ?? true,
         password: undefined,
         parola_sifirla: false,
@@ -361,7 +376,7 @@ export default function UsersPage() {
       form.resetFields();
       void yenile();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const guncelle = useMutation({
@@ -400,14 +415,51 @@ export default function UsersPage() {
     },
   });
 
+  // Silme (2026-11-24): yalnız iz bırakmamış hesap kalıcı silinir; izi olan
+  // için sunucu 409 KAYITLI_KULLANICI döner → pasifleştirme önerilir.
+  const sil = useMutation({
+    mutationFn: (k: KullaniciSatiri) => api.delete<void>(`/api/kullanicilar/${k.id}`),
+    onSuccess: () => {
+      message.success("Kullanıcı silindi");
+      void yenile();
+    },
+    onError: (e: ApiError, k) => {
+      const detay = (e.govde as { detail?: { kod?: string; mesaj?: string } } | undefined)?.detail;
+      if (e.status === 409 && detay?.kod === "KAYITLI_KULLANICI") {
+        modal.confirm({
+          title: "Bu kullanıcı silinemez",
+          content: detay.mesaj,
+          okText: k.is_active ? "Pasifleştir" : "Tamam",
+          cancelText: "Vazgeç",
+          onOk: () =>
+            k.is_active
+              ? guncelle.mutate({ id: k.id, is_active: false, version: k.version })
+              : undefined,
+        });
+        return;
+      }
+      message.error(e.message);
+    },
+  });
+  const [pasifleriGoster, setPasifleriGoster] = useState(false);
+
   return (
     <Card
       title="Kullanıcılar ve roller"
       extra={
         sekme === "kullanicilar" ? (
-          <Button type="primary" onClick={() => setAcik(true)}>
-            Yeni kullanıcı
-          </Button>
+          <Space>
+            <Switch
+              size="small"
+              checked={pasifleriGoster}
+              onChange={setPasifleriGoster}
+              checkedChildren="Pasifler görünür"
+              unCheckedChildren="Pasifler gizli"
+            />
+            <Button type="primary" onClick={() => setAcik(true)}>
+              Yeni kullanıcı
+            </Button>
+          </Space>
         ) : sekme === "roller" ? (
           <Button type="primary" onClick={() => setRolDuzenle({ acik: true })}>
             Yeni rol
@@ -474,7 +526,7 @@ export default function UsersPage() {
       <Table
         rowKey="id"
         loading={kullanicilar.isLoading}
-        dataSource={kullanicilar.data ?? []}
+        dataSource={(kullanicilar.data ?? []).filter((k) => pasifleriGoster || k.is_active)}
         pagination={false}
         columns={[
           {
@@ -560,9 +612,23 @@ export default function UsersPage() {
           {
             title: "",
             render: (_, k: KullaniciSatiri) => (
-              <Button size="small" onClick={() => setDuzenlenen(k)}>
-                Düzenle
-              </Button>
+              <Space size={4}>
+                <Button size="small" onClick={() => setDuzenlenen(k)}>
+                  Düzenle
+                </Button>
+                <Popconfirm
+                  title={`${k.full_name} silinsin mi?`}
+                  description="Sistemde kaydı olmayan hesap kalıcı silinir; kaydı olan pasifleştirilir."
+                  okText="Sil"
+                  okButtonProps={{ danger: true }}
+                  cancelText="Vazgeç"
+                  onConfirm={() => sil.mutate(k)}
+                >
+                  <Button size="small" danger loading={sil.isPending && sil.variables?.id === k.id}>
+                    Sil
+                  </Button>
+                </Popconfirm>
+              </Space>
             ),
           },
         ]}
@@ -708,6 +774,8 @@ export default function UsersPage() {
               giris_acik: v.giris_acik,
               reset_mfa: v.reset_mfa || undefined,
             };
+            if ((v.varsayilan_is_turu ?? null) !== (duzenlenen.varsayilan_is_turu ?? null))
+              gonderilecek.varsayilan_is_turu = v.varsayilan_is_turu ?? "";
             const yeniSirketler: string[] = v.sirketler ?? [];
             const eskiSirketler = duzenlenen.sirketler ?? [];
             if (
@@ -761,6 +829,13 @@ export default function UsersPage() {
               </Form.Item>
             </>
           )}
+          <Form.Item
+            name="varsayilan_is_turu"
+            label="Varsayılan iş türü"
+            extra="Yeni servis kaydında birincil birimle birlikte hazır gelir; formda değiştirilebilir."
+          >
+            <Select allowClear placeholder="Yok" options={VARSAYILAN_IS_TURLERI} />
+          </Form.Item>
           <Form.Item
             name="giris_acik"
             label="Oturum açabilir"

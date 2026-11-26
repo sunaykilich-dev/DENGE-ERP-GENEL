@@ -141,7 +141,7 @@ export default function LokasyonPenceresi({
       setKisi(null);
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   function kisiAc(k: Irtibat | "yeni") {

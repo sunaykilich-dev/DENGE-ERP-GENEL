@@ -113,6 +113,45 @@ async def _sonuc_girebilen_var(db: AsyncSession, kimlikler: Sequence[int]) -> bo
     return any(k.has("servis.tamamla") for k in kisiler)
 
 
+_MUSAITLIK_ADLARI = {
+    "IZIN": "izinli",
+    "EGITIM": "eğitimde",
+    "OFIS": "ofiste",
+    "DIGER": "müsait değil",
+}
+
+
+async def _musaitlik_uyarilari(
+    db: AsyncSession, kimlikler: Sequence[int], clock: Clock
+) -> list[str]:
+    """Şu an izin/eğitim/ofis bloğundaki yeni atanan kişi → uyarı (engellemez)."""
+    if not kimlikler:
+        return []
+    from zoneinfo import ZoneInfo
+
+    from app.models import ServiceUnavailability
+
+    simdi = clock.now()
+    satirlar = (
+        await db.execute(
+            select(User.full_name, ServiceUnavailability.tur, ServiceUnavailability.ends_at)
+            .join(User, User.id == ServiceUnavailability.user_id)
+            .where(
+                ServiceUnavailability.user_id.in_(list(kimlikler)),
+                ServiceUnavailability.is_deleted.is_(False),
+                ServiceUnavailability.starts_at <= simdi,
+                ServiceUnavailability.ends_at > simdi,
+            )
+        )
+    ).all()
+    tr = ZoneInfo("Europe/Istanbul")
+    return [
+        f"{ad} şu an {_MUSAITLIK_ADLARI.get(tur, 'müsait değil')} "
+        f"({bitis.astimezone(tr):%d.%m %H:%M}'e kadar)"
+        for ad, tur, bitis in satirlar
+    ]
+
+
 def _satirlari_dogrula(atamalar: Sequence[AtamaSatiri]) -> list[AtamaSatiri]:
     kimlikler = [a.user_id for a in atamalar]
     if len(kimlikler) != len(set(kimlikler)):
@@ -277,6 +316,7 @@ async def _uygula(
     uyarilar = await kancalar.atama_uyarilari(
         db, so, [a.user_id for a in eklenen] + [a.user_id for a in degisen], clock
     )
+    uyarilar = [*uyarilar, *await _musaitlik_uyarilari(db, [a.user_id for a in eklenen], clock)]
     ozet = (
         f"Ekip güncellendi: {len(eklenen)} eklendi, {len(cikan)} çıkarıldı, "
         f"{len(degisen)} rol değişti"
@@ -297,8 +337,33 @@ async def _uygula(
         _uyari_ekle([SONUC_GIREN_YOK_UYARISI])
     await gecmis.olay_yaz(db, so, "ATAMA", ozet, user=user, clock=clock, veri=veri)
     await kancalar.ekip_degisti(db, so, atamalar, clock)
+    await _durumu_esitle(db, so, bool(atamalar), user=user, clock=clock)
     await db.refresh(so, attribute_names=["atamalar"])
     return await aktif_ekip(db, so), True
+
+
+# Kullanıcı kararı (2026-11-20): şef işi birine verdiğinde iş "verildi"
+# sayılır → PLANLANDI ("TAYİN EDİLDİ"). Ekip boşaltılırsa ve aktif plan
+# yoksa iş tayin bekleyene (PLANLAMADA) döner. Atölye işinin durumu atölye
+# akışından yürür; diğer durumlar (sahada, beklemede...) değişmez.
+TAYIN_BEKLEYEN_DURUMLAR = frozenset({"MUSTERI_TALEBI", "PLANLAMADA", "TEKRAR_ACILDI"})
+
+
+async def _durumu_esitle(
+    db: AsyncSession, so: ServiceOrder, ekip_var: bool, *, user: User, clock: Clock
+) -> None:
+    from app.services.teknik_servis import is_emirleri, planlama
+
+    if so.tur == "ATOLYE":
+        return
+    if ekip_var and so.status in TAYIN_BEKLEYEN_DURUMLAR:
+        await is_emirleri.durum_degistir(
+            db, so, "PLANLANDI", kaynak="tayin", user=user, clock=clock
+        )
+    elif not ekip_var and so.status == "PLANLANDI" and await planlama.aktif_plan(db, so.id) is None:
+        await is_emirleri.durum_degistir(
+            db, so, "PLANLAMADA", kaynak="tayin", user=user, clock=clock
+        )
 
 
 async def ata(
@@ -311,8 +376,9 @@ async def ata(
 ) -> list[ServiceOrderAssignment]:
     """İşin ekibini verilen listeye eşitler (çıkanlar pasiflenir).
 
-    Değişiklik yoksa hiçbir şey yazılmaz (olay da yok). Durum DEĞİŞMEZ
-    (E01-04 kabul 4: atamada DURUM satırı yok).
+    Değişiklik yoksa hiçbir şey yazılmaz (olay da yok). Tayin bekleyen iş
+    ekip alınca PLANLANDI'ya geçer (`_durumu_esitle`; eski E01-04 kabul 4
+    "atamada durum değişmez" kuralı 2026-11-20 kullanıcı kararıyla kalktı).
     """
     ekip, _ = await _uygula(db, so, _satirlari_dogrula(atamalar), user=user, clock=clock)
     return ekip

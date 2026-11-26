@@ -44,6 +44,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   Col,
   DatePicker,
   Descriptions,
@@ -65,6 +66,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -113,14 +115,18 @@ import ListeRaporu, { type FioriEylem, type FioriKategori } from "../fiori/Liste
 import { useYeniParametresi } from "../fiori/useYeniParametresi";
 import { yerelOku, yerelYaz } from "../fiori/yerelDepo";
 import EkYukleyici from "../components/EkYukleyici";
+import { IsEkibiBelgeleri } from "../components/OzlukDosyasi";
 import UlasimPenceresi, { ulasimGerekiyor } from "../components/UlasimPenceresi";
+import { CihazlarBolumu } from "../components/CihazBilgileri";
 import ServisFisiDugmesi, { fisTuru } from "../components/ServisFisiDugmesi";
 import { ServisGozlemleri } from "../components/GozlemFormu";
 import KayitGorevleri from "../components/KayitGorevleri";
 import { PlanGecmisiSekmesi, ZamanSekmesi } from "../components/ServisIsSekmeleri";
 import ImzaAlani, { tuvalPng } from "../components/ImzaAlani";
 import ServisParcalari from "../components/ServisParcalari";
-import SlaEtiketi, { SlaKartiPenceresi } from "../components/SlaEtiketi";
+import { okumaDogrula, okumaGovdesi, OkumaliSeriAlani } from "../components/barkod/SeriAlani";
+import { seriAnahtari } from "../components/SeriOkutucu";
+import SlaEtiketi, { SlaKartiPenceresi, useSlaYururlukte } from "../components/SlaEtiketi";
 import BakimFormu from "./BakimFormu";
 import CihazBilgisiFormu from "./CihazBilgisiFormu";
 import RoleMontajFormu from "./RoleMontajFormu";
@@ -401,7 +407,7 @@ function AtamaPenceresi({
       }
       bitti();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const secenekler = (aday.data ?? []).map((k) => ({
@@ -481,7 +487,10 @@ type Pencere =
 
 /** Alt eylem çubuğundan gelen "detayı aç ve şu pencereyi göster" isteği. */
 export interface PencereIstegi {
-  pencere: "duzenle" | "iptal" | "kalite";
+  /** "gecis": listedeki satır menüsünden seçilen, bilgi isteyen geçiş (uc + hedef). */
+  pencere: "duzenle" | "iptal" | "kalite" | "gecis";
+  uc?: string;
+  hedef?: string;
   /** Aynı pencere ikinci kez istenince de çalışsın diye artan sayaç. */
   n: number;
 }
@@ -497,7 +506,8 @@ function BagliIsBaglantisi({ s, ac }: { s: BagliIsSatiri; ac?: (id: number) => v
   );
 }
 
-function IsDetayCekmecesi({
+/** Planlama ekranı da kullanır (KPI listesi / takvim kartından işi açmak, 2026-11-18). */
+export function IsDetayCekmecesi({
   id,
   sozluk,
   kapat,
@@ -534,6 +544,10 @@ function IsDetayCekmecesi({
     queryFn: () => operasyonApi.isSla(id),
     enabled: slaTabi,
   });
+  // SLA yürürlükte değilken "SLA kartı" düğmesi gizli; tekrar arıza teyidi gibi
+  // kapanış bilgisi istenirse (sunucu `kapanis_icin_gerekenler`) yine görünür.
+  const slaYururlukte = useSlaYururlukte();
+  const slaKartiGerekli = (slaKarti.data?.kapanis_icin_gerekenler.length ?? 0) > 0;
   const gecmis = useQuery({ queryKey: ["servis-is-gecmis", id], queryFn: () => teknikServisApi.gecmis(id) });
   const onaylar = useQuery({ queryKey: ["servis-is-onay", id], queryFn: () => teknikServisApi.onaylar(id) });
   const beklemeler = useQuery({
@@ -624,6 +638,7 @@ function IsDetayCekmecesi({
             saha_seri_no: (v.saha_seri_no as string) || null,
             saha_bolge: (v.saha_bolge as string) || null,
             sure_eksik_onay: !!v.sure_eksik_onay,
+            kapanis_okuma: okumaGovdesi(v.kapanis_okuma as Parameters<typeof okumaGovdesi>[0]),
           });
         case "kapat":
           return teknikServisApi.kapat(d.id, beklenen, (v.gerekce as string) || undefined);
@@ -673,6 +688,9 @@ function IsDetayCekmecesi({
         if (isAc) isAc(sonuc.id);
         return;
       }
+      if (pencere === "sonuc" && sonuc && typeof sonuc === "object" && "sonuc" in sonuc && sonuc.sonuc?.kapanis_seri_farkli) {
+        message.warning("Kapanışta okutulan seri açılıştaki seriden farklı; kayda not düşüldü.", 6);
+      }
       message.success(
         pencere === "kalite_red"
           ? "Kalite reddedildi; iş düzeltme için geri gönderildi"
@@ -699,7 +717,7 @@ function IsDetayCekmecesi({
       setNotMetni("");
       void qc.invalidateQueries({ queryKey: ["servis-is-gecmis", id] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   // Alt çubuktaki Düzenle / İptal: kayıt yüklenince ilgili pencere açılır;
@@ -716,6 +734,13 @@ function IsDetayCekmecesi({
     if (istek.pencere === "kalite") {
       if (d.kalite.verebilir) pencereAc("kalite");
       else message.warning(d.kalite.engel ?? "Bu işe kalite onayı verilemez");
+      return;
+    }
+    if (istek.pencere === "gecis") {
+      // Satır menüsünden: geçiş hâlâ geçerliyse (iş arada değişmiş olabilir) penceresi açılır.
+      const g = (d.gecisler ?? []).find((x) => x.uc === istek.uc && x.hedef === istek.hedef && x.yetkili);
+      if (g) gecisTiklandi(g.uc, g.hedef);
+      else message.warning("Bu geçiş artık uygulanamıyor; iş başka bir duruma geçmiş olabilir");
       return;
     }
     const g = (d.gecisler ?? []).find((x) => x.uc === "iptal" && x.yetkili);
@@ -925,9 +950,9 @@ function IsDetayCekmecesi({
                 {d.cihaz_bilgisi_kurali === "FREKANS" ? "Cihaz ve frekans" : "Cihaz seri no"}
               </Button>
             )}
-            {slaTabi && (
+            {slaTabi && (slaYururlukte || slaKartiGerekli) && (
               <Button
-                danger={(slaKarti.data?.kapanis_icin_gerekenler.length ?? 0) > 0}
+                danger={slaKartiGerekli}
                 onClick={() => setSlaKartiAcik(true)}
               >
                 SLA kartı
@@ -1047,7 +1072,18 @@ function IsDetayCekmecesi({
                         </Descriptions.Item>
                       )}
                       <Descriptions.Item label="Seri" span={2}>
-                        {d.seriler.length ? d.seriler.map((s) => <Tag key={s.id}>{s.seri_no}</Tag>) : "—"}
+                        {d.seriler.length
+                          ? d.seriler.map((s) => (
+                              <Tag
+                                key={s.id}
+                                color={s.okuma_kaynagi === "ELLE" ? "orange" : s.okuma_kaynagi === "OKUTMA" ? "green" : undefined}
+                                title={s.okuma_etiketi ?? "Eski kayıt (nasıl girildiği bilinmiyor)"}
+                              >
+                                {s.seri_no}
+                                {s.okuma_etiketi && <span style={{ marginLeft: 4, fontSize: 11 }}>· {s.okuma_etiketi}</span>}
+                              </Tag>
+                            ))
+                          : "—"}
                       </Descriptions.Item>
                       <Descriptions.Item label="Bildirim">{zaman(d.reported_at)}</Descriptions.Item>
                       <Descriptions.Item label="Açılış">{zaman(d.created_at)}</Descriptions.Item>
@@ -1122,6 +1158,14 @@ function IsDetayCekmecesi({
                           : <Typography.Text type="warning">{TAYIN.tayinEdilmemis}</Typography.Text>}
                       </Descriptions.Item>
                     </Descriptions>
+                    {d.seriler.length > 0 && (
+                      <CihazlarBolumu
+                        isId={d.id}
+                        seriler={d.seriler}
+                        duzenlenebilir={yetkili("servis.yaz") && !["KAPATILDI", "IPTAL"].includes(d.status)}
+                        onKaydedildi={yenile}
+                      />
+                    )}
                     {d.bekleme && (
                       <Alert
                         type="warning"
@@ -1146,6 +1190,15 @@ function IsDetayCekmecesi({
                             {d.sonuc.ariza_nedeni ? ` · ${d.sonuc.ariza_nedeni}` : ""}
                           </span>
                           <Typography.Text style={{ whiteSpace: "pre-wrap" }}>{d.sonuc.yapilan_islem}</Typography.Text>
+                          {d.sonuc.kapanis_seri_no && (
+                            <span>
+                              Kapanış serisi: <Tag>{d.sonuc.kapanis_seri_no}</Tag>
+                              <Tag color={d.sonuc.kapanis_okuma?.okuma_kaynagi === "ELLE" ? "orange" : "green"}>
+                                {d.sonuc.kapanis_okuma?.etiket}
+                              </Tag>
+                              {d.sonuc.kapanis_seri_farkli && <Tag color="red">Açılıştaki seriden farklı</Tag>}
+                            </span>
+                          )}
                         </Space>
                       </Card>
                     )}
@@ -1182,6 +1235,20 @@ function IsDetayCekmecesi({
                         </List.Item>
                       )}
                     />
+                    {/* Özlük: işe atanmış personelin işte paylaşılabilir belgeleri
+                        (SRC, İSG…; 2026-11-20). Açılmadan sorgulanmaz. */}
+                    {(yetkili("servis.planla") || yetkili("operasyon.gor")) && d.ekip.length > 0 && (
+                      <Collapse
+                        size="small"
+                        items={[
+                          {
+                            key: "belgeler",
+                            label: "Ekip belgeleri (SRC, İSG, ehliyet…)",
+                            children: <IsEkibiBelgeleri soId={d.id} />,
+                          },
+                        ]}
+                      />
+                    )}
                   </Space>
                 ),
               },
@@ -1510,6 +1577,35 @@ function IsDetayCekmecesi({
                       .filter((n) => n.is_active)
                       .map((n) => ({ value: n.id, label: n.ad }))}
                   />
+                </Form.Item>
+                <Form.Item noStyle shouldUpdate>
+                  {() => {
+                    const istenir =
+                      !!d.seri_okutma_zorunlu &&
+                      ["COZULDU", "COZULEMEDI"].includes(form.getFieldValue("sonuc")) &&
+                      !["TELEFON", "UZAKTAN"].includes(form.getFieldValue("cozum_kanali"));
+                    if (!istenir) return null;
+                    const okunan = (form.getFieldValue("kapanis_okuma") as { seri_no?: string } | undefined)?.seri_no;
+                    const farkli =
+                      !!okunan?.trim() &&
+                      d.seriler.length > 0 &&
+                      !d.seriler.some((s) => seriAnahtari(s.seri_no) === seriAnahtari(okunan));
+                    return (
+                      <Form.Item
+                        name="kapanis_okuma"
+                        label="Cihaz seri numarası (kapanış okutması)"
+                        required
+                        extra={
+                          farkli
+                            ? `Açılıştaki seriden farklı (${d.seriler.map((s) => s.seri_no).join(", ")}); kaydedilir, not düşülür.`
+                            : "Cihazın barkodunu el okuyucuyla ya da kamera düğmesiyle okutun."
+                        }
+                        rules={[{ validator: (_, x) => okumaDogrula(x, true) }]}
+                      >
+                        <OkumaliSeriAlani />
+                      </Form.Item>
+                    );
+                  }}
                 </Form.Item>
                 <Row gutter={8}>
                   <Col xs={24} sm={12}>
@@ -1952,14 +2048,14 @@ export function ServisIsListesi({
   onayEkrani = false,
 }: ServisIsListesiProps) {
   const { yetkili, kullanici } = useAuth();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
+  const listedenGit = useNavigate();
   const qc = useQueryClient();
   const [arama, setArama] = useSearchParams();
   const ekran = Grid.useBreakpoint();
   const urlSuzgeci = useMemo(() => suzgecOku(arama), [arama]);
   const [sayfa, setSayfa] = useState(1);
   const [secili, setSecili] = useState<number[]>([]);
-  const [cokluSecim, setCokluSecim] = useState(false);
   const [suzgecAcik, setSuzgecAcik] = useState(false);
   const [yeniAcik, setYeniAcik] = useState(false);
   const [topluAtamaAcik, setTopluAtamaAcik] = useState(false);
@@ -2011,10 +2107,13 @@ export function ServisIsListesi({
     !uyanKategori && varsayilanKategori && !kategoriAlanlari.some((a) => urlSuzgeci[a])
       ? kategoriler.find((k) => k.kod === varsayilanKategori)
       : undefined;
-  const suzgec = useMemo<IsSuzgeci>(
-    () => (varsayilan ? { ...urlSuzgeci, ...varsayilan.suzgec } : urlSuzgeci),
-    [urlSuzgeci, varsayilan],
-  );
+  const suzgec = useMemo<IsSuzgeci>(() => {
+    const s = varsayilan ? { ...urlSuzgeci, ...varsayilan.suzgec } : urlSuzgeci;
+    // İş Emri Onayı'nda durum çubuğu/süzgeç paneli yok: liste yalnız
+    // kategori (kpi + birim) ve aramayla süzülür; eski adresteki durum vb.
+    // görünmez bir süzgeç olarak kalmaz (UI/UX revize S5).
+    return onayEkrani ? { kpi: s.kpi, birim: s.birim, q: s.q } : s;
+  }, [urlSuzgeci, varsayilan, onayEkrani]);
   const seciliKategori = (uyanKategori ?? varsayilan)?.kod;
 
   const sozluk = useQuery({
@@ -2110,7 +2209,6 @@ export function ServisIsListesi({
   const acabilir = yazabilir || yetkili("servis.kurulum_ac");
   // "+ Hızlı oluştur" → `?yeni=1`: yeni iş penceresi açılır.
   useYeniParametresi(() => setYeniAcik(true), yeniKayit && acabilir);
-  const secebilir = yazabilir || planlayabilir;
   const ac = (id: number) => detayAc(id);
 
   const kaliteYetkili = yetkili("servis.kalite_onay");
@@ -2120,7 +2218,6 @@ export function ServisIsListesi({
   const kaliteListesi = kaliteYetkili && suzgec.kalite === "BEKLEYEN";
   // İş Emri Onayı: lider (kalite) ya da müdür (son onay = kapatma) onaylar.
   const onaylayabilir = kaliteYetkili || (onayEkrani && yetkili("servis.kapat"));
-  const cokluEtkin = cokluSecim || kaliteListesi || (onayEkrani && onaylayabilir);
   // Onay ekranında yalnız TAMAMLANDI iş seçilir (2026-11-25: kapanan iş onayda yok).
   const onayBekliyor = (r: IsSatiri) => (onayEkrani ? r.status === "TAMAMLANDI" : kaliteBekliyor(r));
   const topluKaliteSatirlari = seciliSatirlar.filter(onayBekliyor);
@@ -2147,7 +2244,7 @@ export function ServisIsListesi({
         );
       } else message.success(`${r.onaylanan.length} işe kalite onayı verildi`);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const ekSuzgecSayisi = [
@@ -2188,7 +2285,8 @@ export function ServisIsListesi({
       render: (v: string, r) => (
         <>
           <span
-            className={noRozeti ? "fl-no-rozet" : "fl-no-duz"}
+            // Rozet rengi işin önceliğinden (2026-11-18): kritik kırmızı, yüksek turuncu, normal sade.
+            className={noRozeti ? `fl-no-rozet${r.oncelik === "KRITIK" ? " kritik" : r.oncelik === "YUKSEK" ? " yuksek" : ""}` : "fl-no-duz"}
             role="link"
             tabIndex={0}
             onClick={() => ac(r.id)}
@@ -2310,9 +2408,6 @@ export function ServisIsListesi({
 
   const listeMenusu = [
     ...(aktarabilir ? [{ key: "excel", label: "Excel'e aktar" }] : []),
-    ...(secebilir && !kaliteListesi
-      ? [{ key: "coklu", label: cokluSecim ? "Tekli seçime dön" : "Çoklu seçim (toplu işlem)" }]
-      : []),
     ...(yazabilir ? [{ key: "ziyaret", label: "Ziyaret onayı", disabled: !secili.length }] : []),
     { key: "ziyaret_formu", label: "Ziyaret formu (PDF)", disabled: !secili.length },
     { key: "temizle", label: "Seçimi temizle", disabled: !secili.length },
@@ -2321,10 +2416,7 @@ export function ServisIsListesi({
   ];
   const listeMenusuTikla = (k: string) => {
     if (k === "excel") window.open(teknikServisApi.excelYolu(suzgec), "_blank");
-    else if (k === "coklu") {
-      setCokluSecim(!cokluSecim);
-      setSecili((s) => (cokluSecim ? s.slice(0, 1) : s));
-    } else if (k === "ziyaret") setZiyaretAcik(true);
+    else if (k === "ziyaret") setZiyaretAcik(true);
     else if (k === "ziyaret_formu") window.open(teknikServisApi.ziyaretFormuYolu(secili), "_blank");
     else if (k === "temizle") setSecili([]);
     else if (k === "yenile") void liste.refetch();
@@ -2333,6 +2425,131 @@ export function ServisIsListesi({
   const tayinEt = () => {
     if (secili.length > 1) setTopluAtamaAcik(true);
     else if (tek) setTekliTayin(tek);
+  };
+
+  // --- Satır menüsü: sağ tık / ⋯ ile hızlı durum (2026-11-18, kullanıcı isteği) ---
+  // Geçişler sunucudan (`gecisler`, yalnız yetkili olunanlar). Genel saha
+  // durumları (Planlamada, İşlemde, Atölyede…) tek tıkla; bilgi isteyenler
+  // (Planla, Beklemeye al, Sonuç, İptal) ayrıntıda kendi penceresini açar.
+  // Birden çok iş seçiliyken seçili satırda menü toplu taşıma sunar.
+  const listeyiYenile = () => {
+    void qc.invalidateQueries({ queryKey: ["servis-isleri"] });
+    void qc.invalidateQueries({ queryKey: ["servis-is"] });
+  };
+  const tekDurum = useMutation({
+    mutationFn: ({ r, hedef }: { r: IsSatiri; hedef: string; ad: string }) =>
+      teknikServisApi.durum(r.id, hedef, r.status),
+    onSuccess: (_, { r, ad }) => {
+      message.success(`${r.so_no} → ${ad}`);
+      listeyiYenile();
+    },
+    onError: (e: Error) => {
+      message.error(e.message);
+      listeyiYenile();
+    },
+  });
+  const topluDurum = useMutation({
+    mutationFn: ({ satirlar, hedef }: { satirlar: IsSatiri[]; hedef: string; ad: string }) =>
+      teknikServisApi.topluDurum(
+        satirlar.map((x) => ({ id: x.id, version: x.version })),
+        hedef,
+      ),
+    onSuccess: (sonuc, { ad }) => {
+      setSecili([]);
+      listeyiYenile();
+      if (!sonuc.atlanan.length) {
+        message.success(`${sonuc.tasinan.length} iş "${ad}" durumuna taşındı`);
+        return;
+      }
+      modal.info({
+        title: `${sonuc.tasinan.length} iş "${ad}" durumuna taşındı, ${sonuc.atlanan.length} iş atlandı`,
+        width: 560,
+        content: (
+          <ul style={{ paddingInlineStart: 18, margin: 0 }}>
+            {sonuc.atlanan.map((a) => (
+              <li key={a.id}>
+                <b>{a.so_no ?? "—"}</b>: {a.neden}
+              </li>
+            ))}
+          </ul>
+        ),
+      });
+    },
+    onError: (e: Error) => void message.error(e.message),
+  });
+  const satirMenusu = (r: IsSatiri): MenuProps | null => {
+    const toplu = secili.length > 1 && secili.includes(r.id);
+    if (toplu) {
+      const satirlar = kayitlar.filter((x) => secili.includes(x.id));
+      // Seçimdeki işlerin genel geçişleri (en az birine uyanlar); her iş sunucuda ayrı sınanır.
+      const hedefler = new Map<string, { ad: string; adet: number }>();
+      for (const x of satirlar)
+        for (const g of x.gecisler ?? [])
+          if (g.uc === "genel") {
+            const v = hedefler.get(g.hedef) ?? { ad: g.ad, adet: 0 };
+            hedefler.set(g.hedef, { ...v, adet: v.adet + 1 });
+          }
+      if (!hedefler.size) return null;
+      return {
+        items: [
+          {
+            key: "baslik",
+            type: "group",
+            label: `Seçili ${satirlar.length} işi taşı`,
+            children: [...hedefler.entries()].map(([hedef, { ad, adet }]) => ({
+              key: `toplu:${hedef}`,
+              label: adet === satirlar.length ? ad : `${ad} (${adet}/${satirlar.length} iş uygun)`,
+            })),
+          },
+        ],
+        onClick: ({ key }) => {
+          const hedef = String(key).replace("toplu:", "");
+          const ad = hedefler.get(hedef)?.ad ?? hedef;
+          modal.confirm({
+            title: `${satirlar.length} iş "${ad}" durumuna taşınsın mı?`,
+            content: "Geçişi uygun olmayan iş atlanır ve nedeni gösterilir.",
+            okText: "Taşı",
+            cancelText: "Vazgeç",
+            onOk: () => topluDurum.mutateAsync({ satirlar, hedef, ad }),
+          });
+        },
+      };
+    }
+    const gecisler = r.gecisler ?? [];
+    const items: NonNullable<MenuProps["items"]> = [];
+    if (gecisler.length)
+      items.push({
+        key: "durum",
+        type: "group",
+        label: "Durumu değiştir",
+        children: gecisler.map((g) => ({
+          key: `g:${g.uc}:${g.hedef}`,
+          // Bilgi isteyen geçiş pencere açar ("…").
+          label: g.uc === "genel" ? g.ad : g.uc === "planla" ? "Planla…" : `${g.ad}…`,
+          danger: g.uc === "iptal",
+        })),
+      });
+    if (items.length) items.push({ type: "divider" });
+    items.push({ key: "ac", label: "Ayrıntıyı aç" });
+    return {
+      items,
+      onClick: ({ key }) => {
+        const k = String(key);
+        if (k === "ac") {
+          ac(r.id);
+          return;
+        }
+        const [, uc, hedef] = k.split(":");
+        const g = gecisler.find((x) => x.uc === uc && x.hedef === hedef);
+        if (!g) return;
+        if (uc === "genel") tekDurum.mutate({ r, hedef, ad: g.ad });
+        else if (uc === "planla") listedenGit(`/servis-planlama?is=${r.id}`);
+        else {
+          setIstek({ pencere: "gecis", uc, hedef, n: Date.now() });
+          ac(r.id);
+        }
+      },
+    };
   };
 
   const eylemler: FioriEylem[] = [
@@ -2345,7 +2562,7 @@ export function ServisIsListesi({
     {
       anahtar: "saat_ac",
       ad: "Saat Aç",
-      gizli: !sayacYetkili,
+      gizli: !sayacYetkili || onayEkrani,
       ipucu: acikBolum ? `Açık sayaç var (${acikBolum.so_no ?? ""}); önce Saat Kapa` : "Seçili işte sayacı başlat",
       devreDisi: !tek || tekKapali || tek.status === "BEKLEMEDE" || !!acikBolum,
       yukleniyor: saatAc.isPending,
@@ -2354,7 +2571,7 @@ export function ServisIsListesi({
     {
       anahtar: "saat_kapa",
       ad: "Saat Kapa",
-      gizli: !sayacYetkili,
+      gizli: !sayacYetkili || onayEkrani,
       ipucu: acikBolum ? `${acikBolum.so_no ?? ""} sayacını bitir` : "Açık sayaç yok",
       devreDisi: !acikBolum,
       yukleniyor: saatKapa.isPending,
@@ -2365,7 +2582,7 @@ export function ServisIsListesi({
       ad: secili.length > 1 ? TAYIN.topluTayin : TAYIN.tayinEt,
       ikon: <UserAddOutlined />,
       yalnizIkon: true,
-      gizli: !planlayabilir,
+      gizli: !planlayabilir || onayEkrani,
       ipucu:
         secili.length > 1 && seciliBirimler.size !== 1
           ? "Toplu tayin tek birimin işleriyle yapılır"
@@ -2381,7 +2598,7 @@ export function ServisIsListesi({
       ikon: <StopOutlined />,
       yalnizIkon: true,
       tehlikeli: true,
-      gizli: !yazabilir,
+      gizli: !yazabilir || onayEkrani,
       devreDisi: !tek || tekKapali,
       onClick: () => {
         if (!tek) return;
@@ -2433,7 +2650,7 @@ export function ServisIsListesi({
       ad: "Düzenle",
       ikon: <EditOutlined />,
       yalnizIkon: true,
-      gizli: !yazabilir,
+      gizli: !yazabilir || onayEkrani,
       devreDisi: !tek || tek.status === "IPTAL",
       onClick: () => {
         if (!tek) return;
@@ -2455,17 +2672,13 @@ export function ServisIsListesi({
     },
   ];
 
-  const sagEylemler: FioriEylem[] = [
-    {
-      anahtar: "yeni",
-      ad: "Yeni Kayıt",
-      ikon: <PlusOutlined />,
-      vurgulu: true,
-      kisalt: true,
-      gizli: !yeniKayit || !acabilir,
-      onClick: () => setYeniAcik(true),
-    },
-  ];
+  // "Yeni Kayıt" alt çubuktan üste, aramanın hemen altına alındı (2026-11-18).
+  const yeniDugmesi =
+    yeniKayit && acabilir ? (
+      <Button type="primary" icon={<PlusOutlined />} onClick={() => setYeniAcik(true)}>
+        Yeni Kayıt
+      </Button>
+    ) : undefined;
 
   const suzgecPaneli = (
     <Row gutter={[8, 8]}>
@@ -2659,24 +2872,30 @@ export function ServisIsListesi({
             onSearch={(q) => suzgecDegistir({ ...urlSuzgeci, q: q.trim() || undefined })}
           />
         }
-        durumCubugu={{
-          gruplar: durumGruplari,
-          secili: seciliGrup,
-          onSec: (kod) =>
-            suzgecDegistir({
-              ...urlSuzgeci,
-              durum: kod ? durumGruplari.find((g) => g.kod === kod)?.durumlar : undefined,
-            }),
-          banaAit,
-          onBanaAit: kullanici
-            ? (v) => suzgecDegistir({ ...urlSuzgeci, teknisyen_id: v ? kullanici.id : undefined })
-            : undefined,
-          onYenile: () => void liste.refetch(),
-          yenileniyor: liste.isFetching,
-          onSuzgec: () => setSuzgecAcik(!suzgecAcik),
-          suzgecAcik,
-          suzgecSayisi: ekSuzgecSayisi,
-        }}
+        // İş Emri Onayı: durum çubuğu ve süzgeç rozeti yok (liste zaten
+        // "onay bekleyen" süzgecidir; YENİ/TAYİN… seçimi boş liste verirdi).
+        durumCubugu={
+          onayEkrani
+            ? undefined
+            : {
+                gruplar: durumGruplari,
+                secili: seciliGrup,
+                onSec: (kod) =>
+                  suzgecDegistir({
+                    ...urlSuzgeci,
+                    durum: kod ? durumGruplari.find((g) => g.kod === kod)?.durumlar : undefined,
+                  }),
+                banaAit,
+                onBanaAit: kullanici
+                  ? (v) => suzgecDegistir({ ...urlSuzgeci, teknisyen_id: v ? kullanici.id : undefined })
+                  : undefined,
+                onYenile: () => void liste.refetch(),
+                yenileniyor: liste.isFetching,
+                onSuzgec: () => setSuzgecAcik(!suzgecAcik),
+                suzgecAcik,
+                suzgecSayisi: ekSuzgecSayisi,
+              }
+        }
         suzgecPaneli={suzgecPaneli}
         ustBilgi={ustBilgi}
         sutunlar={sutunlar}
@@ -2686,6 +2905,23 @@ export function ServisIsListesi({
         bosMetin={
           liste.isError ? (
             (liste.error as Error).message
+          ) : onayEkrani ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={suzgec.q ? "Aramayla eşleşen onay bekleyen iş yok" : "Onay bekleyen iş yok"}
+            >
+              {suzgec.q && (
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setAramaMetni("");
+                    suzgecDegistir({ ...urlSuzgeci, q: undefined });
+                  }}
+                >
+                  Aramayı temizle
+                </Button>
+              )}
+            </Empty>
           ) : (
             <BosListeMesaji
               suzgecli={ekSuzgecSayisi > 0 || !!suzgec.durum?.length || !!suzgec.q || !!suzgec.kpi || !!suzgec.tur}
@@ -2703,7 +2939,8 @@ export function ServisIsListesi({
         // Gizlenen (responsive) sütunlar kadar daralır: 375 px'te yalnız
         // durum, no, açıklama ve personel kalır, tablo kendi içinde kayar.
         scrollX={ekran.xl ? 1540 : ekran.lg ? 1380 : ekran.md ? 1210 : ekran.sm ? 1060 : 720}
-        secimModu={cokluEtkin ? "coklu" : "tek"}
+        // Seçim her zaman onay kutusuyla; başlıktaki kutu hepsini seçer (2026-11-18).
+        secimModu="coklu"
         secili={secili}
         onSecim={(k) => setSecili(k as number[])}
         onSatirAc={(r) => ac(r.id)}
@@ -2716,8 +2953,9 @@ export function ServisIsListesi({
             setSecili([]);
           },
         }}
+        satirMenusu={onayEkrani ? undefined : satirMenusu}
         eylemler={eylemler}
-        sagEylemler={sagEylemler}
+        ustEylem={yeniDugmesi}
         eylemBilgisi={
           acikBolum ? <CanliSayac soNo={acikBolum.so_no} baslangic={acikBolum.started_at} /> : undefined
         }

@@ -65,6 +65,7 @@ import {
   saati,
 } from "../fiori/ListeOgeleri";
 import ListeRaporu, { KpiKutucugu } from "../fiori/ListeRaporu";
+import KutucukPano from "../fiori/KutucukPano";
 
 const ISO = "YYYY-MM-DD";
 const SAYFA = 50;
@@ -146,7 +147,7 @@ export default function ZamanTakibiPage() {
       }
     },
     onError: (e: ApiError) =>
-      message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
+      void message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
   });
 
   const kisiSecenekleri = useMemo(
@@ -260,7 +261,7 @@ export default function ZamanTakibiPage() {
 
       {ozet.isError && <Alert type="error" showIcon message={(ozet.error as ApiError).message} />}
 
-      <div className="fl-kutucuklar">
+      <KutucukPano ekran="zaman-takibi">
         {(ozet.data?.kpi ?? []).map((k) => (
           <KpiKutucugu
             key={k.kod}
@@ -274,9 +275,14 @@ export default function ZamanTakibiPage() {
             yukleniyor={ozet.isLoading}
           />
         ))}
-      </div>
+      </KutucukPano>
 
-      <FioriBolum baslik={`Şu an çalışanlar (${sayaclar.length})`} dolgusuz>
+      <FioriBolum
+        baslik={`Şu an çalışanlar (${sayaclar.length})`}
+        dolgusuz
+        // Açık sayaç yokken boş tablo yerine tek satır (2026-11-18).
+        bos={!aktif.isFetching && !aktif.isError && sayaclar.length === 0 ? "Açık sayaç yok" : undefined}
+      >
         <ListeRaporu<ZamanKaydi>
           kayitSayisi={sayaclar.length}
           durumCubugu={{

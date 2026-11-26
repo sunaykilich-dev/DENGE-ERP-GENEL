@@ -10,6 +10,7 @@
  * gelir; buradaki sabitler yalnız renk ve sıralama içindir.
  */
 import { api, type Sayfa } from "./client";
+import type { SeriOkumasi } from "../components/barkod/elleGerekce";
 
 const TS = "/api/teknik-servis";
 
@@ -33,6 +34,48 @@ export interface FormVerileri {
   cozum_kanallari: KodAd[];
   bekleme_nedenleri: (KodAd & { aciklama_zorunlu: boolean })[];
   olay_turleri: KodAd[];
+  /** Cihaz kartındaki aksesuar kutucukları (atölyeyle aynı liste; 2026-11-25). */
+  aksesuar_turleri?: KodAd[];
+  /** 2026-11-23: cihazlı işte açılış/kapanış seri okutması (ayar `servis_seri_okutma_zorunlu`). */
+  seri_okutma?: { zorunlu: boolean; cihazli_turler: string[]; elle_gerekceleri: KodAd[] };
+}
+
+/** İşteki bir serinin kaydı; `okuma_kaynagi` null = eski kayıt (kaynak bilinmiyor). */
+export interface IsSerisi {
+  id: number;
+  seri_no: string;
+  seri_norm: string;
+  okuma_kaynagi?: "OKUTMA" | "ELLE" | null;
+  elle_gerekce?: string | null;
+  elle_aciklama?: string | null;
+  /** "Okutuldu" / "Elle: <neden>" / null. */
+  okuma_etiketi?: string | null;
+  /** Cihaz başına bilgi (2026-11-24). Not ve müşteri şikâyeti yalnız personel görür. */
+  notlar?: string | null;
+  musteri_sikayeti?: string | null;
+  cihaz_durumu?: CihazDurumu | null;
+  cihaz_durumu_adi?: string | null;
+  cihaz_durumu_aciklama?: string | null;
+  onarim_bilgisi?: string | null;
+  aksesuarlar?: { kind: string; qty: number; description?: string | null }[] | null;
+}
+
+export type CihazDurumu = "CALISIYOR" | "ARIZALI" | "HASARLI" | "PARCA_EKSIK";
+export const CIHAZ_DURUMLARI: { kod: CihazDurumu; ad: string }[] = [
+  { kod: "CALISIYOR", ad: "Çalışıyor" },
+  { kod: "ARIZALI", ad: "Arızalı" },
+  { kod: "HASARLI", ad: "Fiziksel hasarlı" },
+  { kod: "PARCA_EKSIK", ad: "Parçası eksik" },
+];
+
+/** Cihazın notu, şikâyeti, durumu ve onarım bilgisi (açılışta ya da sonradan). */
+export interface CihazBilgisi {
+  notlar?: string | null;
+  musteri_sikayeti?: string | null;
+  cihaz_durumu?: CihazDurumu | null;
+  cihaz_durumu_aciklama?: string | null;
+  onarim_bilgisi?: string | null;
+  aksesuarlar?: { kind: string; qty: number; description?: string | null }[] | null;
 }
 
 export const DURUM_RENKLERI: Record<string, string> = {
@@ -101,6 +144,8 @@ export interface IsSatiri {
   /** Faz A kalite onayı anı (null = verilmedi). */
   kalite_onay_at: string | null;
   version: number;
+  /** Kullanıcının yetkili olduğu durum geçişleri (listedeki sağ tık / ⋯ menüsü). */
+  gecisler?: Gecis[];
 }
 
 /** Bağlı iş satırı; kapsam dışı işin numarası maskelidir (`id` null). */
@@ -164,7 +209,9 @@ export interface IsDetayi extends Omit<IsSatiri, "seriler"> {
   /** Kural yoksa null; varsa kapanışı engelleyen eksikler. */
   cihaz_bilgisi_eksik: string[] | null;
   aciklama: string | null;
-  seriler: { id: number; seri_no: string; seri_norm: string }[];
+  seriler: IsSerisi[];
+  /** Cihazlı işte açılışta ve kapanışta seri okutulur (ayar açık, tür cihazlı). */
+  seri_okutma_zorunlu?: boolean;
   ekip: EkipUyesi[];
   bekleme: {
     id: number;
@@ -187,6 +234,11 @@ export interface IsDetayi extends Omit<IsSatiri, "seriler"> {
     saha_seri_no: string | null;
     saha_bolge: string | null;
     created_at: string;
+    /** Kapanışta okutulan cihaz serisi (2026-11-23). */
+    kapanis_seri_no?: string | null;
+    kapanis_okuma?: { okuma_kaynagi: string; elle_gerekce: string | null; elle_aciklama: string | null; etiket: string | null } | null;
+    /** Kapanış serisi açılıştakinden farklı (engellemez, uyarı). */
+    kapanis_seri_farkli?: boolean;
   } | null;
   first_completed_at: string | null;
   cancelled_at: string | null;
@@ -208,6 +260,8 @@ export interface IsDetayi extends Omit<IsSatiri, "seriler"> {
 
 export interface AcilisUyarisi {
   kod: string;
+  /** `YETKINLIK` (açılışta tayin uyarısı) metni. */
+  mesaj?: string;
   so_no: string;
   id: number;
   adet?: number;
@@ -269,6 +323,8 @@ export interface IsGirdisi {
   sistem?: string | null;
   aciklama?: string | null;
   seriler?: string[];
+  /** Serilerin nasıl girildiği (cihazlı işte zorunlu; `seriler`'e ayrıca yazılmaz). */
+  seri_okumalari?: SeriOkumasi[];
   iliskili_is_id?: number | null;
   iliski_turu?: string | null;
   mukerrer_gec?: boolean;
@@ -280,6 +336,10 @@ export interface IsGirdisi {
   gecis_gerekcesi?: string | null;
   /** Haberleşme saha işinde zorunlu, çoktan seçmeli (KARARLAR §10). */
   nitelikler?: string[] | null;
+  /** Açılışta tayin (yalnız `servis.planla`; kurallar `/atama` ile aynı). */
+  atamalar?: AtamaSatiri[];
+  /** Cihaz başına bilgi (seriye göre eşlenir). */
+  cihaz_bilgileri?: (CihazBilgisi & { seri_no: string })[];
 }
 
 /** Haberleşme saha işinin niteliği (sunucu `role_montaj.NITELIK_ADLARI` ile aynı). */
@@ -374,6 +434,11 @@ export interface TopluKaliteSonucu {
   atlanan: { id: number; so_no: string | null; neden: string }[];
 }
 
+export interface TopluDurumSonucu {
+  tasinan: { id: number; so_no: string }[];
+  atlanan: { id: number; so_no: string | null; neden: string }[];
+}
+
 export interface UzaktanGirdisi extends IsGirdisi {
   cozum_kanali: "TELEFON" | "UZAKTAN";
   yapilan_islem: string;
@@ -445,6 +510,8 @@ export interface SonucGirdisi {
   saha_seri_no?: string | null;
   saha_bolge?: string | null;
   sure_eksik_onay?: boolean;
+  /** Kapanışta okutulan cihaz serisi (cihazlı işte yerinde/atölyede tamamlarken zorunlu). */
+  kapanis_okuma?: SeriOkumasi | null;
 }
 
 export interface AtamaSatiri {
@@ -647,8 +714,8 @@ export const teknikServisApi = {
       g,
     ),
   guncelle: (id: number, g: Record<string, unknown>) => api.patch<IsDetayi>(isYolu(id), g),
-  seriler: (id: number, seriler: string[], gerekce?: string) =>
-    api.put<IsDetayi>(`${isYolu(id)}/seriler`, { seriler, gerekce }),
+  seriler: (id: number, seriler: string[], gerekce?: string, seri_okumalari?: SeriOkumasi[]) =>
+    api.put<IsDetayi>(`${isYolu(id)}/seriler`, { seriler, gerekce, seri_okumalari }),
   /** KARARLAR 2026-11-20 §1: saha ulaşımı ve araç km. */
   ulasim: (id: number) => api.get<UlasimBilgisi>(`${isYolu(id)}/ulasim`),
   ulasimYaz: (id: number, g: UlasimGirdisi) => api.put<UlasimBilgisi>(`${isYolu(id)}/ulasim`, g),
@@ -677,6 +744,9 @@ export const teknikServisApi = {
   /** İş Emri Onayı toplu onayı: her işe onaylayanın sıradaki adımı (lider onayı ya da son onay/kapatma). */
   topluOnay: (isler: { id: number; version: number }[], not?: string) =>
     api.post<TopluKaliteSonucu>(`${TS}/isler/toplu-onay`, { isler, not }),
+  /** Listeden toplu durum (yalnız genel saha durumları; her iş ayrı sınanır). */
+  topluDurum: (isler: { id: number; version: number }[], hedef: string) =>
+    api.post<TopluDurumSonucu>(`${TS}/isler/toplu-durum`, { isler, hedef }),
   /** Yönetici/şef yanlış "Yola çıktım"ı geri alır (§7.4): YOLA_CIKILDI → PLANLANDI. */
   yolaCikisGeriAl: (id: number, version: number, gerekce: string) =>
     api.post<IsDetayi>(`${isYolu(id)}/yola-cikis-geri-al`, { version, gerekce }),
@@ -689,6 +759,9 @@ export const teknikServisApi = {
   sonuc: (id: number, g: SonucGirdisi) => api.post<IsDetayi>(`${isYolu(id)}/sonuc`, g),
   gecmis: (id: number) => api.get<Olay[]>(`${isYolu(id)}/gecmis`),
   notEkle: (id: number, metin: string) => api.post<Olay>(`${isYolu(id)}/notlar`, { metin }),
+  /** Cihazın notu/şikâyeti/durumu/onarım bilgisi (2026-11-24). */
+  cihazNotuKaydet: (id: number, seriId: number, g: CihazBilgisi) =>
+    api.patch<IsSerisi>(`${isYolu(id)}/cihazlar/${seriId}`, g),
   ekip: (id: number) => api.get<EkipUyesi[]>(`${isYolu(id)}/ekip`),
   ata: (id: number, atamalar: AtamaSatiri[]) =>
     api.put<EkipUyesi[]>(`${isYolu(id)}/atama`, { atamalar }),

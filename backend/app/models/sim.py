@@ -44,6 +44,7 @@ from app.models.mixins import (
     TimestampMixin,
     VersionedMixin,
 )
+from app.models.rbac import sirket_check
 
 HAT_DURUMLARI = ("STOKTA", "TEST", "AKTIF", "ASKIDA", "IPTAL")
 OPERATORLER = ("TURK_TELEKOM", "TURKCELL", "VODAFONE", "DIGER")
@@ -65,6 +66,9 @@ class SimCard(
         ),
         Index("ix_sim_durum", "status"),
         Index("ix_sim_taahhut", "commitment_end_date"),
+        # Şirket bazlı hat (fcl000000001).
+        CheckConstraint(sirket_check("sirket"), name="ck_sim_sirket"),
+        Index("ix_sim_sirket", "sirket"),
     )
 
     iccid: Mapped[str] = mapped_column(String(20))
@@ -108,6 +112,12 @@ class SimCard(
     # ile geçiriyordu; kolon olmadığı için dolu Not sütunu olan her dosya
     # uygula adımında 500 veriyordu (güncelleme yolu ise sessizce yutuyordu).
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # Hattın ait olduğu şirket (fcl000000001). Her hat TEK şirkete aittir;
+    # API yeni hatta etkin şirketi yazar. Python varsayılanı DENGE MOBİLİTE:
+    # göç/içe aktarma yükleyicileri yalnız mobilite verisi taşır ve damgasız
+    # (NULL) hat hiçbir şirkette görünmezdi.
+    sirket: Mapped[str | None] = mapped_column(String(20), default="MOBILITE")
 
     @property
     def aylik_maliyet(self) -> float:

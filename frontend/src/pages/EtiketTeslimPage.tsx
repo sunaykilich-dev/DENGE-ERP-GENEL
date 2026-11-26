@@ -30,7 +30,7 @@ export default function EtiketTeslimPage() {
       message.success("Teslim kaydedildi");
       setNot("");
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   if (etiket.isLoading) return <Spin style={{ display: "block", margin: 48 }} />;

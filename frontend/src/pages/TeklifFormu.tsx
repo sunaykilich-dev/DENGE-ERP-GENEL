@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type ApiError } from "../api/client";
 import { teknikServisApi } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
+import { useSirket } from "../auth/SirketContext";
 import { marka } from "../theme";
 
 /**
@@ -63,6 +64,8 @@ interface Baslik {
     vergi_dairesi: string;
     mersis: string;
     kep: string;
+    /** Marka logosu basılsın mı — yalnız DENGE MOBİLİTE (diğer şirkette unvan yazıyla). */
+    logo?: boolean;
   };
   sartlar: string;
   kdv_varsayilan: number;
@@ -88,6 +91,8 @@ const KALEM_TIPLERI = [
   { value: "SIM_PAKETI", label: "SIM paketi" },
   { value: "SERBEST", label: "Serbest" },
 ];
+/** Abonelik / SIM paketi mobilite kalemidir; yalnız DENGE MOBİLİTE etkinken sunulur. */
+const MOBILITE_KALEM_TIPLERI = ["ABONELIK", "SIM_PAKETI"];
 
 /** Birimli (servis) teklifte kalem tipleri: abonelik/SIM yok, işçilik var. */
 const BIRIMLI_KALEM_TIPLERI = [
@@ -150,6 +155,12 @@ export default function TeklifFormu({
   const { kullanici } = useAuth();
   const qc = useQueryClient();
   const birimlerim = kullanici?.birimler ?? [];
+  // Şirket ucu yoksa (eski arka uç) süzgeç yok → canlı mobilite davranışı.
+  const { aktif: aktifSirket, destekleniyor: sirketDestekli } = useSirket();
+  const mobilite = !sirketDestekli || aktifSirket?.kod === "MOBILITE";
+  const satisKalemTipleri = mobilite
+    ? KALEM_TIPLERI
+    : KALEM_TIPLERI.filter((t) => !MOBILITE_KALEM_TIPLERI.includes(t.value));
 
   const [musteriId, setMusteriId] = useState<number>();
   const [birim, setBirim] = useState<string | undefined>(
@@ -165,8 +176,13 @@ export default function TeklifFormu({
   const [isTuru, setIsTuru] = useState<string | undefined>("PLANSIZ_BAKIM");
 
   const baslik = useQuery({
-    queryKey: ["teklif-baslik"],
-    queryFn: () => api.get<Baslik>("/api/teklifler/belge-basligi"),
+    // Künye teklifin şirketinden: birim seçiliyse birimin şirketi (PDF ile aynı kural).
+    queryKey: ["teklif-baslik", birim ?? null],
+    queryFn: () =>
+      api.get<Baslik>(
+        `/api/teklifler/belge-basligi${birim ? `?birim=${encodeURIComponent(birim)}` : ""}`,
+      ),
+    placeholderData: (onceki) => onceki,
   });
   const kdvVarsayilan = baslik.data?.kdv_varsayilan ?? 0.2;
 
@@ -220,7 +236,7 @@ export default function TeklifFormu({
       void qc.invalidateQueries({ queryKey: ["teklifler"] });
       onKaydedildi?.(t.id);
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   function degis(anahtar: number, yama: Partial<Kalem>) {
@@ -326,7 +342,7 @@ export default function TeklifFormu({
                     // Birimli teklifte abonelik/SIM kalemi yok; tipi sıfırla.
                     setKalemler((o) =>
                       o.map((k) =>
-                        b && ["ABONELIK", "SIM_PAKETI"].includes(k.item_type)
+                        b && MOBILITE_KALEM_TIPLERI.includes(k.item_type)
                           ? { ...k, item_type: "HIZMET" }
                           : !b && k.item_type === "ISCILIK"
                             ? { ...k, item_type: "HIZMET" }
@@ -334,7 +350,7 @@ export default function TeklifFormu({
                       ),
                     );
                   }}
-                  placeholder="Boş = satış teklifi"
+                  placeholder={mobilite ? "Boş = satış teklifi" : "Birim seçin"}
                   style={{ width: "100%" }}
                   options={birimlerim.map((b) => ({ value: b, label: b }))}
                 />
@@ -370,7 +386,7 @@ export default function TeklifFormu({
               <Input
                 value={baslikMetni}
                 onChange={(e) => setBaslikMetni(e.target.value)}
-                placeholder="Araç takip sistemi kurulumu"
+                placeholder="Örn. Sistem kurulumu ve bakım hizmeti"
               />
             </Alan>
             <Space style={{ width: "100%" }} size={10}>
@@ -441,7 +457,7 @@ export default function TeklifFormu({
                         value={k.item_type}
                         onChange={(v) => degis(k.anahtar, { item_type: v })}
                         style={{ width: 120 }}
-                        options={birimli ? BIRIMLI_KALEM_TIPLERI : KALEM_TIPLERI}
+                        options={birimli ? BIRIMLI_KALEM_TIPLERI : satisKalemTipleri}
                       />
                       {k.item_type === "URUN" ? (
                         <Select
@@ -578,7 +594,13 @@ export default function TeklifFormu({
         <div className="teklif-sayfa">
           <div className="s-top">
             <div>
-              <img className="s-logo" src="/brand/denge-mobilite.png" alt={f?.unvan ?? ""} />
+              {/* Marka logosu yalnız DENGE MOBİLİTE'nin; diğer şirkette unvan yazıyla
+                  (PDF şablonuyla aynı kural, künye sunucudan). */}
+              {f?.logo === false ? (
+                <div className="s-unvan">{f.unvan}</div>
+              ) : (
+                <img className="s-logo" src="/brand/denge-mobilite.png" alt={f?.unvan ?? ""} />
+              )}
               <div className="s-addr">
                 {f?.adres}
                 <br />
@@ -711,7 +733,11 @@ export default function TeklifFormu({
             style={{ marginTop: 10 }}
             type="info"
             title="Şirket künyesi eksik"
-            description="Resmî unvan, VKN, vergi dairesi ve MERSİS Parametreler ekranından girilince hem önizlemede hem PDF'te görünür."
+            description={
+              f?.logo === false
+                ? `${f.unvan} için şirket başına künye (VKN, vergi dairesi, MERSİS, e-posta) henüz tanımlı değil; belgede yalnız unvan ve grup merkezi adresi basılır.`
+                : "Resmî unvan, VKN, vergi dairesi ve MERSİS Parametreler ekranından girilince hem önizlemede hem PDF'te görünür."
+            }
           />
         )}
       </div>

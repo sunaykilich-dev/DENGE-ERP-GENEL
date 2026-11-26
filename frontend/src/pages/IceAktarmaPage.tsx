@@ -93,7 +93,7 @@ export default function IceAktarmaPage() {
 
   const secili = (profiller.data ?? []).find((p) => p.kod === kod) ?? null;
 
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
 
   const uygula = useMutation({
     mutationFn: (id: number) =>

@@ -92,7 +92,7 @@ export default function ServisParcalari({
       message.success("Sökülen parça teslim alındı");
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
 
   const sorgu = useQuery({
@@ -109,7 +109,7 @@ export default function ServisParcalari({
       message.success("Talep iptal edildi");
       await tazele();
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
 
   const tersKayit = useMutation({
@@ -118,7 +118,7 @@ export default function ServisParcalari({
       message.success("Ters kayıt yazıldı");
       await tazele();
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
 
   if (!yetkili("servis.gor")) return null;

@@ -30,7 +30,7 @@ from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import func, select
 
 from app.api.deps import (
@@ -48,14 +48,19 @@ from app.models import (
     ServiceHoldReason,
     ServiceOrder,
     ServiceOrderAssignment,
+    ServiceOrderSerial,
     ServiceResult,
     User,
 )
 from app.models.rbac import BIRIM_KODLARI
+from app.models.servis_atolye import AKSESUAR_TURLERI
 from app.models.teknik_servis import (
+    CIHAZ_DURUMLARI,
     COZUM_KANALLARI,
     DURUM_GRUPLARI,
     ONCELIKLER,
+    SERI_ELLE_GEREKCELERI,
+    SERI_OKUMA_KAYNAKLARI,
     SERVIS_DURUMLARI,
     SERVIS_SONUCLARI,
     TALEP_KANALLARI,
@@ -65,17 +70,21 @@ from app.permissions import BIRIMLER
 from app.services import audit, kvkk, sirketler
 from app.services import export as export_svc
 from app.services.accounts import kapsam_disinda_mi as hesap_kapsam_disinda_mi
+from app.services.normalize import normalize_seri
 from app.services.pdf import PdfUretilemedi
 from app.services.teknik_servis import (
     atama,
     bekletme,
     cihaz_bilgisi,
+    cihaz_notlari,
     gecmis,
     is_emirleri,
     kapsam,
     role_montaj,
+    seri_okutma,
     sonuc,
 )
+from app.services.teknik_servis import atolye as atolye_svc
 from app.services.teknik_servis.kancalar import ServisGirdiHatasi, ServisHatasi
 
 router = APIRouter(prefix="/api/teknik-servis", tags=["teknik-servis"])
@@ -111,6 +120,69 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 # --- Şemalar ------------------------------------------------------------------------
 
 
+class SeriOkumaIn(BaseModel):
+    """Bir serinin nasıl girildiği (2026-11-23, `seri_okutma`). OKUTMA: kamera ya
+    da el okuyucu; ELLE: yazıldı — sabit listeden neden zorunlu, DIGER'de açıklama."""
+
+    seri_no: str = Field(min_length=1, max_length=200)
+    okuma_kaynagi: Literal[SERI_OKUMA_KAYNAKLARI]  # type: ignore[valid-type]
+    elle_gerekce: Literal[SERI_ELLE_GEREKCELERI] | None = None  # type: ignore[valid-type]
+    elle_aciklama: str | None = Field(default=None, max_length=200)
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"seri_no": "SN-1", "okuma_kaynagi": "OKUTMA"},
+                {"seri_no": "SN-2", "okuma_kaynagi": "ELLE", "elle_gerekce": "ETIKET_YOK"},
+            ]
+        }
+    }
+
+
+def _okumalar(liste: list[SeriOkumaIn] | None) -> list[seri_okutma.SeriOkuma]:
+    try:
+        return [
+            seri_okutma.okuma(o.seri_no, o.okuma_kaynagi, o.elle_gerekce, o.elle_aciklama)
+            for o in liste or ()
+        ]
+    except ServisGirdiHatasi as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+def _okumalari_serilere_kat(seriler: list[str], okumalar: list[SeriOkumaIn]) -> list[str]:
+    """Okunan seriler `seriler`'e eklenir: mükerrer kontrolü tek listeye bakar."""
+    return [*seriler, *(o.seri_no for o in okumalar if o.seri_no not in seriler)]
+
+
+class CihazAksesuariIn(BaseModel):
+    kind: str = Field(min_length=1, max_length=20)
+    qty: int = Field(default=1, ge=1, le=99)
+    description: str | None = Field(default=None, max_length=120)
+
+
+class CihazBilgisiAlanlari(BaseModel):
+    """Cihaz başına bilgi (2026-11-24; `cihaz_notlari`). Not ve müşteri
+    şikâyeti yalnız personel görür; durum ve onarım onarım fişine basılır."""
+
+    notlar: str | None = Field(default=None, max_length=4000)
+    musteri_sikayeti: str | None = Field(default=None, max_length=4000)
+    cihaz_durumu: Literal[CIHAZ_DURUMLARI] | None = None  # type: ignore[valid-type]
+    cihaz_durumu_aciklama: str | None = Field(default=None, max_length=500)
+    onarim_bilgisi: str | None = Field(default=None, max_length=4000)
+    # 2026-11-25: cihazla gelen aksesuarlar (atölye türleri; doğrulama serviste).
+    aksesuarlar: list[CihazAksesuariIn] | None = Field(default=None, max_length=50)
+
+
+class CihazNotuIn(CihazBilgisiAlanlari):
+    seri_no: str = Field(min_length=1, max_length=200)
+
+
+class AtamaSatiriIn(BaseModel):
+    user_id: int
+    rol: Literal["SEF", "TEKNISYEN"] = "TEKNISYEN"
+    is_lead: bool = False
+
+
 class IsAcIn(BaseModel):
     """Ekrandan servis işi açılışı (E01-02/09). Sözlük doğrulaması serviste (400)."""
 
@@ -139,6 +211,19 @@ class IsAcIn(BaseModel):
     nitelikler: list[str] | None = Field(default=None, max_length=8)
     gecis_kaydi: bool = False
     gecis_gerekcesi: str | None = Field(default=None, max_length=500)
+    # Serilerin nasıl girildiği (cihazlı işte ayar açıkken her seri için zorunlu).
+    seri_okumalari: list[SeriOkumaIn] = Field(default_factory=list, max_length=50)
+    # Açılışta tayin (2026-11-24 sahip kararı): `servis.planla` olan kişi işi
+    # açarken ekibi de verir; kurallar `PUT /isler/{id}/atama` ile AYNI
+    # (`atama.ata`), tek işlemde — tayin reddedilirse iş de açılmaz.
+    atamalar: list[AtamaSatiriIn] = Field(default_factory=list, max_length=30)
+    # Cihaz başına bilgi (seriye göre eşlenir; seri `seriler`'de olmalı).
+    cihaz_bilgileri: list[CihazNotuIn] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _okunanlari_kat(self) -> IsAcIn:
+        self.seriler = _okumalari_serilere_kat(self.seriler, self.seri_okumalari)
+        return self
 
     model_config = {
         "json_schema_extra": {
@@ -210,6 +295,13 @@ class IsPatch(BaseModel):
 class SerilerIn(BaseModel):
     seriler: list[str] = Field(default_factory=list, max_length=50)
     gerekce: str | None = Field(default=None, max_length=500)
+    # Yeni eklenen serilerin okuma kaynağı (isteğe bağlı; verilmezse NULL).
+    seri_okumalari: list[SeriOkumaIn] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _okunanlari_kat(self) -> SerilerIn:
+        self.seriler = _okumalari_serilere_kat(self.seriler, self.seri_okumalari)
+        return self
 
     model_config = {"json_schema_extra": {"examples": [{"seriler": ["SN-1"]}]}}
 
@@ -231,6 +323,8 @@ class BagliIsIn(BaseModel):
     contact_id: int | None = None
     # None = önceki işin aktif serileri; [] = cihazsız.
     seriler: list[str] | None = Field(default=None, max_length=50)
+    # Önceki işte olmayan (yeni) serinin okuma kaynağı; önceki işin serisi devralınır.
+    seri_okumalari: list[SeriOkumaIn] = Field(default_factory=list, max_length=50)
     mukerrer_gec: bool = False
     # Rol testi tur 2 (5_teknisyen B8): bağın türü (iliskili_is_id = önceki iş).
     # Verilmezse yalnız `onceki_is_id` bağı kurulur (eski davranış).
@@ -288,6 +382,15 @@ class KaliteTopluIn(BaseModel):
         "populate_by_name": True,
         "json_schema_extra": {"examples": [{"isler": [{"id": 1, "version": 4}]}]},
     }
+
+
+class TopluDurumIn(BaseModel):
+    """Listeden toplu durum değişikliği: yalnız genel saha durumları
+    (PLANLAMADA/YOLA_CIKILDI/SAHADA/ISLEMDE/ATOLYEDE). Bilgi isteyen geçişler
+    (planla, bekleme, sonuç, iptal) tek tek kendi pencerelerinden yapılır."""
+
+    isler: list[KaliteTopluSatir] = Field(min_length=1, max_length=200)
+    hedef: Literal["PLANLAMADA", "YOLA_CIKILDI", "SAHADA", "ISLEMDE", "ATOLYEDE"]
 
 
 class YolaCikisGeriAlIn(BaseModel):
@@ -359,6 +462,8 @@ class SonucIn(BaseModel):
     saha_seri_no: str | None = Field(default=None, max_length=200)
     saha_bolge: str | None = Field(default=None, max_length=120)
     sure_eksik_onay: bool = False
+    # Kapanışta okutulan cihaz serisi (cihazlı işte yerinde/atölyede tamamlarken zorunlu).
+    kapanis_okuma: SeriOkumaIn | None = None
 
     model_config = {
         "json_schema_extra": {
@@ -373,12 +478,6 @@ class NotIn(BaseModel):
     metin: str = Field(min_length=1, max_length=500)
 
     model_config = {"json_schema_extra": {"examples": [{"metin": "Müşteri aranacak"}]}}
-
-
-class AtamaSatiriIn(BaseModel):
-    user_id: int
-    rol: Literal["SEF", "TEKNISYEN"] = "TEKNISYEN"
-    is_lead: bool = False
 
 
 class AtamaIn(BaseModel):
@@ -588,6 +687,9 @@ async def _satirlar(db, sos: list[ServiceOrder], user: User) -> list[dict[str, A
                 "onceki_is_id": s.onceki_is_id,
                 "kalite_onay_at": s.kalite_onay_at,
                 "version": s.version,
+                # Listedeki hızlı durum menüsü (sağ tık / ⋯, 2026-11-18): yalnız
+                # kullanıcının yetkili olduğu geçişler; kurallar detaydakiyle aynı.
+                "gecisler": [g for g in is_emirleri.gecis_secenekleri(s, user) if g["yetkili"]],
             }
         )
     return satirlar
@@ -633,6 +735,8 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "sla_durdurur": aktif.sla_durdurur,
         }
     gecerli = await sonuc.gecerli_sonuc(db, so)
+    aktif_seriler = await is_emirleri.aktif_seriler(db, so)
+    okutma_acik = await seri_okutma.acik_mi(db)
     sonuc_cikti = None
     if gecerli is not None:
         neden_adi = None
@@ -649,6 +753,7 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "saha_seri_no": gecerli.saha_seri_no,
             "saha_bolge": gecerli.saha_bolge,
             "created_at": gecerli.created_at,
+            **seri_okutma.kapanis_ozeti(gecerli, [s.seri_norm for s in aktif_seriler]),
         }
     bekleme_dk = await bekletme.toplam_bekleme_dk(db, [so.id], clock)
     satir.update(
@@ -666,9 +771,23 @@ async def _detay(db, so: ServiceOrder, user: User, clock) -> dict[str, Any]:
             "cihaz_bilgisi_eksik": await cihaz_bilgisi.eksikler(db, so),
             "aciklama": so.aciklama,
             "seriler": [
-                {"id": x.id, "seri_no": x.seri_no, "seri_norm": x.seri_norm}
-                for x in await is_emirleri.aktif_seriler(db, so)
+                {
+                    "id": x.id,
+                    "seri_no": x.seri_no,
+                    "seri_norm": x.seri_norm,
+                    "okuma_kaynagi": x.okuma_kaynagi,
+                    "elle_gerekce": x.elle_gerekce,
+                    "elle_aciklama": x.elle_aciklama,
+                    "okuma_etiketi": seri_okutma.etiket(
+                        x.okuma_kaynagi, x.elle_gerekce, x.elle_aciklama
+                    ),
+                    **cihaz_notlari.cikti(x),
+                }
+                for x in aktif_seriler
             ],
+            # Cihazlı işte açılış/kapanış okutması isteniyor mu (ekran alanı gösterir).
+            "seri_okutma_zorunlu": okutma_acik
+            and seri_okutma.kapsamda(so.tur, gecis=so.sla_kaynak == "GECIS"),
             "ekip": [
                 {
                     "user_id": a.user_id,
@@ -728,6 +847,8 @@ def _girdi(payload: IsAcIn) -> is_emirleri.ServisIsiGirdisi:
         gecis_kaydi=payload.gecis_kaydi,
         nitelikler=payload.nitelikler,
         nitelik_zorunlu=True,
+        seri_okumalari=_okumalar(payload.seri_okumalari),
+        okutma_denetimi=True,
     )
 
 
@@ -772,19 +893,20 @@ async def _talep_bilgisi_dogrula(
     *,
     gecis: bool = False,
 ) -> None:
-    """M1.2 (Faz A): ekrandan açılan işte lokasyon ve talep eden kişinin adı
-    + telefonu zorunlu. Ad/telefon elle girilir ya da seçilen irtibat
+    """M1.2 (Faz A): ekrandan açılan işte talep eden kişinin adı + telefonu
+    zorunlu. Lokasyon 2026-11-24 sahip kararıyla İSTEĞE BAĞLI (elden/kargo
+    gelen cihazda, lokasyonu tanımlanmamış müşteride iş açılabilmeli);
+    `address_id` parametresi imza uyumu için durur. Ad/telefon elle girilir ya da seçilen irtibat
     kişisinin kaydından gelir. PB ve sistem açılışları (bakım üretimi,
     atölye kabulü, kiralama, bakım bulgusu) bu kapıdan geçmez.
 
     Geçiş kaydında (`servis.gecis_kaydi` + gerekçe; KARARLAR 2026-11-05 §9.8)
-    kaynak listede talep eden kişi yoksa ad/telefon aranmaz; lokasyon yine
-    zorunludur. Kişi sahada/ilk aramada işin irtibatına girilir."""
+    kaynak listede talep eden kişi yoksa ad/telefon aranmaz. Kişi sahada/ilk
+    aramada işin irtibatına girilir."""
     from app.models import Contact
 
+    del address_id
     eksik = []
-    if address_id is None:
-        eksik.append("lokasyon")
     kisi = await db.get(Contact, contact_id) if contact_id is not None else None
     ad = (iletisim_ad or "").strip() or (kisi.full_name if kisi is not None else "")
     telefon = (iletisim_telefon or "").strip() or ((kisi.phone or "") if kisi is not None else "")
@@ -940,6 +1062,10 @@ async def form_verileri(db: DbDep, user: SozlukOkuyucu) -> dict[str, Any]:
         "durum_gruplari": {g: sorted(v) for g, v in DURUM_GRUPLARI.items()},
         "oncelikler": list(ONCELIKLER),
         "talep_kanallari": [{"kod": k, "ad": a} for k, a in is_emirleri.KANAL_ADLARI.items()],
+        # Cihaz başına aksesuar kutucukları (atölye kabulüyle aynı liste).
+        "aksesuar_turleri": [
+            {"kod": k, "ad": atolye_svc.AKSESUAR_ADLARI[k]} for k in AKSESUAR_TURLERI
+        ],
         "iliski_turleri": [
             {"kod": k, "ad": is_emirleri.ILISKI_ADLARI[k]} for k in is_emirleri.EKRAN_ILISKI_TURLERI
         ],
@@ -949,6 +1075,13 @@ async def form_verileri(db: DbDep, user: SozlukOkuyucu) -> dict[str, Any]:
             {"kod": n.kod, "ad": n.ad, "aciklama_zorunlu": n.aciklama_zorunlu} for n in nedenler
         ],
         "olay_turleri": [{"kod": k, "ad": a} for k, a in gecmis.OLAY_ADLARI.items()],
+        "seri_okutma": {
+            "zorunlu": await seri_okutma.acik_mi(db),
+            "cihazli_turler": sorted(seri_okutma.CIHAZLI_TURLER),
+            "elle_gerekceleri": [
+                {"kod": k, "ad": a} for k, a in seri_okutma.ELLE_GEREKCE_ADLARI.items()
+            ],
+        },
     }
 
 
@@ -1260,8 +1393,26 @@ async def olustur(
     """Servis işi açar. Mükerrer seri 409 (`mukerrer_gec` ile geçilir);
     aynı müşteri+lokasyonda açık iş yalnız `uyarilar`'da döner."""
     uyarilar = await _acilis_on_kontrol(db, payload, user)
+    if payload.atamalar and not user.has("servis.planla"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tayin yetkiniz yok (servis.planla)")
     try:
         so = await is_emirleri.olustur(db, _girdi(payload), user=user, clock=clock)
+        if payload.cihaz_bilgileri:
+            cihaz_notlari.acilista_yaz(
+                list(await is_emirleri.aktif_seriler(db, so)),
+                [b.model_dump() for b in payload.cihaz_bilgileri],
+            )
+            await db.flush()
+        if payload.atamalar:
+            with atama.uyari_toplayici() as tayin_uyarilari:
+                await atama.ata(
+                    db,
+                    so,
+                    [atama.AtamaSatiri(a.user_id, a.rol, a.is_lead) for a in payload.atamalar],
+                    user=user,
+                    clock=clock,
+                )
+            uyarilar.extend({"kod": "YETKINLIK", "mesaj": m} for m in tayin_uyarilari)
         if any(u["kod"] == "MUKERRER_GECILDI" for u in uyarilar):
             await gecmis.olay_yaz(
                 db,
@@ -1278,6 +1429,7 @@ async def olustur(
                 },
             )
     except _HATALAR as exc:
+        await db.rollback()
         raise _hata(exc) from exc
     if payload.gecis_kaydi:
         await gecmis.olay_yaz(
@@ -1621,6 +1773,55 @@ async def toplu_onay(
     return {"onaylanan": onaylanan, "atlanan": atlanan}
 
 
+@router.post("/isler/toplu-durum", response_model=None)
+async def toplu_durum(
+    payload: TopluDurumIn,
+    request: Request,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yazici,
+) -> dict[str, Any]:
+    """Servis İşleri listesinde çoklu seçimle durum değişikliği (2026-11-18,
+    kullanıcı isteği: "kayıtları hızlıca planlamada/işlemde/atölyede… çekmek").
+
+    Her iş tekli `/durum` ucunun kuralıyla (kapsam, iyimser kilit, durum
+    makinesi, kancalar) ayrı ayrı sınanır; uymayan iş nedeniyle `atlanan`da
+    döner, diğerleri taşınır (toplu onaydaki kısmi sonuç gibi). Durum olayı
+    her işin geçmişine yazılır."""
+    tasinan: list[dict[str, Any]] = []
+    atlanan: list[dict[str, Any]] = []
+    for satir in {s.id: s for s in payload.isler}.values():
+        so = await db.get(ServiceOrder, satir.id)
+        if so is None or so.is_deleted or await kapsam.is_erisimi_yok_mu(db, user, so):
+            atlanan.append({"id": satir.id, "so_no": None, "neden": "Servis işi bulunamadı"})
+            continue
+        try:
+            if satir.version != so.version:
+                raise is_emirleri.IsEmriHatasi(
+                    "Kayıt başka biri tarafından değiştirildi; sayfayı yenileyin"
+                )
+            async with db.begin_nested():
+                await is_emirleri.durum_degistir(
+                    db, so, payload.hedef, kaynak="genel", user=user, clock=clock
+                )
+        except _HATALAR as exc:
+            await db.refresh(so)
+            atlanan.append({"id": so.id, "so_no": so.so_no, "neden": str(exc)})
+            continue
+        tasinan.append({"id": so.id, "so_no": so.so_no})
+    if tasinan:
+        await audit.log(
+            db,
+            "service_orders",
+            "toplu_durum",
+            new_value={"hedef": payload.hedef, "is_idler": [x["id"] for x in tasinan]},
+            user_id=user.id,
+            ip=client_ip(request),
+        )
+    await db.commit()
+    return {"tasinan": tasinan, "atlanan": atlanan}
+
+
 @router.post("/isler/toplu-kalite-onayi", response_model=None)
 async def toplu_kalite_onayi(
     payload: KaliteTopluIn,
@@ -1796,7 +1997,13 @@ async def seriler(
     so = await _kapsamli_is(db, so_id, user)
     try:
         await is_emirleri.serileri_yaz(
-            db, so, payload.seriler, user=user, clock=clock, gerekce=payload.gerekce
+            db,
+            so,
+            payload.seriler,
+            user=user,
+            clock=clock,
+            gerekce=payload.gerekce,
+            okumalar=_okumalar(payload.seri_okumalari),
         )
     except _HATALAR as exc:
         raise _hata(exc) from exc
@@ -1848,6 +2055,16 @@ async def bagli_yeni_is(
     uyarilar = await _acilis_on_kontrol(db, acilis, user)
     girdi = _girdi(acilis)
     girdi.equipment_id = varsayilan.equipment_id
+    # Önceki işin (yeni işte kalan) serisi devralınır: kaynağı da kopyalanır.
+    secilen = {normalize_seri(x) for x in acilis.seriler}
+    yeni_okunan = {o.norm for o in girdi.seri_okumalari}
+    devralinan = [s for s in await is_emirleri.aktif_seriler(db, onceki) if s.seri_norm in secilen]
+    for s in devralinan:
+        if s.okuma_kaynagi and s.seri_norm not in yeni_okunan:
+            girdi.seri_okumalari.append(
+                seri_okutma.SeriOkuma(s.seri_no, s.okuma_kaynagi, s.elle_gerekce, s.elle_aciklama)
+            )
+    girdi.devralinan_seriler = frozenset(s.seri_norm for s in devralinan)
     if payload.iliski_turu is not None:
         girdi.iliskili_is_id = onceki.id
         girdi.iliski_turu = payload.iliski_turu
@@ -1892,6 +2109,7 @@ def _bagli_acilis(
         aciklama=degerler.get("aciklama"),
         seriler=varsayilan.seriler if payload.seriler is None else list(payload.seriler),
         mukerrer_gec=payload.mukerrer_gec,
+        seri_okumalari=payload.seri_okumalari,
     )
 
 
@@ -2371,6 +2589,9 @@ async def sonuc_gir(
                 saha_seri_no=payload.saha_seri_no,
                 saha_bolge=payload.saha_bolge,
                 sure_eksik_onay=payload.sure_eksik_onay,
+                kapanis_okuma=_okumalar([payload.kapanis_okuma])[0]
+                if payload.kapanis_okuma
+                else None,
             ),
             user=user,
             clock=clock,
@@ -2466,6 +2687,36 @@ async def _ekip_cikti(db, so: ServiceOrder) -> list[dict[str, Any]]:
         }
         for a in ekip
     ]
+
+
+@router.patch("/isler/{so_id}/cihazlar/{seri_id}", response_model=None)
+async def cihaz_bilgisi_duzenle(
+    so_id: int,
+    seri_id: int,
+    payload: CihazBilgisiAlanlari,
+    db: DbDep,
+    clock: ClockDep,
+    user: Yazici,
+) -> dict[str, Any]:
+    """Cihazın notu, müşteri şikâyeti, durumu ve onarım bilgisi (2026-11-24).
+    Yalnız gönderilen alanlar yazılır; kapatılmış/iptal işte 409."""
+    so = await _kapsamli_is(db, so_id, user)
+    satir = await db.get(ServiceOrderSerial, seri_id)
+    if satir is None or satir.service_order_id != so.id or not satir.is_active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cihaz bu işte yok")
+    # TAMAMLANDI'da da düzenlenir (onarım bilgisi sonuçtan sonra yazılabilir);
+    # şef kapattıktan ya da iptalden sonra değişmez.
+    if so.status in ("KAPATILDI", "IPTAL"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Kapalı işte cihaz bilgisi değişmez")
+    try:
+        await cihaz_notlari.duzenle(
+            db, so, satir, payload.model_dump(exclude_unset=True), user=user, clock=clock
+        )
+    except _HATALAR as exc:
+        await db.rollback()
+        raise _hata(exc) from exc
+    await db.commit()
+    return {"id": satir.id, "seri_no": satir.seri_no, **cihaz_notlari.cikti(satir)}
 
 
 @router.get("/isler/{so_id}/ekip", response_model=None)

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.catalog import KIMLIK_TIPLERI, SEBEKE_TEKNOLOJILERI, URUN_TIPLERI
+from app.permissions import SIRKETLER
 
 
 class UrunIn(BaseModel):
@@ -23,6 +24,17 @@ class UrunIn(BaseModel):
     currency: str = "TRY"
     notes: str | None = None
     is_active: bool = True
+    # Şirket bazlı katalog (fcl000000001): `permissions.SIRKETLER` kodu ya da
+    # null (= ORTAK ürün, her şirkette görünür). Gönderilmezse oluşturmada
+    # etkin şirket yazılır.
+    sirket: str | None = None
+
+    @field_validator("sirket")
+    @classmethod
+    def _sirket(cls, v: str | None) -> str | None:
+        if v is not None and v not in SIRKETLER:
+            raise ValueError(f"Şirket {tuple(SIRKETLER)} içinden olmalı ya da boş (ortak)")
+        return v
 
     @field_validator("type")
     @classmethod
@@ -99,5 +111,7 @@ class UrunOut(BaseModel):
     yedek_parca: bool = False
     birim: str | None = None
     min_stok: int | None = None
+    # null = ORTAK ürün (her şirkette görünür).
+    sirket: str | None = None
 
     model_config = {"from_attributes": True}

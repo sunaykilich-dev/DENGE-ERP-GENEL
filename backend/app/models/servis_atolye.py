@@ -104,14 +104,25 @@ ATOLYE_ONARIM_KATEGORILERI = (
 ATOLYE_TEST_SONUCLARI = ("GECTI", "KALDI")
 ATOLYE_ONAY_KARARLARI = ("ONAYLANDI", "REDDEDILDI", "ONAY_GEREKMEZ")
 ATOLYE_ONAY_KANALLARI = ("TELEFON", "EPOSTA", "YAZILI", "TEKLIF")
+# Sıra = kabul ekranındaki kutucuk sırası (2026-11-24 sahip listesi; eski
+# türler KILIF/HARICI_MIKROFON/KABLO sahip kararıyla seçilebilir kalır).
+# Kodlar değişmez: SARJ_UNITESI "Şarj yuvası", SARJ_ADAPTORU "Adaptör",
+# KEMER_KLIPSI "Klips" olarak yalnız ADI değişti (eski kayıtlar bozulmaz).
 AKSESUAR_TURLERI = (
-    "BATARYA",
-    "SARJ_UNITESI",
     "SARJ_ADAPTORU",
+    "SARJ_UNITESI",
+    "SARJ_KABLOSU",
+    "SARJ_TAKIMI",
+    "BATARYA",
+    "ASKI_IPI",
     "ANTEN",
+    "KAPAK",
     "KEMER_KLIPSI",
-    "KILIF",
+    "SIM",
+    "KUTU",
+    "SPEAKER_MIKROFON",
     "KULAKLIK",
+    "KILIF",
     "HARICI_MIKROFON",
     "KABLO",
     "DIGER",
@@ -319,8 +330,27 @@ class WorkshopAccessory(Base, PkMixin, TimestampMixin, ActorMixin):
     return_note: Mapped[str | None] = mapped_column(String(300))
 
 
+class AtolyeModeli(Base, PkMixin, TimestampMixin, ActorMixin):
+    """Kabul ekranındaki model listesi (2026-11-24 sahip kararı).
+
+    Marka başına model adları; `atolye.model_ekle` izni olan kullanıcı listede
+    olmayan modeli kabul ekranından ekler. Marka, kütükte yazıldığı gibidir
+    (telsiz birimlerinde sözlük kodu, ör. HYTERA; "Diğer" markada gerçek ad).
+    Liste yalnız seçim kolaylığıdır: kabul serbest model metnini yine kabul
+    eder (eski kayıtlar ve içe aktarma bozulmasın)."""
+
+    __tablename__ = "atolye_modelleri"
+    __table_args__ = (
+        Index("uq_atolye_modeli", text("lower(marka)"), text("lower(model)"), unique=True),
+    )
+
+    marka: Mapped[str] = mapped_column(String(60))
+    model: Mapped[str] = mapped_column(String(80))
+
+
 __all__ = [
     "AKSESUAR_TURLERI",
+    "AtolyeModeli",
     "ATOLYE_ACIK_OLMAYAN",
     "ATOLYE_DURUMLARI",
     "ATOLYE_GARANTI_DURUMLARI",

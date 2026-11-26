@@ -1,8 +1,16 @@
 /**
  * Operasyon Merkezi (TS-082, TS-083; E10-05/08/09).
  *
- * - Sayaçlar `GET /operasyon/ozet`'ten gelir; her sayaç tıklanınca liste
- *   `GET /operasyon/isler?kpi=` ile aynı süzgeçle açılır (sayı = liste toplamı).
+ * - **Pano** (varsayılan sekme, 2026-11-18): tayin bekleyenler, plandan
+ *   sapanlar, ekip durumu — `OperasyonPanosu.tsx`, `GET /operasyon/pano`.
+ *   "Tüm açık işler" sekmesi aşağıdaki SLA sıralı listedir.
+ * - Sayaçlar `GET /operasyon/ozet`'ten gelir; liste başlığındaki açılır
+ *   listeden seçilen sayaç `GET /operasyon/isler?kpi=` ile aynı süzgeçle açılır
+ *   (sayı = liste toplamı). Üstteki kutucuk bloğu kaldırıldı (UI/UX revize S1):
+ *   aynı sayılar Ana Panel'de; `?kpi=` bağlantıları (e-posta özeti) çalışır.
+ * - SLA yürürlükte değilken (S4) SLA sütunu, SLA sayaçları, "SLA Kartı" eylemi
+ *   çizilmez; bildirim sekmesi yalnız görülmemiş bildirim varken "Bildirimler"
+ *   adıyla görünür (bekleme/PB vadesi bildirimleri SLA'ya bağlı değildir).
  * - Liste SLA kalan süresine göre sunucuda sıralıdır. SLA durumu, kalan süre ve
  *   hedef YALNIZ sunucudan gelir; bu ekran öncelikten süre türetmez
  *   (`backend/tests/unit/test_on_yuz_sla_hesabi_yok.py`).
@@ -10,14 +18,14 @@
  *   toplu plan `POST /planlama/toplu-plan` (PlanPenceresi) çağrılır.
  * - "Bugün çalışılan dk" sütunu yalnız `servis_rapor.personel` ile görünür.
  * - Bildirimler kalıcıdır; "görüldü" kişiye özeldir, rozet sayısı anlık hesaptır.
- * - "E-posta kutusu" sekmesi (TS-200) yalnız `operasyon.yonet` ile görünür:
+ * - "E-posta kutusu" (TS-200) Yönetim › E-posta Kutusu sayfasındadır
+ *   (`EpostaKutusuPage`, 2026-11-18), yalnız `operasyon.yonet` ile görünür:
  *   servis e-postasını aç/kapat, özet saati, deneme sınırı ve giden kutusu.
  *   SMTP sırları bu ekrana gelmez (yalnız "tanımlı mı").
  */
 import {
   CalendarOutlined,
   CheckOutlined,
-  DashboardOutlined,
   FieldTimeOutlined,
   ReloadOutlined,
   UserAddOutlined,
@@ -43,7 +51,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { BIRIM_ETIKETLERI, personelApi } from "../api/personel";
@@ -58,8 +66,9 @@ import {
 } from "../api/servisOperasyon";
 import { teknikServisApi, type AtamaSatiri } from "../api/teknikServis";
 import { useAuth } from "../auth/AuthContext";
+import OperasyonPanosu from "./OperasyonPanosu";
 import PlanPenceresi from "../components/PlanPenceresi";
-import SlaEtiketi, { SlaKartiPenceresi } from "../components/SlaEtiketi";
+import SlaEtiketi, { SlaKartiPenceresi, useSlaYururlukte } from "../components/SlaEtiketi";
 import { ONCELIK_ETIKETLERI, TAYIN, servisDurumEtiketi } from "../fiori/etiketler";
 import {
   Aciklama,
@@ -115,7 +124,7 @@ function TopluAtama({
       setSorumlu(undefined);
       bitti();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const secenekler = (aday.data ?? []).map((k) => ({ value: k.id, label: `${k.ad} · ${k.saha_rolu}` }));
   return (
@@ -173,11 +182,14 @@ function IsListesi({
   baslik,
   oncelikler,
   degistir,
+  slaYururlukte,
 }: {
   suzgec: OperasyonSuzgeci;
-  baslik: string;
+  /** Liste başlığı: sayaç seçimi (açılır liste). */
+  baslik: ReactNode;
   oncelikler: string[];
   degistir: (anahtar: string, deger: string | undefined) => void;
+  slaYururlukte: boolean;
 }) {
   const { yetkili } = useAuth();
   const qc = useQueryClient();
@@ -252,17 +264,27 @@ function IsListesi({
         />
       ),
     },
-    {
-      title: "SLA",
-      key: "sla",
-      width: 110,
-      align: "center",
-      render: (_, r) => (
-        <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setKartIs(r.id)} aria-label="SLA kartı">
-          <SlaEtiketi sla={r.sla} />
-        </Button>
-      ),
-    },
+    ...(slaYururlukte
+      ? [
+          {
+            title: "SLA",
+            key: "sla",
+            width: 110,
+            align: "center" as const,
+            render: (_: unknown, r: OperasyonSatiri) => (
+              <Button
+                type="link"
+                size="small"
+                style={{ padding: 0 }}
+                onClick={() => setKartIs(r.id)}
+                aria-label="SLA kartı"
+              >
+                <SlaEtiketi sla={r.sla} />
+              </Button>
+            ),
+          },
+        ]
+      : []),
     { title: "Açılış\nTarihi", dataIndex: "created_at", width: 100, align: "center", responsive: ["sm"], render: gunu },
     { title: "Açılış\nSaati", dataIndex: "created_at", key: "saat", width: 90, align: "center", responsive: ["md"], render: saati },
     { title: "Açıklama", dataIndex: "konu", width: 280, render: (v: string, r) => <Aciklama metin={v} onClick={() => isAc(r)} /> },
@@ -318,7 +340,7 @@ function IsListesi({
         seciliKategori={suzgec.birim ?? TUMU_KATEGORISI.kod}
         onKategori={(k) => degistir("birim", k === TUMU_KATEGORISI.kod ? undefined : k)}
         kayitSayisi={liste.data?.toplam}
-        ustSag={<Typography.Text strong>{baslik}</Typography.Text>}
+        ustSag={baslik}
         durumCubugu={{
           gruplar: oncelikler.map((o) => ({ kod: o, ad: ONCELIK_ETIKETLERI[o] ?? buyuk(o), durumlar: [o] })),
           secili: suzgec.oncelik,
@@ -379,6 +401,7 @@ function IsListesi({
             ad: "SLA Kartı",
             ikon: <FieldTimeOutlined />,
             yalnizIkon: true,
+            gizli: !slaYururlukte,
             devreDisi: secili.length !== 1,
             onClick: () => secili.length === 1 && setKartIs(secili[0].id),
           },
@@ -415,6 +438,8 @@ function IsListesi({
   );
 }
 
+const MUSAITLIK_ADI: Record<string, string> = { IZIN: "İzinli", EGITIM: "Eğitimde", OFIS: "Ofiste" };
+
 function PersonelSekmesi({ birim }: { birim?: string }) {
   const veri = useQuery({
     queryKey: ["operasyon-personel", birim],
@@ -439,6 +464,11 @@ function PersonelSekmesi({ birim }: { birim?: string }) {
               {r.acik_sayac.so_no} · {r.acik_sayac.faaliyet}
             </Tag>
           </Tooltip>
+        ) : r.musait_degil ? (
+          <Tag>
+            {MUSAITLIK_ADI[r.musait_degil.tur] ?? "Müsait değil"} ·{" "}
+            {dayjs(r.musait_degil.ends_at).format("DD.MM HH:mm")}'e kadar
+          </Tag>
         ) : (
           <Typography.Text type="secondary">Açık sayaç yok</Typography.Text>
         ),
@@ -485,7 +515,7 @@ function BildirimSekmesi() {
   const gor = useMutation({
     mutationFn: (idler: number[]) => operasyonApi.goruldu(idler),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["operasyon-bildirimler"] }),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const gorulmemis = (veri.data?.kayitlar ?? []).filter((b) => !b.goruldu).map((b) => b.id);
   const sutunlar: ColumnsType<Bildirim> = [
@@ -579,7 +609,7 @@ const KUTU_DURUM_ADI: Record<string, string> = {
 };
 
 /** Servis e-posta kutusu ve ayarları (TS-200; yalnız `operasyon.yonet`). */
-function EpostaSekmesi() {
+export function EpostaSekmesi() {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [durum, setDurum] = useState<string | undefined>();
@@ -596,7 +626,7 @@ function EpostaSekmesi() {
       qc.setQueryData(["operasyon-eposta-ayar"], r);
       message.success("E-posta ayarı kaydedildi");
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const a = ayar.data;
   const sutunlar: ColumnsType<EpostaKutusuSatiri> = [
@@ -700,7 +730,6 @@ function EpostaSekmesi() {
 
 export default function OperasyonMerkeziPage() {
   const qc = useQueryClient();
-  const { yetkili } = useAuth();
   const [arama, setArama] = useSearchParams();
   const suzgec: OperasyonSuzgeci = useMemo(
     () => ({
@@ -710,7 +739,10 @@ export default function OperasyonMerkeziPage() {
     }),
     [arama],
   );
-  const sekme = arama.get("sekme") ?? "isler";
+  // Varsayılan sekme pano (2026-11-18); `?kpi=` bağlantıları (e-posta özeti)
+  // eski listeye düşer.
+  const sekme = arama.get("sekme") ?? (arama.get("kpi") ? "isler" : "pano");
+  const [ekipIs, setEkipIs] = useState<{ id: number; birim: string } | null>(null);
   const degistir = (anahtar: string, deger: string | undefined) => {
     const p = new URLSearchParams(arama);
     if (deger) p.set(anahtar, deger);
@@ -719,10 +751,13 @@ export default function OperasyonMerkeziPage() {
   };
 
   const sozluk = useQuery({ queryKey: ["sla-sozluk"], queryFn: operasyonApi.sozluk, staleTime: 300_000 });
+  const slaYururlukte = useSlaYururlukte();
   const ozet = useQuery({
     queryKey: ["operasyon-ozet", suzgec.birim, suzgec.oncelik],
     queryFn: () => operasyonApi.ozet({ birim: suzgec.birim, oncelik: suzgec.oncelik }),
     refetchInterval: YENILEME_MS,
+    // Sayaç seçimi yalnız "Tüm açık işler" sekmesinde.
+    enabled: sekme === "isler",
   });
   const rozet = useQuery({
     queryKey: ["operasyon-bildirimler", "rozet"],
@@ -730,70 +765,45 @@ export default function OperasyonMerkeziPage() {
     refetchInterval: YENILEME_MS,
   });
 
-  const gruplar = useMemo(() => {
-    const m = new Map<string, NonNullable<typeof ozet.data>["sayaclar"]>();
-    for (const s of ozet.data?.sayaclar ?? []) {
-      const g = m.get(s.grup) ?? [];
-      g.push(s);
-      m.set(s.grup, g);
-    }
-    return [...m.entries()];
-  }, [ozet.data]);
-  const seciliSayac = ozet.data?.sayaclar.find((s) => s.kod === suzgec.kpi);
+  // Sayaçlar kutucuk değil, liste başlığında açılır liste (S1). SLA grubu
+  // yalnız SLA yürürlükteyken listelenir (S4); adresteki kpi yine uygulanır.
+  const sayaclar = (ozet.data?.sayaclar ?? []).filter(
+    (s) => slaYururlukte || s.grup !== "SLA" || s.kod === suzgec.kpi,
+  );
+  const sayacSecimi = (
+    <Select
+      size="small"
+      style={{ minWidth: 220 }}
+      aria-label="Liste"
+      loading={ozet.isLoading}
+      value={suzgec.kpi}
+      onChange={(k) => degistir("kpi", k === "acik" ? undefined : k)}
+      options={[...new Set(sayaclar.map((s) => s.grup))].map((grup) => ({
+        label: grup,
+        title: grup,
+        options: sayaclar
+          .filter((s) => s.grup === grup)
+          .map((s) => ({ value: s.kod, label: `${s.baslik} (${s.deger.toLocaleString("tr-TR")})`, title: s.tanim })),
+      }))}
+      labelRender={({ value }) => sayaclar.find((s) => s.kod === value)?.baslik ?? "Açık işler"}
+    />
+  );
+  const bildirimSayisi = rozet.data?.toplam ?? 0;
+  const bildirimSekmesiVar = slaYururlukte || bildirimSayisi > 0;
+  const aktifSekme = sekme === "bildirimler" && !bildirimSekmesiVar ? "pano" : sekme;
 
   return (
     <div className="fm-sayfa">
-      {sozluk.data && !sozluk.data.sla_yururlukte && (
-        <Alert
-          type="info"
-          showIcon
-          message="SLA henüz yürürlükte değil: işlere hedef damgalanmıyor, SLA sayaçları boş kalır."
-        />
-      )}
       {ozet.error && <Alert type="error" showIcon message={(ozet.error as Error).message} />}
-      {gruplar.map(([grup, sayaclar]) => (
-        <div key={grup}>
-          <div className="fl-kutucuk-grubu-baslik">{grup}</div>
-          <div className="fl-kutucuklar">
-            {sayaclar.map((s) => {
-              const sec = () => {
-                degistir("kpi", s.kod);
-                if (sekme !== "isler") degistir("sekme", undefined);
-              };
-              return (
-                <Tooltip key={s.kod} title={s.tanim}>
-                  <div
-                    className="fl-kutucuk"
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={s.kod === suzgec.kpi}
-                    onClick={sec}
-                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && sec()}
-                    style={s.kod === suzgec.kpi ? { borderColor: "#0a6ed1", boxShadow: "0 0 0 2px #0a6ed1" } : undefined}
-                  >
-                    <div className="fl-kutucuk-baslik">{s.baslik}</div>
-                    <div className="fl-kutucuk-dip">
-                      <span className="fl-kutucuk-ikon">
-                        <DashboardOutlined />
-                      </span>
-                      <span
-                        className={`fl-kutucuk-sayi${s.deger > 0 && s.vurgu === "kritik" ? " kritik" : s.deger > 0 && s.vurgu === "uyari" ? " uyari" : ""}`}
-                      >
-                        {s.deger.toLocaleString("tr-TR")}
-                      </span>
-                    </div>
-                  </div>
-                </Tooltip>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-      {ozet.data && (
+      {aktifSekme === "isler" && ozet.data && (
         <Space wrap>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Güncelleme {dayjs(ozet.data.sunucu_zamani).format("DD.MM.YYYY HH:mm")} · "SLA riskte" eşiği: hedef
-            süresinin %{ozet.data.risk_yuzde}'i geçmiş açık işler
+            Güncelleme {dayjs(ozet.data.sunucu_zamani).format("DD.MM.YYYY HH:mm")}
+            {slaYururlukte
+              ? ` · "SLA riskte" eşiği: hedef süresinin %${ozet.data.risk_yuzde}'i geçmiş açık işler`
+              : sozluk.data
+                ? " · SLA henüz yürürlükte değil"
+                : ""}
           </Typography.Text>
           <Tooltip title="Yenile (ekran dakikada bir kendiliğinden yenilenir)">
             <Button
@@ -806,36 +816,61 @@ export default function OperasyonMerkeziPage() {
         </Space>
       )}
       <Tabs
-        activeKey={sekme}
-        onChange={(k) => degistir("sekme", k === "isler" ? undefined : k)}
+        activeKey={aktifSekme}
+        onChange={(k) => degistir("sekme", k === "pano" ? undefined : k)}
         items={[
           {
+            key: "pano",
+            label: "Pano",
+            children: (
+              <OperasyonPanosu
+                birim={suzgec.birim}
+                tumIsler={() => degistir("sekme", "isler")}
+                ekipKur={(id, birim) => setEkipIs({ id, birim })}
+              />
+            ),
+          },
+          {
             key: "isler",
-            label: "İşler",
+            label: "Tüm açık işler",
             children: (
               <IsListesi
                 suzgec={suzgec}
-                baslik={seciliSayac?.baslik ?? "Açık işler"}
+                baslik={sayacSecimi}
                 oncelikler={sozluk.data?.oncelikler ?? []}
                 degistir={degistir}
+                slaYururlukte={slaYururlukte}
               />
             ),
           },
           { key: "personel", label: "Personel iş yükü", children: <PersonelSekmesi birim={suzgec.birim} /> },
-          {
-            key: "bildirimler",
-            label: (
-              <Badge count={rozet.data?.toplam ?? 0} size="small" offset={[8, -2]}>
-                SLA bildirimleri
-              </Badge>
-            ),
-            children: <BildirimSekmesi />,
-          },
-          ...(yetkili("operasyon.yonet")
-            ? [{ key: "eposta", label: "E-posta kutusu", children: <EpostaSekmesi /> }]
+          ...(bildirimSekmesiVar
+            ? [
+                {
+                  key: "bildirimler",
+                  label: (
+                    <Badge count={bildirimSayisi} size="small" offset={[8, -2]}>
+                      {slaYururlukte ? "SLA bildirimleri" : "Bildirimler"}
+                    </Badge>
+                  ),
+                  children: <BildirimSekmesi />,
+                },
+              ]
             : []),
         ]}
       />
+      {ekipIs && (
+        <TopluAtama
+          birim={ekipIs.birim}
+          isIdler={[ekipIs.id]}
+          acik
+          kapat={() => setEkipIs(null)}
+          bitti={() => {
+            setEkipIs(null);
+            void qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("operasyon") });
+          }}
+        />
+      )}
     </div>
   );
 }

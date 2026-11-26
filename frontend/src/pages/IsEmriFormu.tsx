@@ -162,7 +162,7 @@ export default function IsEmriFormu({ onKaydedildi }: { onKaydedildi?: () => voi
       void qc.invalidateQueries({ queryKey: ["hakedis-panel"] });
       onKaydedildi?.();
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   async function imeiKontrol(k: Kalem) {

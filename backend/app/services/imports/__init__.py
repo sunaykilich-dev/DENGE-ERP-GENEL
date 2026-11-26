@@ -86,6 +86,12 @@ _EK_PROFIL_MODULLERI = (
     "app.services.imports.parca_acilis",
     # Dalga 3 Göç-2 (D3-G, TS-205): kiralık envanter göç profili.
     "app.services.imports.kiralama_goc",
+    # 2026-11-23: ürün kataloğu (şirkete ait ya da ortak).
+    "app.services.imports.urun",
+    # 2026-11-23: birimlerin Excel talep listesi → servis işleri.
+    "app.services.imports.servis_talep",
+    # 2026-11-24: organizasyon listesinden toplu kullanıcı (rol + şirket + giriş).
+    "app.services.imports.kullanici",
 )
 
 

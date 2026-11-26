@@ -114,6 +114,10 @@ DEFAULTS: dict[str, Any] = {
     "servis_saha_km_zorunlu": False,
     # KARARLAR 2026-11-20 §4: telsiz atölyesinde kargo/teslim öncesi seri okutma.
     "atolye_teslim_seri_okutma": True,
+    # 2026-11-23: cihazlı servis işinde açılışta ve kapanışta seri okutma (kamera
+    # ya da el okuyucu); elle girişte gerekçe zorunlu. Kapalıysa yalnız serbest
+    # seri girişi (eski davranış). İçe aktarma ve sistem açılışları kural dışı.
+    "servis_seri_okutma_zorunlu": True,
     # KARARLAR 2026-11-20 §7–8: izin onayı ve sicil.
     "izin_onay_sure_saat": 24,
     "ik_eposta": "",
@@ -159,6 +163,10 @@ DEFAULTS: dict[str, Any] = {
     # saat, hafta içi; tatiller fark etmez). Bitiş başlangıçtan sonra olmalı.
     "servis_mesai_baslangic": "08:30",
     "servis_mesai_bitis": "18:00",
+    # Operasyon Merkezi (2026-11-18): tayinsiz iş bu kadar MESAİ dakikası
+    # bekleyince "gecikti" olur ve TAYIN_GECIKTI bildirimi/e-postası üretilir.
+    "servis_tayin_suresi_kritik_dk": 10,
+    "servis_tayin_suresi_dk": 30,
     # --- Atölye / kiralama ----------------------------------------------------
     "atolye_tekrar_gelis_gun": 90,
     "atolye_teslim_alinmayan_uyari_gun": 30,
@@ -224,6 +232,7 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "servis_saha_ulasim_zorunlu": ("bool", None, None),
     "servis_saha_km_zorunlu": ("bool", None, None),
     "atolye_teslim_seri_okutma": ("bool", None, None),
+    "servis_seri_okutma_zorunlu": ("bool", None, None),
     "izin_onay_sure_saat": ("tam", 1, 240),
     "servis_toplu_atama_ust_sinir": ("tam", 1, 1000),
     "servis_ek_silme_saat": ("tam", 0, 720),
@@ -258,6 +267,8 @@ AYAR_SINIRLARI: dict[str, tuple[str, Any, Any]] = {
     "servis_gunluk_ozet_saati": ("saat", None, None),
     "servis_mesai_baslangic": ("saat", None, None),
     "servis_mesai_bitis": ("saat", None, None),
+    "servis_tayin_suresi_kritik_dk": ("tam", 1, 480),
+    "servis_tayin_suresi_dk": ("tam", 1, 480),
     "atolye_tekrar_gelis_gun": ("tam", 1, 730),
     "atolye_teslim_alinmayan_uyari_gun": ("tam", 1, 365),
     "kiralama_kontrol_uyari_gun": ("tam", 1, 365),

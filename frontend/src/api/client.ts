@@ -219,6 +219,8 @@ export interface Kullanici {
   parola_degismeli?: boolean;
   birimler?: string[];
   birincil_birim?: string | null;
+  /** Yeni servis kaydında hazır gelen iş türü (2026-11-24; formda değişir). */
+  varsayilan_is_turu?: string | null;
   /** Şirket ayrımı (KARARLAR 2026-11-04 §1): etkin şirket kodu ve üyelikler. */
   aktif_sirket?: string | null;
   sirketler?: { kod: string; ad: string; birimler: string[] }[];

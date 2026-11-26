@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, DbDep
 from app.models import Account, Device, Product, SimCard, User, Vehicle
 from app.services import accounts as hesap_svc
-from app.services import sirketler
+from app.services import sirket_kapsami, sirketler
 from app.services.normalize import tr_normkey
 
 router = APIRouter(prefix="/api/arama", tags=["arama"])
@@ -123,6 +123,8 @@ async def _urun_ara(db: AsyncSession, user: User, terim: str, limit: int) -> lis
         )
         .limit(limit)
     )
+    # Şirket bazlı katalog (fcl000000001): ortak + etkin şirketin ürünleri.
+    stmt = sirket_kapsami.uygula(stmt, sirket_kapsami.urun_kosulu(user))
     return [
         AramaSonucu(
             tur="URUN",
@@ -150,6 +152,8 @@ async def _cihaz_ara(db: AsyncSession, user: User, terim: str, limit: int) -> li
     )
     # Kapsam (TS-217): cihaz listesi ve kartıyla aynı kural; arama yan yoldu.
     stmt = hesap_svc.kapsam_musteri(stmt, user, Device.current_customer_id)
+    # Şirket bazlı (fcl000000001): cihaz listesiyle aynı kural (ürünün şirketi).
+    stmt = sirket_kapsami.uygula(stmt, sirket_kapsami.urun_kosulu(user))
     return [
         AramaSonucu(
             tur="CIHAZ",
@@ -210,6 +214,8 @@ async def _hat_ara(db: AsyncSession, user: User, terim: str, limit: int) -> list
         )
         .limit(limit)
     )
+    # Şirket bazlı (fcl000000001): hat listesiyle aynı kural.
+    stmt = sirket_kapsami.uygula(stmt, sirket_kapsami.hat_kosulu(user))
     return [
         AramaSonucu(
             tur="HAT",
@@ -226,7 +232,9 @@ async def _hat_ara(db: AsyncSession, user: User, terim: str, limit: int) -> list
 def _yalniz_mobilite(arayici: Callable) -> Callable:
     """Mobilite modülü arayıcısı yalnız DENGE MOBİLİTE etkinken sonuç verir
     (KARARLAR 2026-11-04 §1): ekranı 403 olan kaydın aramada çıkması kapıyı
-    yan yoldan açardı. Arayıcının kendisi değişmez; hesap/ürün ortaktır."""
+    yan yoldan açardı. Arayıcının kendisi değişmez; hesap ortaktır. Cihaz ve
+    hat artık şirket bazlıdır (fcl000000001): arayıcıları kendi içinde süzülür,
+    bu sargı yalnız araç arayıcısında kalır."""
 
     async def _sarili(db: AsyncSession, user: User, terim: str, limit: int):
         if not sirketler.mobilite_acik_mi(user):
@@ -240,9 +248,9 @@ def _yalniz_mobilite(arayici: Callable) -> Callable:
 # Canlı arayıcılar — sıra eskisiyle aynı (cihaz, araç, hat, hesap, ürün).
 # Teknik servis arayıcıları kendi API dosyalarından SONRA kaydolur.
 for _izin, _arayici in (
-    ("cihaz.gor", _yalniz_mobilite(_cihaz_ara)),
+    ("cihaz.gor", _cihaz_ara),
     ("arac.gor", _yalniz_mobilite(_arac_ara)),
-    ("hat.gor", _yalniz_mobilite(_hat_ara)),
+    ("hat.gor", _hat_ara),
     ("hesap.gor", _hesap_ara),
     ("urun.gor", _urun_ara),
 ):

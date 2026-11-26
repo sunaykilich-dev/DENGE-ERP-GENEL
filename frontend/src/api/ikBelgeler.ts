@@ -142,7 +142,7 @@ export interface Dogrulama {
 }
 
 /** Çok parçalı istek (dosya yükleme): Content-Type'ı tarayıcı koyar. */
-async function cokParcali<T>(yol: string, govde: FormData): Promise<T> {
+export async function cokParcali<T>(yol: string, govde: FormData): Promise<T> {
   const res = await fetch(yol, {
     method: "POST",
     body: govde,

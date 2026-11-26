@@ -149,7 +149,7 @@ export default function RmaPage() {
     void qc.invalidateQueries({ queryKey: ["rma-ariza-orani"] });
   };
 
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
 
   const ac = useMutation({
     mutationFn: (v: Record<string, unknown>) => api.post<Rma>("/api/rma", v),

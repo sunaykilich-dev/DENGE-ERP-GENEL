@@ -51,7 +51,7 @@ import {
   Typography,
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import type { ApiError } from "../api/client";
@@ -64,6 +64,7 @@ import {
   type HavuzSatiri,
   PLAN_NEDENLERI,
   type Plan,
+  type PlansizIs,
   type TakvimSatiri,
   planlamaApi,
   planlamaP3Api,
@@ -71,8 +72,11 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import KategoriSeridi from "../fiori/KategoriSeridi";
 import { KpiKutucugu } from "../fiori/ListeRaporu";
+import KutucukPano from "../fiori/KutucukPano";
 import PlanPenceresi, { type PlanModu, type PlanPenceresiProps } from "../components/PlanPenceresi";
 import { KaynakSekmesi, PlanUyumuSekmesi } from "./ServisPlanlamaP3";
+import { IsDetayCekmecesi } from "./ServisIsleriPage";
+import { teknikServisApi } from "../api/teknikServis";
 
 type Gorunum = "gun" | "hafta" | "ay";
 const GUN_ADLARI = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
@@ -126,6 +130,34 @@ function kartTuru(k: Kart): string {
   const pb = k.satirlar.filter((s) => s.tur === "PB").length;
   if (pb === 0) return "Servis";
   return pb === k.satirlar.length ? "Bakım" : "Karma";
+}
+
+/** Planı olmayan iş: soluk, kesik çerçeveli; tıklanınca iş ayrıntısı (2026-11-24). */
+function PlansizKart({ is, onAc }: { is: PlansizIs; onAc: () => void }) {
+  const cokGun = is.baslangic !== is.bitis;
+  return (
+    <Card
+      size="small"
+      hoverable
+      onClick={onAc}
+      style={{ marginBottom: 6, opacity: 0.55, borderStyle: "dashed", cursor: "pointer" }}
+      styles={{ body: { padding: 6 } }}
+    >
+      <Space size={4} wrap style={{ fontSize: 12 }}>
+        <Typography.Text strong>{is.so_no}</Typography.Text>
+        <Tag style={{ marginInlineEnd: 0 }}>Plansız</Tag>
+        {is.kapali && <Tag style={{ marginInlineEnd: 0 }}>{is.durum_adi}</Tag>}
+      </Space>
+      <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {is.musteri ?? "—"}
+      </div>
+      <div style={{ fontSize: 11, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {cokGun
+          ? `${dayjs(is.baslangic).format("DD.MM")} – ${dayjs(is.bitis).format("DD.MM")} · ${is.konu}`
+          : is.konu}
+      </div>
+    </Card>
+  );
 }
 
 function ZiyaretKarti({ kart, onAc }: { kart: Kart; onAc: () => void }) {
@@ -203,6 +235,8 @@ export default function ServisPlanlamaPage() {
   const [havuzSecili, setHavuzSecili] = useState<number[]>([]);
   const [havuzAcik, setHavuzAcik] = useState(false);
   const [kart, setKart] = useState<Kart | null>(null);
+  // KPI listesinden / takvim kartından açılan iş ayrıntısı (tüm işlemleriyle).
+  const [isDetayId, setIsDetayId] = useState<number | null>(null);
   const [kartSecili, setKartSecili] = useState<number[]>([]);
   const [pencere, setPencere] = useState<PencereDurumu | null>(null);
   const [geriAl, setGeriAl] = useState<TakvimSatiri | null>(null);
@@ -216,9 +250,39 @@ export default function ServisPlanlamaPage() {
   const bitStr = bit.format(ISO);
   const kpiKodu = params.get("kpi");
 
+  // "Planla…" bağlantısı (Servis İşleri, Operasyon panosu) ?is=<id> ile gelir:
+  // planlayabilen kullanıcıda işin plan penceresi, diğerlerinde iş ayrıntısı
+  // açılır; parametre bir kez işlenip adresten silinir (rol testi 2026-11-20).
+  const isParam = params.get("is");
+  useEffect(() => {
+    const id = Number(isParam);
+    if (!isParam || !Number.isInteger(id) || id <= 0) return;
+    const yeni = new URLSearchParams(params);
+    yeni.delete("is");
+    setParams(yeni, { replace: true });
+    if (!planlayabilir) {
+      setIsDetayId(id);
+      return;
+    }
+    void (async () => {
+      try {
+        const [is, p] = await Promise.all([teknikServisApi.getir(id), planlamaApi.isPlani(id)]);
+        setPencere({ mod: "tekli", isIdler: [id], birim: is.birim, mevcut: p.plan, gun: gun.format(ISO) });
+      } catch (e) {
+        message.error((e as ApiError).message);
+      }
+    })();
+    // Yalnız parametre değişince (bağlantıyla gelişte) çalışır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isParam]);
+
   const takvim = useQuery({
     queryKey: ["servis-takvim", basStr, bitStr, birim, tur],
     queryFn: () => planlamaApi.takvim(basStr, bitStr, suzgec),
+  });
+  const plansiz = useQuery({
+    queryKey: ["servis-takvim-plansiz", basStr, bitStr, birim, tur],
+    queryFn: () => planlamaApi.plansiz(basStr, bitStr, suzgec),
   });
   const havuz = useQuery({
     queryKey: ["servis-havuz", birim, tur, gruplama, arama],
@@ -244,6 +308,13 @@ export default function ServisPlanlamaPage() {
     enabled: gecmisIs != null,
   });
 
+  const isSozlugu = useQuery({
+    queryKey: ["servis-form-verileri"],
+    queryFn: teknikServisApi.formVerileri,
+    staleTime: 5 * 60_000,
+    enabled: isDetayId != null,
+  });
+
   const tazele = () => {
     for (const k of ["servis-takvim", "servis-havuz", "servis-plan-kpi", "servis-plan-kpi-liste"]) {
       void qc.invalidateQueries({ queryKey: [k] });
@@ -260,10 +331,27 @@ export default function ServisPlanlamaPage() {
       tazele();
     },
     onError: (e: ApiError) =>
-      message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
+      void message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
   });
 
   const kartlar = useMemo(() => kartlaraBol(takvim.data ?? []), [takvim.data]);
+  // Plansız işler: başlangıçtan bitişe her gün (görünen aralıkla sınırlı).
+  const plansizGunleri = useMemo(() => {
+    const m = new Map<string, PlansizIs[]>();
+    for (const p of plansiz.data ?? []) {
+      let g = dayjs(p.baslangic, ISO);
+      const son = dayjs(p.bitis, ISO);
+      if (g.isBefore(bas)) g = bas;
+      while (!g.isAfter(son) && !g.isAfter(bit)) {
+        const k = g.format(ISO);
+        m.set(k, [...(m.get(k) ?? []), p]);
+        g = g.add(1, "day");
+      }
+    }
+    return m;
+    // bas/bit basStr/bitStr'den türer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plansiz.data, basStr, bitStr]);
   // Açık kart, takvim tazelenince güncel satırlarla yeniden kurulur.
   const acikKart = useMemo(() => {
     if (!kart) return null;
@@ -297,12 +385,17 @@ export default function ServisPlanlamaPage() {
 
   const gunHucresi = (g: Dayjs, sinir: number) => {
     const liste = kartlar.get(g.format(ISO)) ?? [];
+    const plansizlar = plansizGunleri.get(g.format(ISO)) ?? [];
+    const toplam = liste.length + plansizlar.length;
     return (
       <>
         {liste.slice(0, sinir).map((k) => (
           <ZiyaretKarti key={k.anahtar} kart={k} onAc={() => kartAc(k)} />
         ))}
-        {liste.length > sinir && (
+        {plansizlar.slice(0, Math.max(0, sinir - liste.length)).map((p) => (
+          <PlansizKart key={`p${p.is_id}`} is={p} onAc={() => setIsDetayId(p.is_id)} />
+        ))}
+        {toplam > sinir && (
           <Button
             size="small"
             type="link"
@@ -311,7 +404,7 @@ export default function ServisPlanlamaPage() {
               setGorunum("gun");
             }}
           >
-            +{liste.length - sinir} daha
+            +{toplam - sinir} daha
           </Button>
         )}
       </>
@@ -320,7 +413,7 @@ export default function ServisPlanlamaPage() {
 
   const takvimGovdesi = () => {
     if (gorunum === "gun") {
-      return (kartlar.get(gun.format(ISO)) ?? []).length ? (
+      return (kartlar.get(gun.format(ISO)) ?? []).length + (plansizGunleri.get(gun.format(ISO)) ?? []).length ? (
         gunHucresi(gun, KART_SINIRI.gun)
       ) : (
         <Empty description="Bu gün plan yok" />
@@ -566,7 +659,9 @@ export default function ServisPlanlamaPage() {
                   }
                 />
               )}
-              <span>{s.so_no}</span>
+              <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setIsDetayId(s.is_id)}>
+                {s.so_no}
+              </Button>
               <Tag>{DURUM_ETIKETLERI[s.durum] ?? s.durum}</Tag>
               {s.cakisma && <Tag color="red">Çakışma{s.cakisma_gecildi ? " (gerekçeli)" : ""}</Tag>}
             </Space>
@@ -634,9 +729,19 @@ export default function ServisPlanlamaPage() {
         loading={kpiListe.isLoading}
         dataSource={kpiListe.data?.kayitlar ?? []}
         pagination={{ pageSize: 50 }}
+        // Satıra tıklayınca işin ayrıntısı açılır: durum, düzenle, tayin, planla… (2026-11-18).
+        onRow={(r) => ({ onClick: () => setIsDetayId(r.is_id), style: { cursor: "pointer" } })}
         scroll={{ x: 560 }}
         columns={[
-          { title: "İş No", dataIndex: "so_no" },
+          {
+            title: "İş No",
+            dataIndex: "so_no",
+            render: (v: string, r) => (
+              <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setIsDetayId(r.is_id)}>
+                {v}
+              </Button>
+            ),
+          },
           { title: "Müşteri", dataIndex: "musteri", ellipsis: true },
           { title: "Lokasyon", dataIndex: "lokasyon", ellipsis: true },
           {
@@ -664,7 +769,7 @@ export default function ServisPlanlamaPage() {
   const takvimSekmesi = (
     <>
       {(kpi.data ?? []).length > 0 && (
-        <div className="fl-kutucuklar" style={{ marginBottom: 12 }}>
+        <KutucukPano ekran="servis-planlama" className="fl-pano-bosluk-12">
           {(kpi.data ?? []).map((k) => (
             <KpiKutucugu
               key={k.kod}
@@ -677,7 +782,7 @@ export default function ServisPlanlamaPage() {
               yol={`/servis-planlama?kpi=${k.kod}&gun=${gun.format(ISO)}`}
             />
           ))}
-        </div>
+        </KutucukPano>
       )}
       <div className="fl-rapor" style={{ marginBottom: 12 }}>
         <div className="fm-arac-cubugu" style={{ border: 0, borderRadius: 0 }}>
@@ -772,6 +877,18 @@ export default function ServisPlanlamaPage() {
       />
       {kartCekmecesi}
       {kpiCekmecesi}
+      {isDetayId != null && (
+        <IsDetayCekmecesi
+          key={isDetayId}
+          id={isDetayId}
+          sozluk={isSozlugu.data}
+          isAc={(x) => setIsDetayId(x)}
+          kapat={() => {
+            setIsDetayId(null);
+            tazele();
+          }}
+        />
+      )}
       <Drawer
         open={bolgeIs !== null}
         onClose={() => setBolgeIs(null)}
@@ -998,7 +1115,7 @@ function AracSekmesi() {
       void qc.invalidateQueries({ queryKey: ["servis-araclar"] });
     },
     onError: (e: ApiError) =>
-      message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
+      void message.error(e.cakisma ? `${e.message} Gerekirse sayfayı yenileyin.` : e.message),
   });
 
   const ac = (a: Arac | "yeni") => {

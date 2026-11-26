@@ -72,6 +72,8 @@ export interface KodAd {
 export interface FormVerileri {
   /** Sözlüğün birimi (sunucunun seçtiği ya da istenen); kabul bu birimle gönderilir. */
   birim?: string;
+  /** Tekil kabulde seri okutması zorunlu mu (ayar `servis_seri_okutma_zorunlu`). */
+  seri_okutma_zorunlu?: boolean;
   durumlar: KodAd[];
   servis_turleri: KodAd[];
   /** Telsiz birimlerinde marka sözlüğü; diğerlerinde kütükteki markalar + DIGER. */
@@ -235,7 +237,7 @@ export interface AtolyeKpi {
 }
 
 export interface SeriGecmisi {
-  ekipmanlar: (EkipmanOzeti & { warranty_end: string | null })[];
+  ekipmanlar: (EkipmanOzeti & { warranty_start?: string | null; warranty_end: string | null })[];
   kayitlar: {
     so_id: number;
     atolye_no: string;
@@ -338,6 +340,10 @@ export interface EkipmanGirdisi {
   warranty_start?: string | null;
   warranty_end?: string | null;
   mukerrer_gerekce?: string | null;
+  /** Seri nasıl girildi (tekil kabulde ayar açıkken zorunlu; 2026-11-23). */
+  okuma_kaynagi?: "OKUTMA" | "ELLE" | null;
+  elle_gerekce?: string | null;
+  elle_aciklama?: string | null;
 }
 
 export interface AksesuarGirdisi {
@@ -435,7 +441,31 @@ export function suzgecParametreleri(s: AtolyeSuzgeci): URLSearchParams {
   return p;
 }
 
+export interface AtolyeModeli {
+  id: number;
+  marka: string;
+  model: string;
+}
+
+export interface KabulIrtibati {
+  id: number;
+  ad: string;
+  unvan: string | null;
+  telefon: string | null;
+}
+
 export const atolyeApi = {
+  /** Kabul ekranı model listesi (marka başına; 2026-11-24). */
+  modeller: (marka: string) =>
+    api.get<AtolyeModeli[]>(`${URL_}/modeller?${new URLSearchParams({ marka })}`),
+  /** `atolye.model_ekle`: aynı ad varsa var olanı döner. */
+  modelEkle: (marka: string, model: string) =>
+    api.post<AtolyeModeli>(`${URL_}/modeller`, { marka, model }),
+  /** Müşterinin tüm irtibatları (lokasyon irtibatları dahil). */
+  irtibatlar: (musteriId: number) =>
+    api.get<KabulIrtibati[]>(`${URL_}/irtibatlar?${new URLSearchParams({ musteri_id: String(musteriId) })}`),
+  irtibatEkle: (g: { musteri_id: number; ad: string; unvan?: string | null; telefon?: string | null }) =>
+    api.post<KabulIrtibati>(`${URL_}/irtibatlar`, g),
   /**
    * Birim verilmezse sunucu kullanıcının birimini seçer (birincil / tek görünür
    * birim; belirsizse 400) ve yanıtta `birim` döner (rol testi tur 2 B12).

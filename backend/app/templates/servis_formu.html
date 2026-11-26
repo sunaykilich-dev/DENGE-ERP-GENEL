@@ -28,7 +28,7 @@
       U+2212, U+2215, U+FEFF, U+FFFD;
   }
   @font-face {
-    font-family: "Archivo";
+    font-family: "ArchivoExt";
     src: url("{{ font_dir }}/archivo-latin-ext-wdth-normal.woff2") format("woff2");
     font-weight: 100 900;
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
@@ -44,7 +44,7 @@
       U+2212, U+2215, U+FEFF, U+FFFD;
   }
   @font-face {
-    font-family: "PlexMono";
+    font-family: "PlexMonoExt";
     src: url("{{ font_dir }}/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2");
     font-weight: 400;
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
@@ -56,8 +56,8 @@
     size: A4; margin: 11mm 12mm 14mm 12mm;
     @bottom-right { content: "Sayfa " counter(page) " / " counter(pages); font-size: 7.5pt; }
   }
-  body { margin: 0; font-family: "Archivo", "DejaVu Sans", sans-serif; color: #000; font-size: 8.5pt; }
-  .mono { font-family: "PlexMono", "DejaVu Sans Mono", monospace; }
+  body { margin: 0; font-family: "Archivo", "ArchivoExt", "DejaVu Sans", sans-serif; color: #000; font-size: 8.5pt; }
+  .mono { font-family: "PlexMono", "PlexMonoExt", "DejaVu Sans Mono", monospace; }
   .ust { display: flex; justify-content: space-between; align-items: flex-start; }
   .firma { line-height: 1.45; }
   .firma .ad { font-weight: 700; font-size: 10pt; }

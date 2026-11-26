@@ -34,8 +34,8 @@ export default function HesapServisKarti({ hesapId }: { hesapId: number }) {
   const takvimYaz = useMutation({
     mutationFn: (tur: SlaTakvimTuru | null) =>
       anaVeriApi.musteriSlaTakvimi(hesapId, tur, kart.data!.version),
-    onSuccess: () => message.success("SLA takvimi kaydedildi; yeni açılan işlere uygulanır"),
-    onError: (e: Error) => message.error(e.message),
+    onSuccess: () => void message.success("SLA takvimi kaydedildi; yeni açılan işlere uygulanır"),
+    onError: (e: Error) => void message.error(e.message),
     onSettled: () => void qc.invalidateQueries({ queryKey: ["hesap-servis-karti", hesapId] }),
   });
   const k = kart.data;

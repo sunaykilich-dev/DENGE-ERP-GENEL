@@ -1,8 +1,11 @@
 /**
  * Fatura devri (TS-197, E07-26) — "Faturaya iletildi" işareti (Logo entegrasyonu değil).
  *
- * - Menü izni `tahsilat.gor`; işaret ve geri alma `tahsilat.yaz`; Excel
- *   `servis_rapor.disaaktar`. Düğmeler `yetkili()` ile gizlenir.
+ * - Menü izni `tahsilat.gor`; işaret ve geri alma `tahsilat.yaz`; "Dışa aktar"
+ *   (Excel / CSV Logo) `rapor.disaaktar` VEYA `servis_rapor.disaaktar` — Finans
+ *   Uzmanı da teknik servis rolleri de alır (sunucu kapısıyla aynı kural).
+ *   Düğmeler `yetkili()` ile gizlenir.
+ * - İş No, `servis.gor` sahibinde işin kartını açan bağlantıdır.
  * - Bekleyen: kabul edilmiş birimli teklifi ya da elle/sözleşme/teklif geliri
  *   olan kapanmış servis işleri. Çoklu seçimle toplu işaret; bir iş bile uygun
  *   değilse sunucu TAMAMINI reddeder (409) ve sorunlu işler gösterilir.
@@ -11,7 +14,7 @@
  * - Tutar kolonu yalnız sunucu `tutar` anahtarını döndürdüğünde görünür.
  * - 375 px'te tablo yatay kayar; 409'da yenileme mesajı.
  */
-import { DownloadOutlined } from "@ant-design/icons";
+import { DownOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -19,6 +22,7 @@ import {
   Button,
   Card,
   DatePicker,
+  Dropdown,
   Input,
   Modal,
   Select,
@@ -31,6 +35,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
@@ -127,12 +132,22 @@ function DevirListesi({ durum }: { durum: "bekleyen" | "iletildi" }) {
       setGerekce("");
       yenile();
     },
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
 
   const tutarVar = (liste.data?.kayitlar ?? []).some((r) => "tutar" in r);
+  // Sunucu kapısı: tahsilat.gor VE (rapor.disaaktar VEYA servis_rapor.disaaktar).
+  const disaAktarabilir = yetkili("rapor.disaaktar") || yetkili("servis_rapor.disaaktar");
+  const isGorebilir = yetkili("servis.gor");
   const kolonlar: ColumnsType<DevirSatiri> = [
-    { title: "İş No", dataIndex: "so_no", className: "mono", width: 160 },
+    {
+      title: "İş No",
+      dataIndex: "so_no",
+      className: "mono",
+      width: 160,
+      render: (v: string, r) =>
+        isGorebilir ? <Link to={`/servis-isleri/${r.so_id}`}>{v}</Link> : v,
+    },
     { title: "Birim", dataIndex: "birim", render: (v: string) => BIRIM_ETIKETLERI[v] ?? v },
     { title: "Müşteri", dataIndex: "musteri", render: (v) => v ?? "—" },
     { title: "Kapanış", dataIndex: "kapanis_tarihi", render: tarih, width: 110 },
@@ -210,23 +225,24 @@ function DevirListesi({ durum }: { durum: "bekleyen" | "iletildi" }) {
             Faturaya iletildi olarak işaretle ({secili.length})
           </Button>
         )}
-        {yetkili("servis_rapor.disaaktar") && (
-          <Button
-            icon={<DownloadOutlined />}
-            onClick={() => window.open(servisMaliyetApi.faturaDevriExcelAdresi(suzgec), "_blank")}
+        {disaAktarabilir && (
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: [
+                { key: "xlsx", label: "Excel" },
+                { key: "csv", label: "CSV (Logo)" },
+              ],
+              onClick: ({ key }) => {
+                const adres = servisMaliyetApi.faturaDevriExcelAdresi(suzgec);
+                window.open(key === "csv" ? `${adres}&bicim=csv` : adres, "_blank");
+              },
+            }}
           >
-            Excel
-          </Button>
-        )}
-        {yetkili("servis_rapor.disaaktar") && (
-          <Button
-            icon={<DownloadOutlined />}
-            onClick={() =>
-              window.open(`${servisMaliyetApi.faturaDevriExcelAdresi(suzgec)}&bicim=csv`, "_blank")
-            }
-          >
-            CSV (Logo)
-          </Button>
+            <Button icon={<DownloadOutlined />}>
+              Dışa aktar <DownOutlined />
+            </Button>
+          </Dropdown>
         )}
       </Space>
       {hata && <Alert type="error" showIcon closable message={hata} onClose={() => setHata(null)} />}

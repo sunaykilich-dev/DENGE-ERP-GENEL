@@ -16,6 +16,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -36,6 +37,7 @@ from app.models.mixins import (
     TimestampMixin,
     VersionedMixin,
 )
+from app.models.rbac import sirket_check
 from app.services.normalize import tr_normkey
 
 URUN_TIPLERI = ("CIHAZ_SERILI", "AKSESUAR", "SIM_PAKETI", "ABONELIK_PLANI", "HIZMET")
@@ -86,6 +88,9 @@ class Product(
         CheckConstraint(
             "NOT yedek_parca OR identity_kind = 'YOK'", name="ck_products_yedek_parca_serisiz"
         ),
+        # Şirket bazlı katalog (fcl000000001): NULL = ortak ürün.
+        CheckConstraint(sirket_check("sirket"), name="ck_products_sirket"),
+        Index("ix_products_sirket", "sirket"),
     )
 
     code: Mapped[str] = mapped_column(String(40))
@@ -142,6 +147,12 @@ class Product(
     birim: Mapped[str | None] = mapped_column(String(10))
     # NULL/0 = az stok uyarısı yok.
     min_stok: Mapped[int | None] = mapped_column(Integer)
+
+    # --- Şirket bazlı katalog (fcl000000001) ---------------------------------
+    # Ürünün ait olduğu şirket (`permissions.SIRKETLER` kodu). NULL = ORTAK
+    # ürün: her şirkette görünür. Cihazın şirketi ürününkidir (cihazda ayrı
+    # sütun yok); görünürlük `services/sirket_kapsami.py`.
+    sirket: Mapped[str | None] = mapped_column(String(20))
 
     bundle_items: Mapped[list["ProductBundleItem"]] = relationship(
         back_populates="bundle",

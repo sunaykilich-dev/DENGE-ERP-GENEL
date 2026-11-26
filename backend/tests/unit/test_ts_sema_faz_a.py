@@ -36,11 +36,10 @@ def test_olay_turleri_ve_konum_kosulu_ayni() -> None:
     assert KONUM_DURUMLARI == ("ALINDI", "ALINAMADI")
 
 
-def test_gunluk_servis_turlerinde_tek_cihaz() -> None:
+def test_tek_cihaz_yalniz_planli_bakimda() -> None:
+    """M1.6 (tek cihaz) 2026-11-24 sahip kararıyla kalktı; yalnız PB 1 cihaz."""
     for tur, kural in is_emirleri.TUR_KURALLARI.items():
-        if kural.kategori == "GUNLUK_SERVIS":
-            assert kural.azami_seri == 1, tur
-    assert is_emirleri.TUR_KURALLARI["KESIF"].azami_seri is None
+        assert kural.azami_seri == (1 if tur == "PB" else None), tur
     assert "yeniden_ac" not in is_emirleri.UC_HEDEFLERI
 
 

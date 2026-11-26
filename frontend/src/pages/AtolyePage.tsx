@@ -251,7 +251,7 @@ function AtamaPenceresi({
       message.success(toplu ? `${soIdler.length} kaydın ekibi güncellendi` : "Ekip güncellendi");
       bitti();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const secenekler = (aday.data ?? []).map((k) => ({
@@ -411,7 +411,7 @@ function KayitBilgileri({
       message.success("Kaydedildi");
       guncellendi(yeni);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const tedarikciSecenek = [
@@ -625,7 +625,7 @@ function Aksesuarlar({
       setDuzenle(false);
       guncellendi(yeni);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   return (
@@ -753,7 +753,7 @@ function EkipmanDuzeltPenceresi({
       message.success("Cihaz bilgisi düzeltildi");
       bitti(yeni);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   return (
     <Modal
@@ -1187,7 +1187,6 @@ export default function AtolyePage() {
   // Rapordaki bir KPI kutusu listeyi açınca (adres değişir) pencere kapanır.
   useEffect(() => setRaporAcik(false), [arama]);
   const [topluAtaAcik, setTopluAtaAcik] = useState(false);
-  const [cokluSecim, setCokluSecim] = useState(false);
   const [suzgecAcik, setSuzgecAcik] = useState(false);
   const ekran = Grid.useBreakpoint();
   const [aramaMetni, setAramaMetni] = useState(suzgec.q ?? "");
@@ -1402,9 +1401,6 @@ export default function AtolyePage() {
   const listeMenusu = [
     ...(aktarabilir ? [{ key: "excel", label: "Excel'e aktar" }] : []),
     ...(raporGorur ? [{ key: "rapor", label: "Atölye KPI raporu" }] : []),
-    ...(atayabilir
-      ? [{ key: "coklu", label: cokluSecim ? "Tekli seçime dön" : `Çoklu seçim (${TAYIN.topluTayin})` }]
-      : []),
     ...(suzgec.kabul_grubu ? [{ key: "grup", label: "Grup kabul fişi (PDF)" }] : []),
     { key: "temizle", label: "Seçimi temizle", disabled: !secili.length },
     { type: "divider" as const },
@@ -1413,10 +1409,7 @@ export default function AtolyePage() {
   const listeMenusuTikla = (k: string) => {
     if (k === "excel") window.open(atolyeApi.excelYolu(suzgec), "_blank");
     else if (k === "rapor") setRaporAcik(true);
-    else if (k === "coklu") {
-      setCokluSecim(!cokluSecim);
-      setSecili((x) => (cokluSecim ? x.slice(0, 1) : x));
-    } else if (k === "grup" && suzgec.kabul_grubu) window.open(atolyeApi.grupFisiYolu(suzgec.kabul_grubu), "_blank");
+    else if (k === "grup" && suzgec.kabul_grubu) window.open(atolyeApi.grupFisiYolu(suzgec.kabul_grubu), "_blank");
     else if (k === "temizle") setSecili([]);
     else if (k === "yenile") void liste.refetch();
   };
@@ -1629,10 +1622,10 @@ export default function AtolyePage() {
         yukleniyor={liste.isFetching}
         bosMetin={liste.isError ? (liste.error as Error).message : "Veri yok"}
         scrollX={ekran.xl ? 1500 : ekran.lg ? 1300 : ekran.md ? 1060 : ekran.sm ? 880 : 720}
-        secimModu={cokluSecim ? "coklu" : "tek"}
+        secimModu="coklu"
         secili={secili}
-        onSecim={(k, satirlar) =>
-          setSecili(cokluSecim ? satirlar.filter((r) => r.acik).map((r) => r.so_id) : (k as number[]))
+        onSecim={(_k, satirlar) =>
+          setSecili(satirlar.filter((r) => r.acik).map((r) => r.so_id))
         }
         onSatirAc={ac}
         sayfalama={{

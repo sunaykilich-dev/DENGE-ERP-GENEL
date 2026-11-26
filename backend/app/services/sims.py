@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import Clock
 from app.integrations.base import HatDurumu
-from app.models import Device, Product, SimCard, SimDeviceHistory, SimPlanHistory
+from app.models import Device, Product, SimCard, SimDeviceHistory, SimPlanHistory, User
 from app.services import settings as ayar_svc
+from app.services import sirket_kapsami as kapsam
 
 # Elle girilmiş alanlar operatör senkronunda EZİLMEZ.
 MANUEL = "MANUEL"
@@ -99,23 +100,31 @@ async def senkron_uygula(
 
 
 # --- Raporlar ----------------------------------------------------------------
+#
+# Şirket bazlı (fcl000000001): `user` verilirse hatlar etkin şirkete, cihazlar
+# ürünün şirketine süzülür. `user=None` (gece işi, worker) = süzgeç yok.
 
 
-async def kota_uyarilari(db: AsyncSession) -> list[dict]:
+def _hat(user: User | None):
+    return kapsam.hat_kosulu(user) if user is not None else None
+
+
+def _urun(user: User | None):
+    return kapsam.urun_kosulu(user) if user is not None else None
+
+
+async def kota_uyarilari(db: AsyncSession, *, user: User | None = None) -> list[dict]:
     """Kotasının %80'ini veya tamamını kullanan hatlar (brief §4.4)."""
     ayarlar = await ayar_svc.get_all(db)
     esik1 = int(ayarlar["kota_uyari_yuzde_1"])
     esik2 = int(ayarlar["kota_uyari_yuzde_2"])
-    satirlar = (
-        await db.scalars(
-            select(SimCard).where(
-                SimCard.is_deleted.is_(False),
-                SimCard.data_allowance_mb.is_not(None),
-                SimCard.data_allowance_mb > 0,
-                SimCard.data_used_mb.is_not(None),
-            )
-        )
-    ).all()
+    stmt = select(SimCard).where(
+        SimCard.is_deleted.is_(False),
+        SimCard.data_allowance_mb.is_not(None),
+        SimCard.data_allowance_mb > 0,
+        SimCard.data_used_mb.is_not(None),
+    )
+    satirlar = (await db.scalars(kapsam.uygula(stmt, _hat(user)))).all()
     sonuc = []
     for h in satirlar:
         yuzde = round(100 * (h.data_used_mb or 0) / h.data_allowance_mb)
@@ -135,7 +144,7 @@ async def kota_uyarilari(db: AsyncSession) -> list[dict]:
     return sorted(sonuc, key=lambda x: -x["yuzde"])
 
 
-async def iki_g_riski(db: AsyncSession) -> list[dict]:
+async def iki_g_riski(db: AsyncSession, *, user: User | None = None) -> list[dict]:
     """Yalnız 2G/3G destekleyen cihazlar ve yalnız 2G açık hatlar.
 
     Mevcut mobil şebeke yetkilendirmeleri 30 Nisan 2029'da bitiyor; bu liste
@@ -144,18 +153,17 @@ async def iki_g_riski(db: AsyncSession) -> list[dict]:
     modern = {"4G", "LTE_M", "NB_IOT"}
 
     # Cihaz tarafı: ürünün desteklediği şebekelerde modern teknoloji yok.
-    cihazlar = (
-        await db.execute(
-            select(Device, Product)
-            .join(Product, Product.id == Device.product_id)
-            .where(
-                Device.is_deleted.is_(False),
-                Device.status.in_(("AKTIF", "MONTAJ_BEKLIYOR", "STOKTA")),
-                Product.supported_network_tech.is_not(None),
-                ~Product.supported_network_tech.overlap(list(modern)),
-            )
+    cihaz_stmt = (
+        select(Device, Product)
+        .join(Product, Product.id == Device.product_id)
+        .where(
+            Device.is_deleted.is_(False),
+            Device.status.in_(("AKTIF", "MONTAJ_BEKLIYOR", "STOKTA")),
+            Product.supported_network_tech.is_not(None),
+            ~Product.supported_network_tech.overlap(list(modern)),
         )
-    ).all()
+    )
+    cihazlar = (await db.execute(kapsam.uygula(cihaz_stmt, _urun(user)))).all()
 
     sonuc = [
         {
@@ -169,16 +177,13 @@ async def iki_g_riski(db: AsyncSession) -> list[dict]:
         for c, u in cihazlar
     ]
 
-    hatlar = (
-        await db.scalars(
-            select(SimCard).where(
-                SimCard.is_deleted.is_(False),
-                SimCard.status == "AKTIF",
-                SimCard.enabled_network_tech.is_not(None),
-                ~SimCard.enabled_network_tech.overlap(list(modern)),
-            )
-        )
-    ).all()
+    hat_stmt = select(SimCard).where(
+        SimCard.is_deleted.is_(False),
+        SimCard.status == "AKTIF",
+        SimCard.enabled_network_tech.is_not(None),
+        ~SimCard.enabled_network_tech.overlap(list(modern)),
+    )
+    hatlar = (await db.scalars(kapsam.uygula(hat_stmt, _hat(user)))).all()
     sonuc += [
         {
             "tur": "HAT",
@@ -193,7 +198,7 @@ async def iki_g_riski(db: AsyncSession) -> list[dict]:
     return sonuc
 
 
-async def atil_hatlar(db: AsyncSession, clock: Clock) -> list[dict]:
+async def atil_hatlar(db: AsyncSession, clock: Clock, *, user: User | None = None) -> list[dict]:
     """Aktif olduğu halde uzun süredir veri göndermeyen hatlar (gereksiz maliyet).
 
     Kullanım verisi operatörden gelmediği sürece `usage_synced_at` boş kalır;
@@ -202,19 +207,16 @@ async def atil_hatlar(db: AsyncSession, clock: Clock) -> list[dict]:
     """
     gun = int(await ayar_svc.get(db, "atil_hat_gun"))
     sinir = clock.now() - timedelta(days=gun)
-    hatlar = (
-        await db.scalars(
-            select(SimCard).where(
-                SimCard.is_deleted.is_(False),
-                SimCard.status == "AKTIF",
-                or_(
-                    SimCard.usage_synced_at.is_(None),
-                    SimCard.usage_synced_at < sinir,
-                    SimCard.data_used_mb == 0,
-                ),
-            )
-        )
-    ).all()
+    stmt = select(SimCard).where(
+        SimCard.is_deleted.is_(False),
+        SimCard.status == "AKTIF",
+        or_(
+            SimCard.usage_synced_at.is_(None),
+            SimCard.usage_synced_at < sinir,
+            SimCard.data_used_mb == 0,
+        ),
+    )
+    hatlar = (await db.scalars(kapsam.uygula(stmt, _hat(user)))).all()
     return [
         {
             "sim_id": h.id,
@@ -228,7 +230,7 @@ async def atil_hatlar(db: AsyncSession, clock: Clock) -> list[dict]:
     ]
 
 
-async def hat_karliligi(db: AsyncSession) -> dict:
+async def hat_karliligi(db: AsyncSession, *, user: User | None = None) -> dict:
     """Müşteriden alınan hat ücreti − operatör maliyeti (brief §4.4)."""
     satir = (
         await db.execute(
@@ -243,7 +245,11 @@ async def hat_karliligi(db: AsyncSession) -> dict:
                     ),
                     0,
                 ),
-            ).where(SimCard.is_deleted.is_(False), SimCard.status == "AKTIF")
+            ).where(
+                SimCard.is_deleted.is_(False),
+                SimCard.status == "AKTIF",
+                *([k] if (k := _hat(user)) is not None else []),
+            )
         )
     ).one()
     adet, gelir, maliyet = satir[0], Decimal(str(satir[1])), Decimal(str(satir[2]))
@@ -256,7 +262,9 @@ async def hat_karliligi(db: AsyncSession) -> dict:
     }
 
 
-async def taahhudu_bitenler(db: AsyncSession, clock: Clock) -> list[dict]:
+async def taahhudu_bitenler(
+    db: AsyncSession, clock: Clock, *, user: User | None = None
+) -> list[dict]:
     """Taahhüdü yaklaşan hatlar.
 
     İndirim taahhüde bağlı (%89): taahhüt düşerse aynı hat 14,43 TL'den
@@ -265,17 +273,16 @@ async def taahhudu_bitenler(db: AsyncSession, clock: Clock) -> list[dict]:
     """
     gun = int(await ayar_svc.get(db, "hat_taahhut_uyari_gun"))
     bugun = clock.now().date()
-    hatlar = (
-        await db.scalars(
-            select(SimCard)
-            .where(
-                SimCard.is_deleted.is_(False),
-                SimCard.commitment_end_date.is_not(None),
-                SimCard.commitment_end_date <= bugun + timedelta(days=gun),
-            )
-            .order_by(SimCard.commitment_end_date)
+    stmt = (
+        select(SimCard)
+        .where(
+            SimCard.is_deleted.is_(False),
+            SimCard.commitment_end_date.is_not(None),
+            SimCard.commitment_end_date <= bugun + timedelta(days=gun),
         )
-    ).all()
+        .order_by(SimCard.commitment_end_date)
+    )
+    hatlar = (await db.scalars(kapsam.uygula(stmt, _hat(user)))).all()
     return [
         {
             "sim_id": h.id,
@@ -290,18 +297,16 @@ async def taahhudu_bitenler(db: AsyncSession, clock: Clock) -> list[dict]:
     ]
 
 
-async def cihazsiz_hatlar(db: AsyncSession) -> int:
+async def cihazsiz_hatlar(db: AsyncSession, *, user: User | None = None) -> int:
     """Hiçbir cihaza takılı olmayan aktif hat sayısı."""
     takili = select(SimDeviceHistory.sim_id).where(SimDeviceHistory.valid_to.is_(None))
-    return (
-        await db.scalar(
-            select(func.count())
-            .select_from(SimCard)
-            .where(
-                SimCard.is_deleted.is_(False),
-                SimCard.status == "AKTIF",
-                SimCard.id.not_in(takili),
-            )
+    stmt = (
+        select(func.count())
+        .select_from(SimCard)
+        .where(
+            SimCard.is_deleted.is_(False),
+            SimCard.status == "AKTIF",
+            SimCard.id.not_in(takili),
         )
-        or 0
     )
+    return (await db.scalar(kapsam.uygula(stmt, _hat(user)))) or 0

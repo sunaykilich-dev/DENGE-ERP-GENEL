@@ -6,8 +6,8 @@ işe yazılan parça çıkışları eklenir. Şablonlar: `bakim_fisi.html`,
 `onarim_fisi.html`.
 
 * **Hangi iş:** bakım fişi planlı/plansız bakım işi (`PB`, `PLANSIZ_BAKIM`);
-  onarım fişi arıza ve atölye işi (`ARIZA`, `ATOLYE`). Diğer türde 409 —
-  o işin belgesi servis formudur.
+  onarım fişi bakım dışındaki her iş (2026-11-24; önceden yalnız `ARIZA`,
+  `ATOLYE`). Bakım işinde onarım fişi 409.
 * **Fiyat:** varsayılan FİYATSIZ (sahada müşteriye imzalatılan belge). İstek
   `fiyatli=true` ise ve kullanıcı tutar görebiliyorsa (`fatura_devri.tutar_gorur_mu`:
   `teklif.gor` ya da `maliyet.gor`) işin hizmet bedeli (gelir, KDV hariç)
@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 
 from app.models import Product, ServiceOrder, StockMovement
 from app.models.servis_maliyet import ServiceOrderFinancial
+from app.models.teknik_servis import SERVIS_TURLERI
 from app.services.teknik_servis.kancalar import ServisHatasi
 from app.services.teknik_servis.yerel_zaman import yerel_bugun
 
@@ -32,7 +33,10 @@ if TYPE_CHECKING:
     from app.clock import Clock
 
 BAKIM_TURLERI = ("PB", "PLANSIZ_BAKIM")
-ONARIM_TURLERI = ("ARIZA", "ATOLYE")
+# 2026-11-24 sahip kararı: onarım fişi (cihaz tablosuyla: durum + onarım
+# bilgisi) bakım dışındaki HER iş türünde basılır — destek, kurulum, elden/
+# kargoyla gelen cihaz işi de müşteriye cihaz bazlı belge alır.
+ONARIM_TURLERI = tuple(t for t in SERVIS_TURLERI if t not in BAKIM_TURLERI)
 FIS_TURLERI = {
     "bakim": (BAKIM_TURLERI, "BAKIM FİŞİ", "bakim_fisi.html", "bakım"),
     "onarim": (ONARIM_TURLERI, "ONARIM FİŞİ", "onarim_fisi.html", "onarım"),
@@ -82,6 +86,12 @@ async def baglam(
         )
     bolum = await onay._is_bolumu(db, so)
     bolum["parcalar"] = await parcalar(db, so.id)
+    # Cihaz tablosu: yalnız müşteriye giden alanlar (not/şikâyet BASILMAZ).
+    from app.services.teknik_servis import cihaz_notlari, is_emirleri
+
+    bolum["cihazlar"] = [
+        cihaz_notlari.musteri_ciktisi(x) for x in await is_emirleri.aktif_seriler(db, so)
+    ]
     bedel = None
     if fiyatli:
         fin = await db.scalar(

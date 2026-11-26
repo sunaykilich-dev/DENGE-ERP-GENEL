@@ -19,6 +19,7 @@ from app.api import bakim as bakim_api
 from app.api import catalog as catalog_api
 from app.api import devices as devices_api
 from app.api import egitim as egitim_api
+from app.api import ekran_duzeni as ekran_duzeni_api
 from app.api import gorevler as gorevler_api
 from app.api import ik_belgeler as ik_belgeler_api
 from app.api import imports as imports_api
@@ -29,6 +30,7 @@ from app.api import kvkk as kvkk_api
 from app.api import lokasyonlar as lokasyonlar_api
 from app.api import orders as orders_api
 from app.api import oturum as oturum_api
+from app.api import ozluk as ozluk_api
 from app.api import payments as payments_api
 from app.api import personel as personel_api
 from app.api import pricing as pricing_api
@@ -209,13 +211,16 @@ def create_app() -> FastAPI:
     # aşağıda `MOBILITE_KAPISI` ile yalnız DENGE MOBİLİTE etkinken açılır.
     app.include_router(oturum_api.router)
     app.include_router(accounts_api.router)
+    # Katalog, cihaz, hat ve stok ŞİRKET BAZLIDIR (fcl000000001): üç şirkete
+    # açıktır, her uç etkin şirkete süzülür (`services/sirket_kapsami.py`).
+    # Operatör senkronu ve cihaz uzlaştırma uç düzeyinde MOBİLİTE'ye kapalıdır.
     app.include_router(catalog_api.router)
-    app.include_router(devices_api.router, dependencies=MOBILITE_KAPISI)
-    app.include_router(sims_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(devices_api.router)
+    app.include_router(sims_api.router)
     app.include_router(vehicles_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(workorders_api.router, dependencies=MOBILITE_KAPISI)
     app.include_router(settlements_api.router, dependencies=MOBILITE_KAPISI)
-    app.include_router(stock_api.router, dependencies=MOBILITE_KAPISI)
+    app.include_router(stock_api.router)
     # Teklif uçları mobilite (birimsiz) ve servis (birimli) teklifinin ORTAK ucu:
     # şirket kuralı yönlendiricide değil `services/quotes._sirket_kosulu`'nda.
     app.include_router(quotes_api.router)
@@ -249,6 +254,7 @@ def create_app() -> FastAPI:
     # (operasyon, atölye, kiralama, parça, maliyet, eğitim) D2-S ekledi.
     app.include_router(personel_api.router)
     app.include_router(ik_belgeler_api.router)
+    app.include_router(ozluk_api.router)
     app.include_router(lokasyonlar_api.router)
     app.include_router(teknik_servis_ana_veri_api.router)
     app.include_router(teknik_servis_planlama_api.router)
@@ -268,6 +274,7 @@ def create_app() -> FastAPI:
     # Ana Panel (2026-11-04 §4; Launchpad yerine ana sayfa).
     app.include_router(ana_panel_api.router)
     app.include_router(ana_panel_duzeni_api.router)
+    app.include_router(ekran_duzeni_api.router)
     # Genel `/api/teknik-servis/{...}` yolları alt önekli routerlardan SONRA:
     # `/isler/{id}` gibi bir kalıp `/planlama/...` yolunu yutmasın.
     app.include_router(teknik_servis_api.router)

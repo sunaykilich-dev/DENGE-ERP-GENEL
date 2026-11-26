@@ -46,7 +46,7 @@ export default function IrsaliyeListesi({ siparisId }: Props) {
     void qc.invalidateQueries({ queryKey: ["irsaliyeler"] });
     setSecili([]);
   };
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
 
   const iptal = useMutation({
     mutationFn: (v: { id: number; neden: string; version: number }) =>

@@ -127,7 +127,7 @@ export default function EkipmanTopluIslemleri({
       setSozlesmeId(null);
       onBitti();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   if (!secili.length || (!isAcabilir && !baglayabilir)) return null;

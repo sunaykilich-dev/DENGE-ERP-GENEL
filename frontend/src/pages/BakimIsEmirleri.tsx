@@ -6,13 +6,25 @@
  * emirleri. Yönetici satırları seçip "İş emirlerini aç" der; önce önizleme
  * (kaç iş açılacak, atlananlar), onayla cihaz başına bir PB açılır ve Servis
  * Planlama'ya düşer. Açılmış iş tekrar açılmaz.
+ *
+ * 2026-11-18 (UI/UX revize S2): ayrı "PB Üretimi" sekmesi kaldırıldı; aynı işi
+ * bu sekme yapar. Gece otomatiği anahtarı ve üretim kayıtları (başka ekranı
+ * yok) bu sekmenin başlığındadır; sunucu kuralları değişmedi (%100 eşleştirme
+ * olmadan otomatik açılamaz, `bakim.otomatik_uretim_ayarla`).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Button, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
+import { Alert, App, Button, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 
-import { bakimApi, hataMetni, PLANLI_IS_DURUMLARI, type PlanliIs, type TopluAcSonucu } from "../api/bakim";
+import {
+  bakimApi,
+  hataMetni,
+  PLANLI_IS_DURUMLARI,
+  type PlanliIs,
+  type TopluAcSonucu,
+  type UretimKaydi,
+} from "../api/bakim";
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
 
@@ -41,6 +53,86 @@ function OnizlemeOzeti({ y }: { y: TopluAcSonucu }) {
   );
 }
 
+/** Gece otomatiği (eski "PB Üretimi" sekmesinden) + üretim kayıtları bağlantısı. */
+function OtomatikUretim() {
+  const { message } = App.useApp();
+  const qc = useQueryClient();
+  const [kayitAcik, setKayitAcik] = useState(false);
+  const otomatik = useQuery({ queryKey: ["bakim", "otomatik-uretim"], queryFn: bakimApi.otomatikUretim });
+  const kayitlar = useQuery({
+    queryKey: ["bakim", "uretim-kayitlari"],
+    queryFn: () => bakimApi.uretimKayitlari(),
+    enabled: kayitAcik,
+  });
+  const ayarla = useMutation({
+    mutationFn: bakimApi.otomatikUretimAyarla,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bakim", "otomatik-uretim"] }),
+    onError: (e) => void message.error(hataMetni(e)),
+  });
+  const o = otomatik.data;
+  if (!o) return null;
+  return (
+    <Space wrap size={8} style={{ marginBottom: 12 }}>
+      <Tooltip
+        title={
+          o.oran.yuzde < 100
+            ? `%100 eşleştirme olmadan otomatik üretim açılamaz (şu an %${o.oran.yuzde}, ${o.oran.eslesen}/${o.oran.toplam})`
+            : `Eşleştirme %${o.oran.yuzde} (${o.oran.eslesen}/${o.oran.toplam})`
+        }
+      >
+        <Space size={6}>
+          <Switch
+            size="small"
+            checked={o.acik}
+            disabled={!o.degistirebilir}
+            loading={ayarla.isPending}
+            onChange={(v) => ayarla.mutate(v)}
+            aria-label="Otomatik PB üretimi (gece)"
+          />
+          <Typography.Text>Otomatik PB üretimi (gece)</Typography.Text>
+          {o.oran.yuzde < 100 && <Tag color="gold">Eşleştirme %{o.oran.yuzde}</Tag>}
+        </Space>
+      </Tooltip>
+      <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setKayitAcik(true)}>
+        Üretim kayıtları
+      </Button>
+      <Modal
+        title="Üretim kayıtları"
+        open={kayitAcik}
+        onCancel={() => setKayitAcik(false)}
+        footer={null}
+        width={720}
+        destroyOnHidden
+      >
+        <Table<UretimKaydi>
+          rowKey="id"
+          size="small"
+          loading={kayitlar.isLoading}
+          dataSource={kayitlar.data?.kayitlar}
+          pagination={false}
+          scroll={{ x: 560 }}
+          columns={[
+            { title: "Tarih", dataIndex: "created_at", render: (v) => dayjs(v).format("DD.MM.YYYY HH:mm") },
+            { title: "Tetik", dataIndex: "tetik" },
+            { title: "Üretilen", dataIndex: "generated_count", render: (v) => v ?? "—" },
+            {
+              title: "Atlanan",
+              render: (_, r) =>
+                r.skipped.length ? (
+                  <Typography.Text type="danger">
+                    {r.skipped.map((a) => `${a.contract_no}: ${a.neden_kodu}`).join(", ")}
+                  </Typography.Text>
+                ) : (
+                  "—"
+                ),
+            },
+          ]}
+        />
+      </Modal>
+    </Space>
+  );
+}
+
 export default function BakimIsEmirleriSekmesi() {
   const { yetkili } = useAuth();
   const yazabilir = yetkili("bakim.yaz");
@@ -62,7 +154,7 @@ export default function BakimIsEmirleriSekmesi() {
 
   const ac = useMutation({
     mutationFn: (onizleme: boolean) => bakimApi.planliIsleriAc(secim, onizleme),
-    onError: (e) => message.error(hataMetni(e)),
+    onError: (e) => void message.error(hataMetni(e)),
   });
 
   const baslat = async () => {
@@ -85,6 +177,7 @@ export default function BakimIsEmirleriSekmesi() {
 
   return (
     <>
+      <OtomatikUretim />
       <Alert
         type="info"
         showIcon

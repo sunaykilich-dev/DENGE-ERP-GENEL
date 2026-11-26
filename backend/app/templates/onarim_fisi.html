@@ -69,6 +69,18 @@
     </td></tr>
   </table>
 
+  {% if s.cihazlar %}
+  <div class="bolum">Cihazlar</div>
+  {% for c in s.cihazlar %}
+  <table class="bilgi" style="margin-bottom:3mm">
+    <tr><th>Cihaz {{ loop.index }} — seri no</th><td class="mono"><strong>{{ c.seri_no }}</strong></td></tr>
+    <tr><th>Cihaz durumu</th><td>{{ c.cihaz_durumu or "—" }}{% if c.cihaz_durumu_aciklama %}<br>{{ c.cihaz_durumu_aciklama }}{% endif %}</td></tr>
+    {% if c.aksesuarlar %}<tr><th>Aksesuarlar</th><td>{{ c.aksesuarlar }}</td></tr>{% endif %}
+    <tr><th>Onarım bilgisi</th><td style="white-space:pre-wrap">{{ c.onarim_bilgisi or "—" }}</td></tr>
+  </table>
+  {% endfor %}
+  {% endif %}
+
   <div class="bolum">Değişen / kullanılan parçalar</div>
   {% if s.parcalar %}
   <table>

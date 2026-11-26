@@ -24,6 +24,7 @@ alanına doğrudan atama yasaktır.
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -144,6 +145,10 @@ TALEP_KANALLARI = (
     "WHATSAPP",
     "EPOSTA",
     "SAHADA_BILDIRILDI",
+    # Cihazın kendisi gelir (2026-11-24 sahip kararı, migration fco000000001):
+    # müşteri elden getirir ya da kargoyla gönderir.
+    "ELDEN",
+    "KARGO",
     "BAKIM_OTOMATIK",
     "DIGER",
 )
@@ -153,8 +158,36 @@ KAPSAM_DURUMLARI = ("SOZLESMELI", "GARANTILI", "KAPSAM_DISI", "BILINMIYOR")
 
 SERVIS_SONUCLARI = ("COZULDU", "COZULEMEDI", "TEKRAR_GIDILECEK", "TEKLIF_SUNULACAK")
 COZUM_KANALLARI = ("YERINDE", "UZAKTAN", "TELEFON", "ATOLYE")
+# Cihazın geliş durumu (2026-11-24 sahip kararı, migration fcp000000001):
+# seçim + isteğe bağlı açıklama; onarım fişinde müşteriye basılır.
+CIHAZ_DURUMLARI = ("CALISIYOR", "ARIZALI", "HASARLI", "PARCA_EKSIK")
 # Sahada görülen seri/bölge kütükten farklıysa (E03-14); PB'de form tutar.
 KUTUK_FARK_DURUMLARI = ("ACIK", "UYGULANDI", "YOK_SAYILDI")
+# Seri okuma kaynağı (2026-11-23 sahip kararı, migration fcn000000001): OKUTMA =
+# barkod/QR (telefon kamerası ya da el okuyucu), ELLE = yazıldı. NULL = eski
+# kayıt (kaynak bilinmiyor; geçmiş "okutuldu" diye işaretlenmez). ELLE girişte
+# gerekçe zorunlu; DIGER'de açıklama da zorunlu.
+SERI_OKUMA_KAYNAKLARI = ("OKUTMA", "ELLE")
+SERI_ELLE_GEREKCELERI = ("ETIKET_YOK", "CIHAZ_YANINDA_DEGIL", "DIGER")
+
+
+def _okuma_kisitlari(on: str, ad: str) -> tuple[CheckConstraint, ...]:
+    """Okuma kaynağı CHECK'leri (seri satırı ve kapanış okuması aynı kural)."""
+    kaynak, gerekce, aciklama = f"{on}okuma_kaynagi", f"{on}elle_gerekce", f"{on}elle_aciklama"
+    return (
+        CheckConstraint(_in(kaynak, SERI_OKUMA_KAYNAKLARI, bos=True), name=f"ck_{ad}_okuma"),
+        CheckConstraint(
+            f"({kaynak} IS DISTINCT FROM 'ELLE' AND {gerekce} IS NULL) OR ({kaynak} = 'ELLE' AND "
+            + _in(gerekce, SERI_ELLE_GEREKCELERI)
+            + ")",
+            name=f"ck_{ad}_elle_gerekce",
+        ),
+        CheckConstraint(
+            f"{gerekce} IS DISTINCT FROM 'DIGER' OR coalesce(length(trim({aciklama})), 0) > 0",
+            name=f"ck_{ad}_elle_aciklama",
+        ),
+    )
+
 
 ONAY_TURLERI = ("IMZA", "SOZLU", "BASILI_FORM", "ALINAMADI")
 ATAMA_ROLLERI = ("SEF", "TEKNISYEN")
@@ -265,6 +298,9 @@ SLA_UYARI_KODLARI = (
     "MUDAHALE_ASILDI",
     "BEKLEME_BITIS_GECTI",
     "PB_VADE_GECTI",
+    # Tayin süresi aşıldı (Operasyon Merkezi panosu, 2026-11-18): SLA'ya bağlı
+    # DEĞİL, mesai dakikasıyla `servis_tayin_suresi_*` eşiği.
+    "TAYIN_GECIKTI",
 )
 SLA_UYARI_ONEMLERI = ("BILGI", "UYARI", "KRITIK")
 # Tohum (migration `bulk_insert`): (oncelik, cozum_saat). Müdahale hedefi
@@ -278,7 +314,7 @@ EPOSTA_DURUMLARI = ("BEKLIYOR", "GONDERILDI", "BASARISIZ")
 # Şema tavanı; işletme sınırı ayar `servis_eposta_deneme` (1–10).
 EPOSTA_AZAMI_DENEME = 10
 # Anlık e-posta üreten kalıcı bildirim kodları (E10-06 kuyruga_al).
-EPOSTA_ANLIK_KODLAR = ("SLA_ASILDI", "MUDAHALE_ASILDI")
+EPOSTA_ANLIK_KODLAR = ("SLA_ASILDI", "MUDAHALE_ASILDI", "TAYIN_GECIKTI")
 
 _SURE_ARALIGI = literal_column("tstzrange(started_at, ended_at, '[)')")
 _ACIK_IS = "status NOT IN ('TAMAMLANDI', 'KAPATILDI', 'IPTAL') AND NOT is_deleted"
@@ -623,7 +659,7 @@ class ServiceOrder(
     )
     baslangic_km: Mapped[int | None] = mapped_column(Integer)
     bitis_km: Mapped[int | None] = mapped_column(Integer)
-    # Elle yazılan plaka (KARARLAR 2026-11-25; fci000000001). Havuzda varsa
+    # Elle yazılan plaka (KARARLAR 2026-11-25; fcs000000001). Havuzda varsa
     # servis_arac_id de dolar; yoksa yalnız metin.
     arac_plaka: Mapped[str | None] = mapped_column(String(20))
 
@@ -662,6 +698,8 @@ class ServiceOrderSerial(Base, PkMixin, TimestampMixin, ActorMixin):
         ),
         CheckConstraint("is_active OR removed_at IS NOT NULL", name="ck_sos_pasif"),
         CheckConstraint("length(trim(seri_no)) > 0", name="ck_sos_seri_bos"),
+        *_okuma_kisitlari("", "sos"),
+        CheckConstraint(_in("cihaz_durumu", CIHAZ_DURUMLARI, bos=True), name="ck_sos_cihaz_durumu"),
         Index("ix_sos_seri_norm", "seri_norm"),
         Index("ix_sos_seri_trgm", text("seri_norm gin_trgm_ops"), postgresql_using="gin"),
     )
@@ -682,6 +720,21 @@ class ServiceOrderSerial(Base, PkMixin, TimestampMixin, ActorMixin):
     removed_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
+    # Açılışta nasıl girildi (OKUTMA/ELLE; NULL = eski kayıt ya da sistem/içe aktarma).
+    okuma_kaynagi: Mapped[str | None] = mapped_column(String(10))
+    elle_gerekce: Mapped[str | None] = mapped_column(String(30))
+    elle_aciklama: Mapped[str | None] = mapped_column(String(200))
+    # Cihaz başına bilgi (2026-11-24). `notlar` ve `musteri_sikayeti` YALNIZ
+    # personel içindir (müşteri belgesine/bağlantısına basılmaz); `cihaz_durumu`
+    # + açıklaması ve `onarim_bilgisi` onarım fişinde müşteriye gider.
+    notlar: Mapped[str | None] = mapped_column(Text)
+    musteri_sikayeti: Mapped[str | None] = mapped_column(Text)
+    cihaz_durumu: Mapped[str | None] = mapped_column(String(20))
+    cihaz_durumu_aciklama: Mapped[str | None] = mapped_column(String(500))
+    onarim_bilgisi: Mapped[str | None] = mapped_column(Text)
+    # 2026-11-25: cihazla gelen aksesuarlar [{kind, qty, description}] — türler
+    # atölyeyle ortak (`servis_atolye.AKSESUAR_TURLERI`); onarım fişine basılır.
+    aksesuarlar: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
 
 
 class ServiceOrderEvent(Base, PkMixin):
@@ -844,6 +897,10 @@ class ServiceResult(Base, PkMixin, TimestampMixin, ActorMixin):
         CheckConstraint(
             _in("kutuk_fark_durumu", KUTUK_FARK_DURUMLARI, bos=True), name="ck_sr_kutuk_fark"
         ),
+        CheckConstraint(
+            "(kapanis_seri_no IS NULL) = (kapanis_okuma_kaynagi IS NULL)", name="ck_sr_kapanis_seri"
+        ),
+        *_okuma_kisitlari("kapanis_", "sr_kapanis"),
         Index("ix_sr_is", "service_order_id"),
     )
 
@@ -860,6 +917,12 @@ class ServiceResult(Base, PkMixin, TimestampMixin, ActorMixin):
     saha_seri_no: Mapped[str | None] = mapped_column(String(200))
     saha_bolge: Mapped[str | None] = mapped_column(String(120))
     kutuk_fark_durumu: Mapped[str | None] = mapped_column(String(12))
+    # Kapanışta (tamamlayan sonuçta) okutulan cihaz serisi ve nasıl girildiği
+    # (2026-11-23). Açılış serisinden farklıysa uyarılır, engellenmez.
+    kapanis_seri_no: Mapped[str | None] = mapped_column(String(200))
+    kapanis_okuma_kaynagi: Mapped[str | None] = mapped_column(String(10))
+    kapanis_elle_gerekce: Mapped[str | None] = mapped_column(String(30))
+    kapanis_elle_aciklama: Mapped[str | None] = mapped_column(String(200))
     gecersiz_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     gecersiz_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
@@ -1275,6 +1338,7 @@ __all__ = [
     "ATAMA_ROLLERI",
     "SORUMLU_ROLLERI",
     "BIRIM_KODLARI",
+    "CIHAZ_DURUMLARI",
     "COZUM_KANALLARI",
     "DURUM_GRUPLARI",
     "EPOSTA_ANLIK_KODLAR",

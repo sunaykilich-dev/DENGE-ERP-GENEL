@@ -1,6 +1,6 @@
 /**
- * Yedek Parça — servis stoğu, hareket geçmişi, parça talepleri, sayım, iş
- * emri parçaları ve servis depoları (TS-130…138).
+ * Yedek Parça — servis stoğu, hareket geçmişi, parça talepleri, sayım ve
+ * servis depoları (TS-130…138).
  *
  * - Üstte tıklanabilir Fiori KPI kutucukları (`KpiKutucugu`): sayı sunucudan
  *   (`/stok/ozet`), tıklama aynı süzgeçle sekmeyi açar ("sayı = liste").
@@ -10,7 +10,10 @@
  *   sunucu sayfalaması; Excel `parca.gor + servis_rapor.disaaktar`.
  *   Maliyet sütunu yalnız sunucu `unit_cost` anahtarını gönderdiyse.
  * - Giriş (belge no), zayi, transfer `parca.yonet`; işe çıkış/iade/talep
- *   `parca.kullan` — "İş emri parçaları" sekmesinde `ServisParcalari`.
+ *   `parca.kullan` — servis işi, planlı bakım formu ve atölye kaydındaki
+ *   `ServisParcalari` bölümünde. Eski "İş Emri Parçaları" sekmesi (iş arama +
+ *   aynı bölüm) kaldırıldı (UI/UX denetimi T10); eski `?sekme=isler&so=<id>`
+ *   bağlantısı işin kartına, `so`suz olanı varsayılan sekmeye yönlenir.
  * - Sayım: açılış anı görüntüsü, sayılan adet girişi, gerekçeli onay; sayım
  *   açıkken stok değiştiyse sunucu sapmaları döndürür, kullanıcı değişimi
  *   kabul ederek yeniden onaylar. Onaysız sayım hiçbir bakiyeyi değiştirmez.
@@ -52,10 +55,9 @@ import {
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 
 import { BIRIM_ETIKETLERI, BIRIM_KODLARI, personelApi } from "../api/personel";
-import { teknikServisApi } from "../api/teknikServis";
 import {
   type Depo,
   HAREKET_TURU_ADLARI,
@@ -94,7 +96,6 @@ import {
 import ListeRaporu from "../fiori/ListeRaporu";
 import ParcaHareketPenceresi, { type ParcaHareketTuru } from "../components/ParcaHareketPenceresi";
 import ParcaTuketimRaporu from "../components/ParcaTuketimRaporu";
-import ServisParcalari from "../components/ServisParcalari";
 
 const SAYFA = 25;
 const zaman = (v: string | null | undefined) => (v ? dayjs(v).format("DD.MM.YYYY HH:mm") : "—");
@@ -110,6 +111,14 @@ export default function YedekParcaPage() {
   const [kartAcik, setKartAcik] = useState(false);
 
   const sekmeDegistir = (k: string) => setParams(new URLSearchParams({ sekme: k }));
+
+  // Kaldırılan "İş Emri Parçaları" sekmesinin eski bağlantıları.
+  if (sekme === "isler") {
+    const so = Number(params.get("so"));
+    return (
+      <Navigate replace to={Number.isInteger(so) && so > 0 ? `/servis-isleri/${so}` : "/yedek-parca"} />
+    );
+  }
 
   return (
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
@@ -137,9 +146,6 @@ export default function YedekParcaPage() {
             { key: "talepler", label: "Parça Talepleri", children: <TalepSekmesi /> },
             { key: "kullanim", label: "Sahada Kullanım", children: <KullanimSekmesi /> },
             { key: "sayimlar", label: "Sayım", children: <SayimSekmesi /> },
-            ...(yetkili("servis.gor")
-              ? [{ key: "isler", label: "İş Emri Parçaları", children: <IsSekmesi /> }]
-              : []),
             { key: "depolar", label: "Depolar", children: <DepoSekmesi /> },
             ...(yetkili("servis_rapor.gor")
               ? [{ key: "tuketim", label: "Tüketim raporu", children: <ParcaTuketimRaporu /> }]
@@ -197,7 +203,7 @@ function StokSekmesi() {
       setDuzenle(null);
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
 
   const kayitlar = liste.data?.kayitlar ?? [];
@@ -394,7 +400,7 @@ function HareketSekmesi() {
       message.success("Ters kayıt yazıldı");
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const tersSor = (h: Hareket) => {
     let metin = "";
@@ -610,12 +616,12 @@ function TalepSekmesi() {
   const iptal = useMutation({
     mutationFn: (id: number) => parcaApi.talepIptal(id, "Kullanıcı iptal etti"),
     onSuccess: () => tazele("Talep iptal edildi"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const onayla = useMutation({
     mutationFn: (id: number) => parcaApi.talepOnayla(id),
     onSuccess: () => tazele("Talep onaylandı; depoya iletildi"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const [redAcik, setRedAcik] = useState(false);
   const [redNedeni, setRedNedeni] = useState("");
@@ -626,12 +632,12 @@ function TalepSekmesi() {
       setRedNedeni("");
       await tazele("Talep reddedildi");
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const teslim = useMutation({
     mutationFn: (id: number) => parcaApi.talepTeslim(id),
     onSuccess: () => tazele("Parça teslim edildi; stoktan çıkış yapıldı"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((t) => t.id === secili[0]) ?? null;
@@ -671,9 +677,7 @@ function TalepSekmesi() {
         t.ikmal ? (
           <Tag color="purple">İkmal → {t.hedef_depo_adi}</Tag>
         ) : (
-          <Link to={`/yedek-parca?sekme=isler&so=${t.service_order_id}`} className="fl-no-rozet">
-            {t.so_no}
-          </Link>
+          <IsNoBaglantisi soId={t.service_order_id} soNo={t.so_no} />
         ),
     },
     { title: "Talep\nTarihi", key: "t", width: 100, align: "center", render: (_, t) => gunu(t.created_at) },
@@ -838,7 +842,7 @@ function IkmalOnerisiKutusu() {
       message.success(t.durum === "ONAY_BEKLIYOR" ? "İkmal talebi amir onayına gönderildi" : "İkmal talebi depoya iletildi");
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const veri = oneriler.data ?? [];
   if (!veri.length) return null;
@@ -918,17 +922,17 @@ function KullanimSekmesi() {
   const onayla = useMutation({
     mutationFn: (id: number) => parcaApi.kullanimOnayla(id),
     onSuccess: () => bitti("Kullanım onaylandı"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const reddet = useMutation({
     mutationFn: ({ id, n }: { id: number; n: string }) => parcaApi.kullanimReddet(id, n),
     onSuccess: () => bitti("Kullanım reddedildi; teknisyene zimmet sorusu açıldı"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const zimmet = useMutation({
     mutationFn: ({ id, n }: { id: number; n: string }) => parcaApi.zimmetCevapla(id, n),
     onSuccess: () => bitti("Açıklama gönderildi"),
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((k) => k.id === secili[0]) ?? null;
@@ -953,9 +957,7 @@ function KullanimSekmesi() {
       width: 160,
       align: "center",
       render: (_, k) => (
-        <Link to={`/yedek-parca?sekme=isler&so=${k.service_order_id}`} className="fl-no-rozet">
-          {k.so_no}
-        </Link>
+        <IsNoBaglantisi soId={k.service_order_id} soNo={k.so_no} />
       ),
     },
     { title: "Tarih", key: "t", width: 140, align: "center", render: (_, k) => zaman(k.created_at) },
@@ -1103,7 +1105,7 @@ function SayimSekmesi() {
       await qc.invalidateQueries({ queryKey: ["parca"] });
       setSecili(s.id);
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   return (
     <Space orientation="vertical" size={12} style={{ width: "100%" }}>
@@ -1237,7 +1239,7 @@ function SayimCekmecesi({ sayimId, onKapat }: { sayimId: number | null; onKapat:
       setSayilan({});
       await tazele();
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const onayla = useMutation({
     mutationFn: (kabul: boolean) => parcaApi.sayimOnayla(sayimId!, gerekce.trim(), kabul),
@@ -1258,7 +1260,7 @@ function SayimCekmecesi({ sayimId, onKapat }: { sayimId: number | null; onKapat:
       message.success("Sayım iptal edildi");
       await tazele();
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   return (
     <Drawer
@@ -1361,43 +1363,17 @@ function SayimCekmecesi({ sayimId, onKapat }: { sayimId: number | null; onKapat:
   );
 }
 
-// --- İş emri parçaları ----------------------------------------------------------
+// --- İş no bağlantısı ------------------------------------------------------------
 
-function IsSekmesi() {
-  const [params, setParams] = useSearchParams();
-  const soId = params.get("so") ? Number(params.get("so")) : null;
-  const [q, setQ] = useState("");
-  const isler = useQuery({
-    queryKey: ["parca", "is-arama", q],
-    queryFn: () => teknikServisApi.liste({ q, kapali_dahil: true }, 10, 0),
-    enabled: q.length >= 2,
-  });
+/** İş no → servis işinin kartı (parça çıkışı/iade/talep orada); `servis.gor`
+ *  yoksa düz metin (kart açılamaz). */
+function IsNoBaglantisi({ soId, soNo }: { soId: number | null | undefined; soNo: string | null | undefined }) {
+  const { yetkili } = useAuth();
+  if (soId == null || !yetkili("servis.gor")) return <span className="fl-no-rozet">{soNo ?? "—"}</span>;
   return (
-    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-      <Select
-        showSearch
-        filterOption={false}
-        placeholder="İş no, müşteri veya konu ile servis işi arayın"
-        onSearch={(v) => setQ(v.trim())}
-        value={soId ?? undefined}
-        onChange={(v) => setParams(new URLSearchParams({ sekme: "isler", so: String(v) }))}
-        loading={isler.isFetching}
-        options={(isler.data?.kayitlar ?? []).map((i) => ({
-          value: i.id,
-          label: `${i.so_no} — ${i.musteri?.title ?? i.customer_name_raw ?? ""} — ${i.konu}`,
-        }))}
-        notFoundContent={q.length < 2 ? "En az 2 karakter yazın" : "İş bulunamadı"}
-        style={{ width: "100%", maxWidth: 560 }}
-      />
-      {soId !== null ? (
-        <ServisParcalari soId={soId} />
-      ) : (
-        <Typography.Text type="secondary">
-          Servis işine parça çıkışı, iade ve parça talebi için işi seçin. Aynı bölüm servis işi, planlı
-          bakım formu ve atölye kaydında da görünür.
-        </Typography.Text>
-      )}
-    </Space>
+    <Link to={`/servis-isleri/${soId}`} className="fl-no-rozet">
+      {soNo}
+    </Link>
   );
 }
 
@@ -1461,7 +1437,7 @@ function DepoSekmesi() {
       setDuzenle(null);
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   const arac = Form.useWatch("arac", form);
   const aracDeposu = duzenle === "yeni" ? arac : duzenle?.location_type === "TEKNISYEN";
@@ -1631,7 +1607,7 @@ function KartPenceresi({ acik, onKapat }: { acik: boolean; onKapat: () => void }
       onKapat();
       await qc.invalidateQueries({ queryKey: ["parca"] });
     },
-    onError: (e) => message.error(parcaHatasi(e).mesaj),
+    onError: (e) => void message.error(parcaHatasi(e).mesaj),
   });
   return (
     <Modal

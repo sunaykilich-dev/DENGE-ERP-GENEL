@@ -181,7 +181,10 @@ async def test_sirketsiz_kullanici_hicbir_sey_gormez(client, kullanici_ac, isler
     assert (await client.get("/api/oturum/sirketler")).json() == {"aktif": None, "sirketler": []}
     gorunen, toplam = await _liste(client)
     assert gorunen == set() and toplam == 0
-    assert (await client.get("/api/cihazlar")).status_code == 403
+    # Cihaz ekranı artık şirket bazlı (fcl000000001): kapı yok, liste boş.
+    r = await client.get("/api/cihazlar")
+    assert r.status_code == 200 and r.json() == []
+    assert (await client.get("/api/araclar")).status_code == 403
 
 
 async def test_mobilite_ucu_mobilite_disinda_403(client, kullanici_ac, uyelik_ver) -> None:
@@ -192,10 +195,15 @@ async def test_mobilite_ucu_mobilite_disinda_403(client, kullanici_ac, uyelik_ve
     assert (await client.get("/api/cihazlar")).status_code == 200
 
     assert (await _sec(client, "TELEKOM")).status_code == 200
-    for yol in ("/api/cihazlar", "/api/hatlar", "/api/araclar", "/api/is-emirleri"):
+    for yol in ("/api/araclar", "/api/is-emirleri"):
         r = await client.get(yol)
         assert r.status_code == 403, yol
         assert r.json()["detail"]["kod"] == "SIRKET_DISI", yol
+    # Cihaz, hat ve stok şirket bazlıdır (fcl000000001): her şirkete açık,
+    # etkin şirkete süzülür (`test_sirket_bazli_stok.py`).
+    # (Bu rolün `hat.gor` izni yok; hat ekranı orada sınanır.)
+    for yol in ("/api/cihazlar", "/api/stok/ozet"):
+        assert (await client.get(yol)).status_code == 200, yol
     r = await client.get("/api/raporlar/dashboard")
     assert r.status_code == 403 and r.json()["detail"]["kod"] == "SIRKET_DISI"
     # Uyarı zili bütün modüllerin ortak ucu: kapısız (mobilite satırları süzülür)
@@ -312,10 +320,13 @@ async def test_teklif_sirket_suzgeci(client, db, kullanici_ac, uyelik_ver) -> No
 
 
 async def test_genel_aramada_mobilite_sonucu_yalniz_mobilitede(
-    client, kullanici_ac, uyelik_ver, cihaz_ac
+    client, kullanici_ac, uyelik_ver, cihaz_ac, urun_ac
 ) -> None:
-    """Ekranı 403 olan cihaz, genel aramada da çıkmaz (kapı yan yoldan açılmasın)."""
-    await cihaz_ac(imei="356789012345678")
+    """Başka şirkette görünmeyen cihaz genel aramada da çıkmaz (yan yol yok).
+
+    Cihazın şirketi ürününkidir (fcl000000001): MOBİLİTE ürünü."""
+    urun = await urun_ac("ARAMA-MOB", sirket="MOBILITE")
+    await cihaz_ac(imei="356789012345678", urun=urun)
     kisi = await kullanici_ac("arayan", "ADMIN")
     await uyelik_ver(kisi, "TELEKOM", "MOBILITE")
     await giris(client, "arayan")
@@ -329,3 +340,95 @@ async def test_genel_aramada_mobilite_sonucu_yalniz_mobilitede(
     assert "CIHAZ" in await turler()
     assert (await _sec(client, "TELEKOM")).status_code == 200
     assert "CIHAZ" not in await turler()
+
+
+async def _teklif_ve_versiyon(db, hesap, quote_no: str, birim: str | None, durum="TASLAK"):
+    from app.models import Quote, QuoteVersion
+
+    t = Quote(quote_no=quote_no, customer_id=hesap.id, birim=birim, status=durum)
+    db.add(t)
+    await db.flush()
+    v = QuoteVersion(quote_id=t.id)
+    db.add(v)
+    await db.flush()
+    t.current_version_id = v.id
+    await db.commit()
+    await db.refresh(t)
+    await db.refresh(v)
+    return t, v
+
+
+async def test_teklif_belgesi_kunyesi_teklifin_sirketinden(db) -> None:
+    """Mobilite dışı şirketin teklif PDF'ine Mobilite logosu/unvanı/e-postası
+    basılmaz (UI/UX denetimi T1); birimsiz (satış) teklif bugünkü gibi kalır."""
+    from app.services import belgeler
+    from app.services.pdf import html_uret
+
+    hesap = await musteri(db)
+    t_guv, v_guv = await _teklif_ve_versiyon(db, hesap, "T-KUNYE-GUV", "GUVENLIK")
+    t_sat, v_sat = await _teklif_ve_versiyon(db, hesap, "T-KUNYE-SAT", None)
+
+    baglam = await belgeler.teklif_baglami(db, t_guv, v_guv)
+    assert baglam["firma"]["sirket"] == "ELEKTRONIK"
+    assert baglam["firma"]["unvan"] == "DENGE ELEKTRONİK"
+    html = html_uret("teklif.html", **baglam)
+    assert "denge-mobilite.png" not in html
+    assert "dengemobil.com.tr" not in html
+    assert "Denge Mobilite" not in html
+    assert "DENGE ELEKTRONİK" in html
+
+    baglam = await belgeler.teklif_baglami(db, t_sat, v_sat)
+    assert baglam["firma"]["sirket"] == "MOBILITE"
+    html = html_uret("teklif.html", **baglam)
+    assert "denge-mobilite.png" in html
+    assert "bilgi@dengemobil.com.tr" in html
+
+
+async def test_teklif_onizleme_basligi_sirkete_gore(client, kullanici_ac, uyelik_ver) -> None:
+    kisi = await kullanici_ac("onizle", "ADMIN")
+    await uyelik_ver(kisi, "ELEKTRONIK", "MOBILITE")
+    await giris(client, "onizle")
+
+    async def firma(**params) -> dict:
+        r = await client.get("/api/teklifler/belge-basligi", params=params)
+        assert r.status_code == 200, r.text
+        return r.json()["firma"]
+
+    assert (await _sec(client, "MOBILITE")).status_code == 200
+    f = await firma()
+    assert f["logo"] is True and f["eposta"] == "bilgi@dengemobil.com.tr"
+    assert (await _sec(client, "ELEKTRONIK")).status_code == 200
+    f = await firma()
+    assert f["logo"] is False and f["unvan"] == "DENGE ELEKTRONİK" and f["eposta"] == ""
+    f = await firma(birim="BARIYER")
+    assert f["logo"] is False and f["unvan"] == "DENGE ELEKTRONİK"
+
+
+async def test_siparise_donusum_yalniz_mobilite_satis_teklifi(
+    client, db, kullanici_ac, uyelik_ver
+) -> None:
+    """`/api/siparisler/tekliften` MOBİLİTE dışında 403 `SIRKET_DISI`; MOBİLİTE'de
+    başka şirketin (birimli) teklifi görünmez (404), birimsiz satış teklifi açılır."""
+    from datetime import UTC, datetime
+
+    hesap = await musteri(db)
+    t_guv, v_guv = await _teklif_ve_versiyon(db, hesap, "T-SIP-GUV", "GUVENLIK", "KABUL")
+    t_sat, v_sat = await _teklif_ve_versiyon(db, hesap, "T-SIP-SAT", None, "KABUL")
+    for v in (v_guv, v_sat):
+        v.accepted_at = datetime(2026, 1, 1, 9, tzinfo=UTC)
+    await db.commit()
+    kisi = await kullanici_ac("sip_ad", "ADMIN")
+    await uyelik_ver(kisi, "ELEKTRONIK", "MOBILITE")
+    await giris(client, "sip_ad")
+
+    assert (await _sec(client, "ELEKTRONIK")).status_code == 200
+    for t in (t_guv, t_sat):
+        r = await client.post(f"/api/siparisler/tekliften/{t.id}")
+        assert r.status_code == 403, r.text
+        assert r.json()["detail"]["kod"] == "SIRKET_DISI"
+
+    assert (await _sec(client, "MOBILITE")).status_code == 200
+    r = await client.post(f"/api/siparisler/tekliften/{t_guv.id}")
+    assert r.status_code == 404, r.text
+    r = await client.post(f"/api/siparisler/tekliften/{t_sat.id}")
+    assert r.status_code == 201, r.text

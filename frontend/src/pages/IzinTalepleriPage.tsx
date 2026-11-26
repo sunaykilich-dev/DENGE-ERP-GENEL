@@ -137,7 +137,7 @@ function YeniTalepPenceresi({ acik, onKapat, ik }: { acik: boolean; onKapat: () 
       form.resetFields();
       onKapat();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const kisiler = (adaylar.data ?? []).map((a) => ({ value: a.id, label: a.unvan ? `${a.ad} — ${a.unvan}` : a.ad }));
   return (
@@ -220,7 +220,7 @@ export default function IzinTalepleriPage() {
       message.success("Talep iptal edildi");
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const karar = useMutation({
     mutationFn: (g: { onayId: number; karar: "ONAY" | "RED"; aciklama?: string }) =>
@@ -229,7 +229,7 @@ export default function IzinTalepleriPage() {
       message.success(g.karar === "ONAY" ? "Onaylandı" : "Reddedildi");
       tazele();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   // Bekleyen basamak bende mi (liste karar verdiklerimi de içerir).

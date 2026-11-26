@@ -8,7 +8,16 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from sqlalchemy import func, select
 
-from app.models import Account, Device, PartnerTariff, SimCard, Subscription, Vehicle
+from app.models import (
+    Account,
+    Device,
+    PartnerTariff,
+    Product,
+    ServiceOrder,
+    SimCard,
+    Subscription,
+    Vehicle,
+)
 from app.services import imports as ice
 from app.services.imports.ortak import evet_hayir, tarih_coz, tutar_coz
 
@@ -198,6 +207,24 @@ class TestHesapProfili:
         satir = r.json()["satirlar"][0]
         assert any("IBAN" in h for h in satir["hatalar"])
 
+    async def test_kolon_boyunu_asan_segment_onizlemede_hata(self, client, kullanici_ac):
+        """Uzun sektör adı "Uygula"da tüm partiyi düşürmesin; önizlemede satır hatası."""
+        await _giris(client, kullanici_ac)
+        r = await _yukle(
+            client,
+            "hesap",
+            xlsx(
+                [
+                    ["Unvan", "Segment", "Bölge"],
+                    ["ACME", "Hayvancılık, Balıkçılık, Avcılık", "İstanbul"],
+                    ["BETA", "Enerji", "Ankara"],
+                ]
+            ),
+        )
+        satirlar = r.json()["satirlar"]
+        assert any("segment" in h for h in satirlar[0]["hatalar"])
+        assert satirlar[1]["hatalar"] == []
+
     async def test_montaj_noktasi_ibansiz_uyarir(self, client, kullanici_ac):
         await _giris(client, kullanici_ac)
         r = await _yukle(client, "hesap", xlsx([["Unvan", "Montaj Noktası mı"], ["X OTO", "Evet"]]))
@@ -241,6 +268,163 @@ class TestHesapProfili:
 
 
 # --- Cihaz profili ------------------------------------------------------------
+
+
+class TestUrunProfili:
+    async def test_sirketli_ve_ortak_urun_acar(self, client, kullanici_ac, db):
+        await _giris(client, kullanici_ac)
+        r = await _yukle(
+            client,
+            "urun",
+            xlsx(
+                [
+                    ["Ürün Kodu", "Tanım", "Tür", "Şirket", "Birim", "ERP Kodu"],
+                    ["HYTR.PD685", "HYTERA PD685 TELSİZ", "Cihaz", "DENGE TELEKOM", "ADET", "X1"],
+                    ["GUV.000184", "X-RAY CİHAZI", "Cihaz", "ELEKTRONIK", "ADET", ""],
+                    ["HZM.0001", "KURULUM HİZMETİ", "Hizmet", "", "AY", ""],
+                ]
+            ),
+        )
+        assert r.status_code == 201, r.text
+        satirlar = r.json()["satirlar"]
+        assert all(not s["hatalar"] for s in satirlar)
+        assert any("birimi" in u for u in satirlar[2]["uyarilar"])
+        parti_id = r.json()["parti"]["id"]
+        u = await client.post(f"/api/ice-aktarma/partiler/{parti_id}/uygula", json={})
+        assert u.json()["sonuc"]["eklendi"] == 3
+        urunler = {
+            p.code: p
+            for p in (await db.scalars(select(Product).where(Product.code.like("%.%")))).all()
+        }
+        assert urunler["HYTR.PD685"].sirket == "TELEKOM"
+        assert urunler["HYTR.PD685"].type == "CIHAZ_SERILI"
+        assert urunler["HYTR.PD685"].identity_kind == "SERI_NO"
+        assert urunler["HYTR.PD685"].supplier_code == "X1"
+        assert urunler["GUV.000184"].sirket == "ELEKTRONIK"
+        assert urunler["HZM.0001"].sirket is None
+        assert urunler["HZM.0001"].type == "HIZMET"
+
+    async def test_mukerrer_kod_ve_taninmayan_deger_hata(self, client, kullanici_ac):
+        await _giris(client, kullanici_ac)
+        r = await _yukle(
+            client,
+            "urun",
+            xlsx(
+                [
+                    ["Ürün Kodu", "Tanım", "Tür", "Şirket"],
+                    ["A.1", "Bir", "Aksesuar", ""],
+                    ["A.1", "İki", "Aksesuar", ""],
+                    ["A.2", "Üç", "Bilinmez", ""],
+                    ["A.3", "Dört", "", "BAŞKA ŞİRKET"],
+                ]
+            ),
+        )
+        s = r.json()["satirlar"]
+        assert s[0]["hatalar"] == []
+        assert any("mükerrer" in h for h in s[1]["hatalar"])
+        assert any("tür" in h for h in s[2]["hatalar"])
+        assert any("şirket" in h for h in s[3]["hatalar"])
+
+    async def test_kayitli_kod_cakisma_verir(self, client, kullanici_ac, urun_ac):
+        await urun_ac("VAR.1", identity_kind="YOK", type="AKSESUAR")
+        await _giris(client, kullanici_ac)
+        r = await _yukle(client, "urun", xlsx([["Ürün Kodu", "Tanım"], ["VAR.1", "Yeni ad"]]))
+        assert r.json()["satirlar"][0]["cakisma"]["tip"] == "mevcut"
+
+
+class TestServisTalepProfili:
+    async def test_talep_listesi_servis_isine_doner(self, client, kullanici_ac, db):
+        db.add(
+            Account(
+                title="EREN ENERJİ ELEKTRİK ÜRETİM A.Ş.",
+                title_key="eren enerji elektrik uretim a.s.",
+                is_musteri=True,
+            )
+        )
+        await db.commit()
+        await _giris(client, kullanici_ac)
+        basliklar = [
+            "Birim",
+            "Tür",
+            "Talep Tarihi",
+            "Müşteri / Firma",
+            "Lokasyon",
+            "Talep Detayı",
+            "Durum",
+            "Personel",
+        ]
+        r = await _yukle(
+            client,
+            "servis_talep",
+            xlsx(
+                [
+                    basliklar,
+                    [
+                        "GUVENLIK",
+                        "ARIZA",
+                        "01.10.2026",
+                        "EREN ENERJİ",
+                        "ZONGULDAK",
+                        "X-RAY ARIZA",
+                        "TAMAMLANDI",
+                        "ALİ KAYA",
+                    ],
+                    [
+                        "GUVENLIK",
+                        "KURULUM",
+                        "",
+                        "YENİ MÜŞTERİ",
+                        "KIBRIS",
+                        "BANT KURULUMU",
+                        "BEKLEMEDE",
+                        "",
+                    ],
+                    ["GUVENLIK", "", "", "X", "", "", "BİLİNMEZ", ""],
+                ]
+            ),
+        )
+        assert r.status_code == 201, r.text
+        s = r.json()["satirlar"]
+        assert s[0]["hatalar"] == [] and s[0]["veri"]["hesap_id"]
+        assert any("bulunamadı" in u for u in s[1]["uyarilar"])
+        assert s[2]["hatalar"]
+        parti_id = r.json()["parti"]["id"]
+        u = await client.post(f"/api/ice-aktarma/partiler/{parti_id}/uygula", json={})
+        assert u.json()["sonuc"]["eklendi"] == 2
+        isler = {
+            i.konu: i
+            for i in (
+                await db.scalars(
+                    select(ServiceOrder).where(ServiceOrder.source_ref.like("ExcelTalep:%"))
+                )
+            ).all()
+        }
+        assert isler["X-RAY ARIZA"].status == "KAPATILDI"
+        assert "ALİ KAYA" in isler["X-RAY ARIZA"].aciklama
+        assert isler["BANT KURULUMU"].status == "PLANLAMADA"
+        assert isler["BANT KURULUMU"].customer_name_raw == "YENİ MÜŞTERİ"
+
+        # Aynı dosya ikinci kez: yeni iş açılmaz.
+        r2 = await _yukle(
+            client,
+            "servis_talep",
+            xlsx(
+                [
+                    basliklar,
+                    [
+                        "GUVENLIK",
+                        "ARIZA",
+                        "01.10.2026",
+                        "EREN ENERJİ",
+                        "ZONGULDAK",
+                        "X-RAY ARIZA",
+                        "TAMAMLANDI",
+                        "",
+                    ],
+                ]
+            ),
+        )
+        assert any("daha önce" in h for h in r2.json()["satirlar"][0]["hatalar"])
 
 
 class TestCihazProfili:
@@ -687,3 +871,82 @@ class TestYetki:
             client, "cihaz", xlsx([["Ürün Kodu", "IMEI"], ["L300", "860000000000001"]])
         )
         assert r.status_code == 201, r.text
+
+
+class TestKullaniciProfili:
+    """Organizasyon listesinden toplu kullanıcı (2026-11-24)."""
+
+    BASLIK = ["Ad Soyad", "Rol", "Birimler", "Şirketler", "Ünvan", "Saha Rolü", "Giriş"]
+
+    async def test_kullanicilar_rol_sirket_ve_giris_ile_acilir(self, client, kullanici_ac, db):
+        from app.models import User
+
+        await _giris(client, kullanici_ac)
+        await kullanici_ac("ali.veli", "DEPO")  # var olan kullanıcı adı
+        r = await _yukle(
+            client,
+            "kullanici",
+            xlsx(
+                [
+                    self.BASLIK,
+                    [
+                        "Özgür Çavdar",
+                        "SERVIS_TEKNISYEN",
+                        "GUVENLIK",
+                        "",
+                        "Saha",
+                        "TEKNISYEN",
+                        "Açık",
+                    ],
+                    ["Nurettin Erzurum", "YONETIM", "", "Hepsi", "Genel Müdür", "", "Açık"],
+                    ["Hülya Kaplan", "", "", "Hepsi", "Temizlik", "", "Kapalı"],
+                    ["Ali Veli", "DEPO", "", "", "", "", ""],
+                    ["Ad Min", "ADMIN", "", "", "", "", ""],
+                    ["Şef Yok", "SERVIS_SEF", "", "", "", "", "Açık"],
+                    ["Rolsüz", "", "", "", "", "", "Açık"],
+                ]
+            ),
+        )
+        assert r.status_code == 201, r.text
+        s = r.json()["satirlar"]
+        assert [bool(x["hatalar"]) for x in s] == [False, False, False, True, True, True, True]
+        assert s[0]["veri"]["username"] == "ozgur.cavdar"
+        assert s[0]["veri"]["sirketler"] == "ELEKTRONIK"
+        assert any("ADMIN" in h for h in s[4]["hatalar"])
+        u = await client.post(
+            f"/api/ice-aktarma/partiler/{r.json()['parti']['id']}/uygula", json={}
+        )
+        assert u.json()["sonuc"]["eklendi"] == 3, u.text
+
+        db.expire_all()
+        kisiler = {
+            k.username: k
+            for k in (
+                await db.scalars(
+                    select(User).where(
+                        User.username.in_(["ozgur.cavdar", "nurettin.erzurum", "hulya.kaplan"])
+                    )
+                )
+            ).all()
+        }
+        oz = kisiler["ozgur.cavdar"]
+        assert oz.giris_acik and oz.parola_degismeli and oz.saha_rolu == "TEKNISYEN"
+        assert [b.birim for b in oz.birimler] == ["GUVENLIK"]
+        assert sorted(x.sirket_kod for x in kisiler["nurettin.erzurum"].sirket_uyelikleri) == [
+            "ELEKTRONIK",
+            "MOBILITE",
+            "TELEKOM",
+        ]
+        assert kisiler["hulya.kaplan"].giris_acik is False
+        # Parola dosyada yok: rastgele özet, kimse bilmez → giriş yapılamaz.
+        r = await client.post(
+            "/api/auth/login", json={"username": "ozgur.cavdar", "password": "parola1234"}
+        )
+        assert r.status_code == 401
+
+    async def test_izin_sistem_kullanici(self, client, kullanici_ac):
+        await _giris(client, kullanici_ac, username="depocu", rol="DEPO")
+        r = await _yukle(
+            client, "kullanici", xlsx([self.BASLIK, ["A B", "DEPO", "", "", "", "", ""]])
+        )
+        assert r.status_code == 403

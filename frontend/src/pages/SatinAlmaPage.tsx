@@ -212,7 +212,7 @@ export default function SatinAlmaPage() {
     }
   };
 
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
 
   const siparisAc = useMutation({
     mutationFn: (v: Record<string, unknown>) => api.post<Siparis>("/api/satinalma/siparisler", v),

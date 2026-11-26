@@ -3,25 +3,29 @@
 Şirket aracında plaka araç havuzunda yoksa metin olarak saklanır; havuzdaki
 plakayla eşleşirse ayrıca servis_arac_id de dolar.
 
-Revision ID: fci000000001
-Revises: fch000000001
+Not: ilk hâli `fci000000001` kimliğiyle yazılmıştı; aynı kimlik paralel dalda
+(`fci000000001_tayin_gecikti_bildirimi`) kullanıldığı için birleştirmede zincirin
+sonuna taşındı. Sütun `IF NOT EXISTS` ile eklenir: eski kimlikle bu sütunu almış
+bir veritabanı da sorunsuz yükselir.
+
+Revision ID: fcs000000001
+Revises: fcr000000001
 Create Date: 2026-11-25
 
 """
 
 from collections.abc import Sequence
 
-import sqlalchemy as sa
 from alembic import op
 
-revision: str = "fci000000001"
-down_revision: str | Sequence[str] | None = "fch000000001"
+revision: str = "fcs000000001"
+down_revision: str | Sequence[str] | None = "fcr000000001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("service_orders", sa.Column("arac_plaka", sa.String(20)))
+    op.execute("ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS arac_plaka VARCHAR(20)")
     # Önceden havuzdan seçilmiş araçların plakası metne de yazılır.
     op.execute(
         "UPDATE service_orders so SET arac_plaka = v.plate "

@@ -22,6 +22,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { api, type ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { KameraDugmesi } from "../components/barkod/KameraOkuyucu";
 
 /** Cihazın MOBILITE/ARAC_TAKIP servis işleri (TS-193): IMEI/seri ile okuma
  * anında eşleşir; `devices`'a yazılmaz. Yalnız `servis.gor` sahibine görünür. */
@@ -202,7 +203,7 @@ export default function CihazlarPage() {
       void qc.invalidateQueries({ queryKey: ["cihaz"] });
       void qc.invalidateQueries({ queryKey: ["cihazlar"] });
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const k = kart.data;
@@ -220,6 +221,14 @@ export default function CihazlarPage() {
               setSayfa(1);
             }}
             style={{ width: 260 }}
+          />
+          {/* Kamerayla IMEI/seri okut: okunan değerle aranır. */}
+          <KameraDugmesi
+            baslik="IMEI / seri barkodunu okutun"
+            onOkundu={(m) => {
+              setArama(m);
+              setSayfa(1);
+            }}
           />
         </Space>
       }

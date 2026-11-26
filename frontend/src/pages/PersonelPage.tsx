@@ -22,7 +22,7 @@
  * süzgecinden SONRA uygulanır, yetki genişletmez. Yönetici `personel.yaz` ile
  * kartta seçilir; kapsamınız dışındaki yönetici "Kapsam dışı kişi" görünür.
  */
-import { EditOutlined, PlusOutlined, TeamOutlined } from "@ant-design/icons";
+import { PlusOutlined, ReadOutlined, TeamOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnsType } from "antd/es/table";
 import {
@@ -48,6 +48,7 @@ import {
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { api, type ApiError } from "../api/client";
 import {
@@ -61,6 +62,7 @@ import {
 } from "../api/personel";
 import { useAuth } from "../auth/AuthContext";
 import { useSirket } from "../auth/SirketContext";
+import OzlukDosyasi, { OzlukBekleyenler } from "../components/OzlukDosyasi";
 import {
   Aciklama,
   AltNot,
@@ -73,6 +75,7 @@ import {
 } from "../fiori/ListeOgeleri";
 import SicilNumaralaPenceresi from "../components/SicilNumaralaPenceresi";
 import ListeRaporu from "../fiori/ListeRaporu";
+import KutucukPano from "../fiori/KutucukPano";
 
 const SAYFA_BOYU = 25;
 
@@ -82,6 +85,7 @@ const sahaSecenekleri = [
   ...Object.entries(SAHA_ROLU_ETIKETLERI).map(([k, v]) => ({ value: k, label: v })),
   { value: "EKSIK", label: "Saha rolü girilmemiş" },
 ];
+
 
 interface KartFormu {
   full_name: string;
@@ -187,7 +191,7 @@ function YoneticiAlani({ p, yazabilir, bitti }: { p: Personel; yazabilir: boolea
       message.success("Yönetici kaydedildi");
       bitti();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
   if (!yazabilir) return <>{p.yonetici?.ad ?? "—"}</>;
   const secenekler = (adaylar.data?.kayitlar ?? [])
@@ -285,7 +289,7 @@ function VekaletAlani({ p, verebilir }: { p: Personel; verebilir: boolean }) {
       form.resetFields();
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
   const iptal = useMutation({
     mutationFn: (izin: string) => api.post<Vekalet[]>(`/api/vekalet/${p.id}/iptal`, { izin }),
@@ -293,7 +297,7 @@ function VekaletAlani({ p, verebilir }: { p: Personel; verebilir: boolean }) {
       message.success("Vekâlet iptal edildi");
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   return (
@@ -428,11 +432,12 @@ export default function PersonelPage() {
   const qc = useQueryClient();
   const { message, modal } = App.useApp();
   const yazabilir = yetkili("personel.yaz");
+  // Uyarı zili "Onay bekleyen özlük belgesi" → `/personel?ozluk=bekleyen`.
+  const [arama] = useSearchParams();
 
   const [suzgec, setSuzgec] = useState<PersonelSuzgeci>({ durum: "CALISIYOR" });
   const [sayfa, setSayfa] = useState(1);
   const [seciliId, setSeciliId] = useState<number | null>(null);
-  const [isaretli, setIsaretli] = useState<number[]>([]);
   const [sicilAcik, setSicilAcik] = useState(false);
   const [suzgecAcik, setSuzgecAcik] = useState(false);
   const [yeniAcik, setYeniAcik] = useState(false);
@@ -479,7 +484,7 @@ export default function PersonelPage() {
       tazele();
       setSeciliId(p.id);
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const kartKaydet = useMutation({
@@ -503,7 +508,7 @@ export default function PersonelPage() {
       message.success("Personel kartı kaydedildi");
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const aktiflestir = useMutation({
@@ -512,7 +517,7 @@ export default function PersonelPage() {
       message.success(r.mesaj);
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const cikisYetkisi = yetkili("personel.cikis");
@@ -560,7 +565,7 @@ export default function PersonelPage() {
         ),
       });
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const anonimlestir = useMutation({
@@ -574,7 +579,7 @@ export default function PersonelPage() {
       setAnonimOnay(false);
       tazele();
     },
-    onError: (e: ApiError) => message.error(hataMesaji(e)),
+    onError: (e: ApiError) => void message.error(hataMesaji(e)),
   });
 
   const o = onizleme.data;
@@ -673,7 +678,6 @@ export default function PersonelPage() {
   );
 
   const kayitlar = liste.data?.kayitlar ?? [];
-  const tek = kayitlar.find((r) => r.id === isaretli[0]) ?? null;
   const { aktifBirimler } = useSirket();
   // Rol testi B-13: şerit yalnız etkin şirketin birimlerini gösterir.
   const kategoriler = [
@@ -715,7 +719,14 @@ export default function PersonelPage() {
       dataIndex: "saha_rolu",
       width: 110,
       align: "center",
-      render: (v: string | null) => (v ? <Kucuk>{SAHA_ROLU_ETIKETLERI[v] ?? v}</Kucuk> : <Tag color="gold">girilmemiş</Tag>),
+      render: (v: string | null, r) =>
+        v ? (
+          <Kucuk>{SAHA_ROLU_ETIKETLERI[v] ?? v}</Kucuk>
+        ) : r.saha_rolu_bekleniyor ? (
+          <Tag color="gold">girilmemiş</Tag>
+        ) : (
+          <KucukGri>—</KucukGri>
+        ),
     },
     {
       title: "Sistem",
@@ -746,7 +757,7 @@ export default function PersonelPage() {
   return (
     <div className="fm-sayfa">
       {(ozet.data ?? []).length > 0 && (
-        <div className="fl-kutucuklar">
+        <KutucukPano ekran="personel">
           {(ozet.data ?? []).map((k) => (
             <div
               key={k.kod}
@@ -765,9 +776,11 @@ export default function PersonelPage() {
               </div>
             </div>
           ))}
-        </div>
+        </KutucukPano>
       )}
 
+      {/* 2026-11-23: personelin kendi yüklediği, İK onayı bekleyen özlük belgeleri. */}
+      {yetkili("ik_belge.yonet") && <OzlukBekleyenler acik={arama.get("ozluk") === "bekleyen"} />}
       <SicilNumaralaPenceresi acik={sicilAcik} onKapat={() => setSicilAcik(false)} />
       <ListeRaporu<Personel>
         kategoriBasligi="Birim"
@@ -835,8 +848,6 @@ export default function PersonelPage() {
         yukleniyor={liste.isFetching}
         bosMetin={liste.isError ? (liste.error as ApiError).message : "Veri yok"}
         scrollX={1000}
-        secili={isaretli}
-        onSecim={(k) => setIsaretli(k as number[])}
         onSatirAc={kartiAc}
         sayfalama={{ sayfa, boyut: SAYFA_BOYU, toplam: liste.data?.toplam ?? 0, onChange: setSayfa }}
         eylemler={[
@@ -855,14 +866,6 @@ export default function PersonelPage() {
                 : k === "sicil"
                   ? setSicilAcik(true)
                   : void liste.refetch(),
-          },
-          {
-            anahtar: "kart",
-            ad: "Kartı Aç / Düzenle",
-            ikon: <EditOutlined />,
-            kisalt: true,
-            devreDisi: !tek,
-            onClick: () => tek && kartiAc(tek),
           },
         ]}
         sagEylemler={[
@@ -897,6 +900,14 @@ export default function PersonelPage() {
                 {p.giris_acik ? <Tag color="blue">giriş açık</Tag> : <Tag>giriş yok</Tag>}
               </Descriptions.Item>
               <Descriptions.Item label="Rol">{p.rol.name}</Descriptions.Item>
+              {yetkili("egitim.gor") && (
+                <Descriptions.Item label="Eğitim">
+                  {/* UI/UX I5: Eğitim'deki "Bireysel Gelişim" sekmesi kaldırıldı; kişi kartı buradan açılır. */}
+                  <Link to={`/egitim/${p.id}`}>
+                    <ReadOutlined /> Eğitim kartını aç
+                  </Link>
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="Yönetici">
                 <YoneticiAlani p={p} yazabilir={yazabilir} bitti={tazele} />
               </Descriptions.Item>
@@ -951,6 +962,16 @@ export default function PersonelPage() {
               <VekaletAlani p={p} verebilir={p.calisiyor && p.giris_acik} />
             )}
 
+            {/* Özlük dosyası (2026-11-20): İK yükler, türleri yönetir. */}
+            {yetkili("ik_belge.yonet") && (
+              <div>
+                <Typography.Title level={5} style={{ marginBottom: 8 }}>
+                  Özlük dosyası
+                </Typography.Title>
+                <OzlukDosyasi kisiId={p.id} />
+              </div>
+            )}
+
             {yazabilir ? (
               <Form
                 form={kartForm}
@@ -969,7 +990,11 @@ export default function PersonelPage() {
                 <Descriptions.Item label="Sicil no">{p.sicil_no ?? "—"}</Descriptions.Item>
                 <Descriptions.Item label="Ünvan">{p.unvan ?? "—"}</Descriptions.Item>
                 <Descriptions.Item label="Saha rolü">
-                  {p.saha_rolu ? SAHA_ROLU_ETIKETLERI[p.saha_rolu] ?? p.saha_rolu : "girilmemiş"}
+                  {p.saha_rolu
+                    ? SAHA_ROLU_ETIKETLERI[p.saha_rolu] ?? p.saha_rolu
+                    : p.saha_rolu_bekleniyor
+                      ? "girilmemiş"
+                      : "—"}
                 </Descriptions.Item>
                 <Descriptions.Item label="Birimler">
                   {p.birimler.length

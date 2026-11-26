@@ -1,11 +1,10 @@
 """Faz A servis işi kuralları (KARARLAR_2026-10-28 §7 madde 2, 6, 7; e1a000000001).
 
-- M1.6: günlük servis işinde (arıza/destek/plansız bakım) en çok bir cihaz;
-  proje türleri (keşif/kurulum) cihazsız ya da çok cihazlı olabilir; eski çok
-  cihazlı kayıtlar okunur kalır.
+- M1.6 (tek cihaz) 2026-11-24 sahip kararıyla KALKTI: her türde çok cihaz,
+  yalnız planlı bakım (PB) tek cihaz.
 - M1.7: kapanmış iş yeniden açılmaz; bağlı yeni iş açılır, bağ iki yönlü görünür.
-- M1.2: ekrandan açılışta talep eden kişi + telefon, müşteri + lokasyon, arıza
-  tanımı zorunlu; sistem açılışları muaf.
+- M1.2: ekrandan açılışta talep eden kişi + telefon, müşteri, arıza tanımı
+  zorunlu (lokasyon 2026-11-24'ten beri isteğe bağlı); sistem açılışları muaf.
 - D3.4 + G4.6: kalite onayı (görevler ayrılığı: işte çalışan onaylayamaz).
 - G7.8: iş başlat/bitir konumu; alınamazsa "Konum bilgisi alınamadı".
 - M1.10 / M9.4: süre kaydı olmadan kapanış uyarıyla serbest, iş "süre eksik".
@@ -59,63 +58,30 @@ async def _seri_ekle(db, so: ServiceOrder, *seriler: str) -> None:
     await db.commit()
 
 
-# --- M1.6: arıza işinde tek cihaz -------------------------------------------------
+# --- M1.6 kalktı (2026-11-24): her türde çok cihaz, PB hariç -----------------------
 
 
-async def test_ariza_isinde_en_cok_bir_cihaz(client, db, birimli_kullanici_ac, lokasyon_ac) -> None:
+async def test_ariza_isinde_cok_cihaz(client, db, birimli_kullanici_ac, lokasyon_ac) -> None:
     await birimli_kullanici_ac("op_a1", "SERVIS_OPERASYON", ["GUVENLIK"])
     lok = await lokasyon_ac()
     await giris(client, "op_a1")
-    r = await client.post(IS, json=_govde(lok.account_id, lok.id, seriler=["SN-1", "SN-2"]))
-    assert r.status_code == 400, r.text
-    assert "en çok 1 cihaz" in r.json()["detail"]
-    for tur in ("DESTEK", "PLANSIZ_BAKIM"):
-        r = await client.post(IS, json=_govde(lok.account_id, lok.id, tur=tur, seriler=["A", "B"]))
-        assert r.status_code == 400, tur
-    # Tek cihaz ve cihazsız arıza açılır.
-    r = await client.post(IS, json=_govde(lok.account_id, lok.id, seriler=["SN-1"]))
-    assert r.status_code == 201, r.text
+    for tur in ("ARIZA", "DESTEK", "PLANSIZ_BAKIM"):
+        r = await client.post(
+            IS,
+            json=_govde(
+                lok.account_id, lok.id, tur=tur, konu=f"{tur} iki", seriler=[f"{tur}-1", f"{tur}-2"]
+            ),
+        )
+        assert r.status_code == 201, (tur, r.text)
+        assert len(r.json()["seriler"]) == 2
     ariza = r.json()
-    r = await client.post(IS, json=_govde(lok.account_id, lok.id, seriler=[]))
-    assert r.status_code == 201, r.text
-    # Keşif cihazsız, kurulum çok cihazlı olabilir.
-    r = await client.post(IS, json=_govde(lok.account_id, lok.id, tur="KESIF", seriler=[]))
-    assert r.status_code == 201, r.text
-    r = await client.post(
-        IS, json=_govde(lok.account_id, lok.id, tur="KURULUM", seriler=["K1", "K2", "K3"])
-    )
-    assert r.status_code == 201, r.text
-    kurulum = r.json()
-    # Seri değişikliği de sınırı aşamaz.
-    r = await client.put(f"{IS}/{ariza['id']}/seriler", json={"seriler": ["SN-1", "SN-9"]})
-    assert r.status_code == 400
-    # Çok cihazlı kurulum arızaya çevrilemez.
+    # Seri listesi sonradan da büyütülebilir.
     await birimli_kullanici_ac("sef_a1", "SERVIS_SEF", ["GUVENLIK"])
     await giris(client, "sef_a1")
-    r = await client.patch(
-        f"{IS}/{kurulum['id']}", json={"version": kurulum["version"], "tur": "ARIZA"}
+    r = await client.put(
+        f"{IS}/{ariza['id']}/seriler",
+        json={"seriler": [s["seri_no"] for s in ariza["seriler"]] + ["EK-3"]},
     )
-    assert r.status_code == 400
-    assert "en çok 1 cihaz" in r.json()["detail"]
-
-
-async def test_eski_cok_cihazli_ariza_okunur(
-    client, db, birimli_kullanici_ac, servis_isi_ac
-) -> None:
-    """Göçten/Faz A öncesinden gelen çok cihazlı arıza kaydı okunur; seri
-    listesi azaltılabilir ama artırılamaz."""
-    await birimli_kullanici_ac("sef_a2", "SERVIS_SEF", ["GUVENLIK"])
-    so = await servis_isi_ac(seri=None)
-    await _seri_ekle(db, so, "ESKI-1", "ESKI-2", "ESKI-3")
-    await giris(client, "sef_a2")
-    r = await client.get(f"{IS}/{so.id}")
-    assert r.status_code == 200
-    assert [s["seri_no"] for s in r.json()["seriler"]] == ["ESKI-1", "ESKI-2", "ESKI-3"]
-    r = await client.get(IS, params={"q": "ESKI-2"})
-    assert [x["id"] for x in r.json()] == [so.id]
-    r = await client.put(f"{IS}/{so.id}/seriler", json={"seriler": ["ESKI-1", "ESKI-2"]})
-    assert r.status_code == 400
-    r = await client.put(f"{IS}/{so.id}/seriler", json={"seriler": ["ESKI-1"]})
     assert r.status_code == 200, r.text
 
 
@@ -128,8 +94,9 @@ async def test_acilista_lokasyon_ve_talep_eden_zorunlu(
     await birimli_kullanici_ac("op_a3", "SERVIS_OPERASYON", ["GUVENLIK"])
     lok = await lokasyon_ac()
     await giris(client, "op_a3")
-    r = await client.post(IS, json=_govde(lok.account_id, None))
-    assert r.status_code == 400 and "lokasyon" in r.json()["detail"]
+    # Lokasyon 2026-11-24'ten beri isteğe bağlı (elden/kargo gelen cihaz).
+    r = await client.post(IS, json=_govde(lok.account_id, None, konu="Lokasyonsuz"))
+    assert r.status_code == 201, r.text
     r = await client.post(IS, json=_govde(lok.account_id, lok.id, iletisim_telefon=None))
     assert r.status_code == 400 and "telefonu" in r.json()["detail"]
     r = await client.post(IS, json=_govde(lok.account_id, lok.id, iletisim_ad="  "))
@@ -140,7 +107,7 @@ async def test_acilista_lokasyon_ve_talep_eden_zorunlu(
     r = await client.post(
         f"{IS}/uzaktan-cozuldu",
         json={
-            **_govde(lok.account_id, None),
+            **_govde(lok.account_id, lok.id, iletisim_ad=None),
             "cozum_kanali": "TELEFON",
             "yapilan_islem": "Yönlendirildi",
         },
@@ -262,9 +229,7 @@ async def test_bagli_yeni_is_kurallari(
         "iletisim_ad": "Yeni Yetkili",
         "iletisim_telefon": "+905320000000",
     }
-    # Çok cihazlı eski işin devamı tek cihaz seçmeli (M1.6).
-    r = await client.post(f"{IS}/{eski.id}/bagli-yeni-is", json=govde)
-    assert r.status_code == 400 and "en çok 1 cihaz" in r.json()["detail"]
+    # Çok cihazlı eski işin devamında cihaz seçilebilir (M1.6 kalktı, 2026-11-24).
     r = await client.post(f"{IS}/{eski.id}/bagli-yeni-is", json={**govde, "seriler": ["E-2"]})
     assert r.status_code == 201, r.text
     assert [s["seri_no"] for s in r.json()["seriler"]] == ["E-2"]
@@ -467,17 +432,7 @@ async def test_suresiz_kapanis_uyari_ve_sure_eksik(
 
 
 async def test_servis_seri_siniri_servis_katmaninda(db, lokasyon_ac) -> None:
-    lok = await lokasyon_ac()
+    """PB dışında seri üst sınırı yok; PB'de tek seri servis katmanında da sınanır."""
     with pytest.raises(ServisGirdiHatasi):
-        await is_emirleri.olustur(
-            db,
-            is_emirleri.ServisIsiGirdisi(
-                birim="GUVENLIK",
-                tur="ARIZA",
-                konu="İki cihaz",
-                customer_id=lok.account_id,
-                seriler=["A", "B"],
-            ),
-            user=None,
-            clock=FakeClock(),
-        )
+        is_emirleri.seri_sayisi_dogrula("PB", ["A", "B"])
+    is_emirleri.seri_sayisi_dogrula("ARIZA", ["A", "B", "C"])

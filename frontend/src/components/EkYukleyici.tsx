@@ -79,7 +79,7 @@ export default function EkYukleyici({
       message.success("Ek silindi");
       void qc.invalidateQueries({ queryKey: anahtar });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   const liste = (ekler.data ?? []).filter((e) => !yalnizTur || e.kind === kind);

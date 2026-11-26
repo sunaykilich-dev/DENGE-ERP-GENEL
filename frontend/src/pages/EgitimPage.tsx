@@ -1,9 +1,14 @@
 /**
  * Eğitim ve Gelişim (TS-150…160).
  *
- * Sekmeler eski sistemle aynı sırada (E-18): Yönetim Özeti · Yıllık Plan ·
- * Eğitim Kataloğu · Katılım ve Sınav · Saha Gözlemi · 30/60/90 Takip ·
- * Düzeltici Faaliyetler · Yetkinlik Matrisi · Belgeler · Bireysel Gelişim.
+ * Üst sekmeler (UI/UX I5, en çok 7): Yönetim Özeti · Yıllık Plan · Katılım ve
+ * Sınav · Saha Gözlemi · Düzeltici Faaliyetler · Raporlar · Tanımlar.
+ * "Raporlar" içinde: 30/60/90 Takip · Sertifika geçerliliği · Etkinlik Raporu ·
+ * Yeniden Değerlendir; "Tanımlar" içinde: Eğitim Kataloğu · Yetkinlik Matrisi ·
+ * Yetkinlik Eşlemeleri (iç seçim `?sekme=raporlar&alt=belge`). Eski anahtarlar
+ * (`?sekme=belge`, `?sekme=takip` ... — bildirim/KPI bağlantıları) `ESKI_SEKMELER`
+ * ile yeni yere yönlenir. "Bireysel Gelişim" sekmesi kaldırıldı: kişi listesi
+ * Personel ekranıdır, kartta "Eğitim kartını aç" bağlantısı `/egitim/:id`'yi açar.
  * Sekme ve KPI süzgeci URL'dedir (`?sekme=plan&kpi=plan_geciken`): KPI kutusu
  * tıklanınca liste AYNI süzgeçle açılır, kutudaki sayı listenin toplamıdır.
  * `/egitim/:id` kişi kartını açar. Butonlar `yetkili()` ile gizlenir; sunucu
@@ -34,6 +39,7 @@ import {
   Modal,
   Progress,
   Row,
+  Segmented,
   Select,
   Space,
   Switch,
@@ -44,7 +50,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
-import { useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import type { ApiError } from "../api/client";
@@ -79,6 +85,7 @@ import {
   tekliGruplar,
 } from "../fiori/ListeOgeleri";
 import ListeRaporu, { KpiKutucugu } from "../fiori/ListeRaporu";
+import KutucukPano from "../fiori/KutucukPano";
 import { KisiKartiGorunumu } from "./EgitimKisiKarti";
 import { EslemeSekmesi, EtkinlikSekmesi, YenidenDegerlendirSekmesi } from "./EgitimRaporlari";
 
@@ -140,7 +147,7 @@ function OzetSekmesi() {
           onChange={(v) => ayarla("birim", v)}
         />
       </Space>
-      <div className="fl-kutucuklar">
+      <KutucukPano ekran="egitim">
         {(ozet.data?.kutular ?? []).map((k) => (
           <KpiKutucugu
             key={k.kod}
@@ -154,7 +161,7 @@ function OzetSekmesi() {
             yukleniyor={ozet.isLoading}
           />
         ))}
-      </div>
+      </KutucukPano>
       <Row gutter={[12, 12]}>
         <Col xs={24} md={12}>
           <Card size="small" title={`${yil} yıllık gerçekleşme`} loading={ozet.isLoading}>
@@ -229,7 +236,7 @@ function TopluPlanPenceresi({ acik, kapat }: { acik: boolean; kapat: () => void 
       setSecili([]);
       kapat();
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   const tumu = (kisiler.data?.kayitlar ?? []).map((k) => k.id);
   return (
@@ -322,7 +329,7 @@ function PlanSekmesi() {
       setErtelenen(null);
       tazele();
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   const kayitlar = liste.data?.kayitlar ?? [];
   const tek = kayitlar.find((r) => r.id === secili[0]) ?? null;
@@ -516,12 +523,12 @@ function Kriterler({ kurs, yazabilir }: { kurs: Kurs; yazabilir: boolean }) {
       setKritik(false);
       tazele();
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   const guncelle = useMutation({
     mutationFn: (g: { id: number; version: number; is_active: boolean }) => egitimApi.kriterGuncelle(g),
     onSuccess: tazele,
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Space orientation="vertical" style={{ width: "100%" }}>
@@ -588,7 +595,7 @@ function KatalogSekmesi() {
       setDuzenlenen(null);
       void qc.invalidateQueries({ queryKey: ["egitim-kurslar"] });
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Card
@@ -717,7 +724,7 @@ function KatilimSekmesi() {
       setSecili(o);
       void qc.invalidateQueries({ queryKey: ["egitim-oturumlar"] });
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Space orientation="vertical" style={{ width: "100%" }}>
@@ -765,7 +772,7 @@ function KatilimSekmesi() {
                               onOk: () =>
                                 egitimApi.oturumSil(o).then(
                                   () => void qc.invalidateQueries({ queryKey: ["egitim-oturumlar"] }),
-                                  (er: ApiError) => message.error(hata(er)),
+                                  (er: ApiError) => void message.error(hata(er)),
                                 ),
                             });
                           }}
@@ -1142,7 +1149,7 @@ function YetkinlikSekmesi() {
         ? egitimApi.yetkinlikOlustur(v)
         : egitimApi.yetkinlikGuncelle({ ...v, id: (duzenlenen as Yetkinlik).id, version: (duzenlenen as Yetkinlik).version }),
     onSuccess: () => { setDuzenlenen(null); void qc.invalidateQueries({ queryKey: ["egitim-yetkinlikler"] }); },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   const degerlendir = useMutation({
     mutationFn: (v: { user_id: number; competency_id: number; mevcut_seviye: number; hedef_seviye?: number; kanit?: string }) =>
@@ -1153,7 +1160,7 @@ function YetkinlikSekmesi() {
       setDegAcik(false);
       void qc.invalidateQueries({ queryKey: ["egitim-matris"] });
     },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Space orientation="vertical" style={{ width: "100%" }}>
@@ -1258,7 +1265,7 @@ function BelgeSekmesi() {
         gecerlilik_bitis: v.gecerlilik_bitis ? v.gecerlilik_bitis.format("YYYY-MM-DD") : null,
       }),
     onSuccess: () => { message.success("Belge kaydedildi"); setAcik(false); void qc.invalidateQueries({ queryKey: ["egitim-belgeler"] }); },
-    onError: (e: ApiError) => message.error(hata(e)),
+    onError: (e: ApiError) => void message.error(hata(e)),
   });
   return (
     <Card
@@ -1304,52 +1311,22 @@ function BelgeSekmesi() {
   );
 }
 
-// --- Bireysel gelişim (kişi listesi) ------------------------------------------------------------------
-
-function KisilerSekmesi() {
-  const git = useNavigate();
-  const [q, setQ] = useState("");
-  const [birim, setBirim] = useState<string | undefined>();
-  const [sayfa, setSayfa] = useState(1);
-  const liste = useQuery({
-    queryKey: ["egitim-kisiler", "liste", q, birim, sayfa],
-    queryFn: () => egitimApi.kisiler({ q, birim }, SAYFA, (sayfa - 1) * SAYFA),
-  });
-  return (
-    <Card
-      size="small"
-      title="Bireysel gelişim"
-      extra={
-        <Space wrap>
-          <Select allowClear placeholder="Birim" style={{ width: 170 }} options={birimSecenekleri} onChange={(v) => { setBirim(v); setSayfa(1); }} />
-          <Input.Search allowClear placeholder="Ad / sicil" onSearch={(v) => { setQ(v); setSayfa(1); }} style={{ width: 200 }} />
-        </Space>
-      }
-    >
-      <Table
-        size="small"
-        rowKey="id"
-        loading={liste.isLoading}
-        dataSource={liste.data?.kayitlar}
-        onRow={(k) => ({ onClick: () => git(`/egitim/${k.id}`), style: { cursor: "pointer" } })}
-        pagination={{ current: sayfa, pageSize: SAYFA, total: liste.data?.toplam, onChange: setSayfa }}
-        columns={[
-          { title: "Personel", dataIndex: "ad" },
-          { title: "Ünvan", dataIndex: "unvan", responsive: ["sm"] },
-          { title: "Birim", dataIndex: "birimler", render: (b: string[]) => b.map((x) => BIRIM_ETIKETLERI[x] ?? x).join(", ") || "Birimsiz" },
-        ]}
-      />
-    </Card>
-  );
-}
+// --- Kişi eğitim kartı (`/egitim/:id`; liste Personel ekranındadır) ------------------------------
 
 function KisiKartiSayfasi({ kisiId }: { kisiId: number }) {
   const git = useNavigate();
+  const { yetkili } = useAuth();
   const kart = useQuery({ queryKey: ["egitim-kart", kisiId], queryFn: () => egitimApi.kart(kisiId) });
   return (
     <Card
       title={kart.data ? `Eğitim kartı — ${kart.data.kisi.ad}` : "Eğitim kartı"}
-      extra={<Button onClick={() => git("/egitim?sekme=kisiler")}>Listeye dön</Button>}
+      extra={
+        yetkili("personel.gor") ? (
+          <Button onClick={() => git("/personel")}>Personel listesine dön</Button>
+        ) : (
+          <Button onClick={() => git("/egitim")}>Eğitime dön</Button>
+        )
+      }
       loading={kart.isLoading}
     >
       {kart.error && <Empty description={(kart.error as Error).message} />}
@@ -1358,28 +1335,91 @@ function KisiKartiSayfasi({ kisiId }: { kisiId: number }) {
   );
 }
 
-const SEKMELER = [
-  { key: "ozet", label: "Yönetim Özeti", el: <OzetSekmesi /> },
-  { key: "plan", label: "Yıllık Plan", el: <PlanSekmesi /> },
-  { key: "katalog", label: "Eğitim Kataloğu", el: <KatalogSekmesi /> },
-  { key: "katilim", label: "Katılım ve Sınav", el: <KatilimSekmesi /> },
-  { key: "gozlem", label: "Saha Gözlemi", el: <GozlemSekmesi /> },
+interface SekmeTanimi {
+  key: string;
+  label: string;
+  el: ReactNode;
+}
+
+// Raporlar: liste/izleme görünümleri. TS-198: etkinlik raporu, yeniden değerlendir.
+const RAPOR_SEKMELERI: SekmeTanimi[] = [
   { key: "takip", label: "30/60/90 Takip", el: <TakipSekmesi /> },
-  { key: "faaliyet", label: "Düzeltici Faaliyetler", el: <FaaliyetSekmesi /> },
-  { key: "yetkinlik", label: "Yetkinlik Matrisi", el: <YetkinlikSekmesi /> },
-  { key: "belge", label: "Belgeler", el: <BelgeSekmesi /> },
-  { key: "kisiler", label: "Bireysel Gelişim", el: <KisilerSekmesi /> },
-  // TS-198: etkinlik raporu, yeniden değerlendir listesi, yetkinlik eşlemeleri.
+  // UI/UX I12: eski "Belgeler" — eğitim/sertifika geçerlilik takibidir.
+  { key: "belge", label: "Sertifika geçerliliği", el: <BelgeSekmesi /> },
   { key: "etkinlik", label: "Etkinlik Raporu", el: <EtkinlikSekmesi /> },
   { key: "yeniden", label: "Yeniden Değerlendir", el: <YenidenDegerlendirSekmesi /> },
+];
+
+// Tanımlar: katalog ve yetkinlik tanımları (TS-198: yetkinlik eşlemeleri).
+const TANIM_SEKMELERI: SekmeTanimi[] = [
+  { key: "katalog", label: "Eğitim Kataloğu", el: <KatalogSekmesi /> },
+  { key: "yetkinlik", label: "Yetkinlik Matrisi", el: <YetkinlikSekmesi /> },
   { key: "esleme", label: "Yetkinlik Eşlemeleri", el: <EslemeSekmesi /> },
 ];
+
+/** Grup sekmesi: içte Segmented seçim; seçim `?alt=` ile URL'dedir. */
+function GrupSekmesi({ altlar }: { altlar: SekmeTanimi[] }) {
+  const { params, setParams } = useSorguParam();
+  // Eski anahtarla gelindiyse (`?sekme=belge`) yönlendirme beklenmeden doğru iç görünüm.
+  const altKod = params.get("alt") ?? params.get("sekme");
+  const secili = altlar.find((a) => a.key === altKod) ?? altlar[0];
+  return (
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+      <div style={{ overflowX: "auto", maxWidth: "100%" }}>
+        <Segmented
+          value={secili.key}
+          options={altlar.map((a) => ({ value: a.key, label: a.label }))}
+          onChange={(v) => setParams({ sekme: params.get("sekme") ?? "", alt: String(v) })}
+        />
+      </div>
+      <div key={secili.key}>{secili.el}</div>
+    </Space>
+  );
+}
+
+const SEKMELER: SekmeTanimi[] = [
+  { key: "ozet", label: "Yönetim Özeti", el: <OzetSekmesi /> },
+  { key: "plan", label: "Yıllık Plan", el: <PlanSekmesi /> },
+  { key: "katilim", label: "Katılım ve Sınav", el: <KatilimSekmesi /> },
+  { key: "gozlem", label: "Saha Gözlemi", el: <GozlemSekmesi /> },
+  { key: "faaliyet", label: "Düzeltici Faaliyetler", el: <FaaliyetSekmesi /> },
+  { key: "raporlar", label: "Raporlar", el: <GrupSekmesi altlar={RAPOR_SEKMELERI} /> },
+  { key: "tanimlar", label: "Tanımlar", el: <GrupSekmesi altlar={TANIM_SEKMELERI} /> },
+];
+
+/**
+ * Eski `?sekme=` anahtarı → yeni yer (UI/UX I5). Sunucunun ürettiği bağlantılar
+ * (`egitim_rapor.py` KPI/uyarı `yol`'ları: belge, takip, yetkinlik ...) ve yer
+ * imleri kırılmasın; diğer sorgu parametreleri (kpi, vade ...) korunur.
+ */
+const ESKI_SEKMELER: Record<string, { sekme: string; alt: string }> = {
+  ...Object.fromEntries(RAPOR_SEKMELERI.map((a) => [a.key, { sekme: "raporlar", alt: a.key }])),
+  ...Object.fromEntries(TANIM_SEKMELERI.map((a) => [a.key, { sekme: "tanimlar", alt: a.key }])),
+};
 
 export default function EgitimPage() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
+  const git = useNavigate();
+  const { yetkili } = useAuth();
+  const ham = params.get("sekme") ?? "ozet";
+  const eski = ESKI_SEKMELER[ham];
+  // Eski anahtar: URL'yi yeni biçime çevir (geçmişe yeni satır eklemeden).
+  useEffect(() => {
+    if (id) return;
+    if (eski) {
+      const yeni = new URLSearchParams(params);
+      yeni.set("sekme", eski.sekme);
+      yeni.set("alt", eski.alt);
+      setParams(yeni, { replace: true });
+    } else if (ham === "kisiler") {
+      // Kaldırılan "Bireysel Gelişim": kişi listesi Personel ekranıdır.
+      if (yetkili("personel.gor")) git("/personel", { replace: true });
+      else setParams({ sekme: "ozet" }, { replace: true });
+    }
+  }, [id, eski, ham, params, setParams, git, yetkili]);
   if (id && /^\d+$/.test(id)) return <KisiKartiSayfasi kisiId={Number(id)} />;
-  const sekme = params.get("sekme") ?? "ozet";
+  const sekme = eski ? eski.sekme : SEKMELER.some((s) => s.key === ham) ? ham : "ozet";
   return (
     <Card title="Eğitim ve Gelişim" styles={{ body: { paddingTop: 0 } }}>
       <Tabs

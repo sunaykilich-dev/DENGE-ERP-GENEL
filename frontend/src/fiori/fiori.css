@@ -20,104 +20,8 @@
   padding-bottom: 4px;
 }
 
-/* --- Kategori ikon şeridi ------------------------------------------------- */
-.fl-kategori-seridi {
-  display: flex;
-  gap: 4px;
-  padding: 10px 8px 0;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--fl-kenar);
-  scrollbar-width: thin;
-}
-.fl-kategori {
-  --fl-renk: var(--fl-mavi);
-  position: relative;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  min-width: 76px;
-  max-width: 96px;
-  padding: 2px 6px 9px;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font: inherit;
-  color: var(--fl-yazi);
-}
-.fl-kategori.kirmizi { --fl-renk: var(--fl-kirmizi); }
-.fl-kategori.yesil { --fl-renk: var(--fl-yesil); }
-.fl-kategori-daire {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  border: 2px solid var(--fl-renk);
-  color: var(--fl-renk);
-  background: color-mix(in srgb, var(--fl-renk) 7%, #fff);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 21px;
-  transition: background 0.15s, color 0.15s;
-}
-.fl-kategori:hover .fl-kategori-daire { background: color-mix(in srgb, var(--fl-renk) 16%, #fff); }
-.fl-kategori.secili .fl-kategori-daire {
-  background: var(--fl-renk);
-  color: #fff;
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--fl-renk) 45%, transparent);
-}
-.fl-kategori-ad {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  text-transform: uppercase;
-  white-space: nowrap;
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.fl-kategori-sayi {
-  position: absolute;
-  top: 0;
-  right: 10px;
-  min-width: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: var(--fl-renk);
-  color: #fff;
-  font-size: 10px;
-  line-height: 18px;
-  text-align: center;
-}
-.fl-kategori-sayi.sifir {
-  background: #fff;
-  color: var(--fl-renk);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fl-renk) 45%, transparent);
-}
-/* Gruplu şeritte gruplar arası ince ayraç (tür | durum). */
-.fl-kategori-ayrac {
-  flex: 0 0 1px;
-  align-self: stretch;
-  margin: 6px 6px 12px;
-  background: var(--fl-kenar);
-}
-/* Sekme ayarı (dişli): şeridin sağ ucunda, gri. */
-.fl-kategori.fl-kategori-ayar {
-  --fl-renk: #8a8f98;
-  margin-left: auto;
-}
-.fl-kategori.secili::after {
-  content: "";
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 0;
-  height: 3px;
-  border-radius: 2px 2px 0 0;
-  background: var(--fl-renk);
-}
-.fl-kategori:focus-visible { outline: 2px solid var(--fl-mavi); outline-offset: -2px; }
+/* Kategori ikon şeridi (dairesel TÜMÜ/ARIZA/BAKIM…) 2026-11-17'de kaldırıldı;
+   seçim "Kayıt Sayısı" satırındaki açılır listeyle yapılır (`.fl-kategori-secici`). */
 
 /* --- Kayıt sayısı + durum çubuğu ------------------------------------------ */
 .fl-ust {
@@ -244,11 +148,14 @@
 .fl-alt-not.kritik { color: var(--fl-kirmizi); font-weight: 700; }
 .fl-alt-not.uyari { color: var(--fl-turuncu); font-weight: 700; }
 
+/* 2026-11-18: sarı zemin kaldırıldı; rozet sade, öncelikli işte renkli
+   (kritik kırmızı, yüksek turuncu — `ServisIsleriPage` iş no sütunu). */
 .fl-no-rozet {
   display: inline-block;
-  padding: 4px 6px;
-  border-radius: 2px;
-  background: #f4e842;
+  padding: 3px 6px;
+  border: 1px solid #d5dadd;
+  border-radius: 4px;
+  background: #f5f6f7;
   color: #1d2d3e;
   font-weight: 700;
   font-size: 12.5px;
@@ -256,6 +163,8 @@
   white-space: nowrap;
   cursor: pointer;
 }
+.fl-no-rozet.kritik { background: #fdecec; border-color: #bb0000; color: #bb0000; }
+.fl-no-rozet.yuksek { background: #fff3e6; border-color: #e9730c; color: #a35200; }
 .fl-no-duz {
   font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   white-space: nowrap;
@@ -374,19 +283,28 @@
   font-weight: 400;
   color: var(--fl-yazi, #32363a);
 }
-.fl-kutucuklar { display: flex; flex-wrap: wrap; gap: 12px; }
+/* 2026-11-18 kullanıcı isteği: kutucuklar kompakt (~64 px; eskisi 176×176) ve
+   satırı eşit paylaşır; büyük boşluk kalmaz. Geniş kutucuk iki sütun kaplar
+   (`KutucukPano`, kişisel düzen). */
+.fl-kutucuklar {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
 .fl-kutucuk {
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  width: 176px;
-  height: 176px;
-  padding: 14px 14px 12px;
+  gap: 6px;
+  width: auto;
+  min-width: 0;
+  min-height: 64px;
+  padding: 8px 28px 8px 12px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.1);
   color: #32363a;
   font-family: "72", "72full", Arial, Helvetica, sans-serif;
   text-align: left;
@@ -400,13 +318,13 @@
 }
 .fl-kutucuk.statik { cursor: default; }
 .fl-kutucuk.statik:hover { border-color: transparent; }
-.fl-kutucuk-baslik { font-size: 14px; font-weight: 700; line-height: 1.25; overflow: hidden; }
-.fl-kutucuk-alt { margin-top: 2px; font-size: 12px; color: #6a6d70; line-height: 1.3; max-height: 48px; overflow: hidden; }
-.fl-kutucuk-dip { display: flex; align-items: flex-end; gap: 8px; min-width: 0; }
-.fl-kutucuk-ikon { font-size: 28px; color: #0a6ed1; line-height: 1; flex: 0 0 auto; }
+.fl-kutucuk-baslik { font-size: 13px; font-weight: 600; line-height: 1.25; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fl-kutucuk-alt { margin-top: 1px; font-size: 11px; color: #6a6d70; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-kutucuk-dip { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fl-kutucuk-ikon { font-size: 16px; color: #0a6ed1; line-height: 1; flex: 0 0 auto; }
 .fl-kutucuk-sayi {
-  font-size: 36px;
-  font-weight: 300;
+  font-size: 24px;
+  font-weight: 400;
   line-height: 1;
   color: #32363a;
   white-space: nowrap;
@@ -416,15 +334,37 @@
 .fl-kutucuk-sayi.uyari { color: #e9730c; }
 .fl-kutucuk-sayi.kritik { color: #bb0000; }
 .fl-kutucuk-birim { font-size: 13px; color: #6a6d70; margin-left: 2px; }
-.fl-kutucuk-bilgi { position: absolute; top: 10px; right: 10px; color: #89919a; font-size: 13px; }
+.fl-kutucuk-bilgi { position: absolute; top: 9px; right: 9px; color: #89919a; font-size: 12px; }
+
+/* --- Kişiselleştirilebilir pano (KutucukPano) --- */
+.fl-pano { position: relative; padding-right: 30px; }
+.fl-pano.duzenleniyor { padding-right: 0; }
+.fl-pano-duzenle { position: absolute; top: 0; right: 0; color: #6a6d70; }
+.fl-pano-oge { position: relative; min-width: 0; display: flex; }
+.fl-pano-oge > .fl-kutucuk { flex: 1 1 auto; }
+.fl-pano-oge.genis { grid-column: span 2; }
+.fl-pano-oge.gizli { opacity: 0.45; }
+.fl-pano.duzenleniyor .fl-pano-oge { cursor: grab; outline: 1px dashed #89b8e8; outline-offset: 2px; border-radius: 8px; }
+.fl-pano.duzenleniyor .fl-pano-oge.suruklenen { opacity: 0.35; }
+.fl-pano.duzenleniyor .fl-kutucuk { cursor: grab; }
+/* Düzenlerken araç çubuğu kutucuğun altında kendi satırında: değerin üstüne binmez. */
+.fl-pano.duzenleniyor .fl-pano-oge { flex-direction: column; gap: 2px; }
+.fl-pano.duzenleniyor .fl-pano-arac { position: static; align-self: flex-end; box-shadow: none; background: transparent; }
+.fl-pano-arac {
+  position: absolute; right: 4px; bottom: 4px; display: flex; gap: 0;
+  background: rgba(255, 255, 255, 0.95); border-radius: 6px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.fl-pano-cubuk {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 8px; padding: 6px 10px; border-radius: 6px; background: #eaf3fc; color: #32363a; font-size: 13px;
+}
+.fl-pano-cubuk-sag { display: flex; gap: 6px; }
 
 @media (max-width: 575px) {
-  .fl-kategori { min-width: 64px; }
-  .fl-kategori-daire { width: 40px; height: 40px; font-size: 18px; }
   .fl-eylem .fl-eylem-metin.kisalt { display: none; }
-  .fl-kutucuklar { gap: 8px; }
-  .fl-kutucuk { width: calc(50% - 4px); height: 148px; padding: 10px; }
-  .fl-kutucuk-sayi { font-size: 30px; }
+  .fl-kutucuklar { gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fl-kutucuk-sayi { font-size: 22px; }
+  .fl-pano-oge.genis { grid-column: span 2; }
   .fl-ust { padding: 10px 8px 6px; }
   .fl-durum-cubugu-sarici { padding: 0 8px 8px; }
 }
@@ -437,3 +377,11 @@
 .fl-tablo .ant-table-sticky-scroll-bar-active { background: rgba(0, 0, 0, 0.55); }
 
 .fl-kucuk.fl-kirmizi { color: var(--fl-kirmizi); font-weight: 700; }
+.fl-pano-bosluk-16 { margin-bottom: 16px; }
+.fl-pano-bosluk-12 { margin-bottom: 12px; }
+
+/* Durum çubuğu + sağda birincil eylem (Yeni Kayıt aramanın altında, 2026-11-18). */
+.fl-durum-satiri { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.fl-durum-satiri-sol { flex: 1 1 auto; min-width: 0; }
+.fl-ust-eylem { flex: 0 0 auto; padding: 0 12px 8px 0; }
+@media (max-width: 575px) { .fl-ust-eylem { padding: 0 8px 8px 0; } }

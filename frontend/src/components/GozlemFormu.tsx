@@ -144,7 +144,7 @@ export default function GozlemFormu({ open, onClose, servis, kisiId, onKaydedild
       void qc.invalidateQueries({ queryKey: ["servis-gozlemleri"] });
       onKaydedildi?.(r.gozlem);
     },
-    onError: (e: ApiError) => message.error(e.message),
+    onError: (e: ApiError) => void message.error(e.message),
   });
 
   const kapat = () => {

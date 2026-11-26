@@ -63,7 +63,7 @@ export default function IadeOkutmaBolumu({
   const karsilastir = useMutation({
     mutationFn: () => istek(false),
     onSuccess: (v) => setSonuc(v),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
   const kaydet = useMutation({
     mutationFn: () => istek(true),
@@ -72,7 +72,7 @@ export default function IadeOkutmaBolumu({
       setSonuc(v);
       doldur(v);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => void message.error(e.message),
   });
 
   if (!disarida.length) return null;

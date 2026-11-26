@@ -54,7 +54,7 @@ SERI_ADI = "Cihaz seri numarası"
 # Kütük cihaz seçicisinde birime göre gösterilen ekipman tipleri.
 KUTUK_TIPLERI = {
     "GUVENLIK": ("XRAY", "KAPI_DEDEKTORU", "EL_DEDEKTORU", "DIGER_GUVENLIK"),
-    "HABERLESME": ("ROLE_TEKRARLAYICI", "TELSIZ", "TELSIZ_DIGER"),
+    "HABERLESME": ("ROLE_TEKRARLAYICI", "TELSIZ", "ARAC_TELSIZI", "AKSESUAR", "TELSIZ_DIGER"),
 }
 
 

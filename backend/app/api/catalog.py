@@ -13,7 +13,8 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import DbDep, client_ip, require_permission
 from app.models import Product, ProductBundleItem, User
 from app.schemas.catalog import PaketKalemi, UrunIn, UrunOut, UrunPatch
-from app.services import audit
+from app.services import audit, sirketler
+from app.services import sirket_kapsami as kapsam
 from app.services.normalize import tr_normkey
 
 router = APIRouter(prefix="/api/urunler", tags=["katalog"])
@@ -38,15 +39,16 @@ def _cikti(urun: Product) -> UrunOut:
 
 
 @router.get("/markalar")
-async def markalar(db: DbDep, _: Okuyucu) -> list[dict]:
-    """Katalogdaki markalar ve her markanın modelleri — filtre kutusu için."""
-    satirlar = (
-        await db.execute(
-            select(Product.brand, Product.model, Product.id)
-            .where(Product.is_deleted.is_(False), Product.is_active.is_(True))
-            .order_by(Product.brand.nulls_last(), Product.model)
-        )
-    ).all()
+async def markalar(db: DbDep, user: Okuyucu) -> list[dict]:
+    """Katalogdaki markalar ve her markanın modelleri — filtre kutusu için.
+
+    Şirket bazlı (fcl000000001): ortak ürünler + etkin şirketin ürünleri."""
+    stmt = (
+        select(Product.brand, Product.model, Product.id)
+        .where(Product.is_deleted.is_(False), Product.is_active.is_(True))
+        .order_by(Product.brand.nulls_last(), Product.model)
+    )
+    satirlar = (await db.execute(kapsam.uygula(stmt, kapsam.urun_kosulu(user)))).all()
     gruplar: dict[str, list[str]] = {}
     for marka, model, _pid in satirlar:
         # Markası girilmemiş ürünler kaybolmasın: kendi grubunda toplanır.
@@ -60,7 +62,7 @@ async def markalar(db: DbDep, _: Okuyucu) -> list[dict]:
 @router.get("", response_model=list[UrunOut])
 async def listele(
     db: DbDep,
-    _: Okuyucu,
+    user: Okuyucu,
     q: str | None = None,
     tip: str | None = None,
     marka: str | None = None,
@@ -76,6 +78,7 @@ async def listele(
         .order_by(Product.brand.nulls_last(), Product.model, Product.name)
         .limit(limit)
     )
+    stmt = kapsam.uygula(stmt, kapsam.urun_kosulu(user))
     if not pasifler:
         stmt = stmt.where(Product.is_active.is_(True))
     if tip:
@@ -100,20 +103,21 @@ async def listele(
 
 
 @router.get("/{urun_id}", response_model=UrunOut)
-async def getir(urun_id: int, db: DbDep, _: Okuyucu) -> UrunOut:
+async def getir(urun_id: int, db: DbDep, user: Okuyucu) -> UrunOut:
     urun = await db.scalar(
         select(Product)
         .where(Product.id == urun_id, Product.is_deleted.is_(False))
         .options(selectinload(Product.bundle_items).selectinload(ProductBundleItem.product))
     )
-    if urun is None:
+    # Başka şirketin ürünü yokmuş gibi 404 (fcl000000001).
+    if urun is None or not kapsam.urun_gorunur_mu(user, urun.sirket):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ürün bulunamadı")
     out = _cikti(urun)
-    out.stok_adedi = await _stok_adedi(db, urun)
+    out.stok_adedi = await _stok_adedi(db, urun, user)
     return out
 
 
-async def _stok_adedi(db: DbDep, urun: Product) -> int:
+async def _stok_adedi(db: DbDep, urun: Product, user: User) -> int:
     """Serilide eldeki cihaz sayısı, serisizde hareket toplamı."""
     from sqlalchemy import func
 
@@ -132,18 +136,39 @@ async def _stok_adedi(db: DbDep, urun: Product) -> int:
         ) or 0
     return (
         await db.scalar(
-            select(func.coalesce(func.sum(StockMovement.qty), 0)).where(
-                StockMovement.product_id == urun.id
+            kapsam.uygula(
+                select(func.coalesce(func.sum(StockMovement.qty), 0)).where(
+                    StockMovement.product_id == urun.id
+                ),
+                # Ortak ürünün adedi yalnız görünür (ortak/etkin şirket) depolardan.
+                kapsam.depo_id_kosulu(user, StockMovement.warehouse_id),
             )
         )
     ) or 0
+
+
+def _sirket_yazilabilir_mi(user: User, sirket: str | None) -> None:
+    """Ürüne yazılacak şirket: null (ortak) ya da ETKİN şirket. Başka şirkete
+    damgalanan ürün yazan kullanıcıdan kaybolurdu; o şirkete geçip yazılır."""
+    if sirket is None or kapsam.urun_gorunur_mu(user, sirket):
+        return
+    raise HTTPException(
+        status.HTTP_400_BAD_REQUEST,
+        "Ürün yalnız etkin şirkete ya da ortak (boş) olarak kaydedilebilir. "
+        "Başka şirketin ürünü için üst çubuktaki şirket seçiciden o şirkete geçin.",
+    )
 
 
 @router.post("", response_model=UrunOut, status_code=status.HTTP_201_CREATED)
 async def olustur(payload: UrunIn, request: Request, db: DbDep, user: Yazici) -> UrunOut:
     if await db.scalar(select(Product).where(Product.code == payload.code)):
         raise HTTPException(status.HTTP_409_CONFLICT, f"'{payload.code}' kodlu ürün zaten var")
-    urun = Product(**payload.model_dump(), created_by=user.id)
+    veri = payload.model_dump()
+    # Gönderilmezse etkin şirket; açıkça null = ortak ürün (fcl000000001).
+    if "sirket" not in payload.model_fields_set:
+        veri["sirket"] = sirketler.aktif_sirket(user)
+    _sirket_yazilabilir_mi(user, veri["sirket"])
+    urun = Product(**veri, created_by=user.id)
     db.add(urun)
     await db.flush()
     await audit.log(
@@ -151,7 +176,12 @@ async def olustur(payload: UrunIn, request: Request, db: DbDep, user: Yazici) ->
         "products",
         "olustur",
         entity_id=urun.id,
-        new_value={"code": urun.code, "name": urun.name, "identity_kind": urun.identity_kind},
+        new_value={
+            "code": urun.code,
+            "name": urun.name,
+            "identity_kind": urun.identity_kind,
+            "sirket": urun.sirket,
+        },
         user_id=user.id,
         ip=client_ip(request),
     )
@@ -198,7 +228,7 @@ async def guncelle(
     urun_id: int, payload: UrunPatch, request: Request, db: DbDep, user: Yazici
 ) -> UrunOut:
     urun = await db.get(Product, urun_id, options=[selectinload(Product.bundle_items)])
-    if urun is None or urun.is_deleted:
+    if urun is None or urun.is_deleted or not kapsam.urun_gorunur_mu(user, urun.sirket):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ürün bulunamadı")
     if payload.version is not None and payload.version != urun.version:
         raise HTTPException(
@@ -209,6 +239,8 @@ async def guncelle(
     if degisen.get("code") and degisen["code"] != urun.code:
         if await db.scalar(select(Product.id).where(Product.code == degisen["code"])):
             raise HTTPException(status.HTTP_409_CONFLICT, "Bu ürün kodu zaten kayıtlı.")
+    if "sirket" in degisen:
+        _sirket_yazilabilir_mi(user, degisen["sirket"])
     if degisen.get("identity_kind") and degisen["identity_kind"] != urun.identity_kind:
         await _envanterli_kimlik_korumasi(db, urun)
     for alan, deger in degisen.items():

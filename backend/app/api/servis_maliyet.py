@@ -15,7 +15,8 @@ Yollar (`/api/teknik-servis/maliyet` öneki):
 - `GET /analiz` (maliyet.gor + servis_rapor.gor) — dönem zorunlu, ≤ 12 ay
 - `GET /analiz.xlsx?kirilim=is|musteri` (maliyet.gor + servis_rapor.disaaktar) —
   aynı `analiz()` çıktısı; eksik tutar boş hücre, 0 değil (TS-197, E07-22)
-- `GET /fatura-devri` (tahsilat.gor), `GET /fatura-devri.xlsx` (+ servis_rapor.disaaktar),
+- `GET /fatura-devri` (tahsilat.gor), `GET /fatura-devri.xlsx` (+ rapor.disaaktar VEYA
+  servis_rapor.disaaktar),
   `POST /fatura-devri/isaretle`, `POST /fatura-devri/{so_id}/geri-al` (tahsilat.yaz)
   — "Faturaya iletildi" işareti; işaret sonrası gelir kilidi (TS-197, E07-26)
 - `GET /teklif-donusumu` (teklif.gor + servis_rapor.gor), `.xlsx` (+ disaaktar) —
@@ -38,7 +39,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
-from app.api.deps import ClockDep, DbDep, client_ip, require_permission, sayfala
+from app.api.deps import (
+    ClockDep,
+    DbDep,
+    client_ip,
+    require_any_permission,
+    require_permission,
+    sayfala,
+)
 from app.models import ServiceLaborRate, ServiceOrder, User
 from app.services import export as export_svc
 from app.services.teknik_servis import fatura_devri, kapsam
@@ -56,8 +64,11 @@ AnalizAktarici = Annotated[
 ]
 DevirOkuyucu = Annotated[User, Depends(require_permission("tahsilat.gor"))]
 DevirYazici = Annotated[User, Depends(require_permission("tahsilat.yaz"))]
-DevirAktarici = Annotated[
-    User, Depends(require_permission("tahsilat.gor", "servis_rapor.disaaktar"))
+# Fatura devri ekranı finansın ortak ekranıdır (menü `tahsilat.gor`): Finans
+# Uzmanı (`rapor.disaaktar`) da teknik servis rolleri (`servis_rapor.disaaktar`)
+# da dökümü alır — `tahsilat.gor` VE iki dışa aktarım izninden EN AZ BİRİ.
+DevirAktarimIzni = Annotated[
+    User, Depends(require_any_permission("rapor.disaaktar", "servis_rapor.disaaktar"))
 ]
 DonusumOkuyucu = Annotated[User, Depends(require_permission("teklif.gor", "servis_rapor.gor"))]
 DonusumAktarici = Annotated[
@@ -590,7 +601,8 @@ async def fatura_devri_listesi(
 async def fatura_devri_xlsx(
     request: Request,
     db: DbDep,
-    user: DevirAktarici,
+    user: DevirOkuyucu,
+    _aktarim: DevirAktarimIzni,
     durum: Literal["bekleyen", "iletildi"] = "bekleyen",
     donem: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
     birim: str | None = None,

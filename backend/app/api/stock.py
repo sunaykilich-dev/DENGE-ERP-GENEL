@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import exists, not_, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import ClockDep, DbDep, client_ip, require_permission
@@ -23,6 +23,7 @@ from app.models.stock import KONUM_TIPLERI, SAHIPLIK_DURUMLARI, TRANSFER_TIPLERI
 from app.services import audit
 from app.services import devices as cihaz_svc
 from app.services import irsaliye as irsaliye_svc
+from app.services import sirket_kapsami as kapsam
 from app.services import stock as svc
 from app.services.statemachine import IzinsizGecis
 
@@ -120,9 +121,42 @@ async def _transfer_cikti(db: DbDep, t: Transfer) -> TransferOut:
     return out
 
 
+# --- Şirket bazlı kapsam (fcl000000001) ----------------------------------------
+# Cihazın şirketi ürününkidir, deponun şirketi biriminin şirketidir. Transferin
+# kendi şirket sütunu yok: transfer, kalemlerinin TAMAMI ve iki ucundaki depo
+# görünürse görünür (başka şirketin tek bir cihazı bile belgeyi gizler).
+
+
+def _transfer_kosulu(user: User):
+    cihaz = kapsam.cihaz_kosulu(user)
+    depo = kapsam.depo_kosulu(user)
+    if cihaz is None or depo is None:
+        return None
+    gizli_kalem = exists(
+        select(TransferItem.id)
+        .join(Device, Device.id == TransferItem.device_id)
+        .where(TransferItem.transfer_id == Transfer.id, not_(cihaz))
+    )
+    gorunur_depo = select(Warehouse.id).where(depo)
+    return (
+        not_(gizli_kalem)
+        & (Transfer.from_warehouse_id.is_(None) | Transfer.from_warehouse_id.in_(gorunur_depo))
+        & (Transfer.to_warehouse_id.is_(None) | Transfer.to_warehouse_id.in_(gorunur_depo))
+    )
+
+
+async def _cihaz_kapsamda(db: DbDep, user: User, device_id: int) -> None:
+    """Başka şirketin cihazı yokmuş gibi 404."""
+    if not await kapsam.cihaz_gorunur_mu(db, user, await db.get(Device, device_id)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cihaz bulunamadı")
+
+
 @router.get("/transferler", response_model=list[TransferOut])
 async def transferleri_listele(
-    db: DbDep, _: Okuyucu, durum: str | None = None, limit: int = Query(default=50, ge=1, le=200)
+    db: DbDep,
+    user: Okuyucu,
+    durum: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
 ) -> list[TransferOut]:
     stmt = (
         select(Transfer)
@@ -130,6 +164,7 @@ async def transferleri_listele(
         .order_by(Transfer.id.desc())
         .limit(limit)
     )
+    stmt = kapsam.uygula(stmt, _transfer_kosulu(user))
     if durum:
         stmt = stmt.where(Transfer.status == durum)
     return [await _transfer_cikti(db, t) for t in (await db.scalars(stmt)).all()]
@@ -150,6 +185,9 @@ async def transfer_olustur(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     for depo_id in (payload.from_warehouse_id, payload.to_warehouse_id):
         depo = await db.get(Warehouse, depo_id) if depo_id is not None else None
+        if depo_id is not None and not kapsam.depo_gorunur_mu(user, depo):
+            # Başka şirketin deposu yokmuş gibi (fcl000000001).
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Depo bulunamadı")
         if depo is not None and (depo.servis_deposu or depo.kiralama_deposu):
             # Cihaz transferi mobilite akışıdır; servis/kiralama depoları ayrı
             # defter tutar (E06-D01, E11-D01).
@@ -170,11 +208,15 @@ async def transfer_olustur(
         )
 
     kimlikler = [k.strip() for k in payload.kimlikler if k.strip()]
+    # Başka şirketin cihazı "sistemde bulunamadı" sayılır (fcl000000001).
     cihazlar = (
         await db.scalars(
-            select(Device).where(
-                (Device.imei.in_(kimlikler)) | (Device.serial_no.in_(kimlikler)),
-                Device.is_deleted.is_(False),
+            kapsam.uygula(
+                select(Device).where(
+                    (Device.imei.in_(kimlikler)) | (Device.serial_no.in_(kimlikler)),
+                    Device.is_deleted.is_(False),
+                ),
+                kapsam.cihaz_kosulu(user),
             )
         )
     ).all()
@@ -274,6 +316,10 @@ async def transfer_teslim(
 ) -> TransferOut:
     """Teslimi kaydeder ve tüm cihazların konumunu TEK işlemde günceller."""
     t = await db.get(Transfer, transfer_id, options=[selectinload(Transfer.items)])
+    kosul = _transfer_kosulu(user)
+    if t is not None and kosul is not None:
+        gorunur = await db.scalar(select(Transfer.id).where(Transfer.id == t.id, kosul))
+        t = t if gorunur is not None else None
     if t is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Transfer bulunamadı")
     try:
@@ -296,7 +342,8 @@ async def transfer_teslim(
 
 
 @router.get("/cihaz/{device_id}/konum-gecmisi", response_model=list[KonumOut])
-async def konum_gecmisi(device_id: int, db: DbDep, _: Okuyucu) -> list[KonumOut]:
+async def konum_gecmisi(device_id: int, db: DbDep, user: Okuyucu) -> list[KonumOut]:
+    await _cihaz_kapsamda(db, user, device_id)
     kayitlar = (
         await db.scalars(
             select(DeviceCustodyHistory)
@@ -315,8 +362,11 @@ async def konum_gecmisi(device_id: int, db: DbDep, _: Okuyucu) -> list[KonumOut]
 
 
 @router.get("/cihaz/{device_id}/tarihinde", response_model=KonumOut | None)
-async def konum_tarihinde(device_id: int, an: datetime, db: DbDep, _: Okuyucu) -> KonumOut | None:
+async def konum_tarihinde(
+    device_id: int, an: datetime, db: DbDep, user: Okuyucu
+) -> KonumOut | None:
     """'Bu cihaz o gün neredeydi' — brief §4.3."""
+    await _cihaz_kapsamda(db, user, device_id)
     kayit = await svc.konum_tarihinde(db, device_id, an)
     if kayit is None:
         return None
@@ -337,14 +387,26 @@ class StokHareketIn(BaseModel):
 
 
 @router.get("/ozet")
-async def ozet(db: DbDep, _: Okuyucu, tip: str | None = None) -> list[dict]:
-    """Denge stoğu, model bazında: hangi üründen kaç adet var, nerede duruyor."""
-    return await svc.denge_stogu(db, urun_tipi=tip)
+async def ozet(db: DbDep, user: Okuyucu, tip: str | None = None) -> list[dict]:
+    """Denge stoğu, model bazında: hangi üründen kaç adet var, nerede duruyor.
+
+    Etkin şirkete süzülür: ortak + şirketin ürünleri (fcl000000001)."""
+    return await svc.denge_stogu(db, urun_tipi=tip, user=user)
 
 
 @router.post("/hareket", status_code=status.HTTP_201_CREATED)
 async def stok_hareketi(payload: StokHareketIn, request: Request, db: DbDep, user: Yazici) -> dict:
     """Serisiz ürüne (aksesuar, kablo) giriş/çıkış/sayım hareketi."""
+    from app.models import Product
+
+    # Başka şirketin ürünü / deposu yokmuş gibi (fcl000000001).
+    urun = await db.get(Product, payload.product_id)
+    if urun is None or not kapsam.urun_gorunur_mu(user, urun.sirket):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ürün bulunamadı")
+    if payload.warehouse_id is not None and not kapsam.depo_gorunur_mu(
+        user, await db.get(Warehouse, payload.warehouse_id)
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Depo bulunamadı")
     try:
         hareket = await svc.stok_hareketi(db, **payload.model_dump(), user_id=user.id)
     except svc.TransferHatasi as exc:
@@ -364,7 +426,7 @@ async def stok_hareketi(payload: StokHareketIn, request: Request, db: DbDep, use
 
 @router.get("/hareketler")
 async def stok_hareketleri(
-    db: DbDep, _: Okuyucu, product_id: int | None = None, limit: int = 200
+    db: DbDep, user: Okuyucu, product_id: int | None = None, limit: int = 200
 ) -> list[dict]:
     from app.models import Product, StockMovement
 
@@ -378,6 +440,11 @@ async def stok_hareketleri(
         .where(StockMovement.hareket_turu.is_(None))
         .order_by(StockMovement.id.desc())
         .limit(min(limit, 500))
+    )
+    stmt = kapsam.uygula(
+        stmt,
+        kapsam.urun_kosulu(user),
+        kapsam.depo_id_kosulu(user, StockMovement.warehouse_id),
     )
     if product_id:
         stmt = stmt.where(StockMovement.product_id == product_id)
@@ -398,14 +465,14 @@ async def stok_hareketleri(
 
 
 @router.get("/bayi-stogu")
-async def bayi_stogu(db: DbDep, _: Okuyucu, account_id: int | None = None) -> list[dict]:
-    return await svc.bayi_stogu(db, account_id=account_id)
+async def bayi_stogu(db: DbDep, user: Okuyucu, account_id: int | None = None) -> list[dict]:
+    return await svc.bayi_stogu(db, account_id=account_id, user=user)
 
 
 @router.get("/yaslanan")
-async def yaslanan(db: DbDep, clock: ClockDep, _: Okuyucu) -> list[dict]:
+async def yaslanan(db: DbDep, clock: ClockDep, user: Okuyucu) -> list[dict]:
     """Eşik günden uzun süredir bayide bekleyen cihazlar."""
-    satirlar = await svc.yaslanan_stok(db, clock)
+    satirlar = await svc.yaslanan_stok(db, clock, user=user)
     for s in satirlar:
         h = await db.get(Account, s["account_id"]) if s["account_id"] else None
         s["account_title"] = h.title if h else None
@@ -413,20 +480,20 @@ async def yaslanan(db: DbDep, clock: ClockDep, _: Okuyucu) -> list[dict]:
 
 
 @router.get("/depolar")
-async def depolar(db: DbDep, _: Okuyucu) -> list[dict]:
-    # Yalnız mobilite depoları: servis ve kiralama depoları kendi ekranlarında
-    # (E11-D01, E06-D01); burada listelenseydi mobilite hareketi oraya girilirdi.
-    kayitlar = (
-        await db.scalars(
-            select(Warehouse)
-            .where(
-                Warehouse.is_active.is_(True),
-                Warehouse.servis_deposu.is_(False),
-                Warehouse.kiralama_deposu.is_(False),
-            )
-            .order_by(Warehouse.name)
+async def depolar(db: DbDep, user: Okuyucu) -> list[dict]:
+    # Yalnız stok depoları: servis ve kiralama depoları kendi ekranlarında
+    # (E11-D01, E06-D01); burada listelenseydi stok hareketi oraya girilirdi.
+    # Şirket bazlı (fcl000000001): ortak (birimsiz) + etkin şirketin birim depoları.
+    stmt = (
+        select(Warehouse)
+        .where(
+            Warehouse.is_active.is_(True),
+            Warehouse.servis_deposu.is_(False),
+            Warehouse.kiralama_deposu.is_(False),
         )
-    ).all()
+        .order_by(Warehouse.name)
+    )
+    kayitlar = (await db.scalars(kapsam.uygula(stmt, kapsam.depo_kosulu(user)))).all()
     return [
         {"id": w.id, "code": w.code, "name": w.name, "location_type": w.location_type}
         for w in kayitlar

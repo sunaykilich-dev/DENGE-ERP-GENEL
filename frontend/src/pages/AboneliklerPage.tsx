@@ -278,7 +278,7 @@ export default function AboneliklerPage() {
     void qc.invalidateQueries({ queryKey: ["toplu-zam"] });
   };
 
-  const hata = (e: ApiError) => message.error(e.message);
+  const hata = (e: ApiError) => void message.error(e.message);
 
   const olustur = useMutation({
     mutationFn: (v: Record<string, unknown>) => api.post<Abonelik>("/api/abonelikler", v),

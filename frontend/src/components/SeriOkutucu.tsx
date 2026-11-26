@@ -6,10 +6,17 @@
  * verilirse okunanlar yeşil, beklenmeyenler kırmızı, eksikler ayrı gösterilir.
  * Karşılaştırma büyük/küçük harf, boşluk ve tireden bağımsızdır (sunucudaki
  * `normalize_seri` ile aynı fikir).
+ *
+ * 2026-11-23: kamera düğmesi (telefonla okutma) ve el okuyucu algılama
+ * (`barkod/okuyucuAlgilama`): eklenen her serinin nasıl girildiği `onOkuma`
+ * ile bildirilir (OKUTMA / ELLE).
  */
 import { BarcodeOutlined } from "@ant-design/icons";
 import { Input, Space, Tag, Typography, type InputRef } from "antd";
 import { useRef, useState } from "react";
+
+import { KameraDugmesi } from "./barkod/KameraOkuyucu";
+import { useOkuyucuAlgilama, type OkumaKaynagi } from "./barkod/okuyucuAlgilama";
 
 export function seriAnahtari(s: string): string {
   return s.toLocaleUpperCase("tr-TR").replace(/[\s\-_./]/g, "");
@@ -31,6 +38,9 @@ export default function SeriOkutucu({
   hedefAdet,
   placeholder = "Barkodu okutun ya da seriyi yazıp Enter'a basın",
   onOkundu,
+  onOkuma,
+  etiketler,
+  disabled,
 }: {
   value?: string[];
   onChange?: (v: string[]) => void;
@@ -41,17 +51,24 @@ export default function SeriOkutucu({
   placeholder?: string;
   /** Okunan seri listeye eklenmeden önce: false dönerse eklenmez (ör. bulunamadı). */
   onOkundu?: (seri: string) => boolean | void;
+  /** Listeye eklenen serinin nasıl girildiği (el okuyucu/kamera = OKUTMA). */
+  onOkuma?: (seri: string, kaynak: OkumaKaynagi) => void;
+  /** Etiketin yanında küçük not (ör. "Okutuldu" / "Elle"); anahtar `seriAnahtari`. */
+  etiketler?: Record<string, string>;
+  disabled?: boolean;
 }) {
   const [metin, setMetin] = useState("");
   const giris = useRef<InputRef>(null);
   const liste = value ?? [];
+  const { olaylar, kaynak } = useOkuyucuAlgilama();
 
-  const ekle = () => {
-    const seri = metin.trim();
+  const ekle = (ham: string, k: OkumaKaynagi) => {
+    const seri = ham.trim();
     setMetin("");
     if (!seri) return;
     if (liste.some((x) => seriAnahtari(x) === seriAnahtari(seri))) return; // ikinci okutma
     if (onOkundu?.(seri) === false) return;
+    onOkuma?.(seri, k);
     onChange?.([...liste, seri]);
     giris.current?.focus();
   };
@@ -61,29 +78,37 @@ export default function SeriOkutucu({
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size={6}>
-      <Input
-        ref={giris}
-        prefix={<BarcodeOutlined />}
-        value={metin}
-        placeholder={placeholder}
-        onChange={(e) => setMetin(e.target.value)}
-        onPressEnter={(e) => {
-          e.preventDefault();
-          ekle();
-        }}
-        allowClear
-        autoComplete="off"
-      />
+      <Space.Compact style={{ width: "100%" }}>
+        <Input
+          ref={giris}
+          prefix={<BarcodeOutlined />}
+          value={metin}
+          placeholder={placeholder}
+          disabled={disabled}
+          {...olaylar}
+          onChange={(e) => setMetin(e.target.value)}
+          onPressEnter={(e) => {
+            e.preventDefault();
+            ekle(metin, kaynak(metin, e.timeStamp));
+          }}
+          allowClear
+          autoComplete="off"
+        />
+        <KameraDugmesi disabled={disabled} onOkundu={(m) => ekle(m, "OKUTMA")} />
+      </Space.Compact>
       {liste.length > 0 && (
         <Space size={[4, 4]} wrap>
           {liste.map((s) => (
             <Tag
               key={s}
               color={fark ? (fazlaKume.has(seriAnahtari(s)) ? "red" : "green") : "blue"}
-              closable
+              closable={!disabled}
               onClose={() => onChange?.(liste.filter((x) => x !== s))}
             >
               {s}
+              {etiketler?.[seriAnahtari(s)] && (
+                <span style={{ marginLeft: 4, opacity: 0.7, fontSize: 11 }}>· {etiketler[seriAnahtari(s)]}</span>
+              )}
             </Tag>
           ))}
         </Space>

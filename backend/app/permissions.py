@@ -194,6 +194,8 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     # Rol testi B4 (KARARLAR 2026-11-04 §6.5): operasyon kargoyla gelen cihazı
     # atölyeye KABUL eder; teşhis/onarım/teslim `atolye.yaz`'da kalır.
     "atolye.kabul": ("Atölye", "Atölye kabul kaydı açar (tekli ve toplu kabul)"),
+    # 2026-11-24 sahip kararı: kabul ekranında listede olmayan modeli ekler.
+    "atolye.model_ekle": ("Atölye", "Kabul ekranındaki model listesine yeni model ekler"),
     # --- Kiralama ----------------------------------------------------------------
     "kiralama.gor": ("Kiralama", "Kiralamaları ve kiralık envanteri görür"),
     "kiralama.yaz": (
@@ -374,6 +376,10 @@ BIRIM_KAPSAMLARI = (SCOPE_OWN_UNITS, SCOPE_OWN_JOBS)
 # --- Personel sözlükleri (models.user ile aynı; tutarlılık unit testte) -------
 SAHA_ROLLERI = ("SEF", "TEKNISYEN", "STAJYER", "OFIS", "YOK")
 ATANABILIR_SAHA_ROLLERI = ("SEF", "TEKNISYEN", "STAJYER")
+# Saha rolünün BEKLENDİĞİ sistem rolleri (UI/UX I2, 2026-11-18): "Saha rolü
+# girilmemiş" KPI'sı ve satır uyarısı yalnız bu rollerdeki personeli sayar;
+# ofis rollerinde boş saha rolü eksik değildir. Atanabilirliği etkilemez.
+SAHA_ROLU_BEKLENEN_ROLLER = ("SERVIS_SEF", "SERVIS_TEKNISYEN", "ATOLYE", "SAHA_SORUMLUSU")
 AYRILIS_NEDENLERI = ("ISTIFA", "FESIH", "EMEKLILIK", "SOZLESME_BITIMI", "DIGER")
 
 # --- Yetki yükseltme önlemi (E13-01, TS-006) ----------------------------------
@@ -638,6 +644,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "bakim.onayla",
             "atolye.gor",
             "atolye.yaz",
+            "atolye.model_ekle",
             "kiralama.gor",
             "kiralama.yaz",
             "kiralama.envanter",
@@ -693,6 +700,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "bakim.onayla",
             "atolye.gor",
             "atolye.yaz",
+            "atolye.model_ekle",
             "kiralama.gor",
             "kiralama.asama",
             "zaman.yaz",
@@ -728,6 +736,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "lokasyon.yaz",
             "atolye.gor",
             "atolye.kabul",
+            "atolye.model_ekle",
             "urun.gor",
             "cihaz.gor",
             "kiralama.gor",
@@ -776,6 +785,7 @@ ROLES: dict[str, tuple[str, tuple[str, ...], str]] = {
             "ekipman.gor",
             "atolye.gor",
             "atolye.yaz",
+            "atolye.model_ekle",
             "kiralama.gor",
             "zaman.yaz",
             "parca.gor",

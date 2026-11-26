@@ -77,6 +77,7 @@ logger = logging.getLogger("denge.worker")
 KOD_ADLARI: dict[str, str] = {
     "SLA_ASILDI": "SLA çözüm hedefi aşıldı",
     "MUDAHALE_ASILDI": "Müdahale hedefi aşıldı",
+    "TAYIN_GECIKTI": "Tayin süresi aşıldı",
 }
 # Günlük özetteki sayaçlar (panel KPI kaydı; sayı = liste, kapsamlı).
 OZET_SAYACLARI: tuple[tuple[str, str], ...] = (
