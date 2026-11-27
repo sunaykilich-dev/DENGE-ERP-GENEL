@@ -402,9 +402,9 @@ class TestServisTalepProfili:
                 )
             ).all()
         }
-        # KARARLAR 2026-11-27: tamamlanan TAMAMLANDI (onaya düşer), tamamlanmayan
+        # KARARLAR 2026-11-27: tamamlanan KAPATILDI (kapanmış iş), tamamlanmayan
         # PLANLAMADA; ad bulunamazsa açıklamada kalır.
-        assert isler["X-RAY ARIZA"].status == "TAMAMLANDI"
+        assert isler["X-RAY ARIZA"].status == "KAPATILDI"
         assert "ALİ KAYA" in isler["X-RAY ARIZA"].aciklama
         assert isler["BANT KURULUMU"].status == "PLANLAMADA"
         assert isler["BANT KURULUMU"].customer_name_raw == "YENİ MÜŞTERİ"
@@ -513,10 +513,11 @@ class TestServisTalepProfili:
         assert u.json()["sonuc"]["eklendi"] == 3
 
         biten = await db.scalar(select(ServiceOrder).where(ServiceOrder.konu.like("3 ADET%")))
-        assert biten.birim == "GUVENLIK" and biten.status == "TAMAMLANDI"
+        assert biten.birim == "GUVENLIK" and biten.status == "KAPATILDI"
         assert biten.arac_plaka == "34 GGA 161"
         assert biten.reported_at.date() == date(2026, 11, 12)
         assert biten.completed_at.date() == date(2026, 11, 12)
+        assert biten.closed_at == biten.completed_at
         sonuc = await db.scalar(
             select(ServiceResult).where(ServiceResult.service_order_id == biten.id)
         )
@@ -539,7 +540,53 @@ class TestServisTalepProfili:
         # Müşterisi yazılmamış geçmiş iş kaybolmaz; yer tutucuyla, sonuçsuz notla açılır.
         lastik = await db.scalar(select(ServiceOrder).where(ServiceOrder.konu == "LASTİK DEĞİŞİMİ"))
         assert lastik.customer_name_raw == "(Müşteri yazılmamış)"
-        assert lastik.status == "TAMAMLANDI"
+        assert lastik.status == "KAPATILDI"
+
+    async def test_ertelenen_is_tek_is_olur(self, client, kullanici_ac, db):
+        """Ertelenen iş sonraki günlere yeniden yazılır; ERP'de tek iş açılır
+        (kullanıcı 2026-11-27). İfade değişse de (2. EL → İKİNCİ EL) aynı iş."""
+        await _giris(client, kullanici_ac)
+        b = ["NO", "TALEP TARİHİ", "MÜŞTERİ / FİRMA", "TALEP DETAYI", "PLANLANAN TARİH"]
+        b += ["DURUM", "NOT / AÇIKLAMA", "ARAÇ"]
+        r = await _yukle(
+            client,
+            "servis_talep",
+            xlsx(
+                [
+                    [*b],
+                    ["1", "", "MARKA AVM", "JENERATÖR FANININ DEĞİŞMESİ GEREKİRSE 2. EL "
+                     "JENERATÖRÜN DEĞİŞTİRİLMESİ", "25.11.2026", "ERTELENDİ", "YOĞUNLUK",
+                     "34 MBN 549"],
+                    ["2", "", "KENT AVM", "X-RAY ARIZA KEŞFİ", "25.11.2026", "TAMAMLANDI", "",
+                     ""],
+                    ["3", "", "MARKA AVM", "X-RAY CİHAZI JENERATÖR FANININ DEĞİŞTİRİLMESİ, "
+                     "GEREKİRSE İKİNCİ EL JENERATÖR İLE DEĞİŞTİRİLMESİ", "26.11.2026",
+                     "ERTELENDİ", "YOĞUNLUK", ""],
+                    ["4", "", "MARKA AVM", "X-RAY CİHAZI JENERATÖR FANININ DEĞİŞTİRİLMESİ, "
+                     "GEREKİRSE İKİNCİ EL JENERATÖR İLE DEĞİŞTİRİLMESİ", "27.11.2026",
+                     "TAMAMLANDI", "FAN DEĞİŞTİ", ""],
+                ]
+            ),
+        )  # fmt: skip
+        assert r.status_code == 201, r.text
+        s = r.json()["satirlar"]
+        assert any("4. satır" in u for u in s[2]["uyarilar"])
+        parti_id = r.json()["parti"]["id"]
+        u = await client.post(f"/api/ice-aktarma/partiler/{parti_id}/uygula", json={})
+        assert u.json()["sonuc"]["eklendi"] == 2
+
+        isler = (
+            await db.scalars(
+                select(ServiceOrder).where(ServiceOrder.customer_name_raw == "MARKA AVM")
+            )
+        ).all()
+        assert len(isler) == 1
+        tek = isler[0]
+        assert tek.status == "KAPATILDI"
+        assert tek.reported_at.date() == date(2026, 11, 25)  # ilk satırın tarihi
+        assert tek.completed_at.date() == date(2026, 11, 27)
+        assert tek.arac_plaka == "34 MBN 549"  # ilk satırdan taşındı
+        assert tek.aciklama.count("(YOĞUNLUK)") == 2
 
 
 class TestCihazProfili:
