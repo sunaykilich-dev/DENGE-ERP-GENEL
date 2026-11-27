@@ -14,6 +14,8 @@ from app.models import (
     PartnerTariff,
     Product,
     ServiceOrder,
+    ServiceOrderAssignment,
+    ServiceResult,
     SimCard,
     Subscription,
     Vehicle,
@@ -390,6 +392,7 @@ class TestServisTalepProfili:
         assert s[2]["hatalar"]
         parti_id = r.json()["parti"]["id"]
         u = await client.post(f"/api/ice-aktarma/partiler/{parti_id}/uygula", json={})
+        assert u.status_code == 200, u.text
         assert u.json()["sonuc"]["eklendi"] == 2
         isler = {
             i.konu: i
@@ -399,7 +402,9 @@ class TestServisTalepProfili:
                 )
             ).all()
         }
-        assert isler["X-RAY ARIZA"].status == "KAPATILDI"
+        # KARARLAR 2026-11-27: tamamlanan TAMAMLANDI (onaya düşer), tamamlanmayan
+        # PLANLAMADA; ad bulunamazsa açıklamada kalır.
+        assert isler["X-RAY ARIZA"].status == "TAMAMLANDI"
         assert "ALİ KAYA" in isler["X-RAY ARIZA"].aciklama
         assert isler["BANT KURULUMU"].status == "PLANLAMADA"
         assert isler["BANT KURULUMU"].customer_name_raw == "YENİ MÜŞTERİ"
@@ -425,6 +430,99 @@ class TestServisTalepProfili:
             ),
         )
         assert any("daha önce" in h for h in r2.json()["satirlar"][0]["hatalar"])
+
+    async def test_guvenlik_talep_takip_dosyasi(self, client, kullanici_ac, db):
+        """KARARLAR 2026-11-27: Güvenlik Talep Takip Excel'i olduğu gibi yüklenir.
+
+        Birim sütunu yok (GUVENLIK), personel ayraçsız ve yazım hatalı, talep
+        tarihi boş (planlanan tarih), not = sonuç, araç = plaka.
+        """
+        onur = await kullanici_ac("onur demir", "SERVIS_TEKNISYEN")
+        timucin = await kullanici_ac("timuçin sekmen", "SERVIS_TEKNISYEN")
+        await kullanici_ac("ali kaya", "SERVIS_TEKNISYEN")
+        await _giris(client, kullanici_ac)
+        basliklar = [
+            "NO ",
+            "TALEP TARİHİ",
+            "MÜŞTERİ / FİRMA",
+            "LOKASYON",
+            "ARAÇ",
+            "PERSONEL",
+            "TALEP DETAYI",
+            "YETKİLİ KİŞİ",
+            "PLANLANAN TARİH",
+            "DURUM",
+            "NOT / AÇIKLAMA",
+        ]
+        r = await _yukle(
+            client,
+            "servis_talep",
+            xlsx(
+                [
+                    basliklar,
+                    [
+                        "1",
+                        "",
+                        "ANPA GROSS",
+                        "BEYLİKDÜZÜ",
+                        "34 GGA 161 / 34 EBC 119",
+                        "ONUE DEMİR TUMİÇİN SEKMEN NAZIM KÖSE",
+                        "3 ADET BUTON DEĞİŞİMİ",
+                        "",
+                        "12.11.2026",
+                        "TAMAMLANDI",
+                        "DEĞİŞİM YAPILDI FAAL",
+                    ],
+                    [
+                        "2",
+                        "",
+                        "AKKOM CESSAS",
+                        "",
+                        "",
+                        "NURİ DEMİR",
+                        "PC KASASI MONTAJI VE KURULUMU",
+                        "23.11.2026",
+                        "",
+                        "ERTELENDİ",
+                        "YOĞUNLUK",
+                    ],
+                ]
+            ),
+        )
+        assert r.status_code == 201, r.text
+        s = r.json()["satirlar"]
+        assert s[0]["hatalar"] == [] and s[1]["hatalar"] == []
+        assert any("NAZIM KOSE" in u for u in s[0]["uyarilar"])
+        # "NURİ" ONUR'a benzer ama yazım hatası sayılmaz (uydurma tayin yok).
+        assert any("NURI DEMIR" in u for u in s[1]["uyarilar"])
+        parti_id = r.json()["parti"]["id"]
+        u = await client.post(f"/api/ice-aktarma/partiler/{parti_id}/uygula", json={})
+        assert u.status_code == 200, u.text
+        assert u.json()["sonuc"]["eklendi"] == 2
+
+        biten = await db.scalar(select(ServiceOrder).where(ServiceOrder.konu.like("3 ADET%")))
+        assert biten.birim == "GUVENLIK" and biten.status == "TAMAMLANDI"
+        assert biten.arac_plaka == "34 GGA 161"
+        assert biten.reported_at.date() == date(2026, 11, 12)
+        assert biten.completed_at.date() == date(2026, 11, 12)
+        sonuc = await db.scalar(
+            select(ServiceResult).where(ServiceResult.service_order_id == biten.id)
+        )
+        assert sonuc.sonuc == "COZULDU" and sonuc.yapilan_islem == "DEĞİŞİM YAPILDI FAAL"
+        atamalar = (
+            await db.scalars(
+                select(ServiceOrderAssignment)
+                .where(ServiceOrderAssignment.service_order_id == biten.id)
+                .order_by(ServiceOrderAssignment.id)
+            )
+        ).all()
+        assert [(a.user_id, a.is_lead) for a in atamalar] == [(onur.id, True), (timucin.id, False)]
+
+        bekleyen = await db.scalar(select(ServiceOrder).where(ServiceOrder.konu.like("PC KASASI%")))
+        assert bekleyen.status == "PLANLAMADA" and bekleyen.tur == "KURULUM"
+        # Yetkili sütunundaki tarih talep tarihi sayılır.
+        assert bekleyen.reported_at.date() == date(2026, 11, 23)
+        assert "Yetkili:" not in (bekleyen.aciklama or "")
 
 
 class TestCihazProfili:

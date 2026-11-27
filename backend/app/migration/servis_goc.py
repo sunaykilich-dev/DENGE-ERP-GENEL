@@ -197,6 +197,9 @@ class IsTaslagi:
     seriler: list[str] = field(default_factory=list)
     olaylar: list[dict[str, Any]] = field(default_factory=list)
     atamalar: list[tuple[str, str, datetime | None]] = field(default_factory=list)
+    # Excel talep listesi (KARARLAR 2026-11-27): sonuç notu ve elle yazılan plaka.
+    sonuc_metni: str | None = None
+    arac_plaka: str | None = None
 
 
 def sigdir(deger: str | None, sinir: int, ad: str, ekler: list[str]) -> str | None:
@@ -546,6 +549,7 @@ async def is_yaz(db: AsyncSession, t: IsTaslagi, bag: YazmaBaglami) -> int | Non
         "konu": t.konu,
         "aciklama": t.aciklama,
         "equipment_id": ekipman,
+        "arac_plaka": t.arac_plaka,
         "source_system": GOC_SISTEMI,
         "source_ref": t.ref,
         "created_by": bag.user_id,
@@ -611,7 +615,7 @@ async def is_yaz(db: AsyncSession, t: IsTaslagi, bag: YazmaBaglami) -> int | Non
                 service_order_id=so_id,
                 sonuc="COZULDU",
                 cozum_kanali=t.kanal,
-                yapilan_islem=GOC_SONUC_METNI,
+                yapilan_islem=t.sonuc_metni or GOC_SONUC_METNI,
                 created_by=bag.user_id,
             )
         )
