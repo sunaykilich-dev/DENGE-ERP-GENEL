@@ -61,6 +61,12 @@ for (const { yaprak, atalar } of tumYapraklar) {
 const menuYollari = new Set(tumYapraklar.map(({ yaprak }) => yolKismi(yaprak.yol)));
 for (const s of SAYFALAR) {
   if (s.yol.startsWith("#")) continue;
+  // 2026-11-23: Mobilite bölümü menüden kaldırıldı (DENGE MOBİLİTE ayrı şirket); kalan
+  // mobilite ekranları bilerek menüde yok, adresle açılır. Rotaları yine de olmalı.
+  if (s.grup === "mobilite") {
+    if (!rotaDesenleri.some((d) => d.test(yolKismi(s.yol)))) hatalar.push(`Rotası olmayan mobilite sayfası: ${s.baslik} (${s.yol})`);
+    continue;
+  }
   // Kişisel sayfalar kullanıcı menüsündedir (Kabuk), sol menüde değil; rotası olmalı.
   if (s.kisisel) {
     if (!rotaDesenleri.some((d) => d.test(yolKismi(s.yol)))) hatalar.push(`Rotası olmayan kişisel sayfa: ${s.baslik} (${s.yol})`);
