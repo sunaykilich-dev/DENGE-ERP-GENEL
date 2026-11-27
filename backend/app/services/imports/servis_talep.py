@@ -8,8 +8,10 @@ servis işine çevirir; yazma, eski sistem göçüyle AYNI fonksiyondur
 Kurallar (KARARLAR 2026-11-27; 2026-11-23 sürümünün yerine):
 - Birim sütunu yoksa/boşsa GUVENLIK (liste Güvenlik Talep Takip dosyasıdır;
   başka birim kendi kodunu yazar).
-- TAMAMLANDI → TAMAMLANDI: iş İş Emri Onayı'na düşer. "Not / Açıklama"
-  sütunu işin SONUCU olarak yazılır (yerinde çözüldü); not yoksa göç metni.
+- TAMAMLANDI → KAPATILDI (2026-11-27 düzeltme, kullanıcı: "iş emirlerini
+  açmanı ve kapatmanı istedim"): geçmiş iş onaya düşmez, kapanmış iş olarak
+  açılır; kapanış anı = tamamlanma anı. "Not / Açıklama" sütunu işin SONUCU
+  olarak yazılır (yerinde çözüldü); not yoksa göç metni.
 - Tamamlanmayan her durum (Beklemede, Planlandı, Devam ediyor, Ertelendi,
   boş) → PLANLAMADA (planlamada bekler). İptal edildi → IPTAL.
 - Personel sütunundaki adlar kayıtlı kullanıcılarla eşlenip işe TAYİN edilir
@@ -23,8 +25,11 @@ Kurallar (KARARLAR 2026-11-27; 2026-11-23 sürümünün yerine):
   KURULUM, keşif → KESIF, bakım → PLANSIZ_BAKIM, diğerleri ARIZA.
 - Aynı satır ikinci kez yüklenirse yeni iş açılmaz (sıra no + müşteri + detay
   + tarih + lokasyon özetinden kaynak anahtarı; `uq_so_kaynak`).
+- "Ertelendi" satırı, aynı işin sonraki satırına katılır: ertelenen iş ERP'de
+  tek iştir (ayrıntı: `ertelemeleri_birlestir`).
 """
 
+import difflib
 import hashlib
 import re
 from datetime import UTC, date, datetime, time
@@ -45,8 +50,8 @@ from app.services.normalize import clean_cell, tr_normkey
 KAYNAK_ONEKI = "ExcelTalep:"
 VARSAYILAN_BIRIM = "GUVENLIK"
 DURUM_ESLEME = {
-    "tamamlandi": "TAMAMLANDI",
-    "kapatildi": "TAMAMLANDI",
+    "tamamlandi": "KAPATILDI",
+    "kapatildi": "KAPATILDI",
     "beklemede": "PLANLAMADA",
     "planlandi": "PLANLAMADA",
     "devam ediyor": "PLANLAMADA",
@@ -202,6 +207,57 @@ class AdEsleyici:
         return bulunan, [" ".join(p).upper() for p in kalan if p != ["ve"]]
 
 
+ERTELEME_BENZERLIK = 0.6
+
+
+def _ayni_is(once: dict, sonra: dict) -> bool:
+    """Ertelenen satır ile sonraki satır aynı iş mi: müşterinin ilk sözcüğü aynı
+    ve talep detayı en az %60 benzer (yeniden yazılırken ifade değişebiliyor:
+    "RÖNESANS ANKARA" → "RÖNESANS OFİS", "2. EL" → "İKİNCİ EL")."""
+    m1, m2 = _belirtecler(once["musteri"]), _belirtecler(sonra["musteri"])
+    if not m1 or not m2 or m1[0] != m2[0]:
+        return False
+    d1 = " ".join(_belirtecler(once["detay"]))
+    d2 = " ".join(_belirtecler(sonra["detay"]))
+    return difflib.SequenceMatcher(None, d1, d2).ratio() >= ERTELEME_BENZERLIK
+
+
+def ertelemeleri_birlestir(sonuclar: list[SatirSonucu]) -> None:
+    """Ertelenen iş Excel'de sonraki günlere yeniden yazılır; ERP'de TEK iş olur
+    (kullanıcı 2026-11-27: "ertelendi yazan işleri ayrı ayrı açma tek olsun").
+
+    "Ertelendi" satırı, aynı işin sonraki ilk satırına katılır (zincir: o da
+    ertelendiyse bir sonrakine). İşin durumu, planı, sonucu ve ekibi son
+    satırdan; talep tarihi ilk satırdan gelir. Kaynak anahtarı zincirin ilk
+    satırınınkidir: dosyaya yeni satır eklense de iş yeniden açılmaz. Her
+    erteleme tarihi ve nedeni açıklamaya yazılır. Sonrası olmayan erteleme
+    tek başına PLANLAMADA açılır.
+    """
+    for i, r in enumerate(sonuclar):
+        v = r.veri
+        if not r.gecerli or tr_normkey(v.get("eski_durum") or "") != "ertelendi":
+            continue
+        hedef = next(
+            (s for s in sonuclar[i + 1 :] if s.gecerli and _ayni_is(v, s.veri)),
+            None,
+        )
+        if hedef is None:
+            continue
+        h = hedef.veri
+        not_ = f" ({v['notlar']})" if v.get("notlar") else ""
+        satir = f"{v.get('plan') or v.get('plan_gunu') or 'tarihsiz'}{not_}"
+        h["ertelemeler"] = " ; ".join(x for x in (v.get("ertelemeler"), satir) if x)
+        h["ref"] = v["ref"]
+        gunler = [g for g in (v.get("talep_gunu"), h.get("talep_gunu")) if g]
+        h["talep_gunu"] = min(gunler) if gunler else None
+        for alan in ("atamalar", "plaka", "hesap_id", "lokasyon"):
+            if not h.get(alan) and v.get(alan):
+                h[alan] = v[alan]
+        v["birlesti"] = str(hedef.satir_no)
+        r.uyarilar.append(f"Ertelendi; {hedef.satir_no}. satırdaki işle tek iş olarak açılacak")
+        hedef.uyarilar.append(f"{r.satir_no}. satırdaki ertelenen işin devamı (tek iş)")
+
+
 class ServisTalepProfili(Profil):
     kod = "servis_talep"
     ad = "Servis Talepleri"
@@ -332,7 +388,8 @@ class ServisTalepProfili(Profil):
             )
             sonuclar.append(r)
 
-        refler = [r.veri["ref"] for r in sonuclar if r.gecerli]
+        ertelemeleri_birlestir(sonuclar)
+        refler = [r.veri["ref"] for r in sonuclar if r.gecerli and not r.veri.get("birlesti")]
         if refler:
             var = set(
                 (
@@ -362,7 +419,9 @@ class ServisTalepProfili(Profil):
         bag = await servis_goc.yazma_baglami(db, user_id=user_id)
         for satir, _ in self.uygulanacaklar(satirlar, kararlar):
             v: dict[str, Any] = satir["veri"]
-            tamam = v["durum"] == "TAMAMLANDI"
+            if v.get("birlesti"):
+                continue  # ertelenen satır; sonraki satırdaki işe katıldı
+            tamam = v["durum"] in ("TAMAMLANDI", "KAPATILDI")
             ekler: list[str] = []
             for etiket, alan in (
                 ("Personel", "personel"),
@@ -372,6 +431,7 @@ class ServisTalepProfili(Profil):
                 ("Yetkili iletişim", "yetkili_iletisim"),
                 ("Not", "notlar"),
                 ("Excel'deki durum", "eski_durum"),
+                ("Ertelendi", "ertelemeler"),
             ):
                 if v.get(alan):
                     ekler.append(f"{etiket}: {v[alan]}")
@@ -395,6 +455,7 @@ class ServisTalepProfili(Profil):
                 aciklama="\n".join(["Excel talep listesinden aktarıldı.", *ekler]),
                 acilis=acilis,
                 tamamlanma=bitis if tamam else None,
+                kapanis=bitis if v["durum"] == "KAPATILDI" else None,
                 iptal=bitis if v["durum"] == "IPTAL" else None,
                 onceki_durum="PLANLAMADA",
                 sonuc_metni=(v.get("notlar") or TAMAMLANMIS_SONUC_YOK) if tamam else None,
