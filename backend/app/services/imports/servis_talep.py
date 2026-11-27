@@ -59,6 +59,8 @@ YASAK_TURLER = {"PB", "ATOLYE"}
 KONU_SINIRI = ServiceOrder.__table__.c.konu.type.length
 MUSTERI_SINIRI = ServiceOrder.__table__.c.customer_name_raw.type.length
 PLAKA_SINIRI = ServiceOrder.__table__.c.arac_plaka.type.length
+MUSTERI_YOK = "(Müşteri yazılmamış)"
+DETAY_YOK = "(Talep detayı yazılmamış)"
 TAMAMLANMIS_SONUC_YOK = "Excel talep listesinden aktarıldı (sonuç notu yok)"
 _PLAKA = re.compile(r"\b(\d{2})\s*([A-ZÇĞİÖŞÜ]{1,3})\s*(\d{2,4})\b")
 
@@ -254,10 +256,15 @@ class ServisTalepProfili(Profil):
             durum = DURUM_ESLEME.get(durum_ham)
             if durum is None:
                 r.hatalar.append(f"durum tanınmadı: {h.get('durum')}")
-            if not musteri:
-                r.hatalar.append("müşteri boş")
-            if not detay:
-                r.hatalar.append("talep detayı boş")
+            # Geçmiş iş kaybolmasın: yalnız biri boşsa yer tutucuyla açılır.
+            if not musteri and not detay:
+                r.hatalar.append("müşteri ve talep detayı boş")
+            elif not musteri:
+                musteri = MUSTERI_YOK
+                r.uyarilar.append("Müşteri yazılmamış; iş müşterisiz açılacak")
+            elif not detay:
+                detay = h.get("notlar") or DETAY_YOK
+                r.uyarilar.append("Talep detayı yazılmamış; not/yer tutucu konu olacak")
 
             yetkili = h.get("yetkili", "")
             yetkili_gunu = _gun(yetkili) if re.match(r"^\d", yetkili) else None
@@ -314,7 +321,9 @@ class ServisTalepProfili(Profil):
                     "atamalar": ",".join(f"{uid}:{esleyici.kisiler[uid][1]}" for uid in kisiler)
                     or None,
                     "yetkili": yetkili or None,
-                    **{k: h.get(k) or None for k in ("musteri", "lokasyon", "detay")},
+                    "musteri": musteri,
+                    "detay": detay,
+                    "lokasyon": h.get("lokasyon") or None,
                     **{
                         k: h.get(k) or None
                         for k in ("plan", "personel", "arac", "yetkili_iletisim", "notlar")

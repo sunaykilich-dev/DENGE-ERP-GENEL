@@ -486,6 +486,19 @@ class TestServisTalepProfili:
                         "ERTELENDİ",
                         "YOĞUNLUK",
                     ],
+                    [
+                        "3",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "ONUR DEMİR",
+                        "LASTİK DEĞİŞİMİ",
+                        "",
+                        "25.11.2026",
+                        "TAMAMLANDI",
+                        "",
+                    ],
                 ]
             ),
         )
@@ -498,7 +511,7 @@ class TestServisTalepProfili:
         parti_id = r.json()["parti"]["id"]
         u = await client.post(f"/api/ice-aktarma/partiler/{parti_id}/uygula", json={})
         assert u.status_code == 200, u.text
-        assert u.json()["sonuc"]["eklendi"] == 2
+        assert u.json()["sonuc"]["eklendi"] == 3
 
         biten = await db.scalar(select(ServiceOrder).where(ServiceOrder.konu.like("3 ADET%")))
         assert biten.birim == "GUVENLIK" and biten.status == "TAMAMLANDI"
@@ -523,6 +536,11 @@ class TestServisTalepProfili:
         # Yetkili sütunundaki tarih talep tarihi sayılır.
         assert bekleyen.reported_at.date() == date(2026, 11, 23)
         assert "Yetkili:" not in (bekleyen.aciklama or "")
+
+        # Müşterisi yazılmamış geçmiş iş kaybolmaz; yer tutucuyla, sonuçsuz notla açılır.
+        lastik = await db.scalar(select(ServiceOrder).where(ServiceOrder.konu == "LASTİK DEĞİŞİMİ"))
+        assert lastik.customer_name_raw == "(Müşteri yazılmamış)"
+        assert lastik.status == "TAMAMLANDI"
 
 
 class TestCihazProfili:
