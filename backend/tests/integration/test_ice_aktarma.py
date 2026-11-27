@@ -437,9 +437,8 @@ class TestServisTalepProfili:
         Birim sütunu yok (GUVENLIK), personel ayraçsız ve yazım hatalı, talep
         tarihi boş (planlanan tarih), not = sonuç, araç = plaka.
         """
-        onur = await kullanici_ac("onur demir", "SERVIS_TEKNISYEN")
-        timucin = await kullanici_ac("timuçin sekmen", "SERVIS_TEKNISYEN")
-        await kullanici_ac("ali kaya", "SERVIS_TEKNISYEN")
+        onur = await kullanici_ac("onur yalın", "SERVIS_TEKNISYEN")
+        timucin = await kullanici_ac("timuçin aksoy", "SERVIS_TEKNISYEN")
         await _giris(client, kullanici_ac)
         basliklar = [
             "NO ",
@@ -466,7 +465,7 @@ class TestServisTalepProfili:
                         "ANPA GROSS",
                         "BEYLİKDÜZÜ",
                         "34 GGA 161 / 34 EBC 119",
-                        "ONUE DEMİR TUMİÇİN SEKMEN NAZIM KÖSE",
+                        "ONUE YALIN TUMİÇİN AKSOY NAZIM TEKİN",
                         "3 ADET BUTON DEĞİŞİMİ",
                         "",
                         "12.11.2026",
@@ -479,7 +478,7 @@ class TestServisTalepProfili:
                         "AKKOM CESSAS",
                         "",
                         "",
-                        "NURİ DEMİR",
+                        "NURİ YALIN",
                         "PC KASASI MONTAJI VE KURULUMU",
                         "23.11.2026",
                         "",
@@ -492,7 +491,7 @@ class TestServisTalepProfili:
                         "",
                         "",
                         "",
-                        "ONUR DEMİR",
+                        "ONUR YALIN",
                         "LASTİK DEĞİŞİMİ",
                         "",
                         "25.11.2026",
@@ -505,9 +504,9 @@ class TestServisTalepProfili:
         assert r.status_code == 201, r.text
         s = r.json()["satirlar"]
         assert s[0]["hatalar"] == [] and s[1]["hatalar"] == []
-        assert any("NAZIM KOSE" in u for u in s[0]["uyarilar"])
+        assert any("NAZIM TEKIN" in u for u in s[0]["uyarilar"])
         # "NURİ" ONUR'a benzer ama yazım hatası sayılmaz (uydurma tayin yok).
-        assert any("NURI DEMIR" in u for u in s[1]["uyarilar"])
+        assert any("NURI YALIN" in u for u in s[1]["uyarilar"])
         parti_id = r.json()["parti"]["id"]
         u = await client.post(f"/api/ice-aktarma/partiler/{parti_id}/uygula", json={})
         assert u.status_code == 200, u.text
