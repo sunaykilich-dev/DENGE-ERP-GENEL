@@ -11,8 +11,9 @@ Bu sürüm, 2026-11-23 sürümünün kurallarının yerine geçer. Dal:
 
 | Konu | Karar | Gerekçe |
 |---|---|---|
-| Tamamlandı | TAMAMLANDI; "Not / Açıklama" sütunu sonuç olur (YERINDE, COZULDU). Not yoksa sabit metin yazılır. | İstek. İş, İş Emri Onayı'na düşer; orada toplu seçimle onaylanır. |
+| Tamamlandı | KAPATILDI (düzeltme, aynı gün); kapanış anı = planlanan tarih. "Not / Açıklama" sütunu sonuç olur (YERINDE, COZULDU). Not yoksa sabit metin yazılır. | Kullanıcı: "iş emirlerini açmanı ve kapatmanı istedim". Geçmiş iş onaya düşmez; Kapanan İşler'de görünür. |
 | Tamamlanmayan | Beklemede, Planlandı, Devam ediyor, Ertelendi ve boş durum PLANLAMADA olur. | İstek: "planlamada bekle". Bekleme kaydı açılmaz. |
+| Ertelendi tekrarı | "Ertelendi" satırı, aynı işin sonraki ilk satırına katılır; tek iş açılır. Aynı iş: müşterinin ilk sözcüğü aynı ve detay en az %60 benzer. Durum, plan, sonuç ve ekip son satırdan; talep tarihi ilk satırdan. Erteleme tarihleri ve nedenleri açıklamaya yazılır. Sonrası olmayan erteleme tek başına PLANLAMADA açılır. | Kullanıcı: "ertelendi yazan işleri ayrı ayrı açma tek olsun". |
 | İptal edildi | IPTAL | İptal edilmiş iş planlamaya dönmez. |
 | Personel | Kayıtlı kullanıcıya tayin edilir. İlk teknisyen sorumlu olur. Ayraçsız yazılmış adlar ve küçük yazım hataları da eşlenir. | İstek: "personellerde gir". |
 | Eşleşmeyen ad | Uyarı verilir ve ad açıklamada kalır. Kişi açılmaz. | Uydurma tayin olmaz. Hesap açmak ayrı karardır. |
@@ -24,13 +25,14 @@ Bu sürüm, 2026-11-23 sürümünün kurallarının yerine geçer. Dal:
 | Tür | Detaydan çıkarılır: kurulum veya devreye alma KURULUM, keşif KESIF, bakım PLANSIZ_BAKIM, diğerleri ARIZA. | Excel'de tür sütunu yok. |
 | Müşteri veya detay boş | Yer tutucuyla açılır ve uyarı verilir. İkisi de boşsa satır reddedilir. | Geçmiş iş kaybolmasın. |
 
-Demo sonucu: 218 satırın tamamı iş olarak açıldı.
+Demo sonucu (dosyanın 27.11 13:44 sürümü, 219 satır; demo içe aktarma
+öncesi yedeğe döndürülüp yeniden yüklendi): 207 iş açıldı, 12 erteleme satırı
+devam satırına katıldı.
 
-- 169 TAMAMLANDI (169'unun sonucu var)
-- 48 PLANLAMADA
+- 176 KAPATILDI (176'sının sonucu ve kapanış tarihi var)
+- 30 PLANLAMADA
 - 1 IPTAL
-- 165 işe 299 tayin yapıldı
-- 105 işe plaka yazıldı
+- 9 işin açıklamasında erteleme geçmişi var
 
 Eşleşmeyen adlar: ERP hesabı olmayan 7 kişi, bir soyadsız ad ve bir "taşıma
 ekibi" ifadesi. Hepsi işin açıklamasında duruyor. Ad listesi kişisel veri
